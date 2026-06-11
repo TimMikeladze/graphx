@@ -1,0 +1,41 @@
+{
+	"name": "graphx-monorepo",
+	"private": true,
+	"homepage": "https://github.com/TimMikeladze/graphx#readme",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git"
+	},
+	"workspaces": [
+		"packages/*"
+	],
+	"type": "module",
+	"scripts": {
+		"build": "bunup",
+		"dev": "bunup --watch",
+		"format": "oxfmt",
+		"lint": "oxlint",
+		"prepare": "bun simple-git-hooks",
+		"release": "bumpp -r --commit --push --tag",
+		"test": "bun test",
+		"test:coverage": "bun test --coverage",
+		"test:watch": "bun test --watch",
+		"type-check": "bun run --filter '*' type-check"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"bumpp": "^11.1.0",
+		"bunup": "^0.16.32",
+		"oxfmt": "^0.54.0",
+		"oxlint": "^1.69.0",
+		"simple-git-hooks": "^2.13.1",
+		"typescript": "^6.0.3"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "bun run lint && bun run type-check"
+	}
+}
