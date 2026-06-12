@@ -18,3 +18,8 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .turbo
+
+# libSQL test databases (tests open file: DBs per namespace)
+*.db
+*.db-wal
+*.db-shm

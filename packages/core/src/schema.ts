@@ -1,0 +1,91 @@
+import type { Client } from '@libsql/client';
+import { applyConnPragmas } from './db.ts';
+
+/**
+ * Full P1 DDL (§4 corrected + D1/D5/B9) with the embedding dimension substituted
+ * into `F32_BLOB(<dim>)`. Every `CREATE` is `IF NOT EXISTS` so `init()` re-runs as
+ * a no-op. `executeMultiple` runs the whole script (no `;`-splitting).
+ *
+ * D5: `nv_emb_idx` is a **partial** vector index over LIVE rows only
+ * (`WHERE valid_to = FOREVER`). This is verified to execute on @libsql/client at
+ * init time (see test/p1-schema.test.ts). P4's as-of-past path must over-fetch and
+ * temporal-filter because the index covers live rows only.
+ */
+export function schema(dim: number = 768): string {
+	return `
+CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);   -- ULID
+CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
+
+CREATE TABLE IF NOT EXISTS node_versions (
+  ver          INTEGER PRIMARY KEY,
+  id           TEXT NOT NULL REFERENCES node_identity(id),
+  kind         TEXT NOT NULL,
+  body         TEXT,
+  uri          TEXT,
+  content_hash TEXT,
+  content_type TEXT,
+  props        TEXT NOT NULL DEFAULT '{}',
+  emb          F32_BLOB(${dim}),
+  valid_from   INTEGER NOT NULL,
+  valid_to     INTEGER NOT NULL DEFAULT 8640000000000000
+);
+CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_kind ON node_versions(kind);
+CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = 8640000000000000;
+
+CREATE TABLE IF NOT EXISTS edge_versions (
+  ver        INTEGER PRIMARY KEY,
+  id         TEXT NOT NULL REFERENCES edge_identity(id),
+  src        TEXT NOT NULL REFERENCES node_identity(id),
+  dst        TEXT NOT NULL REFERENCES node_identity(id),
+  rel        TEXT NOT NULL,
+  weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
+  props      TEXT NOT NULL DEFAULT '{}',
+  valid_from INTEGER NOT NULL,
+  valid_to   INTEGER NOT NULL DEFAULT 8640000000000000
+);
+CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
+
+CREATE VIEW IF NOT EXISTS nodes AS
+  SELECT id, kind, body, uri, content_hash, content_type, props, emb
+  FROM node_versions WHERE valid_to = 8640000000000000;
+CREATE VIEW IF NOT EXISTS edges AS
+  SELECT id, src, dst, rel, weight, props
+  FROM edge_versions WHERE valid_to = 8640000000000000;
+
+CREATE TABLE IF NOT EXISTS archival_state (
+  table_name TEXT PRIMARY KEY, watermark INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+`;
+}
+
+/**
+ * Create the schema on `client`, idempotent. Sets `journal_mode = WAL` (persists in
+ * the file; harmless on `:memory:`), applies the per-connection pragmas
+ * (`foreign_keys`, `busy_timeout`), then runs the multi-statement DDL.
+ */
+export async function init(client: Client, dim?: number): Promise<void> {
+	await client.execute('PRAGMA journal_mode = WAL');
+	await applyConnPragmas(client);
+	await client.executeMultiple(schema(dim));
+}
+
+/**
+ * Additive column guard (§4.1): `CREATE ... IF NOT EXISTS` covers tables but SQLite
+ * has no `ADD COLUMN IF NOT EXISTS`, so check first and only `ALTER` when the column
+ * is absent. Uses `table_xinfo` (not `table_info`) because on this @libsql/client
+ * build `table_info` HIDES generated columns — and generated columns are exactly
+ * what this guard adds, so it must see them to stay idempotent.
+ */
+export async function ensureColumn(
+	client: Client,
+	table: string,
+	col: string,
+	ddl: string,
+): Promise<void> {
+	const info = await client.execute(`PRAGMA table_xinfo(${table})`);
+	if (!info.rows.some((r) => String(r.name) === col)) {
+		await client.execute(ddl);
+	}
+}
