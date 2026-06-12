@@ -3,6 +3,7 @@ import { ulid } from 'ulidx';
 import type { Kind } from './define-graph-schema.ts';
 import type { GraphSchema } from './graph.ts';
 import { NODES_FTS_TRIGGER_DDL, NV_EMB_IDX_DDL } from './schema.ts';
+import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
  * P13 — bulk ingestion (§19.8). An import path DISTINCT from the live close-and-insert
@@ -40,6 +41,13 @@ export interface BulkOpts {
 	chunkSize?: number;
 	/** Shared `valid_from` for every row (epoch ms; default `Date.now()`). */
 	loadTs?: number;
+	/**
+	 * P12 (§15) upcaster registry. When set, each bulk row's props are `_v`-stamped exactly
+	 * like {@link Graph.addNode}, so a registered kind's bulk-loaded rows read back correctly
+	 * (without it they would lack `_v`, be misread as v1, and the read-time chain would run
+	 * over already-current data). Omit ⇒ no `_v` stamp (byte-identical to pre-P12 bulk).
+	 */
+	upcasters?: UpcasterRegistry;
 }
 
 interface RawNodeDef {
@@ -77,11 +85,13 @@ export async function bulkLoad<S extends GraphSchema>(
 ): Promise<BulkResult> {
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
+	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
 	// 1. Validate + prepare everything up front — fail fast, BEFORE touching indexes.
 	const prepared: PreparedRow[] = rows.map((row) => {
 		const def = (schema.nodes as Record<string, RawNodeDef | undefined>)[row.kind];
 		if (!def) throw new Error(`bulkLoad: unknown kind '${String(row.kind)}'`);
+		const parsed = def.parse(row.props) as Record<string, unknown>;
 		return {
 			id: ulid(),
 			kind: String(row.kind),
@@ -89,7 +99,8 @@ export async function bulkLoad<S extends GraphSchema>(
 			uri: row.uri ?? null,
 			content_hash: row.content_hash ?? null,
 			content_type: row.content_type ?? null,
-			props: JSON.stringify(def.parse(row.props)),
+			// P12: stamp `_v` for registered kinds (no-op for unregistered ⇒ pre-P12 bytes).
+			props: JSON.stringify(upcaster.stamp(String(row.kind), parsed)),
 			emb: row.emb ?? null,
 		};
 	});

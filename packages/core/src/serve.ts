@@ -11,6 +11,7 @@ import type { QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
+import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
  * P11 — Serving (§14, D2). The SDK is a library; this exposes it over HTTP as a
@@ -48,6 +49,12 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * tenant can't raise its own limits. Omit for {@link DEFAULT_LIMITS}.
 	 */
 	limits?: Partial<QueryLimits>;
+	/**
+	 * P12 (§15) read-time upcaster registry. When set, every per-project `Graph` (and the
+	 * journey route) applies it, so the HTTP read surfaces return props in the latest schema
+	 * shape over the wire. Omit ⇒ raw stored props (pre-P12 behavior).
+	 */
+	upcasters?: UpcasterRegistry;
 }
 
 /** Hono env: the per-request principal + the resolved per-project SDK handle. */
@@ -66,9 +73,10 @@ export async function graphForProject<S extends GraphSchema>(
 	projectId: string,
 	op: Op,
 	schema: S,
+	upcasters?: UpcasterRegistry,
 ): Promise<Graph<S>> {
 	const { client } = await resolveProjectDb(control, principal, projectId, op);
-	return new Graph(client, schema);
+	return new Graph(client, schema, upcasters);
 }
 
 // --- wire contracts (the Zod schema is the single source feeding every surface) ---
@@ -148,7 +156,14 @@ function requireGraph<S extends GraphSchema>(
 		if (c.req.param('tenant') !== principal.tenantId || !project) {
 			throw new AuthzError(404, 'project not found');
 		}
-		const graph = await graphForProject(cfg.control, principal, project, op, cfg.schema);
+		const graph = await graphForProject(
+			cfg.control,
+			principal,
+			project,
+			op,
+			cfg.schema,
+			cfg.upcasters,
+		);
 		c.set('graph', graph);
 		await next();
 	});
@@ -173,6 +188,8 @@ function onError(err: Error, c: Context) {
 
 /** Build the chained Hono app for `cfg` (internal; the chain's type becomes AppType). */
 function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
+	// journey takes its own opt-in upcaster (getNode/neighbors upcast via the project Graph).
+	const journeyUpcaster = cfg.upcasters ? new Upcaster(cfg.schema, cfg.upcasters) : undefined;
 	const app = new Hono<ServeEnv<S>>()
 		.use('/t/:tenant/p/:project/*', authn(cfg))
 		.post(
@@ -233,6 +250,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const rows = await journey(c.get('graph').raw, {
 					...c.req.valid('json'),
 					limits: cfg.limits,
+					upcaster: journeyUpcaster,
 				});
 				return c.json(rows);
 			},

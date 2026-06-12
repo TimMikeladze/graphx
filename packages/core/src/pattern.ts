@@ -10,6 +10,7 @@ import {
 	type QueryLimits,
 	resolveLimits,
 } from './governance.ts';
+import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
  * P5 — PatternBuilder (§8). A fluent, typed builder that compiles to raw SQL — no
@@ -122,11 +123,16 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 	private readonly steps: Step[] = [];
 	private readonly conds: WhereCond[] = [];
 	private asOfT: number | null = null;
+	/** P12 read-time upcaster (§15) applied in {@link reshape}; empty registry ⇒ identity. */
+	private readonly upcaster: Upcaster;
 
 	constructor(
 		private readonly schemaDef: S,
 		private readonly raw: Client | undefined,
-	) {}
+		upcasters?: UpcasterRegistry,
+	) {
+		this.upcaster = new Upcaster(schemaDef, upcasters ?? {});
+	}
 
 	/** Add an aliased node bound to `kind`; extends the type accumulator. */
 	node<A extends string, K extends Kind<S>>(
@@ -364,6 +370,7 @@ WHERE walk.depth >= ${v.min}`;
 	): Promise<PatternQuery<S, Acc, Sel>> {
 		const { sql, args } = this.toSQL();
 		const raw = this.raw;
+		const upcaster = this.upcaster;
 		const keyCols = aliases.map((a) => `sub.${a}__id`);
 		return {
 			run: async (): Promise<Array<PatternRow<S, Acc, Sel>>> => {
@@ -371,7 +378,7 @@ WHERE walk.depth >= ${v.min}`;
 					throw new Error('PatternBuilder.run: no raw client (pass it to match(schema, raw))');
 				const capped = applyLimit(sql, DEFAULT_LIMITS.maxRows);
 				const res = await raw.execute({ sql: capped, args: args as never[] });
-				return res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases));
+				return res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases, upcaster));
 			},
 			page: async (opts: PagePatternOpts = {}): Promise<PatternPage<S, Acc, Sel>> => {
 				if (!raw)
@@ -398,7 +405,7 @@ ORDER BY ${keyCols.join(', ')}
 LIMIT ?`;
 				pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
 				const res = await raw.execute({ sql: paged, args: pageArgs as never[] });
-				const rows = res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases));
+				const rows = res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases, upcaster));
 				if (rows.length > pageSize) {
 					const page = rows.slice(0, pageSize);
 					const last = page[page.length - 1] as PatternRow<S, Acc, Sel>;
@@ -411,17 +418,23 @@ LIMIT ?`;
 	}
 }
 
-/** Reshape a flat result row into `{ [alias]: { id, kind, props } }`. */
+/**
+ * Reshape a flat result row into `{ [alias]: { id, kind, props } }`, applying the P12
+ * read-time upcaster (§15) to each alias's props. The upcast runs for every read —
+ * including `.asOf` historical rows — so a returned `NodeOf<S,K>` always matches its
+ * single (latest) static type. Empty registry ⇒ identity (raw JSON, pre-P12).
+ */
 function reshape<
 	S extends GraphSchema,
 	Acc extends Record<string, Kind<S>>,
 	Sel extends keyof Acc & string,
->(row: Row, aliases: Sel[]): PatternRow<S, Acc, Sel> {
+>(row: Row, aliases: Sel[], upcaster: Upcaster): PatternRow<S, Acc, Sel> {
 	const out = {} as PatternRow<S, Acc, Sel>;
 	for (const alias of aliases) {
 		const id = String(row[`${alias}__id`]);
 		const kind = String(row[`${alias}__kind`]);
-		const props = JSON.parse(String(row[`${alias}__props`]));
+		const raw = JSON.parse(String(row[`${alias}__props`])) as Record<string, unknown>;
+		const props = upcaster.apply(kind, raw);
 		(out as Record<string, unknown>)[alias] = { id, kind, props } as NodeOf<S, Acc[Sel]>;
 	}
 	return out;
@@ -431,8 +444,9 @@ function reshape<
 export function match<S extends GraphSchema>(
 	schema: S,
 	raw?: Client,
+	upcasters?: UpcasterRegistry,
 ): PatternBuilder<S, Record<never, Kind<S>>> {
-	return new PatternBuilder<S, Record<never, Kind<S>>>(schema, raw);
+	return new PatternBuilder<S, Record<never, Kind<S>>>(schema, raw, upcasters);
 }
 
 export { FOREVER };

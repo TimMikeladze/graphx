@@ -69,6 +69,15 @@ export {
 	type ZObj,
 } from './define-graph-schema.ts';
 
+// P12 — schema evolution / read-time upcasting (§15)
+export {
+	defineUpcasters,
+	type KindUpcaster,
+	Upcaster,
+	type UpcasterRegistry,
+	type UpcastStep,
+} from './upcast.ts';
+
 // P3 / P6 — data layer + temporal mutations
 export {
 	type AddEdgeInput,

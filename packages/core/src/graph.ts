@@ -11,6 +11,7 @@ import {
 	type QueryLimits,
 	resolveLimits,
 } from './governance.ts';
+import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
  * P3 — data layer (§6). The temporal store front: ULID identity, close-and-insert
@@ -139,11 +140,16 @@ export class Graph<S extends GraphSchema> {
 	private lastTs = 0;
 	/** id -> kind cache, populated on write and on getNode/lookup (endpoint checks). */
 	private kindCache = new Map<string, string>();
+	/** P12 read-time upcaster (§15). Empty registry ⇒ identity (pre-P12 behavior). */
+	private readonly upcaster: Upcaster;
 
 	constructor(
 		public raw: Client,
 		public schema: S,
-	) {}
+		upcasters?: UpcasterRegistry,
+	) {
+		this.upcaster = new Upcaster(schema, upcasters ?? {});
+	}
 
 	/**
 	 * Monotonic write clock (M6): strictly increasing across rapid writes so two
@@ -168,6 +174,12 @@ export class Graph<S extends GraphSchema> {
 		const id = ulid();
 		const ts = this.now();
 
+		// P12: stamp the kind's current `_v` into the STORED props (so future readers
+		// know which upcasters to run). The in-memory return stays the clean parsed
+		// shape (no `_v`). An unregistered kind stamps nothing — byte-identical to pre-P12;
+		// a kind that itself declares the reserved `_v` throws (no silent clobber).
+		const storedProps = this.upcaster.stamp(n.kind, parsed as Record<string, unknown>);
+
 		const common = [
 			id,
 			n.kind,
@@ -175,7 +187,7 @@ export class Graph<S extends GraphSchema> {
 			n.uri ?? null,
 			n.content_hash ?? null,
 			n.content_type ?? null,
-			JSON.stringify(parsed),
+			JSON.stringify(storedProps),
 		];
 		// B5: emb present -> vector(?) with the JSON array; absent -> literal NULL.
 		const versionStmt: InStatement = n.emb
@@ -485,7 +497,27 @@ export class Graph<S extends GraphSchema> {
 			// Superseded between SELECT and UPDATE -> nothing closed -> retry.
 			if (closed.rowsAffected !== 1) return 'superseded';
 
-			const props = { ...JSON.parse(String(cur.props)), ...patch.props };
+			// P12: produce a successor that is genuinely current-shaped and honestly `_v`-stamped
+			// (never "v2-tagged but v1-shaped"). The OLD version row is untouched (closed above) —
+			// only this new successor moves forward (no backfill). Unregistered kind ⇒ both
+			// `apply` and `stamp` are identity → exactly the pre-P12 behavior.
+			const successorKind = patch.kind ?? String(cur.kind);
+			const curRaw = JSON.parse(String(cur.props)) as Record<string, unknown>;
+			let props: Record<string, unknown>;
+			if (successorKind !== String(cur.kind) && this.upcaster.stampVersion(successorKind) !== undefined) {
+				// Kind change INTO a registered kind: the live props were shaped by the OLD kind's
+				// chain, meaningless under the successor. Re-parse the merged result against the
+				// SUCCESSOR's Zod schema (drops foreign fields, applies its defaults, throws if a
+				// required successor field is missing) before stamping, so the stamp matches the shape.
+				const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[successorKind];
+				const reshaped = (def ? def.parse({ ...curRaw, ...patch.props }) : { ...curRaw, ...patch.props }) as Record<string, unknown>;
+				props = this.upcaster.stamp(successorKind, reshaped);
+			} else {
+				// Same-kind (or unregistered successor): migrate the live props to the latest shape,
+				// merge the patch, stamp.
+				const merged = { ...this.upcaster.apply(String(cur.kind), curRaw), ...patch.props };
+				props = this.upcaster.stamp(successorKind, merged);
+			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
 			const common: InValue[] = [
@@ -556,21 +588,29 @@ export class Graph<S extends GraphSchema> {
 		return kind;
 	}
 
-	/** Reshape a `{ id, kind, props }` row from a view into the typed node shape. */
+	/**
+	 * Reshape a `{ id, kind, props }` row from a view into the typed node shape, applying
+	 * the P12 read-time upcaster (§15): stored props are migrated from their `_v` to the
+	 * latest shape and Zod-parsed. Empty registry ⇒ identity (raw JSON, pre-P12).
+	 */
 	private rowToNode(row: Row): AnyNode<S> {
 		const kind = String(row.kind);
 		this.kindCache.set(String(row.id), kind);
 		return {
 			id: String(row.id),
 			kind,
-			props: JSON.parse(String(row.props)),
+			props: this.upcaster.apply(kind, JSON.parse(String(row.props)) as Record<string, unknown>),
 		} as AnyNode<S>;
 	}
 }
 
 /** Convenience: pair a raw client with a schema. (P11 wires the per-project factory.) */
-export function graphFor<S extends GraphSchema>(raw: Client, schema: S): Graph<S> {
-	return new Graph(raw, schema);
+export function graphFor<S extends GraphSchema>(
+	raw: Client,
+	schema: S,
+	upcasters?: UpcasterRegistry,
+): Graph<S> {
+	return new Graph(raw, schema, upcasters);
 }
 
 export { FOREVER };

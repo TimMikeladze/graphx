@@ -27,6 +27,12 @@ export interface JourneyOpts {
 	maxDepth?: number;
 	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
 	limits?: Partial<QueryLimits>;
+	/**
+	 * P12 (§15) opt-in read-time upcaster. When set, the projected `name` is read from
+	 * the upcast LATEST shape (so a renamed/derived name field still surfaces); when
+	 * omitted, `name` is the raw `props ->> 'name'` (pre-P12 behavior — unchanged).
+	 */
+	upcaster?: { apply: (kind: string, props: Record<string, unknown>) => Record<string, unknown> };
 }
 
 /** One reached node with its earliest arrival time and minimal hop count. */
@@ -91,7 +97,7 @@ journey(node, t_arrive, depth, path) AS (
 ),
 reached AS (SELECT node AS id, MIN(t_arrive) AS arrival_t, MIN(depth) AS hops
             FROM journey WHERE node <> ? GROUP BY node)
-SELECT r.id, r.arrival_t, r.hops, n.kind, n.props ->> 'name' AS name
+SELECT r.id, r.arrival_t, r.hops, n.kind, n.props ->> 'name' AS name, n.props AS props_json
 FROM reached r JOIN node_versions n
   ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to
 ORDER BY r.arrival_t, r.hops`;
@@ -100,13 +106,20 @@ ORDER BY r.arrival_t, r.hops`;
 		raw.execute({ sql: applyLimit(sql, limits.maxRows), args: params }),
 		limits.timeoutMs,
 	);
-	return res.rows.map(
-		(row: Row): JourneyRow => ({
+	return res.rows.map((row: Row): JourneyRow => {
+		const kind = String(row.kind);
+		// P12: with an upcaster, project `name` from the upcast LATEST shape; without one,
+		// keep the raw SQL `props ->> 'name'` projection byte-for-byte (pre-P12).
+		const name = o.upcaster
+			? (o.upcaster.apply(kind, JSON.parse(String(row.props_json)) as Record<string, unknown>)
+					.name ?? null)
+			: row.name;
+		return {
 			id: String(row.id),
 			arrival_t: Number(row.arrival_t),
 			hops: Number(row.hops),
-			kind: String(row.kind),
-			name: row.name,
-		}),
-	);
+			kind,
+			name,
+		};
+	});
 }
