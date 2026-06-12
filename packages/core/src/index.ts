@@ -74,3 +74,12 @@ export { asOfPredicate, diff, history, type TemporalDiff } from './temporal.ts';
 
 // P7 — time-respecting traversal
 export { journey, type JourneyOpts, type JourneyRow } from './journey.ts';
+
+// P11 — serving (Hono app + typed client)
+export {
+	type AppType,
+	createApp,
+	graphForProject,
+	type ServeConfig,
+	type ServeEnv,
+} from './serve.ts';
