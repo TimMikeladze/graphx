@@ -75,6 +75,28 @@ export { asOfPredicate, diff, history, type TemporalDiff } from './temporal.ts';
 // P7 — time-respecting traversal
 export { journey, type JourneyOpts, type JourneyRow } from './journey.ts';
 
+// P8 — graph algorithms (CSR mirror, shortestPath, analytics)
+export {
+	buildCSR,
+	centrality,
+	type CentralityKind,
+	community,
+	type CommunityOpts,
+	type CSR,
+	type CsrNeighbor,
+	type Metric,
+	neighbors,
+	pagerank,
+	type PageRankOpts,
+	shortestPath,
+	type ShortestPathOpts,
+	type ShortestPathResult,
+	snapshotCSR,
+	type TopNode,
+	topNodes,
+	type TopNodesOpts,
+} from './algorithms.ts';
+
 // P11 — serving (Hono app + typed client)
 export {
 	type AppType,

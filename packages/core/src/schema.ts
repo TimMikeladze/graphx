@@ -57,6 +57,20 @@ CREATE VIEW IF NOT EXISTS edges AS
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
+
+-- D4/B10: analytics live in a SIDE table, UPSERTed by P8 jobs and JOINed by topNodes.
+-- Version rows stay byte-stable — no analytics columns on node_versions. Per-metric
+-- indexes back the ORDER BY <metric> DESC in topNodes.
+CREATE TABLE IF NOT EXISTS node_analytics (
+  id          TEXT PRIMARY KEY REFERENCES node_identity(id),
+  pagerank    REAL,
+  community   INTEGER,
+  degree      INTEGER,
+  computed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
+CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
 
