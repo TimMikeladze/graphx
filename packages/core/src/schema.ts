@@ -2,6 +2,28 @@ import type { Client } from '@libsql/client';
 import { applyConnPragmas } from './db.ts';
 
 /**
+ * The partial live ANN index DDL (D5). Exported so the P13 bulk loader can DROP it
+ * before a large import and recreate it afterward (deferred index build, §19.8).
+ * The predicate `valid_to = 8640000000000000` (FOREVER) makes it partial over live
+ * rows only; it is dim-independent (the `F32_BLOB(dim)` lives on the column).
+ */
+export const NV_EMB_IDX_DDL: string =
+	`CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = 8640000000000000;`;
+
+/**
+ * The FTS5 external-content sync trigger DDL (M2, §19.3). External-content FTS5 does
+ * NOT auto-sync, so this `AFTER INSERT` trigger mirrors every new `node_versions` row
+ * (rowid = `ver`) into `nodes_fts`. Closes are UPDATEs (no FTS mutation) — intentional,
+ * so the index covers every version (live + historical), which is what powers as-of
+ * lexical search. Exported so the bulk loader can DROP it during a load (per-row FTS
+ * sync would defeat the deferral) and recreate it before the final `'rebuild'`.
+ */
+export const NODES_FTS_TRIGGER_DDL: string =
+	`CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
+  INSERT INTO nodes_fts(rowid, body) VALUES (new.ver, new.body);
+END;`;
+
+/**
  * Full P1 DDL (§4 corrected + D1/D5/B9) with the embedding dimension substituted
  * into `F32_BLOB(<dim>)`. Every `CREATE` is `IF NOT EXISTS` so `init()` re-runs as
  * a no-op. `executeMultiple` runs the whole script (no `;`-splitting).
@@ -10,6 +32,10 @@ import { applyConnPragmas } from './db.ts';
  * (`WHERE valid_to = FOREVER`). This is verified to execute on @libsql/client at
  * init time (see test/p1-schema.test.ts). P4's as-of-past path must over-fetch and
  * temporal-filter because the index covers live rows only.
+ *
+ * P13 (M2, §19.3): `nodes_fts` is an external-content FTS5 index over `node_versions`
+ * (`content_rowid='ver'`) kept in sync by `nodes_fts_ai`; both are additive and join
+ * the lexical seed list into hybrid retrieval.
  */
 export function schema(dim: number = 768): string {
 	return `
@@ -31,7 +57,11 @@ CREATE TABLE IF NOT EXISTS node_versions (
 );
 CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
 CREATE INDEX IF NOT EXISTS nv_kind ON node_versions(kind);
-CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = 8640000000000000;
+${NV_EMB_IDX_DDL}
+
+-- P13 (M2/§19.3): external-content FTS5 over node_versions, synced by the trigger below.
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');
+${NODES_FTS_TRIGGER_DDL}
 
 CREATE TABLE IF NOT EXISTS edge_versions (
   ver        INTEGER PRIMARY KEY,

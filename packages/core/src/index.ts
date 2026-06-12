@@ -12,7 +12,13 @@ export {
 } from './db.ts';
 
 // P1 — schema init
-export { ensureColumn, init, schema } from './schema.ts';
+export {
+	ensureColumn,
+	init,
+	NODES_FTS_TRIGGER_DDL,
+	NV_EMB_IDX_DDL,
+	schema,
+} from './schema.ts';
 
 // P0.5 — control plane + authz
 export {
@@ -59,6 +65,19 @@ export {
 
 // P4 — vectors + GraphRAG retrieve
 export { type EmbedFn, retrieve, type RetrievedNode, type RetrieveOpts } from './retrieve.ts';
+
+// P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR
+export {
+	type HybridRetrieveOpts,
+	hybridRetrieve,
+	type MmrOpts,
+	type RerankFn,
+	type RerankScore,
+	sanitizeMatch,
+} from './hybrid.ts';
+
+// P13 — bulk ingestion
+export { type BulkOpts, bulkLoad, type BulkResult, type BulkRow } from './bulk.ts';
 
 // P5 — PatternBuilder
 export {
