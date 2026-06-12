@@ -1,6 +1,13 @@
 import type { Client, Row } from '@libsql/client';
 import { FOREVER } from './db.ts';
-import { applyLimit, type QueryLimits, resolveLimits, withTimeout } from './governance.ts';
+import {
+	applyLimit,
+	type MetricsContext,
+	metricLabels,
+	type QueryLimits,
+	resolveLimits,
+	withTimeout,
+} from './governance.ts';
 
 /**
  * P7 — `journey()` (§10). Earliest-arrival, time-respecting cascade over the
@@ -33,6 +40,12 @@ export interface JourneyOpts {
 	 * omitted, `name` is the raw `props ->> 'name'` (pre-P12 behavior — unchanged).
 	 */
 	upcaster?: { apply: (kind: string, props: Record<string, unknown>) => Record<string, unknown> };
+	/**
+	 * P15 (§19.6) observability: when set, feeds the slow-query log (via {@link withTimeout}) and
+	 * observes traversal histograms (`graphx_traversal_rows`/`graphx_traversal_depth`). Omit ⇒ no
+	 * metrics, zero overhead (pre-P15 behavior).
+	 */
+	metrics?: MetricsContext;
 }
 
 /** One reached node with its earliest arrival time and minimal hop count. */
@@ -105,8 +118,9 @@ ORDER BY r.arrival_t, r.hops`;
 	const res = await withTimeout(
 		raw.execute({ sql: applyLimit(sql, limits.maxRows), args: params }),
 		limits.timeoutMs,
+		o.metrics,
 	);
-	return res.rows.map((row: Row): JourneyRow => {
+	const rows = res.rows.map((row: Row): JourneyRow => {
 		const kind = String(row.kind);
 		// P12: with an upcaster, project `name` from the upcast LATEST shape; without one,
 		// keep the raw SQL `props ->> 'name'` projection byte-for-byte (pre-P12).
@@ -122,4 +136,15 @@ ORDER BY r.arrival_t, r.hops`;
 			name,
 		};
 	});
+	if (o.metrics) {
+		// §19.6 traversal histograms: result size (fan-out) and reached depth (max hops).
+		const labels = metricLabels(o.metrics);
+		o.metrics.sink.observe('graphx_traversal_rows', rows.length, labels);
+		o.metrics.sink.observe(
+			'graphx_traversal_depth',
+			rows.reduce((m, r) => Math.max(m, r.hops), 0),
+			labels,
+		);
+	}
+	return rows;
 }

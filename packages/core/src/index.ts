@@ -28,11 +28,17 @@ export {
 } from './constraints.ts';
 
 // P14 — query governance (§19.2) + pagination cursor codec (§19.7)
+// P15 — observability metrics sink (§19.6)
 export {
 	applyLimit,
 	decodeCursor,
 	DEFAULT_LIMITS,
 	encodeCursor,
+	InMemoryMetrics,
+	type MetricsContext,
+	metricLabels,
+	type MetricsSink,
+	NOOP_METRICS,
 	type QueryLimits,
 	QueryTimeoutError,
 	resolveLimits,
@@ -121,8 +127,17 @@ export {
 	type RelOpts,
 } from './pattern.ts';
 
-// P6 — temporal reads
-export { asOfPredicate, diff, history, type TemporalDiff } from './temporal.ts';
+// P6 — temporal reads + P15 change feed / CDC (§19.10)
+export {
+	asOfPredicate,
+	changeFeed,
+	type ChangeFeedCursor,
+	type ChangeFeedOpts,
+	type ChangeFeedPage,
+	diff,
+	history,
+	type TemporalDiff,
+} from './temporal.ts';
 
 // P7 — time-respecting traversal
 export { journey, type JourneyOpts, type JourneyRow } from './journey.ts';
@@ -149,11 +164,13 @@ export {
 	type TopNodesOpts,
 } from './algorithms.ts';
 
-// P11 — serving (Hono app + typed client)
+// P11 — serving (Hono app + typed client) + P15 readiness latch (§19.6)
 export {
 	type AppType,
 	createApp,
+	createReadiness,
 	graphForProject,
+	type Readiness,
 	type ServeConfig,
 	type ServeEnv,
 } from './serve.ts';

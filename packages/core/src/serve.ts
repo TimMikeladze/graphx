@@ -7,7 +7,7 @@ import { HTTPException } from 'hono/http-exception';
 import { z, ZodError } from 'zod';
 import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
-import type { QueryLimits } from './governance.ts';
+import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
@@ -55,6 +55,39 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * shape over the wire. Omit ⇒ raw stored props (pre-P12 behavior).
 	 */
 	upcasters?: UpcasterRegistry;
+	/**
+	 * P15 (§19.6) metrics sink. When set, read routes increment a per-tenant query counter
+	 * (`graphx_queries_total`) and journey/retrieve observe traversal + slow-query histograms.
+	 * Omit ⇒ no metrics, zero overhead (additive — behavior byte-identical to pre-P15).
+	 */
+	metrics?: MetricsSink;
+	/**
+	 * P15 (§19.6) readiness latch gating `/ready` (the load-balancer health gate). Build one with
+	 * {@link createReadiness}, serve immediately (`/ready` → 503), run `syncIfReplica(...)` for the
+	 * served namespaces ("sync-before-serve"), then call `markReady()` (`/ready` → 200). Omit ⇒
+	 * ready immediately (the non-replica case — there is no sync to wait on).
+	 */
+	readiness?: Readiness;
+}
+
+/**
+ * The `/ready` latch (§19.6). `/ready` reports 503 until {@link Readiness.markReady} is called,
+ * so an embedded replica can finish its sync-before-serve before the load balancer routes traffic.
+ */
+export interface Readiness {
+	isReady(): boolean;
+	markReady(): void;
+}
+
+/** Create a {@link Readiness} latch (starts not-ready). The operator flips it after sync-before-serve. */
+export function createReadiness(): Readiness {
+	let ready = false;
+	return {
+		isReady: () => ready,
+		markReady: () => {
+			ready = true;
+		},
+	};
 }
 
 /** Hono env: the per-request principal + the resolved per-project SDK handle. */
@@ -164,6 +197,9 @@ function requireGraph<S extends GraphSchema>(
 			cfg.schema,
 			cfg.upcasters,
 		);
+		// §19.6 per-tenant query counts: only authorized requests are counted (this runs
+		// after the confused-deputy guard + authz resolve), labelled by tenant and op.
+		cfg.metrics?.inc('graphx_queries_total', { tenant: principal.tenantId, op });
 		c.set('graph', graph);
 		await next();
 	});
@@ -191,6 +227,15 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	// journey takes its own opt-in upcaster (getNode/neighbors upcast via the project Graph).
 	const journeyUpcaster = cfg.upcasters ? new Upcaster(cfg.schema, cfg.upcasters) : undefined;
 	const app = new Hono<ServeEnv<S>>()
+		// §19.6 ops endpoints — UNAUTHENTICATED + tenant-agnostic by construction: mounted
+		// OUTSIDE the `/t/:tenant/p/:project/*` authn group, so they never touch the
+		// confused-deputy guard. /health = process up (always 200); /ready gates the load
+		// balancer on the sync-before-serve latch (default ready when no latch is configured).
+		.get('/health', (c) => c.json({ status: 'ok' }))
+		.get('/ready', (c) => {
+			const ready = cfg.readiness ? cfg.readiness.isReady() : true;
+			return c.json({ status: ready ? 'ready' : 'not-ready' }, ready ? 200 : 503);
+		})
 		.use('/t/:tenant/p/:project/*', authn(cfg))
 		.post(
 			'/t/:tenant/p/:project/nodes',
@@ -238,6 +283,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const rows = await retrieve(c.get('graph').raw, cfg.embed, {
 					...c.req.valid('query'),
 					limits: cfg.limits,
+					metrics: cfg.metrics
+						? { sink: cfg.metrics, op: 'retrieve', tenant: c.get('principal').tenantId }
+						: undefined,
 				});
 				return c.json(rows);
 			},
@@ -251,6 +299,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					...c.req.valid('json'),
 					limits: cfg.limits,
 					upcaster: journeyUpcaster,
+					metrics: cfg.metrics
+						? { sink: cfg.metrics, op: 'journey', tenant: c.get('principal').tenantId }
+						: undefined,
 				});
 				return c.json(rows);
 			},

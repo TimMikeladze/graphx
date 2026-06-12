@@ -79,6 +79,77 @@ export function fanoutJoin(maxFanout: number): string {
 	return `JOIN adj_deg ON adj_deg.a = walk.id AND adj_deg.deg <= ${Math.floor(maxFanout)}`;
 }
 
+/**
+ * P15 — observability (§19.6). A pluggable, dependency-free metrics sink threaded per-call
+ * (like {@link QueryLimits}, never a module global — multi-tenant safety). Minimal structural
+ * interface: a counter ({@link MetricsSink.inc}), a histogram ({@link MetricsSink.observe}),
+ * and a gauge ({@link MetricsSink.gauge}). Adapt it to prom-client/OTel at the edge; the
+ * portable core never imports a metrics backend.
+ */
+export interface MetricsSink {
+	/** Increment a labelled counter by one (per-tenant query counts, slow-query totals). */
+	inc(name: string, labels?: Record<string, string>): void;
+	/** Record a histogram observation (traversal depth/fan-out, slow-query elapsed ms). */
+	observe(name: string, value: number, labels?: Record<string, string>): void;
+	/**
+	 * Set a gauge. Infra-bound gauges are DEFERRED (they need signals not available in-process):
+	 * `graphx_replica_sync_lag_ms`, `graphx_write_queue_depth`, `graphx_ann_recall`. Wire them
+	 * at the operator edge (off sqld replication state / the write path) — not faked here.
+	 */
+	gauge(name: string, value: number, labels?: Record<string, string>): void;
+}
+
+/** A sink plus the labels for one operation — threaded into reads for slow-query + traversal metrics. */
+export interface MetricsContext {
+	sink: MetricsSink;
+	/** Operation label (e.g. `journey`, `retrieve`) for the emitted records. */
+	op: string;
+	/** Optional tenant label for per-tenant attribution. */
+	tenant?: string;
+}
+
+/** Zero-overhead default sink: every method is a no-op (absent metrics ⇒ this). */
+export const NOOP_METRICS: MetricsSink = {
+	inc() {},
+	observe() {},
+	gauge() {},
+};
+
+/** In-memory {@link MetricsSink} for tests: records every call with its labels, plus query helpers. */
+export class InMemoryMetrics implements MetricsSink {
+	readonly counters: Array<{ name: string; labels?: Record<string, string> }> = [];
+	readonly histograms: Array<{ name: string; value: number; labels?: Record<string, string> }> = [];
+	readonly gauges: Array<{ name: string; value: number; labels?: Record<string, string> }> = [];
+
+	inc(name: string, labels?: Record<string, string>): void {
+		this.counters.push({ name, labels });
+	}
+	observe(name: string, value: number, labels?: Record<string, string>): void {
+		this.histograms.push({ name, value, labels });
+	}
+	gauge(name: string, value: number, labels?: Record<string, string>): void {
+		this.gauges.push({ name, value, labels });
+	}
+
+	/** Count `inc` calls for `name` whose labels are a superset of every key in `match`. */
+	count(name: string, match?: Record<string, string>): number {
+		return this.counters.filter(
+			(c) =>
+				c.name === name &&
+				(match === undefined || Object.entries(match).every(([k, v]) => c.labels?.[k] === v)),
+		).length;
+	}
+	/** All histogram values observed for `name`, in order. */
+	observations(name: string): number[] {
+		return this.histograms.filter((h) => h.name === name).map((h) => h.value);
+	}
+}
+
+/** Build the `{op, tenant?}` label bag for a {@link MetricsContext} (omits an absent tenant). */
+export function metricLabels(ctx: MetricsContext): Record<string, string> {
+	return ctx.tenant ? { op: ctx.op, tenant: ctx.tenant } : { op: ctx.op };
+}
+
 /** Thrown by {@link withTimeout} when the work outlives its budget (M7 abandonment). */
 export class QueryTimeoutError extends Error {
 	constructor(ms: number) {
@@ -92,18 +163,75 @@ export class QueryTimeoutError extends Error {
  * rejects with {@link QueryTimeoutError} while `work` keeps running server-side (M7).
  * A non-positive / non-finite budget disables the guard (pass-through). The timer is
  * always cleared on settle so no handle dangles.
+ *
+ * P15 (§19.6): when `ctx` carries a sink, emits ONE structured slow-query record
+ * (`graphx_query_slow_ms`, labelled by op/tenant) iff the query outlives `ms/2` — on either
+ * the success path (slow but completed) or the abandonment path (timer fired). Absent `ctx`
+ * ⇒ identical to the pre-P15 behavior (zero overhead, no extra observation).
  */
-export function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
-	if (!Number.isFinite(ms) || ms <= 0) return work;
+export function withTimeout<T>(work: Promise<T>, ms: number, ctx?: MetricsContext): Promise<T> {
+	// No sink ⇒ EXACTLY the pre-P15 path: zero added allocation, byte-identical behavior. This
+	// is the additive guarantee — every prior call site (no `ctx`) keeps its original semantics.
+	if (!ctx?.sink) {
+		if (!Number.isFinite(ms) || ms <= 0) return work;
+		return new Promise<T>((resolve, reject) => {
+			const timer = setTimeout(() => reject(new QueryTimeoutError(ms)), ms);
+			work.then(
+				(v) => {
+					clearTimeout(timer);
+					resolve(v);
+				},
+				(e) => {
+					clearTimeout(timer);
+					reject(e);
+				},
+			);
+		});
+	}
+
+	// Sink present: instrument the §19.6 slow-query log. Emit ONE record iff elapsed > ms/2 — on
+	// the success path (slow but completed) or the abandonment path (timer fired); `emitted`
+	// makes it at-most-once. A disabled budget (ms ≤ 0 / non-finite) has no slow threshold.
+	const sink = ctx.sink;
+	const labels = metricLabels(ctx);
+	const slowThreshold = Number.isFinite(ms) && ms > 0 ? ms / 2 : Number.POSITIVE_INFINITY;
+	const start = Date.now();
+	let emitted = false;
+	const emitIfSlow = (): void => {
+		if (emitted) return;
+		const elapsed = Date.now() - start;
+		if (elapsed > slowThreshold) {
+			emitted = true;
+			sink.observe('graphx_query_slow_ms', elapsed, labels);
+		}
+	};
+
+	if (!Number.isFinite(ms) || ms <= 0) {
+		return work.then(
+			(v) => {
+				emitIfSlow();
+				return v;
+			},
+			(e) => {
+				emitIfSlow();
+				throw e;
+			},
+		);
+	}
 	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new QueryTimeoutError(ms)), ms);
+		const timer = setTimeout(() => {
+			emitIfSlow(); // elapsed ≈ ms > ms/2 → records the abandonment as slow
+			reject(new QueryTimeoutError(ms));
+		}, ms);
 		work.then(
 			(v) => {
 				clearTimeout(timer);
+				emitIfSlow();
 				resolve(v);
 			},
 			(e) => {
 				clearTimeout(timer);
+				emitIfSlow();
 				reject(e);
 			},
 		);

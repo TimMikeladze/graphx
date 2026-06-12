@@ -4,6 +4,8 @@ import {
 	applyLimit,
 	FANOUT_DEG_CTE,
 	fanoutJoin,
+	type MetricsContext,
+	metricLabels,
 	type QueryLimits,
 	resolveLimits,
 	withTimeout,
@@ -41,6 +43,24 @@ export interface RetrieveOpts {
 	asOf?: number;
 	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
 	limits?: Partial<QueryLimits>;
+	/**
+	 * P15 (§19.6) observability: when set, feeds the slow-query log (via {@link withTimeout}) and
+	 * observes traversal histograms (`graphx_traversal_rows`/`graphx_traversal_depth`). Omit ⇒ no
+	 * metrics, zero overhead (pre-P15 behavior).
+	 */
+	metrics?: MetricsContext;
+}
+
+/** §19.6 traversal histograms: observe the subgraph size (fan-out) and max reached depth. */
+function observeTraversal(ctx: MetricsContext | undefined, rows: RetrievedNode[]): void {
+	if (!ctx) return;
+	const labels = metricLabels(ctx);
+	ctx.sink.observe('graphx_traversal_rows', rows.length, labels);
+	ctx.sink.observe(
+		'graphx_traversal_depth',
+		rows.reduce((m, r) => Math.max(m, r.depth), 0),
+		labels,
+	);
 }
 
 /** One node in the retrieved subgraph. `depth` 0 = ANN seed, ≥1 = walked. */
@@ -158,13 +178,16 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 		const r = await withTimeout(
 			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
 			limits.timeoutMs,
+			opts.metrics,
 		);
-		return r.rows.map((row) => ({
+		const rows = r.rows.map((row) => ({
 			id: String(row.id),
 			body: row.body === null ? null : String(row.body),
 			uri: row.uri === null ? null : String(row.uri),
 			depth: Number(row.depth),
 		}));
+		observeTraversal(opts.metrics, rows);
+		return rows;
 	}
 
 	// Current-time: the live partial index already returns only live rows (D3/D5);
@@ -206,11 +229,14 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 	const r = await withTimeout(
 		raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
 		limits.timeoutMs,
+		opts.metrics,
 	);
-	return r.rows.map((row) => ({
+	const rows = r.rows.map((row) => ({
 		id: String(row.id),
 		body: row.body === null ? null : String(row.body),
 		uri: row.uri === null ? null : String(row.uri),
 		depth: Number(row.depth),
 	}));
+	observeTraversal(opts.metrics, rows);
+	return rows;
 }
