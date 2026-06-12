@@ -1,5 +1,13 @@
 import type { Client } from '@libsql/client';
 import { FOREVER } from './db.ts';
+import {
+	applyLimit,
+	FANOUT_DEG_CTE,
+	fanoutJoin,
+	type QueryLimits,
+	resolveLimits,
+	withTimeout,
+} from './governance.ts';
 
 /**
  * P4 — vectors + GraphRAG `retrieve` (§7, corrected; D3/D5).
@@ -31,6 +39,8 @@ export interface RetrieveOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
 	asOf?: number;
+	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
+	limits?: Partial<QueryLimits>;
 }
 
 /** One node in the retrieved subgraph. `depth` 0 = ANN seed, ≥1 = walked. */
@@ -73,6 +83,7 @@ export async function retrieve(
 	const direction = opts.direction ?? 'both';
 	const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 	const qEmbJson = JSON.stringify(qEmb);
+	const limits = resolveLimits(opts.limits);
 
 	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
 
@@ -108,6 +119,7 @@ WITH seeds AS (
 adj AS (
   ${adjCte(direction, edgePred + relPredAdj)}
 ),
+${FANOUT_DEG_CTE},
 walk AS (
   SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
   FROM node_versions n JOIN seeds USING (id)
@@ -116,6 +128,7 @@ walk AS (
   SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
   FROM walk
   JOIN adj ON adj.a = walk.id
+  ${fanoutJoin(limits.maxFanout)}
   JOIN node_versions n ON n.id = adj.b AND n.valid_from <= ? AND ? < n.valid_to
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
@@ -142,7 +155,10 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 			maxDepth, // walk recursive: depth < ?
 		);
 
-		const r = await raw.execute({ sql, args });
+		const r = await withTimeout(
+			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
+			limits.timeoutMs,
+		);
 		return r.rows.map((row) => ({
 			id: String(row.id),
 			body: row.body === null ? null : String(row.body),
@@ -165,6 +181,7 @@ WITH seeds AS (
 adj AS (
   ${adjCte(direction, edgePredLive + relPredAdj)}
 ),
+${FANOUT_DEG_CTE},
 walk AS (
   SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
   FROM node_versions n JOIN seeds USING (id)
@@ -173,6 +190,7 @@ walk AS (
   SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
   FROM walk
   JOIN adj ON adj.a = walk.id
+  ${fanoutJoin(limits.maxFanout)}
   JOIN node_versions n ON n.id = adj.b AND n.valid_to = ${FOREVER}
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
@@ -185,7 +203,10 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 	}
 	args.push(maxDepth);
 
-	const r = await raw.execute({ sql, args });
+	const r = await withTimeout(
+		raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
+		limits.timeoutMs,
+	);
 	return r.rows.map((row) => ({
 		id: String(row.id),
 		body: row.body === null ? null : String(row.body),

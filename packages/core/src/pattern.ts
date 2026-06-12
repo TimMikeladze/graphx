@@ -2,6 +2,14 @@ import type { Client, Row } from '@libsql/client';
 import { FOREVER } from './db.ts';
 import type { GraphSchema } from './graph.ts';
 import type { Kind, NodeOf } from './define-graph-schema.ts';
+import {
+	applyLimit,
+	decodeCursor,
+	DEFAULT_LIMITS,
+	encodeCursor,
+	type QueryLimits,
+	resolveLimits,
+} from './governance.ts';
 
 /**
  * P5 — PatternBuilder (§8). A fluent, typed builder that compiles to raw SQL — no
@@ -72,6 +80,39 @@ export type PatternRow<
 > = {
 	[A in Sel]: NodeOf<S, Acc[A]>;
 };
+
+/** Options for {@link PatternQuery.page} — keyset pagination over the selected ids (§19.7). */
+export interface PagePatternOpts {
+	/** Page size; clamped to `maxRows`. Defaults to `maxRows`. */
+	limit?: number;
+	/** Opaque cursor from a prior page's `nextCursor`; omit for the first page. */
+	cursor?: string;
+	/** §19.2 caps; `maxRows` is the hard ceiling on a page. */
+	limits?: Partial<QueryLimits>;
+}
+
+/** One page of {@link PatternQuery.page}. */
+export interface PatternPage<
+	S extends GraphSchema,
+	Acc extends Record<string, Kind<S>>,
+	Sel extends keyof Acc & string,
+> {
+	rows: Array<PatternRow<S, Acc, Sel>>;
+	/** `null` when this is the last page. */
+	nextCursor: string | null;
+}
+
+/** The runnable handle returned by {@link PatternBuilder.select}. */
+export interface PatternQuery<
+	S extends GraphSchema,
+	Acc extends Record<string, Kind<S>>,
+	Sel extends keyof Acc & string,
+> {
+	/** Run the pattern, capped at `maxRows` (§19.2). */
+	run(): Promise<Array<PatternRow<S, Acc, Sel>>>;
+	/** Keyset-paginate the pattern by the composite key of the selected alias ids (§19.7). */
+	page(opts?: PagePatternOpts): Promise<PatternPage<S, Acc, Sel>>;
+}
 
 /**
  * Fluent builder over a typed schema. `Acc` accumulates alias→kind as `.node` is
@@ -307,18 +348,64 @@ WHERE walk.depth >= ${v.min}`;
 	/**
 	 * Execute and reshape rows: each selected alias becomes a `{ id, kind, props }`
 	 * node read off the `<alias>__id|kind|props` columns. Requires the raw client.
+	 *
+	 * `.run()` caps at `maxRows` (§19.2); `.page()` keyset-paginates (§19.7) by the
+	 * composite key of the selected alias ids — a row-value cursor `(a__id, b__id, …)`.
+	 *
+	 * `.page()` returns each DISTINCT selected-id tuple once (it `GROUP BY`s the key, the
+	 * same way `neighborsPage` groups by neighbor id) — necessary because the selected
+	 * tuple is not unique per row when a strict subset of aliases is selected, when edges
+	 * are multi-valued, or in a variable-length walk (same endpoints at different depths).
+	 * This makes pages stable (neither skip nor duplicate a tuple) and DIVERGES from
+	 * `.run()`, which keeps every duplicate row.
 	 */
 	async select<Sel extends keyof Acc & string>(
 		...aliases: Sel[]
-	): Promise<{ run(): Promise<Array<PatternRow<S, Acc, Sel>>> }> {
+	): Promise<PatternQuery<S, Acc, Sel>> {
 		const { sql, args } = this.toSQL();
 		const raw = this.raw;
+		const keyCols = aliases.map((a) => `sub.${a}__id`);
 		return {
 			run: async (): Promise<Array<PatternRow<S, Acc, Sel>>> => {
 				if (!raw)
 					throw new Error('PatternBuilder.run: no raw client (pass it to match(schema, raw))');
-				const res = await raw.execute({ sql, args: args as never[] });
+				const capped = applyLimit(sql, DEFAULT_LIMITS.maxRows);
+				const res = await raw.execute({ sql: capped, args: args as never[] });
 				return res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases));
+			},
+			page: async (opts: PagePatternOpts = {}): Promise<PatternPage<S, Acc, Sel>> => {
+				if (!raw)
+					throw new Error('PatternBuilder.page: no raw client (pass it to match(schema, raw))');
+				if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+					throw new Error(`PatternBuilder.page: limit must be a positive integer, got ${opts.limit}`);
+				}
+				const maxRows = resolveLimits(opts.limits).maxRows;
+				const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+				const pageArgs: unknown[] = [...args];
+				let whereClause = '';
+				if (opts.cursor) {
+					const key = decodeCursor(opts.cursor);
+					if (key.length !== aliases.length) throw new Error('invalid cursor');
+					whereClause = ` WHERE (${keyCols.join(', ')}) > (${key.map(() => '?').join(', ')})`;
+					pageArgs.push(...key);
+				}
+				// Wrap the (unchanged) compiled pattern; GROUP BY the composite id tuple so
+				// each distinct selected tuple is one keyset row (no duplicate, no skip even
+				// when the inner rows share a tuple — multi-edge / var-walk / partial select).
+				const paged = `SELECT * FROM (${sql}) sub${whereClause}
+GROUP BY ${keyCols.join(', ')}
+ORDER BY ${keyCols.join(', ')}
+LIMIT ?`;
+				pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
+				const res = await raw.execute({ sql: paged, args: pageArgs as never[] });
+				const rows = res.rows.map((row) => reshape<S, Acc, Sel>(row, aliases));
+				if (rows.length > pageSize) {
+					const page = rows.slice(0, pageSize);
+					const last = page[page.length - 1] as PatternRow<S, Acc, Sel>;
+					const key = aliases.map((a) => (last[a] as NodeOf<S, Acc[Sel]>).id);
+					return { rows: page, nextCursor: encodeCursor(key) };
+				}
+				return { rows, nextCursor: null };
 			},
 		};
 	}

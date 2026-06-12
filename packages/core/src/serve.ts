@@ -7,6 +7,7 @@ import { HTTPException } from 'hono/http-exception';
 import { z, ZodError } from 'zod';
 import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
+import type { QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
@@ -41,6 +42,12 @@ export interface ServeConfig<S extends GraphSchema> {
 	authenticate: (c: Context) => Principal | Promise<Principal>;
 	/** Embedder for the `retrieve` route; omit to leave `retrieve` unconfigured (501). */
 	embed?: EmbedFn;
+	/**
+	 * §19.2 governance caps enforced server-side on every read route (row cap, fan-out
+	 * guard, fail-safe timeout). Set by the operator — NOT client-overridable, so a
+	 * tenant can't raise its own limits. Omit for {@link DEFAULT_LIMITS}.
+	 */
+	limits?: Partial<QueryLimits>;
 }
 
 /** Hono env: the per-request principal + the resolved per-project SDK handle. */
@@ -200,6 +207,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const list = await c.get('graph').neighbors(c.req.param('id'), {
 					direction,
 					rels: rel ? [rel] : undefined,
+					limits: cfg.limits,
 				});
 				return c.json(list);
 			},
@@ -210,7 +218,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			zValidator('query', retrieveQuerySchema),
 			async (c) => {
 				if (!cfg.embed) throw new HTTPException(501, { message: 'retrieve not configured' });
-				const rows = await retrieve(c.get('graph').raw, cfg.embed, c.req.valid('query'));
+				const rows = await retrieve(c.get('graph').raw, cfg.embed, {
+					...c.req.valid('query'),
+					limits: cfg.limits,
+				});
 				return c.json(rows);
 			},
 		)
@@ -219,7 +230,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			requireGraph(cfg, 'read'),
 			zValidator('json', journeyInputSchema),
 			async (c) => {
-				const rows = await journey(c.get('graph').raw, c.req.valid('json'));
+				const rows = await journey(c.get('graph').raw, {
+					...c.req.valid('json'),
+					limits: cfg.limits,
+				});
 				return c.json(rows);
 			},
 		);

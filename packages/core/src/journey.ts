@@ -1,4 +1,6 @@
 import type { Client, Row } from '@libsql/client';
+import { FOREVER } from './db.ts';
+import { applyLimit, type QueryLimits, resolveLimits, withTimeout } from './governance.ts';
 
 /**
  * P7 — `journey()` (§10). Earliest-arrival, time-respecting cascade over the
@@ -23,6 +25,8 @@ export interface JourneyOpts {
 	rels?: string[];
 	direction?: 'forward' | 'reverse' | 'both';
 	maxDepth?: number;
+	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
+	limits?: Partial<QueryLimits>;
 }
 
 /** One reached node with its earliest arrival time and minimal hop count. */
@@ -48,15 +52,42 @@ export async function journey(raw: Client, o: JourneyOpts): Promise<JourneyRow[]
 						'CASE WHEN e.src = j.node THEN e.dst ELSE e.src END',
 					];
 	const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
-	const params = [o.start, o.from, o.start, ...(rels ?? []), maxDepth, o.start];
+	const limits = resolveLimits(o.limits);
+	const maxFanout = Math.floor(limits.maxFanout);
+
+	// Supernode fan-out guard (§19.2): live out-degree per node in the walk direction.
+	// A LEFT JOIN + `IS NULL OR <= maxFanout` predicate means only genuine live
+	// supernodes are blocked from expansion — a node with few/zero live edges (it may
+	// still be reachable via a historical-but-still-open edge) is never regressed. Live
+	// out-degree is the proxy (matching the task's "live out-degree > maxFanout"); the
+	// per-arrival usable set is time-varying and can't be a static CTE.
+	let degBody: string;
+	if (dir === 'forward') {
+		degBody = `SELECT e.src AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause} GROUP BY e.src`;
+	} else if (dir === 'reverse') {
+		degBody = `SELECT e.dst AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause} GROUP BY e.dst`;
+	} else {
+		degBody = `SELECT node, COUNT(*) AS c FROM (
+    SELECT e.src AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause}
+    UNION ALL SELECT e.dst AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause}
+  ) GROUP BY node`;
+	}
+	const degParams = dir === 'both' ? [...(rels ?? []), ...(rels ?? [])] : [...(rels ?? [])];
+	const params = [...degParams, o.start, o.from, o.start, ...(rels ?? []), maxDepth, o.start];
 
 	const sql = `
-WITH RECURSIVE journey(node, t_arrive, depth, path) AS (
+WITH RECURSIVE deg(node, c) AS (
+  ${degBody}
+),
+journey(node, t_arrive, depth, path) AS (
   SELECT ?, CAST(? AS INTEGER), 0, ',' || ? || ','
   UNION ALL
   SELECT ${nextExpr}, MAX(j.t_arrive, e.valid_from), j.depth+1, j.path || ${nextExpr} || ','
-  FROM journey j JOIN edge_versions e ON ${edgeMatch} AND e.valid_to > j.t_arrive${relClause}
+  FROM journey j
+  LEFT JOIN deg ON deg.node = j.node
+  JOIN edge_versions e ON ${edgeMatch} AND e.valid_to > j.t_arrive${relClause}
   WHERE j.depth < ? AND j.path NOT LIKE '%,' || ${nextExpr} || ',%'
+    AND (deg.c IS NULL OR deg.c <= ${maxFanout})
 ),
 reached AS (SELECT node AS id, MIN(t_arrive) AS arrival_t, MIN(depth) AS hops
             FROM journey WHERE node <> ? GROUP BY node)
@@ -65,7 +96,10 @@ FROM reached r JOIN node_versions n
   ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to
 ORDER BY r.arrival_t, r.hops`;
 
-	const res = await raw.execute({ sql, args: params });
+	const res = await withTimeout(
+		raw.execute({ sql: applyLimit(sql, limits.maxRows), args: params }),
+		limits.timeoutMs,
+	);
 	return res.rows.map(
 		(row: Row): JourneyRow => ({
 			id: String(row.id),

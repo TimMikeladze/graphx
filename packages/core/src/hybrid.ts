@@ -1,5 +1,13 @@
 import type { Client } from '@libsql/client';
 import { FOREVER } from './db.ts';
+import {
+	applyLimit,
+	FANOUT_DEG_CTE,
+	fanoutJoin,
+	type QueryLimits,
+	resolveLimits,
+	withTimeout,
+} from './governance.ts';
 import type { EmbedFn, RetrievedNode } from './retrieve.ts';
 
 /**
@@ -64,6 +72,8 @@ export interface HybridRetrieveOpts {
 	rerank?: RerankFn;
 	/** Optional MMR diversification of the expanded candidates (§19.4). */
 	mmr?: MmrOpts;
+	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
+	limits?: Partial<QueryLimits>;
 }
 
 /**
@@ -201,6 +211,7 @@ async function walkCurrent(
 	direction: 'forward' | 'reverse' | 'both',
 	rels: string[] | null,
 	maxDepth: number,
+	limits: QueryLimits,
 ): Promise<RetrievedNode[]> {
 	const edgePred = `valid_to = ${FOREVER}${relFragment(rels)}`;
 	const sql = `
@@ -208,6 +219,7 @@ WITH seeds(id) AS (SELECT value FROM json_each(?)),
 adj AS (
   ${adjCte(direction, edgePred)}
 ),
+${FANOUT_DEG_CTE},
 walk AS (
   SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
   FROM node_versions n JOIN seeds USING (id)
@@ -216,6 +228,7 @@ walk AS (
   SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
   FROM walk
   JOIN adj ON adj.a = walk.id
+  ${fanoutJoin(limits.maxFanout)}
   JOIN node_versions n ON n.id = adj.b AND n.valid_to = ${FOREVER}
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
@@ -225,7 +238,9 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 	const sides = direction === 'both' ? 2 : 1;
 	for (let i = 0; i < sides; i++) args.push(...(rels ?? []));
 	args.push(maxDepth);
-	return rowsToNodes(await raw.execute({ sql, args }));
+	return rowsToNodes(
+		await withTimeout(raw.execute({ sql: applyLimit(sql, limits.maxRows), args }), limits.timeoutMs),
+	);
 }
 
 /** Run the §7 cycle-safe walk from an explicit fused-seed id list (as-of-past). */
@@ -236,6 +251,7 @@ async function walkAsOf(
 	rels: string[] | null,
 	maxDepth: number,
 	t: number,
+	limits: QueryLimits,
 ): Promise<RetrievedNode[]> {
 	const edgePred = `valid_from <= ? AND ? < valid_to${relFragment(rels)}`;
 	const sql = `
@@ -243,6 +259,7 @@ WITH seeds(id) AS (SELECT value FROM json_each(?)),
 adj AS (
   ${adjCte(direction, edgePred)}
 ),
+${FANOUT_DEG_CTE},
 walk AS (
   SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
   FROM node_versions n JOIN seeds USING (id)
@@ -251,6 +268,7 @@ walk AS (
   SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
   FROM walk
   JOIN adj ON adj.a = walk.id
+  ${fanoutJoin(limits.maxFanout)}
   JOIN node_versions n ON n.id = adj.b AND n.valid_from <= ? AND ? < n.valid_to
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
@@ -260,7 +278,9 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 	const sides = direction === 'both' ? 2 : 1;
 	for (let i = 0; i < sides; i++) args.push(t, t, ...(rels ?? []));
 	args.push(t, t, t, t, maxDepth);
-	return rowsToNodes(await raw.execute({ sql, args }));
+	return rowsToNodes(
+		await withTimeout(raw.execute({ sql: applyLimit(sql, limits.maxRows), args }), limits.timeoutMs),
+	);
 }
 
 function rowsToNodes(r: { rows: Record<string, unknown>[] }): RetrievedNode[] {
@@ -371,6 +391,7 @@ export async function hybridRetrieve(
 	const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 	const rrfK = opts.rrfK ?? DEFAULT_RRF_K;
 	const fetchK = k * SEED_MULTIPLIER;
+	const limits = resolveLimits(opts.limits);
 
 	const qEmb = await embed(opts.query);
 	const qEmbJson = JSON.stringify(qEmb);
@@ -387,8 +408,8 @@ export async function hybridRetrieve(
 	if (seedIds.length === 0) return [];
 
 	let candidates = isPast
-		? await walkAsOf(raw, seedIds, direction, rels, maxDepth, t)
-		: await walkCurrent(raw, seedIds, direction, rels, maxDepth);
+		? await walkAsOf(raw, seedIds, direction, rels, maxDepth, t, limits)
+		: await walkCurrent(raw, seedIds, direction, rels, maxDepth, limits);
 
 	let rerankScore: Map<string, number> | null = null;
 	if (opts.rerank) {

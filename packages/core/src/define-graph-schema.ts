@@ -15,11 +15,16 @@ export type ZObj = z.ZodType<Record<string, unknown>>;
  * One edge relation's definition. `props` validates edge props; `from`/`to`
  * constrain endpoint kinds (a single kind or a readonly list of them). All
  * optional — a bare `{}` is a valid, untyped, unconstrained relation.
+ *
+ * `single: true` marks the rel single-valued (cardinality 1 per source, §19.5): each
+ * `addEdge` closes any existing live `(src, rel)` edge in the same write, and
+ * `materializeConstraints` adds a partial unique index hard-guaranteeing it.
  */
 export interface EdgeDef<K extends string> {
 	props?: ZObj;
 	from?: K | readonly K[];
 	to?: K | readonly K[];
+	single?: boolean;
 }
 
 /**

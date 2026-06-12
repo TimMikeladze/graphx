@@ -20,6 +20,25 @@ export {
 	schema,
 } from './schema.ts';
 
+// P14 — constraints (§19.5)
+export {
+	declareSingleValuedRel,
+	declareUniqueNodeProp,
+	materializeConstraints,
+} from './constraints.ts';
+
+// P14 — query governance (§19.2) + pagination cursor codec (§19.7)
+export {
+	applyLimit,
+	decodeCursor,
+	DEFAULT_LIMITS,
+	encodeCursor,
+	type QueryLimits,
+	QueryTimeoutError,
+	resolveLimits,
+	withTimeout,
+} from './governance.ts';
+
 // P0.5 — control plane + authz
 export {
 	addMembership,
@@ -60,6 +79,8 @@ export {
 	graphFor,
 	type GraphSchema,
 	type NeighborOpts,
+	type NeighborPage,
+	type NeighborPageOpts,
 	type PropsInput,
 } from './graph.ts';
 
@@ -83,7 +104,10 @@ export { type BulkOpts, bulkLoad, type BulkResult, type BulkRow } from './bulk.t
 export {
 	type CompiledPattern,
 	match,
+	type PagePatternOpts,
 	PatternBuilder,
+	type PatternPage,
+	type PatternQuery,
 	type PatternRow,
 	type RelOpts,
 } from './pattern.ts';

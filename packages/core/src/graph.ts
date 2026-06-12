@@ -1,8 +1,16 @@
-import type { Client, InStatement, InValue, Row } from '@libsql/client';
+import { setTimeout as sleep } from 'node:timers/promises';
+import type { Client, InStatement, InValue, Row, Transaction } from '@libsql/client';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
 import type { AnyNode, Kind, NodeOf, Rel } from './define-graph-schema.ts';
+import {
+	applyLimit,
+	decodeCursor,
+	encodeCursor,
+	type QueryLimits,
+	resolveLimits,
+} from './governance.ts';
 
 /**
  * P3 — data layer (§6). The temporal store front: ULID identity, close-and-insert
@@ -64,13 +72,31 @@ export interface EdgeRef {
 export interface NeighborOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
+	/** §19.2 per-call governance caps; `maxRows` bounds the result (default 10k). */
+	limits?: Partial<QueryLimits>;
 }
 
-/** One edge def as carried by P2 (props/from/to all optional). */
+/** Options for {@link Graph.neighborsPage} — keyset pagination over neighbor id (§19.7). */
+export interface NeighborPageOpts extends NeighborOpts {
+	/** Page size; clamped to `maxRows`. Defaults to `maxRows`. */
+	limit?: number;
+	/** Opaque cursor from a prior page's `nextCursor`; omit for the first page. */
+	cursor?: string;
+}
+
+/** One page of {@link Graph.neighborsPage}: the rows + the cursor for the next page. */
+export interface NeighborPage<S extends GraphSchema> {
+	rows: AnyNode<S>[];
+	/** `null` when this is the last page. */
+	nextCursor: string | null;
+}
+
+/** One edge def as carried by P2 (props/from/to/single all optional). */
 interface RawEdgeDef {
 	props?: { parse: (v: unknown) => unknown };
 	from?: string | readonly string[];
 	to?: string | readonly string[];
+	single?: boolean;
 }
 
 /** One node prop schema as carried by P2 (a zod object). */
@@ -81,6 +107,31 @@ interface RawNodeDef {
 function toKindSet(spec: string | readonly string[] | undefined): Set<string> | null {
 	if (spec === undefined) return null;
 	return new Set(typeof spec === 'string' ? [spec] : spec);
+}
+
+/**
+ * Bound on the conditional-close retry loop (§19.1). The spec's "5-retry" covered only
+ * supersession (a concurrent writer closed the row first); under genuine contention an
+ * interactive `transaction('write')` can also fail fast with `SQLITE_BUSY` (its
+ * connection never gets `busy_timeout`), so the loop must also retry that — with a
+ * larger budget and a backoff so racing writers all make progress without overlap.
+ */
+const WRITE_MAX_RETRIES = 50;
+
+/** `SQLITE_BUSY`/`SQLITE_LOCKED` — transient write contention; safe to roll back + retry. */
+function isRetryableContention(e: unknown): boolean {
+	const code = (e as { code?: unknown } | null)?.code;
+	if (code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT' || code === 'SQLITE_LOCKED') {
+		return true;
+	}
+	const msg = String((e as { message?: unknown } | null)?.message ?? '');
+	return /database (?:table )?is locked|SQLITE_BUSY/i.test(msg);
+}
+
+/** Full-jitter exponential backoff (capped) between contended write attempts. */
+function backoff(attempt: number): Promise<void> {
+	const base = Math.min(2 ** attempt, 64);
+	return sleep(base + Math.random() * base);
 }
 
 export class Graph<S extends GraphSchema> {
@@ -139,10 +190,16 @@ export class Graph<S extends GraphSchema> {
 					args: [...common, ts],
 				};
 
-		// foreign_keys is ON, so the identity row must land before the version row.
-		await this.raw.batch(
-			[{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] }, versionStmt],
-			'write',
+		// foreign_keys is ON, so the identity row must land before the version row. The
+		// batch is wrapped in the same contention-retry envelope as the close paths: an
+		// interactive transaction() elsewhere on this client drops busy_timeout to 0, so a
+		// later append BEGIN IMMEDIATE can fail fast with SQLITE_BUSY and must be retried,
+		// not lost (§19.1, write-correctness).
+		await this.runWriteBatch('addNode', () =>
+			this.raw.batch(
+				[{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] }, versionStmt],
+				'write',
+			),
 		);
 
 		this.kindCache.set(id, n.kind);
@@ -179,18 +236,51 @@ export class Graph<S extends GraphSchema> {
 		}
 
 		const id = ulid();
-		const ts = this.now();
-		await this.raw.batch(
-			[
-				{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
-				{
-					sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from)
+		const props = JSON.stringify(parsedProps);
+		const weight = e.weight ?? 1.0;
+		const insertEdge = (ts: number): InStatement[] => [
+			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
+			{
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from)
 						VALUES (?,?,?,?,?,?,?)`,
-					args: [id, e.src, e.dst, e.rel, e.weight ?? 1.0, JSON.stringify(parsedProps), ts],
-				},
-			],
-			'write',
-		);
+				args: [id, e.src, e.dst, e.rel, weight, props, ts],
+			},
+		];
+
+		if (def.single) {
+			// §19.5 single-valued cardinality: close any existing live (src, rel) edge and
+			// insert the successor in ONE interactive write tx (BEGIN IMMEDIATE), mirroring
+			// updateNode. The high-water-mark read MUST be inside the tx — an autocommit read
+			// before a separate write lets a concurrent writer's newer edge be closed at a
+			// stale ts, inverting its interval. Reading valid_from in-tx and bumping
+			// ts = max(now, vf+1) keeps every closed interval real (M6); the BEGIN IMMEDIATE
+			// serializes writers (last write wins) and a partial unique index hard-guarantees
+			// exactly one live edge. Like updateNode/deleteEdge this needs a `file:` DB on
+			// :memory: (transaction() detaches the connection).
+			await this.runConditionalClose('addEdge', async (tx, rawNow) => {
+				const live = (
+					await tx.execute({
+						sql: 'SELECT MAX(valid_from) AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+						args: [e.src, e.rel, FOREVER],
+					})
+				).rows[0];
+				const vf = live?.vf;
+				const ts = vf != null ? Math.max(rawNow, Number(vf) + 1) : rawNow;
+				await tx.execute({
+					sql: 'UPDATE edge_versions SET valid_to = ? WHERE src = ? AND rel = ? AND valid_to = ?',
+					args: [ts, e.src, e.rel, FOREVER],
+				});
+				for (const stmt of insertEdge(ts)) await tx.execute(stmt);
+				await tx.commit();
+				return 'committed';
+			});
+			return { id, rel: e.rel, src: e.src, dst: e.dst };
+		}
+
+		// Normal (multi-valued) rel: a plain atomic append under the §19.1 contention-retry
+		// envelope (an interactive transaction() elsewhere on this client drops busy_timeout
+		// to 0, so a later batch BEGIN IMMEDIATE can fail fast and must be retried, not lost).
+		await this.runWriteBatch('addEdge', () => this.raw.batch(insertEdge(this.now()), 'write'));
 		return { id, rel: e.rel, src: e.src, dst: e.dst };
 	}
 
@@ -210,45 +300,150 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Neighbor nodes reached over the live `edges` view in the given direction
-	 * (forward: src=id→dst; reverse: dst=id→src; both: union), optionally filtered
-	 * to `rels`. Returns the neighbor nodes (live shape, AnyNode[]).
+	 * Build the directional neighbor-id subquery (live `edges` view) + its args.
+	 * forward: src=id→dst; reverse: dst=id→src; both: UNION (dedups nids). Shared by
+	 * {@link neighbors} and {@link neighborsPage}.
 	 */
-	async neighbors(id: string, opts: NeighborOpts = {}): Promise<AnyNode<S>[]> {
+	private neighborSubquery(
+		id: string,
+		opts: NeighborOpts,
+	): { sql: string; args: (string | number)[] } {
 		const direction = opts.direction ?? 'forward';
 		const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 		const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
-
-		// Pick the neighbor-id expression per direction; `both` unions both sides.
-		let neighborSql: string;
 		const args: (string | number)[] = [];
+		let sql: string;
 		if (direction === 'forward') {
-			neighborSql = `SELECT e.dst AS nid FROM edges e WHERE e.src = ?${relClause}`;
+			sql = `SELECT e.dst AS nid FROM edges e WHERE e.src = ?${relClause}`;
 			args.push(id, ...(rels ?? []));
 		} else if (direction === 'reverse') {
-			neighborSql = `SELECT e.src AS nid FROM edges e WHERE e.dst = ?${relClause}`;
+			sql = `SELECT e.src AS nid FROM edges e WHERE e.dst = ?${relClause}`;
 			args.push(id, ...(rels ?? []));
 		} else {
-			neighborSql =
+			sql =
 				`SELECT e.dst AS nid FROM edges e WHERE e.src = ?${relClause} ` +
 				`UNION SELECT e.src AS nid FROM edges e WHERE e.dst = ?${relClause}`;
 			args.push(id, ...(rels ?? []), id, ...(rels ?? []));
 		}
+		return { sql, args };
+	}
 
-		const sql = `SELECT n.id AS id, n.kind AS kind, n.props AS props
+	/**
+	 * Neighbor nodes reached over the live `edges` view in the given direction
+	 * (forward: src=id→dst; reverse: dst=id→src; both: union), optionally filtered
+	 * to `rels`. Returns the neighbor nodes (live shape, AnyNode[]). The §19.2 row cap
+	 * (`opts.limits.maxRows`, default 10k) bounds the result so a supernode can't OOM.
+	 */
+	async neighbors(id: string, opts: NeighborOpts = {}): Promise<AnyNode<S>[]> {
+		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
+		const sql = applyLimit(
+			`SELECT n.id AS id, n.kind AS kind, n.props AS props
 			FROM (${neighborSql}) nb
 			JOIN nodes n ON n.id = nb.nid
-			ORDER BY n.id`;
+			ORDER BY n.id`,
+			resolveLimits(opts.limits).maxRows,
+		);
 		const r = await this.raw.execute({ sql, args });
 		return r.rows.map((row) => this.rowToNode(row));
 	}
 
 	/**
+	 * Keyset-paginated {@link neighbors} (§19.7). Orders by the stable neighbor id and
+	 * pages with an opaque `cursor` (the last id of the previous page), so pages never
+	 * overlap or skip even as new neighbors are inserted concurrently. Over-fetches one
+	 * row to decide `nextCursor` without a second query; `nextCursor` is `null` on the
+	 * last page. The page size is clamped to `maxRows`.
+	 */
+	async neighborsPage(id: string, opts: NeighborPageOpts = {}): Promise<NeighborPage<S>> {
+		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+			throw new Error(`neighborsPage: limit must be a positive integer, got ${opts.limit}`);
+		}
+		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
+		const maxRows = resolveLimits(opts.limits).maxRows;
+		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+		const pageArgs = [...args];
+		let cursorClause = '';
+		if (opts.cursor) {
+			const [lastId] = decodeCursor(opts.cursor);
+			cursorClause = ' WHERE n.id > ?';
+			pageArgs.push(lastId as string);
+		}
+		// GROUP BY n.id makes the keyset key unique even when multiple edges reach the
+		// same neighbor (a duplicate nid would otherwise break no-overlap/no-skip).
+		const sql = `SELECT n.id AS id, n.kind AS kind, n.props AS props
+			FROM (${neighborSql}) nb
+			JOIN nodes n ON n.id = nb.nid${cursorClause}
+			GROUP BY n.id
+			ORDER BY n.id
+			LIMIT ?`;
+		pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
+		const r = await this.raw.execute({ sql, args: pageArgs });
+		const rows = r.rows.map((row) => this.rowToNode(row));
+		if (rows.length > pageSize) {
+			const page = rows.slice(0, pageSize);
+			return { rows: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
+		}
+		return { rows, nextCursor: null };
+	}
+
+	/**
+	 * Run an atomic write `batch` under the §19.1 contention-retry envelope. `batch`
+	 * commits in one round trip, so a `SQLITE_BUSY`/`LOCKED` (an interactive
+	 * transaction() elsewhere on the shared client drops busy_timeout to 0 → BEGIN
+	 * IMMEDIATE fails fast) is rolled back implicitly and retried with backoff rather
+	 * than surfacing as a lost write. Other errors (constraint, etc.) propagate.
+	 */
+	private async runWriteBatch(label: string, run: () => Promise<unknown>): Promise<void> {
+		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
+			try {
+				await run();
+				return;
+			} catch (e) {
+				if (!isRetryableContention(e)) throw e;
+			}
+			await backoff(attempt);
+		}
+		throw new Error(`${label}: too much contention`);
+	}
+
+	/**
+	 * The §19.1 conditional-close + retry envelope, shared by {@link updateNode} and
+	 * {@link deleteEdge}. Each attempt opens a `write` transaction (BEGIN IMMEDIATE) and
+	 * runs `body`, which returns `'committed'` on success or `'superseded'` when the
+	 * conditional close found `rowsAffected !== 1` (a concurrent writer already closed
+	 * the live row). Superseded → roll back and retry. A thrown `SQLITE_BUSY`/`LOCKED`
+	 * (genuine lock contention — the interactive tx connection never gets `busy_timeout`,
+	 * so BEGIN IMMEDIATE fails fast instead of waiting) is also rolled back and retried
+	 * with a jittered backoff, so N racing writers all make progress and the version
+	 * chain stays contiguous and non-overlapping. Any other error propagates.
+	 */
+	private async runConditionalClose(
+		label: string,
+		body: (tx: Transaction, now: number) => Promise<'committed' | 'superseded'>,
+	): Promise<void> {
+		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
+			let tx: Transaction | undefined;
+			try {
+				tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE (may throw SQLITE_BUSY)
+				const result = await body(tx, this.now());
+				if (result === 'committed') return;
+				if (!tx.closed) await tx.rollback(); // superseded → retry
+			} catch (e) {
+				// Guard: don't roll back a committed/closed tx (would throw).
+				if (tx && !tx.closed) await tx.rollback();
+				if (!isRetryableContention(e)) throw e; // permanent error → propagate
+			}
+			await backoff(attempt);
+		}
+		throw new Error(`${label}: too much contention`);
+	}
+
+	/**
 	 * Update a node via close-and-insert with the §19.1 conditional-close + retry
-	 * protocol. The whole read-merge-write runs in one `write` transaction (BEGIN
-	 * IMMEDIATE); the close is conditional (`WHERE valid_to = FOREVER`) so a
-	 * concurrent writer that already superseded this row leaves `rowsAffected = 0`
-	 * and we retry instead of creating overlapping intervals.
+	 * protocol ({@link runConditionalClose}). The whole read-merge-write runs in one
+	 * `write` transaction; the close is conditional (`WHERE valid_to = FOREVER`) so a
+	 * concurrent writer that already superseded this row leaves `rowsAffected = 0` and we
+	 * retry instead of creating overlapping intervals.
 	 *
 	 * Carry-forward (B4/B5): every column the patch omits is copied from the
 	 * current live version — `body/uri/content_hash/content_type/kind` via
@@ -268,107 +463,85 @@ export class Graph<S extends GraphSchema> {
 			content_type?: string;
 		},
 	): Promise<void> {
-		for (let attempt = 0; attempt < 5; attempt++) {
-			const tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE
-			try {
-				const cur = (
-					await tx.execute({
-						sql: `SELECT kind, body, uri, content_hash, content_type, props, emb
-							FROM node_versions WHERE id = ? AND valid_to = ?`,
-						args: [id, FOREVER],
-					})
-				).rows[0];
-				if (!cur) {
-					await tx.rollback();
-					throw new Error(`updateNode: no live version for '${id}'`);
-				}
+		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
+			const cur = (
+				await tx.execute({
+					sql: `SELECT kind, body, uri, content_hash, content_type, props, emb, valid_from
+						FROM node_versions WHERE id = ? AND valid_to = ?`,
+					args: [id, FOREVER],
+				})
+			).rows[0];
+			if (!cur) throw new Error(`updateNode: no live version for '${id}'`);
 
-				const now = this.now();
-				const closed = await tx.execute({
-					sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
-					args: [now, id, FOREVER],
-				});
-				// Superseded between SELECT and UPDATE -> nothing closed -> retry.
-				if (closed.rowsAffected !== 1) {
-					await tx.rollback();
-					continue;
-				}
+			// M6 data-derived bump: the successor opens (and the predecessor closes) strictly
+			// AFTER the predecessor's valid_from, so [valid_from, now) is never zero-width —
+			// even when a cross-instance writer's clock ran ahead of this instance's now()
+			// (the per-instance high-water mark alone can't see other instances' writes).
+			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
+			const closed = await tx.execute({
+				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
+				args: [now, id, FOREVER],
+			});
+			// Superseded between SELECT and UPDATE -> nothing closed -> retry.
+			if (closed.rowsAffected !== 1) return 'superseded';
 
-				const props = { ...JSON.parse(String(cur.props)), ...patch.props };
-				// B4: carry every metadata column forward unless explicitly patched.
-				// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
-				const common: InValue[] = [
-					id,
-					patch.kind ?? (cur.kind as InValue),
-					patch.body ?? (cur.body as InValue) ?? null,
-					patch.uri ?? (cur.uri as InValue) ?? null,
-					patch.content_hash ?? (cur.content_hash as InValue) ?? null,
-					patch.content_type ?? (cur.content_type as InValue) ?? null,
-					JSON.stringify(props),
-				];
-				// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
-				// (carries a real F32 vector, or NULL when there was none).
-				const successor: InStatement = patch.emb
-					? {
-							sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-								VALUES (?,?,?,?,?,?,?, vector(?), ?)`,
-							args: [...common, JSON.stringify(patch.emb), now],
-						}
-					: {
-							sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-								VALUES (?,?,?,?,?,?,?, ?, ?)`,
-							args: [...common, (cur.emb as InValue) ?? null, now],
-						};
-				await tx.execute(successor);
-				await tx.commit();
-				return;
-			} catch (e) {
-				// Guard: don't roll back a committed/closed tx (would throw).
-				if (!tx.closed) await tx.rollback();
-				throw e;
-			}
-		}
-		throw new Error(`updateNode: too much contention on '${id}'`);
+			const props = { ...JSON.parse(String(cur.props)), ...patch.props };
+			// B4: carry every metadata column forward unless explicitly patched.
+			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
+			const common: InValue[] = [
+				id,
+				patch.kind ?? (cur.kind as InValue),
+				patch.body ?? (cur.body as InValue) ?? null,
+				patch.uri ?? (cur.uri as InValue) ?? null,
+				patch.content_hash ?? (cur.content_hash as InValue) ?? null,
+				patch.content_type ?? (cur.content_type as InValue) ?? null,
+				JSON.stringify(props),
+			];
+			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
+			// (carries a real F32 vector, or NULL when there was none).
+			const successor: InStatement = patch.emb
+				? {
+						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
+							VALUES (?,?,?,?,?,?,?, vector(?), ?)`,
+						args: [...common, JSON.stringify(patch.emb), now],
+					}
+				: {
+						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
+							VALUES (?,?,?,?,?,?,?, ?, ?)`,
+						args: [...common, (cur.emb as InValue) ?? null, now],
+					};
+			await tx.execute(successor);
+			await tx.commit();
+			return 'committed';
+		});
 	}
 
 	/**
-	 * Delete an edge via the §19.1 conditional-close protocol: close the live
-	 * version (`valid_to = now`) with NO successor. Conditional on
-	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we
-	 * retry rather than racing.
+	 * Delete an edge via the §19.1 conditional-close protocol ({@link runConditionalClose}):
+	 * close the live version (`valid_to = now`) with NO successor. Conditional on
+	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we retry
+	 * rather than racing.
 	 */
 	async deleteEdge(id: string): Promise<void> {
-		for (let attempt = 0; attempt < 5; attempt++) {
-			const tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE
-			try {
-				const cur = (
-					await tx.execute({
-						sql: 'SELECT 1 FROM edge_versions WHERE id = ? AND valid_to = ?',
-						args: [id, FOREVER],
-					})
-				).rows[0];
-				if (!cur) {
-					await tx.rollback();
-					throw new Error(`deleteEdge: no live version for '${id}'`);
-				}
+		await this.runConditionalClose('deleteEdge', async (tx, rawNow) => {
+			const cur = (
+				await tx.execute({
+					sql: 'SELECT valid_from FROM edge_versions WHERE id = ? AND valid_to = ?',
+					args: [id, FOREVER],
+				})
+			).rows[0];
+			if (!cur) throw new Error(`deleteEdge: no live version for '${id}'`);
 
-				const now = this.now();
-				const closed = await tx.execute({
-					sql: 'UPDATE edge_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
-					args: [now, id, FOREVER],
-				});
-				if (closed.rowsAffected !== 1) {
-					await tx.rollback();
-					continue;
-				}
-				await tx.commit();
-				return;
-			} catch (e) {
-				if (!tx.closed) await tx.rollback();
-				throw e;
-			}
-		}
-		throw new Error(`deleteEdge: too much contention on '${id}'`);
+			// M6 data-derived bump: close strictly after the edge's valid_from (no zero-width).
+			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
+			const closed = await tx.execute({
+				sql: 'UPDATE edge_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
+				args: [now, id, FOREVER],
+			});
+			if (closed.rowsAffected !== 1) return 'superseded';
+			await tx.commit();
+			return 'committed';
+		});
 	}
 
 	/** Resolve a node's live kind, caching it (used by endpoint-kind checks). */

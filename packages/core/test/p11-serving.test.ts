@@ -239,6 +239,33 @@ test('P11: edges + neighbors over HTTP (with rel filter)', async () => {
 	cleanup(s);
 });
 
+test('P14: server-set limits cap a read route (not client-overridable)', async () => {
+	const s = await setup();
+	const me = { user: s.editor, tenant: s.tenantA };
+	// a second app over the SAME control plane + project DB, but with a hard maxRows=1.
+	const capped = createApp({
+		control: s.control,
+		schema: SCHEMA,
+		authenticate,
+		limits: { maxRows: 1 },
+	});
+	const hub = (await postNode(s, me, s.pA, { kind: 'person', props: { name: 'hub' } })).json.id;
+	for (const name of ['a', 'b', 'c']) {
+		const n = (await postNode(s, me, s.pA, { kind: 'person', props: { name } })).json.id;
+		await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges`, {
+			method: 'POST',
+			headers: hdr(s.editor, s.tenantA),
+			body: JSON.stringify({ rel: 'knows', src: hub, dst: n }),
+		});
+	}
+	const res = await capped.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${hub}/neighbors`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	const rows = await res.json();
+	expect(rows.length).toBe(1); // 3 neighbors exist, the server cap returns 1
+	cleanup(s);
+});
+
 test('P11: journey over HTTP returns reached nodes with arrival times', async () => {
 	const s = await setup();
 	const me = { user: s.editor, tenant: s.tenantA };
