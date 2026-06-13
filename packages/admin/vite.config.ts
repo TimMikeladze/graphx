@@ -12,6 +12,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // gl-bench's `browser` field is a global-assignment UMD (no exports); Cosmograph's
+      // `@cosmos.gl/graph` default-imports it, which the bundler can't resolve. Point at the
+      // package's real ESM build (`export default`) instead.
+      "gl-bench": path.resolve(
+        __dirname,
+        "../../node_modules/gl-bench/dist/gl-bench.module.js",
+      ),
     },
   },
   server: {

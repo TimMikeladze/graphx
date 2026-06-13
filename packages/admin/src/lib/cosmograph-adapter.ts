@@ -6,6 +6,8 @@ export interface CosmoNode {
   kind: string
   color: string
   selected: boolean
+  // Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
+  [key: string]: unknown
 }
 
 /** A Cosmograph link. Cosmograph keys edges on `source`/`target` point ids. */
@@ -14,6 +16,7 @@ export interface CosmoLink {
   target: string
   rel: string
   weight: number
+  [key: string]: unknown
 }
 
 /** The shape `<Cosmograph points={..} links={..} />` consumes. */
