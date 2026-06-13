@@ -92,6 +92,60 @@ export interface NeighborPage<S extends GraphSchema> {
 	nextCursor: string | null;
 }
 
+/** Filter/pagination options for {@link Graph.listNodes}. */
+export interface NodeListOpts {
+	/** Restrict to one node kind. */
+	kind?: string;
+	/** Full-text query over `body` (FTS5). No usable tokens ⇒ empty page. */
+	q?: string;
+	/** As-of epoch ms (D3 half-open read). Omit ⇒ current (live) nodes. */
+	asOf?: number;
+	/** Page size; clamped to `maxRows`. Defaults to `maxRows`. */
+	limit?: number;
+	/** Opaque keyset cursor from a prior page's `nextCursor`; omit for the first page. */
+	cursor?: string;
+	/** §19.2 governance caps; `maxRows` bounds the page (default 10k). */
+	limits?: Partial<QueryLimits>;
+}
+
+/** One page of {@link Graph.listNodes}: the rows + the cursor for the next page. */
+export interface NodeListPage<S extends GraphSchema> {
+	nodes: AnyNode<S>[];
+	/** `null` when this is the last page. */
+	nextCursor: string | null;
+}
+
+/** Filter options for {@link Graph.graphSlice}. */
+export interface GraphSliceOpts {
+	kind?: string;
+	q?: string;
+	asOf?: number;
+	limits?: Partial<QueryLimits>;
+}
+
+/** A canvas node in a {@link GraphSlice}. */
+export interface GraphSliceNode {
+	id: string;
+	kind: string;
+}
+
+/** A canvas link in a {@link GraphSlice} (Cosmograph `source`/`target` naming). */
+export interface GraphSliceLink {
+	id: string;
+	source: string;
+	target: string;
+	rel: string;
+	weight: number;
+}
+
+/** A governed graph slice for the Cosmograph canvas: the filtered node set + edges among them. */
+export interface GraphSlice {
+	nodes: GraphSliceNode[];
+	links: GraphSliceLink[];
+	/** True when the node set hit the `maxRows` cap (UI shows a "narrow filters" banner). */
+	truncated: boolean;
+}
+
 /** One edge def as carried by P2 (props/from/to/single all optional). */
 interface RawEdgeDef {
 	props?: { parse: (v: unknown) => unknown };
@@ -396,6 +450,88 @@ export class Graph<S extends GraphSchema> {
 			return { rows: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
 		}
 		return { rows, nextCursor: null };
+	}
+
+	/**
+	 * FTS5 MATCH expression from a free-text query: each whitespace token quoted (quotes
+	 * doubled) and OR-joined. Mirrors `sanitizeMatch` in hybrid.ts — inlined here to avoid an
+	 * import cycle (hybrid → retrieve → graph). `null` when the query has no usable tokens.
+	 */
+	private ftsMatch(query: string): string | null {
+		const tokens = query
+			.split(/\s+/)
+			.filter((t) => t.length > 0)
+			.map((t) => `"${t.replace(/"/g, '""')}"`);
+		return tokens.length > 0 ? tokens.join(' OR ') : null;
+	}
+
+	/**
+	 * Build the node-filter WHERE for {@link listNodes}/{@link graphSlice} over `node_versions`
+	 * aliased `nv`: a temporal predicate (live via the FOREVER sentinel, or as-of half-open),
+	 * an optional `kind`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
+	 * `null` when `q` is present but yields no tokens (⇒ caller returns an empty result).
+	 */
+	private nodeFilter(opts: {
+		kind?: string;
+		q?: string;
+		asOf?: number;
+	}): { where: string; args: (string | number)[] } | null {
+		const where: string[] = [];
+		const args: (string | number)[] = [];
+		if (opts.asOf !== undefined) {
+			where.push('nv.valid_from <= ? AND ? < nv.valid_to');
+			args.push(opts.asOf, opts.asOf);
+		} else {
+			where.push('nv.valid_to = ?');
+			args.push(FOREVER);
+		}
+		if (opts.kind) {
+			where.push('nv.kind = ?');
+			args.push(opts.kind);
+		}
+		if (opts.q !== undefined) {
+			const match = this.ftsMatch(opts.q);
+			if (match === null) return null;
+			where.push('nv.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)');
+			args.push(match);
+		}
+		return { where: where.join(' AND '), args };
+	}
+
+	/**
+	 * List nodes with optional `kind`/full-text/as-of filters, keyset-paginated by id (§19.7)
+	 * and bounded by the §19.2 row cap. Each id has exactly one matching version (live, or the
+	 * single as-of version), so the id keyset is a strict total order — no skip, no overlap.
+	 * Props are upcast + parsed via the same path as `getNode`/`neighbors` (P12).
+	 */
+	async listNodes(opts: NodeListOpts = {}): Promise<NodeListPage<S>> {
+		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+			throw new Error(`listNodes: limit must be a positive integer, got ${opts.limit}`);
+		}
+		const filter = this.nodeFilter(opts);
+		if (filter === null) return { nodes: [], nextCursor: null };
+		const maxRows = resolveLimits(opts.limits).maxRows;
+		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+		const args = [...filter.args];
+		let cursorClause = '';
+		if (opts.cursor) {
+			const [lastId] = decodeCursor(opts.cursor);
+			cursorClause = ' AND nv.id > ?';
+			args.push(lastId as string);
+		}
+		const sql = `SELECT nv.id AS id, nv.kind AS kind, nv.props AS props
+			FROM node_versions nv
+			WHERE ${filter.where}${cursorClause}
+			ORDER BY nv.id
+			LIMIT ?`;
+		args.push(pageSize + 1); // over-fetch one to detect a next page
+		const r = await this.raw.execute({ sql, args });
+		const rows = r.rows.map((row) => this.rowToNode(row));
+		if (rows.length > pageSize) {
+			const page = rows.slice(0, pageSize);
+			return { nodes: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
+		}
+		return { nodes: rows, nextCursor: null };
 	}
 
 	/**
