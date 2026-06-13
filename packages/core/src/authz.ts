@@ -9,6 +9,13 @@ export type Op = 'read' | 'write';
 export interface Principal {
 	userId: string;
 	tenantId: string;
+	/**
+	 * Operator (admin) principal. When true, {@link authorize} still enforces that the project
+	 * belongs to `tenantId` (no cross-tenant leak) but SKIPS the per-tenant membership/role
+	 * lookup — operators have no `memberships` row. Set by the consumer's `authenticate` when it
+	 * recognizes the admin credential; `tenantId` should be taken from the request's route tenant.
+	 */
+	operator?: boolean;
 }
 
 /** Typed authz failure carrying an HTTP status (403 forbidden / 404 not found). */
@@ -52,6 +59,13 @@ export async function authorize(
 	// Unknown project OR a project in another tenant → 404 (no existence leak).
 	if (!row || String(row.tenant_id) !== principal.tenantId) {
 		throw new AuthzError(404, 'project not found');
+	}
+
+	// Operator bypass: the project-tenant guard above already ran (no cross-tenant leak), so an
+	// operator is authorized for any op without a membership row. End users fall through to the
+	// membership/role check below.
+	if (principal.operator) {
+		return { dbNamespace: String(row.db_namespace) };
 	}
 
 	const mem = await control.execute({
