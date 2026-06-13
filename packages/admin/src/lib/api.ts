@@ -49,6 +49,11 @@ export function setUnauthorizedHandler(fn: () => void): void {
   onUnauthorized = fn
 }
 
+/** Programmatically open the token prompt (same path as a 401) — e.g. a "Set token" button. */
+export function requestToken(): void {
+  onUnauthorized?.()
+}
+
 /** An HTTP error carrying the response status (mapped from the server's error envelopes). */
 export class ApiError extends Error {
   readonly status: number

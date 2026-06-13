@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { useProjects, useTenants } from "@/hooks/use-graph"
+import { requestToken } from "@/lib/api"
 import { useState } from "react"
 
 /**
@@ -14,9 +16,14 @@ export function IndexPage() {
 
   return (
     <div className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 p-8">
-      <div>
-        <h1 className="text-xl font-semibold">graphx admin</h1>
-        <p className="text-sm text-muted-foreground">Pick a tenant and project to explore.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">graphx admin</h1>
+          <p className="text-sm text-muted-foreground">Pick a tenant and project to explore.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => requestToken()}>
+          Set token
+        </Button>
       </div>
 
       <Card className="p-4">
