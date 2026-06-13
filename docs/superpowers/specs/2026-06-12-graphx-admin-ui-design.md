@@ -68,8 +68,10 @@ Bun.serve({ fetch: app.fetch })
 New core files (keep `serve.ts` focused):
 - `packages/core/src/admin.ts` — `createAdminApp(cfg)`: operator sub-app, `adminAuthenticate` hook,
   control-plane CRUD handlers wrapping existing `control-plane.ts` functions.
-- `packages/core/src/list.ts` — `listNodes(graph, opts)` and `graphSlice(graph, opts)`: new read
-  primitives (today only `getNode` by id exists). Read-only, governed, temporal-aware.
+- `Graph.listNodes(opts)` and `Graph.graphSlice(opts)` — new read primitives added as **methods on
+  the `Graph` class** in `packages/core/src/graph.ts` (today only `getNode` by id exists). Read-only,
+  governed, temporal-aware. (Refinement: spec originally proposed a standalone `src/list.ts`; methods
+  reuse the class's private `rowToNode`/upcaster and sit beside `neighbors`/`neighborsPage`.)
 - `packages/core/src/serve.ts` — add the three tenant-scoped graph-explore routes to the existing
   `createApp` chain (reuse `requireGraph('read')`, `onError`, metrics sink).
 
@@ -90,8 +92,12 @@ The existing `authenticate(c) → {userId, tenantId}` is single-tenant; authz ch
    (same pattern as `authenticate`). Dev default compares a `Bearer` token to a server-configured
    `adminToken`; production verifies a real session/JWT.
 2. **Operator impersonation** on tenant-scoped graph routes: when a valid admin token is present, the
-   principal is synthesized *per route* as `{userId:'operator', tenantId: <:tenant param>, role:'owner'}`,
-   so existing `requireGraph` authz passes unchanged for any tenant. **No change to the authz module.**
+   consumer's `authenticate` returns a principal synthesized *per route* as
+   `{userId:'operator', tenantId: <:tenant param>, operator:true}`. `authorize()` reads membership from
+   a table, so a synthesized principal alone fails the membership check (403) — the operator has no
+   `memberships` row. Resolution: a **one-field** `Principal.operator?` + a one-line bypass in
+   `authorize` (after the project-tenant guard, so no cross-tenant leak). That is the only authz-module
+   change; `requireGraph` and the routes are untouched.
 
 UI stores the token in `localStorage` and sends `Authorization: Bearer`. A 401 opens a token-entry
 dialog and retries on submit.
