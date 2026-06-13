@@ -17,6 +17,8 @@
 	"scripts": {
 		"build": "bunup",
 		"dev": "bunup --watch",
+		"dev:admin": "bun scripts/dev-admin.ts",
+		"dev:admin:api": "bun scripts/admin-api.ts",
 		"format": "oxfmt",
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",
