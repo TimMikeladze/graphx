@@ -68,3 +68,52 @@ test('listNodes maxRows cap bounds the page', async () => {
 	expect(page.nodes.length).toBe(2);
 	g.raw.close();
 });
+
+test('graphSlice returns the node set and only edges with both endpoints inside it', async () => {
+	const g = await graph();
+	const p1 = await g.addNode({ kind: 'person', props: { name: 'p1' } });
+	const p2 = await g.addNode({ kind: 'person', props: { name: 'p2' } });
+	const d1 = await g.addNode({ kind: 'device', props: { type: 'router' } });
+	await g.addEdge({ rel: 'knows', src: p1.id, dst: p2.id });
+	await g.addEdge({ rel: 'owns', src: p1.id, dst: d1.id });
+
+	// Unfiltered: all 3 nodes, both edges.
+	const all = await g.graphSlice();
+	expect(all.nodes.map((n) => n.id).sort()).toEqual([p1.id, p2.id, d1.id].sort());
+	expect(all.links.map((l) => l.rel).sort()).toEqual(['knows', 'owns']);
+	expect(all.truncated).toBe(false);
+
+	// kind=person drops d1, so the `owns` edge (endpoint d1 outside the set) is excluded.
+	const persons = await g.graphSlice({ kind: 'person' });
+	expect(persons.nodes.map((n) => n.id).sort()).toEqual([p1.id, p2.id].sort());
+	expect(persons.links.map((l) => l.rel)).toEqual(['knows']);
+	g.raw.close();
+});
+
+test('graphSlice links carry Cosmograph source/target/weight', async () => {
+	const g = await graph();
+	const p1 = await g.addNode({ kind: 'person', props: { name: 'p1' } });
+	const p2 = await g.addNode({ kind: 'person', props: { name: 'p2' } });
+	await g.addEdge({ rel: 'knows', src: p1.id, dst: p2.id, weight: 3 });
+	const slice = await g.graphSlice();
+	expect(slice.links[0]).toMatchObject({ source: p1.id, target: p2.id, rel: 'knows', weight: 3 });
+	g.raw.close();
+});
+
+test('graphSlice sets truncated when the node set hits maxRows', async () => {
+	const g = await graph();
+	for (let i = 0; i < 5; i++) await g.addNode({ kind: 'person', props: { name: `p${i}` } });
+	const slice = await g.graphSlice({ limits: { maxRows: 2 } });
+	expect(slice.nodes.length).toBe(2);
+	expect(slice.truncated).toBe(true);
+	g.raw.close();
+});
+
+test('graphSlice with an unmatched full-text query returns empty', async () => {
+	const g = await graph();
+	await g.addNode({ kind: 'person', props: { name: 'p1' }, body: 'hello' });
+	const slice = await g.graphSlice({ q: 'zzzznomatch' });
+	expect(slice.nodes).toEqual([]);
+	expect(slice.links).toEqual([]);
+	g.raw.close();
+});

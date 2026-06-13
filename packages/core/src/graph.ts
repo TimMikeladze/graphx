@@ -535,6 +535,60 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
+	 * A governed graph slice for the canvas (D-UI-3): the filtered node set (capped at the §19.2
+	 * row cap) plus every edge whose BOTH endpoints are in that set. The node set is the same
+	 * filter as {@link listNodes} (live or as-of), evaluated as an SQL subquery so the edge
+	 * endpoint membership tests never materialize a giant `IN (...)` parameter list. `truncated`
+	 * signals the node set hit the cap so the UI can prompt to narrow filters.
+	 */
+	async graphSlice(opts: GraphSliceOpts = {}): Promise<GraphSlice> {
+		const filter = this.nodeFilter(opts);
+		if (filter === null) return { nodes: [], links: [], truncated: false };
+		const maxRows = resolveLimits(opts.limits).maxRows;
+
+		// 1) The capped node set (id + kind). Reused as a subquery for the edge endpoint filter.
+		const nodeSub = `SELECT nv.id AS id, nv.kind AS kind
+			FROM node_versions nv
+			WHERE ${filter.where}
+			ORDER BY nv.id
+			LIMIT ${Math.floor(maxRows)}`;
+		const nodesRes = await this.raw.execute({ sql: nodeSub, args: filter.args });
+		const nodes: GraphSliceNode[] = nodesRes.rows.map((r) => ({
+			id: String(r.id),
+			kind: String(r.kind),
+		}));
+		const truncated = nodes.length >= maxRows;
+
+		if (nodes.length === 0) return { nodes, links: [], truncated };
+
+		// 2) Edges among the node set. Live edges via the `edges` view; as-of via edge_versions.
+		const idSub = `SELECT id FROM (${nodeSub})`;
+		let edgeSql: string;
+		const edgeArgs: (string | number)[] = [];
+		if (opts.asOf !== undefined) {
+			edgeSql = `SELECT ev.id AS id, ev.src AS source, ev.dst AS target, ev.rel AS rel, ev.weight AS weight
+				FROM edge_versions ev
+				WHERE (ev.valid_from <= ? AND ? < ev.valid_to)
+					AND ev.src IN (${idSub}) AND ev.dst IN (${idSub})`;
+			edgeArgs.push(opts.asOf, opts.asOf, ...filter.args, ...filter.args);
+		} else {
+			edgeSql = `SELECT e.id AS id, e.src AS source, e.dst AS target, e.rel AS rel, e.weight AS weight
+				FROM edges e
+				WHERE e.src IN (${idSub}) AND e.dst IN (${idSub})`;
+			edgeArgs.push(...filter.args, ...filter.args);
+		}
+		const edgesRes = await this.raw.execute({ sql: edgeSql, args: edgeArgs });
+		const links: GraphSliceLink[] = edgesRes.rows.map((r) => ({
+			id: String(r.id),
+			source: String(r.source),
+			target: String(r.target),
+			rel: String(r.rel),
+			weight: Number(r.weight),
+		}));
+		return { nodes, links, truncated };
+	}
+
+	/**
 	 * Run an atomic write `batch` under the §19.1 contention-retry envelope. `batch`
 	 * commits in one round trip, so a `SQLITE_BUSY`/`LOCKED` (an interactive
 	 * transaction() elsewhere on the shared client drops busy_timeout to 0 → BEGIN
