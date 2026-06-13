@@ -11,6 +11,7 @@ import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
+import { history } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -160,6 +161,22 @@ const journeyInputSchema = z.object({
 	maxDepth: z.number().optional(),
 });
 
+/** GET /nodes query — kind/full-text/as-of filters + keyset pagination. */
+const nodeListQuerySchema = z.object({
+	kind: z.string().optional(),
+	q: z.string().optional(),
+	asOf: z.coerce.number().optional(),
+	limit: z.coerce.number().optional(),
+	cursor: z.string().optional(),
+});
+
+/** GET /graph query — kind/full-text/as-of filters for the canvas slice. */
+const graphSliceQuerySchema = z.object({
+	kind: z.string().optional(),
+	q: z.string().optional(),
+	asOf: z.coerce.number().optional(),
+});
+
 /** Authn middleware: run `cfg.authenticate`, put the principal on ctx, 401 on throw. */
 function authn<S extends GraphSchema>(cfg: ServeConfig<S>): MiddlewareHandler<ServeEnv<S>> {
 	return createMiddleware<ServeEnv<S>>(async (c, next) => {
@@ -219,6 +236,8 @@ function onError(err: Error, c: Context) {
 	if (String((err as { code?: unknown }).code ?? '').startsWith('SQLITE_CONSTRAINT')) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
+	// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.
+	if (err.message === 'invalid cursor') return c.json({ error: 'invalid cursor' }, 400);
 	return c.json({ error: 'internal' }, 500);
 }
 
@@ -274,6 +293,32 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				return c.json(list);
 			},
 		)
+		.get(
+			'/t/:tenant/p/:project/nodes',
+			requireGraph(cfg, 'read'),
+			zValidator('query', nodeListQuerySchema),
+			async (c) => {
+				const { kind, q, asOf, limit, cursor } = c.req.valid('query');
+				const page = await c
+					.get('graph')
+					.listNodes({ kind, q, asOf, limit, cursor, limits: cfg.limits });
+				return c.json(page);
+			},
+		)
+		.get(
+			'/t/:tenant/p/:project/graph',
+			requireGraph(cfg, 'read'),
+			zValidator('query', graphSliceQuerySchema),
+			async (c) => {
+				const { kind, q, asOf } = c.req.valid('query');
+				const slice = await c.get('graph').graphSlice({ kind, q, asOf, limits: cfg.limits });
+				return c.json(slice);
+			},
+		)
+		.get('/t/:tenant/p/:project/nodes/:id/history', requireGraph(cfg, 'read'), async (c) => {
+			const versions = await history(c.get('graph').raw, c.req.param('id'));
+			return c.json({ versions });
+		})
 		.get(
 			'/t/:tenant/p/:project/retrieve',
 			requireGraph(cfg, 'read'),
