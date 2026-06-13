@@ -1,0 +1,241 @@
+# `@graphx/react` — React Query integration (DRAFT spec)
+
+> Status: **DRAFT / proposed.** Not part of `initial_spec.md`. Net-new package layered over the
+> existing SDK + Hono serving layer. No phase number assigned yet.
+
+## 1. Goal
+
+Ship a thin, **inference-only** React Query (`@tanstack/react-query`) binding for graphx that gives
+React apps typed hooks for every HTTP-exposed graph operation — query hooks, mutation hooks, keyset
+infinite-scroll, and (the differentiator) **CDC-driven live cache invalidation** off the §19.10
+change feed — with **no codegen** and types **inferred through the same zod** that validates writes
+server-side.
+
+### Non-goals
+- No GraphQL (the project is Hono REST by decision D2).
+- No codegen / no build step (consistent with D2's "typed client, no codegen").
+- No new query semantics — hooks are a transport + cache wrapper over the SDK's existing surface.
+- No client-side governance overrides — `limits` are server-set and non-client-overridable (§19.2).
+
+## 2. Design principles
+
+1. **Reuse the SDK's zod-inferred types; do not regenerate them.** The precise, per-kind contracts
+   already exist and are exported from `graph.ts`:
+   - inputs: `AddNodeInput<S, K>`, `AddEdgeInput<S, R>`, `PropsInput<S, K>`, `EdgePropsInput<S, R>`
+   - outputs: `NodeOf<S, K>`, `AnyNode<S>`, `EdgeRef`, `NeighborPage<S>`
+   - read opts: `NeighborOpts`, `NeighborPageOpts`, `RetrieveOpts`, `JourneyOpts`, `RetrievedNode`,
+     `JourneyRow`
+   These are `z.input` / `z.infer` of the user's `defineGraphSchema(...)`. A hook's in/out types come
+   straight from them.
+
+2. **Generic factory parameterised by the user's schema `S`** (mirrors `createApp<S>`). Per-kind prop
+   typing requires the user's `S`, because the *wire* schemas are deliberately loose
+   (`nodeInputSchema = { kind: z.string(), props: z.record(...) }`). So the public entry is
+   `createGraphHooks(schema)`, not standalone hooks.
+
+3. **Do NOT rely on `hc<AppType>` for types.** Known limitation (documented in `serve.ts`): under
+   `isolatedDeclarations`, Hono's inferred per-route RPC schema cannot be emitted into `.d.ts`
+   (probed TS9007/TS9010), so from the published package `hc` request bodies and `res.json()` resolve
+   to `unknown`. **Decision:** type the hooks from `S` + the SDK domain types above; use `hc`/`fetch`
+   purely as the runtime transport. This sidesteps the limitation entirely.
+
+## 3. Current HTTP surface (what hooks can wrap today)
+
+From `serve.ts`, the only routes that exist:
+
+| Method | Path | SDK call | React hook |
+|---|---|---|---|
+| POST | `/t/:tenant/p/:project/nodes` | `addNode` | `useAddNode` |
+| POST | `/t/:tenant/p/:project/edges` | `addEdge` | `useAddEdge` |
+| GET  | `/t/:tenant/p/:project/nodes/:id` | `getNode` | `useNode` |
+| GET  | `/t/:tenant/p/:project/nodes/:id/neighbors` | `neighbors` (unpaginated) | `useNeighbors` |
+| GET  | `/t/:tenant/p/:project/retrieve` | `retrieve` | `useRetrieve` |
+| POST | `/t/:tenant/p/:project/journey` | `journey` | `useJourney` |
+| GET  | `/health`, `/ready` | — | (ops, no hook) |
+
+**Not exposed over HTTP** (SDK-only today): `neighborsPage`, `updateNode`, `deleteEdge`, `history`,
+`diff`, `changeFeed`, `match`, `hybridRetrieve`, algorithms (`shortestPath`/`topNodes`/…).
+
+## 4. Phase 0 — HTTP surface expansion (prerequisite)
+
+The hooks we want (infinite scroll, mutations, live sync) need routes that don't exist yet. Add these
+to `serve.ts`, each with a zod wire schema and `requireGraph(op)`:
+
+| Method | Path | SDK call | Op | Backs |
+|---|---|---|---|---|
+| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) |
+| PATCH| `/nodes/:id` | `updateNode` | write | `useUpdateNode` |
+| DELETE | `/edges/:id` | `deleteEdge` | write | `useDeleteEdge` |
+| GET  | `/nodes/:id/history` | `history` | read | `useHistory` |
+| GET  | `/changes` | `changeFeed` | read | `useChangeFeedSync` ← **the CDC live-sync route** |
+| GET  | `/diff` | `diff` | read | reconciliation (close events) |
+
+Notes:
+- `/changes` takes opaque per-stream cursors as query params: `?nodes=<cursor>&edges=<cursor>&limit=`.
+  Returns the `ChangeFeedPage` shape verbatim (`{ nodes, edges, nextCursor: { nodes, edges } }`).
+  changeFeed emits **raw stored bytes** (never upcast) — preserve that over the wire.
+- `match`/`hybridRetrieve`/algorithms are **out of scope** for v1 (complex bodies; add later if needed).
+- Reuse the existing `onError` mapping (ZodError→400, AuthzError→403/404, SQLITE_CONSTRAINT→400). The
+  P15 cursor fix means a malformed CDC cursor throws `invalid cursor` → add a 400 branch for it.
+
+## 5. Package shape
+
+```ts
+// createGraphHooks — generic over the user's schema S (like createApp)
+export function createGraphHooks<S extends GraphSchema>(schema: S) {
+  // returns { useNode, useNeighbors, useRetrieve, useJourney, useHistory,
+  //           useAddNode, useAddEdge, useUpdateNode, useDeleteEdge,
+  //           useChangeFeedSync, keys }
+}
+```
+
+- **Provider**: `<GraphProvider baseUrl tenant project headers>` supplies transport config via context
+  (routes are `/t/:tenant/p/:project/...`; `headers` is a getter for auth — JWT/session/API key).
+  Wrap in the app's `QueryClientProvider`.
+- **Query keys**: a single `keys` factory, project-scoped, opaque-cursor-friendly:
+  ```ts
+  keys.node(id)            // ['graphx', project, 'node', id]
+  keys.neighbors(id, opts) // ['graphx', project, 'neighbors', id, opts]
+  keys.retrieve(params)    // ['graphx', project, 'retrieve', params]
+  keys.journey(body)
+  keys.history(id)
+  keys.changes()
+  ```
+
+## 6. Hook catalog + inference contract
+
+| Hook | RQ primitive | Input type (inferred) | Output type (inferred) |
+|---|---|---|---|
+| `useNode(id)` | `useQuery` | `string` | `AnyNode<S> \| null` |
+| `useNeighbors(id, opts)` | `useInfiniteQuery` | `NeighborPageOpts` | `NeighborPage<S>` pages |
+| `useRetrieve(params)` | `useQuery` | `RetrieveOpts` (no `limits`) | `RetrievedNode[]` |
+| `useJourney(body)` | `useQuery`/`useMutation` | `JourneyOpts` (no `limits`) | `JourneyRow[]` |
+| `useHistory(id)` | `useQuery` | `string` | raw version rows |
+| `useAddNode()` | `useMutation` | `AddNodeInput<S, Kind<S>>` | `NodeOf<S, Kind<S>>` |
+| `useAddEdge()` | `useMutation` | `AddEdgeInput<S, Rel<S>>` | `EdgeRef` |
+| `useUpdateNode()` | `useMutation` | `{ id: string; patch: Partial<…> }` | `void` |
+| `useDeleteEdge()` | `useMutation` | `string` | `void` |
+| `useChangeFeedSync()` | `useQuery` (polling) | — | `ChangeFeedPage` |
+
+`limits` is intentionally absent from client input types — the server applies it (§19.2), not the
+client.
+
+### Infinite neighbors
+The SDK's keyset pagination maps directly:
+```ts
+useInfiniteQuery({
+  queryKey: keys.neighbors(id, opts),
+  queryFn: ({ pageParam }) => getPage(`/nodes/${id}/neighborsPage`, { cursor: pageParam, ...opts }),
+  initialPageParam: undefined as string | undefined,
+  getNextPageParam: (last) => last.nextCursor ?? undefined, // null = last page → stops
+});
+```
+`nextCursor` is opaque base64; thread it untouched.
+
+## 7. CDC-driven live invalidation (the differentiator)
+
+A single poller hook tails `/changes` and invalidates **exactly** the affected query keys instead of
+blind interval refetch:
+
+```ts
+function useChangeFeedSync(intervalMs = 2000) {
+  const cursor = useRef<{ nodes?: string; edges?: string }>({});
+  return useQuery({
+    queryKey: keys.changes(),
+    refetchInterval: intervalMs,
+    queryFn: async () => {
+      const page = await getChanges(cursor.current); // GET /changes?nodes=&edges=
+      for (const n of page.nodes) qc.invalidateQueries({ queryKey: keys.node(String(n.id)) });
+      for (const e of page.edges) {
+        qc.invalidateQueries({ queryKey: keys.neighbors(String(e.src)) });
+        qc.invalidateQueries({ queryKey: keys.neighbors(String(e.dst)) });
+      }
+      cursor.current = {
+        nodes: page.nextCursor.nodes ?? cursor.current.nodes, // null = caught up → keep last cursor
+        edges: page.nextCursor.edges ?? cursor.current.edges,
+      };
+      return page;
+    },
+  });
+}
+```
+
+The `(valid_from, ver)` keyset guarantees no skip / no overlap, so the poller never double-invalidates
+or misses a version.
+
+### Close/delete caveat (decision A.3)
+The feed is **valid_from-only**: it surfaces INSERTs + UPDATE-successors, **not** pure closes
+(`deleteEdge`, single-valued `addEdge` supersession move `valid_to` with no new row). So edge
+*removals* will not arrive via the feed. Handle them one of two ways:
+- **(recommended for v1)** invalidate on the mutation's `onSettled` — the client already holds the
+  affected ids for `useDeleteEdge`/single-valued `useAddEdge`.
+- **(follow-up)** add the `valid_to`-keyed companion close-feed (documented §19.10 follow-up) and a
+  matching `/changes` close cursor.
+
+## 8. Mutations & cache invalidation
+
+Invalidation matrix (on `onSettled`):
+
+| Mutation | Invalidate |
+|---|---|
+| `useAddNode` | nothing required (new id; or `keys.node(newId)` to prime) |
+| `useAddEdge` | `keys.neighbors(src)`, `keys.neighbors(dst)`, `keys.node(dst)` |
+| `useUpdateNode` | `keys.node(id)`, `keys.history(id)` |
+| `useDeleteEdge` | `keys.neighbors(src)`, `keys.neighbors(dst)` |
+
+### Optimistic-update policy
+**Default to invalidate-on-settle, not optimistic, for writes that gain server-derived fields.** The
+server mints the ULID `id`, applies zod **defaults** (e.g. `crit: 1`), and stamps the P12 `_v` — none
+of which the client can predict, so an optimistic cache entry won't byte-match the server response.
+Optimistic updates are acceptable only for `useDeleteEdge` / simple toggles, with rollback in
+`onError`.
+
+## 9. Cross-cutting
+
+- **Auth / tenant**: all data routes are `/t/:tenant/p/:project/...`; the provider injects
+  `tenant`/`project` + auth `headers`. A 401 (unauthenticated) / 403 (role) / 404 (cross-tenant
+  confused-deputy) surfaces as the React Query `error`.
+- **Error mapping**: 4xx → typed error object (`{ status, message, issues? }` from `onError`); 5xx →
+  generic. Map `invalid cursor` / validation issues for form display.
+- **SSR / prefetch**: standard `queryClient.prefetchQuery` with the same `keys` factory; hooks are
+  isomorphic (transport is `fetch`).
+- **Optional runtime response validation**: if the wire zod schemas are exported from `serve.ts`
+  (currently module-private), hooks can `schema.parse(res)` for a runtime guard. Decision: ship
+  without it in v1 (trust the typed server), add behind a flag if needed.
+
+## 10. Testing strategy (fully local)
+
+- Unit: render hooks under a real `QueryClient` + a mocked `fetch`/`hc`; assert query keys,
+  `getNextPageParam` cursor threading, and the invalidation matrix fire.
+- Integration: run `createApp(cfg)` in-process (as the P11/P15 tests do) and point the transport at
+  `app.request` / `Bun.serve` — exercises real routes, real zod validation, real CDC keyset.
+- CDC sync: drive writes through the SDK, assert `useChangeFeedSync` invalidates the right keys and
+  advances cursors with no skip/overlap (mirror the P15 CDC keyset tests).
+
+No infra required — everything is local (libSQL `:memory:`/`file:` + in-process Hono).
+
+## 11. Open decisions / forks
+
+1. **`useJourney` as query vs mutation** — `journey` is a POST with a body but is read-only. Lean
+   `useQuery` keyed on the body (cacheable), unless bodies are large/volatile → then `useMutation`.
+2. **CDC cursor persistence** — in-memory ref (lost on remount) vs `localStorage` (survives reload,
+   resumes the tail). v1: in-memory; flag for persistence.
+3. **Polling vs SSE/WebSocket for CDC** — v1 polls `/changes` (no new infra). A push transport is a
+   later optimisation; the cursor contract is unchanged.
+4. **Package boundary** — `@graphx/react` depends on `@tanstack/react-query` (peer) + the core types
+   only (no runtime core import beyond types). Keep React out of `core`.
+
+## 12. Out of scope (v1)
+
+`match` / `hybridRetrieve` / algorithms hooks; the `valid_to` close-feed; optimistic writes for
+server-derived shapes; SSE/WebSocket transport; GraphQL.
+
+## 13. Suggested build phases
+
+- **R0** — HTTP surface expansion (§4): `neighborsPage`, `updateNode`, `deleteEdge`, `history`,
+  `changes`, `diff` routes + wire schemas + tests. (In-scope polish; partly already flagged as the
+  §19.10 `/changes` route follow-up.)
+- **R1** — `@graphx/react` package: provider, `keys`, query hooks, infinite neighbors, mutation hooks
+  + invalidation matrix. TDD with mocked transport + in-process app.
+- **R2** — `useChangeFeedSync` live invalidation + the close-handling policy.
+- **R3** — optional: runtime response validation, cursor persistence, close-feed companion.
