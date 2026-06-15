@@ -49,11 +49,18 @@ export {
 export {
 	addMembership,
 	CONTROL_SCHEMA,
+	createApiKey,
 	createProject,
 	createTenant,
 	createUser,
+	hashApiKey,
 	initControl,
+	listProjects,
+	listTenants,
+	listUsers,
 } from './control-plane.ts';
+// Admin — operator-gated control-plane CRUD sub-app (mount with app.route('/admin', ...))
+export { type AdminConfig, createAdminApp } from './admin.ts';
 export {
 	AuthzError,
 	authorize,
@@ -93,9 +100,15 @@ export {
 	Graph,
 	graphFor,
 	type GraphSchema,
+	type GraphSlice,
+	type GraphSliceLink,
+	type GraphSliceNode,
+	type GraphSliceOpts,
 	type NeighborOpts,
 	type NeighborPage,
 	type NeighborPageOpts,
+	type NodeListOpts,
+	type NodeListPage,
 	type PropsInput,
 } from './graph.ts';
 

@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import type { Client } from '@libsql/client';
 import { ulid } from 'ulidx';
 import { applyConnPragmas } from './db.ts';
@@ -73,4 +74,53 @@ export async function createProject(
 		args: [id, p.tenantId, p.name, p.dbNamespace],
 	});
 	return id;
+}
+
+/** List all tenants (registry read for the admin UI), ordered by name. */
+export async function listTenants(control: Client): Promise<Array<{ id: string; name: string }>> {
+	const r = await control.execute('SELECT id, name FROM tenants ORDER BY name');
+	return r.rows.map((row) => ({ id: String(row.id), name: String(row.name) }));
+}
+
+/** List a tenant's projects (with their sqld namespace), ordered by name. */
+export async function listProjects(
+	control: Client,
+	tenantId: string,
+): Promise<Array<{ id: string; name: string; dbNamespace: string }>> {
+	const r = await control.execute({
+		sql: 'SELECT id, name, db_namespace FROM projects WHERE tenant_id = ? ORDER BY name',
+		args: [tenantId],
+	});
+	return r.rows.map((row) => ({
+		id: String(row.id),
+		name: String(row.name),
+		dbNamespace: String(row.db_namespace),
+	}));
+}
+
+/** List all users (registry read for the admin UI), ordered by email. */
+export async function listUsers(control: Client): Promise<Array<{ id: string; email: string }>> {
+	const r = await control.execute('SELECT id, email FROM users ORDER BY email');
+	return r.rows.map((row) => ({ id: String(row.id), email: String(row.email) }));
+}
+
+/** The stored hash for an API key (sha256 hex). Exported so an `authenticate` impl can verify a presented key. */
+export function hashApiKey(key: string): string {
+	return createHash('sha256').update(key).digest('hex');
+}
+
+/**
+ * Mint an API key for a tenant. Stores ONLY the {@link hashApiKey} hash (never the plaintext)
+ * and returns the plaintext key exactly once — the caller must surface it immediately.
+ */
+export async function createApiKey(
+	control: Client,
+	a: { tenantId: string; scopes: string[] },
+): Promise<{ key: string }> {
+	const key = `gxk_${randomBytes(24).toString('base64url')}`;
+	await control.execute({
+		sql: 'INSERT INTO api_keys (hash, tenant_id, scopes, created_at) VALUES (?, ?, ?, ?)',
+		args: [hashApiKey(key), a.tenantId, JSON.stringify(a.scopes), Date.now()],
+	});
+	return { key };
 }
