@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test"
 import { ApiError, api, qs, setToken } from "./api"
 
 describe("qs", () => {
@@ -11,15 +11,17 @@ describe("qs", () => {
 })
 
 describe("api transport", () => {
-  let fetchMock: ReturnType<typeof vi.fn>
+  let fetchMock: ReturnType<typeof mock>
+  let originalFetch: typeof globalThis.fetch
 
   beforeEach(() => {
     setToken(null)
-    fetchMock = vi.fn()
-    vi.stubGlobal("fetch", fetchMock)
+    fetchMock = mock()
+    originalFetch = globalThis.fetch
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch
   })
   afterEach(() => {
-    vi.unstubAllGlobals()
+    globalThis.fetch = originalFetch
   })
 
   function ok(body: unknown) {
