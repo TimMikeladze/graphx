@@ -86,7 +86,8 @@ export async function bulkLoad<S extends GraphSchema>(
 ): Promise<BulkResult> {
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
-	const embExpr = embFreshExpr(dialectOf(raw));
+	const d = dialectOf(raw);
+	const embExpr = embFreshExpr(d);
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
 	// 1. Validate + prepare everything up front — fail fast, BEFORE touching indexes.
@@ -107,9 +108,13 @@ export async function bulkLoad<S extends GraphSchema>(
 		};
 	});
 
-	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger.
-	await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
-	await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');
+	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger. libSQL only —
+	// on Postgres there is no FTS trigger (the generated `tsvector` self-maintains) and no HNSW
+	// index is created yet, so there is nothing to defer.
+	if (d !== 'postgres') {
+		await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
+		await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');
+	}
 
 	// One atomic `batch` (NOT `transaction()` — the latter detaches the connection from
 	// a `:memory:` DB on this client build, breaking every follow-on op). Identity rows
@@ -140,13 +145,18 @@ export async function bulkLoad<S extends GraphSchema>(
 		if (stmts.length > 0) await raw.batch(stmts, 'write');
 	} finally {
 		// 3. Always restore queryability — recreate the ANN index and the FTS trigger,
-		// even if the load threw (a failed batch is atomic, so no rows leak).
-		await raw.execute(NV_EMB_IDX_DDL);
-		await raw.execute(NODES_FTS_TRIGGER_DDL);
+		// even if the load threw (a failed batch is atomic, so no rows leak). libSQL only.
+		if (d !== 'postgres') {
+			await raw.execute(NV_EMB_IDX_DDL);
+			await raw.execute(NODES_FTS_TRIGGER_DDL);
+		}
 	}
 
-	// 4. Rebuild the FTS index from the content table, then refresh planner stats.
-	await raw.execute(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
+	// 4. Rebuild the FTS index from the content table (libSQL only — PG's generated tsvector
+	// is already current), then refresh planner stats.
+	if (d !== 'postgres') {
+		await raw.execute(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
+	}
 	await raw.execute('ANALYZE');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };

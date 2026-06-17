@@ -7,7 +7,7 @@ import {
 	type SqlStatement,
 	type SqlValue,
 } from './dialect.ts';
-import { distinctSelect, embFreshExpr, embRebindExpr } from './dialect-sql.ts';
+import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
@@ -505,8 +505,9 @@ export class Graph<S extends GraphSchema> {
 		if (opts.q !== undefined) {
 			const match = this.ftsMatch(opts.q);
 			if (match === null) return null;
-			where.push('nv.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)');
-			args.push(match);
+			const d = dialectOf(this.raw);
+			where.push(ftsWhere(d, 'nv'));
+			args.push(d === 'postgres' ? opts.q : match);
 		}
 		return { where: where.join(' AND '), args };
 	}

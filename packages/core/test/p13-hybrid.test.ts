@@ -7,7 +7,12 @@ import { Graph } from '../src/graph.ts';
 import { hybridRetrieve, sanitizeMatch } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { embSql, makeTestDb, TEST_DRIVER } from './harness.ts';
+
+/** These probe libSQL's FTS5 internals (the `nodes_fts` table + sync trigger), which have no
+ *  Postgres analog (FTS is a generated `body_tsv` column there). The user-facing hybrid-search
+ *  contract is exercised by the retrieval tests below, which DO run on both backends. */
+const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR (§19.3–19.4). dim 4.
 
@@ -38,7 +43,7 @@ async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA>
 // FTS5 schema + trigger (M2)
 // ---------------------------------------------------------------------------
 
-test('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger', async () => {
+libsqlOnly('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger', async () => {
 	const { client, g } = await freshGraph();
 	await g.addNode({ kind: 'doc', props: { title: 'x' }, body: 'the quick brown fox' });
 	const r = await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'fox'");
@@ -46,7 +51,7 @@ test('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger', asy
 	client.close();
 });
 
-test('P13 schema: init() is idempotent with the FTS table + trigger present', async () => {
+libsqlOnly('P13 schema: init() is idempotent with the FTS table + trigger present', async () => {
 	const client = makeTestDb().client;
 	await init(client, 4);
 	await init(client, 4); // must not throw (IF NOT EXISTS on vtable + trigger)
@@ -70,7 +75,7 @@ test('P13 sanitize: quotes each token, joins with OR, empty → null', () => {
 	expect(sanitizeMatch('a"b')).toBe('"a""b"');
 });
 
-test('P13 sanitize: malicious FTS5 syntax never errors or escapes the query', async () => {
+libsqlOnly('P13 sanitize: malicious FTS5 syntax never errors or escapes the query', async () => {
 	const { client, g } = await freshGraph();
 	await g.addNode({ kind: 'doc', props: { title: 'x' }, body: 'red apple', emb: VECTORS.red });
 	const nasty = [
@@ -156,7 +161,7 @@ test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/tempor
 	// Z: a decoy with a live embedding so the ANN index is non-empty.
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [z] });
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,vector(?),?,?)',
+		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [3, z, 'doc', 'zzz', '[0,0,0,1]', T1, FOREVER],
 	});
 

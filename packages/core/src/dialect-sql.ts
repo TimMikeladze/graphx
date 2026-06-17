@@ -172,6 +172,19 @@ export function embFreshExpr(dialect: Dialect): string {
 }
 
 /**
+ * Full-text WHERE predicate on a `node_versions` alias. libSQL joins the external-content
+ * FTS5 table by rowid (`ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`, bound
+ * arg = a sanitized FTS5 expression); Postgres matches the generated `body_tsv` column
+ * (`@@ websearch_to_tsquery('english', ?)`, bound arg = the RAW query text — websearch
+ * parses it safely). Callers gate both on "has usable tokens" before binding.
+ */
+export function ftsWhere(dialect: Dialect, alias: string): string {
+	return dialect === 'postgres'
+		? `${alias}.body_tsv @@ websearch_to_tsquery('english', ?)`
+		: `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
+}
+
+/**
  * Current-time ANN seed sub-SELECT (the body of `seeds AS ( … )`). Consumes 2 bound args:
  * the query embedding (JSON-array string) and k. libSQL uses the partial-live
  * `vector_top_k` index function joined by rowid; pgvector orders live rows by cosine
@@ -231,6 +244,76 @@ export function annSeedsAsOf(dialect: Dialect): string {
   )
   ORDER BY rk
   LIMIT ?`;
+}
+
+/**
+ * Standalone live ANN seed list (id only) for hybrid retrieval. Bound args: embedding, k.
+ * libSQL: partial-live `vector_top_k`; Postgres: live rows ordered by cosine distance.
+ */
+export function vecSeedLive(dialect: Dialect): string {
+	if (dialect === 'postgres') {
+		return `SELECT id
+FROM node_versions
+WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+ORDER BY emb <=> ?::vector
+LIMIT ?`;
+	}
+	return `SELECT n.id AS id
+FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+JOIN node_versions n ON n.rowid = v.id
+WHERE n.valid_to = ${FOREVER_LIT}`;
+}
+
+/**
+ * Live full-text seed list (id only, best-first). Bound args: ftsArg, k — where ftsArg is a
+ * sanitized FTS5 expression (libSQL) or the raw query text (Postgres). Postgres binds the
+ * `tsquery` once via a CTE so the arg count matches libSQL's.
+ */
+export function ftsSeedLive(dialect: Dialect): string {
+	if (dialect === 'postgres') {
+		return `WITH q AS (SELECT websearch_to_tsquery('english', ?) AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+	}
+	return `SELECT n.id AS id
+FROM nodes_fts
+JOIN node_versions n ON n.ver = nodes_fts.rowid
+WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER_LIT}
+ORDER BY rank
+LIMIT ?`;
+}
+
+/** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
+export function ftsSeedAsOf(dialect: Dialect): string {
+	if (dialect === 'postgres') {
+		return `WITH q AS (SELECT websearch_to_tsquery('english', ?) AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+	}
+	return `SELECT n.id AS id
+FROM nodes_fts
+JOIN node_versions n ON n.ver = nodes_fts.rowid
+WHERE nodes_fts MATCH ? AND n.valid_from <= ? AND ? < n.valid_to
+ORDER BY rank
+LIMIT ?`;
+}
+
+/** Expand a JSON-array string param into a single `id` column of rows. libSQL `json_each`, PG `jsonb_array_elements_text`. */
+export function jsonArrayRows(dialect: Dialect): string {
+	return dialect === 'postgres'
+		? `SELECT jsonb_array_elements_text(?::jsonb) AS id`
+		: `SELECT value AS id FROM json_each(?)`;
+}
+
+/** Read an embedding back as a JSON-array string. libSQL `vector_extract(emb)`; pgvector's text form IS `[..]`. */
+export function embExtract(dialect: Dialect): string {
+	return dialect === 'postgres' ? 'emb' : 'vector_extract(emb)';
 }
 
 /**

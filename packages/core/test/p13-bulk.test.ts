@@ -7,7 +7,13 @@ import { Graph } from '../src/graph.ts';
 import { hybridRetrieve } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, TEST_DRIVER } from './harness.ts';
+
+// These assert libSQL bulk-load INTERNALS — the deferred-index drop/rebuild via sqlite_master,
+// the FTS5 nodes_fts table, and the libSQL fsync speedup. Postgres bulk loads in one batch with
+// no index deferral (generated tsvector self-maintains), so the mechanics differ; the functional
+// contract (N rows loaded + queryable) is covered by the cross-backend tests.
+const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P13 — bulk ingestion (§19.8). dim 4.
 
@@ -58,7 +64,7 @@ test('P13 bulk: loads N nodes, all queryable through the live view', async () =>
 	client.close();
 });
 
-test('P13 bulk: ANN index is rebuilt and queryable after the deferred build', async () => {
+libsqlOnly('P13 bulk: ANN index is rebuilt and queryable after the deferred build', async () => {
 	const client = await mem();
 	await bulkLoad(client, SCHEMA, rows(30));
 	// the partial-live vector index must exist and seed retrieval
@@ -71,7 +77,7 @@ test('P13 bulk: ANN index is rebuilt and queryable after the deferred build', as
 	client.close();
 });
 
-test('P13 bulk: FTS index is rebuilt and powers hybrid retrieval', async () => {
+libsqlOnly('P13 bulk: FTS index is rebuilt and powers hybrid retrieval', async () => {
 	const client = await mem();
 	const res = await bulkLoad(client, SCHEMA, [
 		{ kind: 'doc', props: { title: 'unique' }, body: 'a uniquetoken lives here', emb: [0, 0, 0, 1] },
@@ -88,7 +94,7 @@ test('P13 bulk: FTS index is rebuilt and powers hybrid retrieval', async () => {
 	client.close();
 });
 
-test('P13 bulk: trigger is restored so subsequent live writes still sync FTS', async () => {
+libsqlOnly('P13 bulk: trigger is restored so subsequent live writes still sync FTS', async () => {
 	const client = await mem();
 	await bulkLoad(client, SCHEMA, rows(10));
 	// a normal live write AFTER the bulk load must still populate the FTS index
@@ -99,7 +105,7 @@ test('P13 bulk: trigger is restored so subsequent live writes still sync FTS', a
 	client.close();
 });
 
-test('P13 bulk: measurably faster than per-row close-and-insert', async () => {
+libsqlOnly('P13 bulk: measurably faster than per-row close-and-insert', async () => {
 	const N = 400;
 	const data = rows(N);
 
@@ -128,7 +134,7 @@ test('P13 bulk: measurably faster than per-row close-and-insert', async () => {
 	console.log(`bulk speedup: ${speedup.toFixed(1)}× (loop ${tLoop}ms → bulk ${tBulk}ms, N=${N})`);
 });
 
-test('P13 bulk: invalid props throw, leaving the ANN index intact (fail-fast before drop)', async () => {
+libsqlOnly('P13 bulk: invalid props throw, leaving the ANN index intact (fail-fast before drop)', async () => {
 	const client = await mem();
 	// seed a valid node first via the normal path so the index has a live row.
 	const g = new Graph(client, SCHEMA);

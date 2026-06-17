@@ -1,4 +1,12 @@
-import type { DbClient } from './dialect.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
+import {
+	annSeedsAsOf,
+	embExtract,
+	ftsSeedAsOf,
+	ftsSeedLive,
+	jsonArrayRows,
+	vecSeedLive,
+} from './dialect-sql.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -130,28 +138,19 @@ function adjCte(direction: 'forward' | 'reverse' | 'both', edgePred: string): st
 async function seedsCurrent(
 	raw: DbClient,
 	qEmbJson: string,
+	query: string,
 	match: string | null,
 	fetchK: number,
 ): Promise<string[][]> {
-	const vec = await raw.execute({
-		sql: `SELECT n.id AS id
-FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-JOIN node_versions n ON n.rowid = v.id
-WHERE n.valid_to = ${FOREVER}`,
-		args: [qEmbJson, fetchK],
-	});
+	const d = dialectOf(raw);
+	const vec = await raw.execute({ sql: vecSeedLive(d), args: [qEmbJson, fetchK] });
 	const vecIds = vec.rows.map((r) => String(r.id));
 
 	let ftsIds: string[] = [];
 	if (match !== null) {
 		const fts = await raw.execute({
-			sql: `SELECT n.id AS id
-FROM nodes_fts
-JOIN node_versions n ON n.ver = nodes_fts.rowid
-WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER}
-ORDER BY rank
-LIMIT ?`,
-			args: [match, fetchK],
+			sql: ftsSeedLive(d),
+			args: [d === 'postgres' ? query : match, fetchK],
 		});
 		ftsIds = fts.rows.map((r) => String(r.id));
 	}
@@ -162,26 +161,16 @@ LIMIT ?`,
 async function seedsAsOf(
 	raw: DbClient,
 	qEmbJson: string,
+	query: string,
 	match: string | null,
 	fetchK: number,
 	t: number,
 ): Promise<string[][]> {
-	// Vector: mirror retrieve.ts — over-fetch the live index, keep ids that have a
-	// version valid at :t, order by the index rowid proxy.
+	const d = dialectOf(raw);
+	// Vector: over-fetch the live index, keep ids that have a version valid at :t, rank
+	// (libSQL by the index rowid proxy; Postgres by cosine distance).
 	const vec = await raw.execute({
-		sql: `SELECT live.id AS id
-FROM (
-  SELECT n.id AS id, MIN(v.id) AS rk
-  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-  JOIN node_versions n ON n.rowid = v.id
-  GROUP BY n.id
-) live
-WHERE EXISTS (
-  SELECT 1 FROM node_versions h
-  WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
-)
-ORDER BY rk
-LIMIT ?`,
+		sql: annSeedsAsOf(d),
 		args: [qEmbJson, fetchK, t, t, fetchK],
 	});
 	const vecIds = vec.rows.map((r) => String(r.id));
@@ -191,13 +180,8 @@ LIMIT ?`,
 		// Lexical: match the version actually valid at :t (the FTS index covers every
 		// version, so this is exact — not best-effort like the live-only ANN leg).
 		const fts = await raw.execute({
-			sql: `SELECT n.id AS id
-FROM nodes_fts
-JOIN node_versions n ON n.ver = nodes_fts.rowid
-WHERE nodes_fts MATCH ? AND n.valid_from <= ? AND ? < n.valid_to
-ORDER BY rank
-LIMIT ?`,
-			args: [match, t, t, fetchK],
+			sql: ftsSeedAsOf(d),
+			args: [d === 'postgres' ? query : match, t, t, fetchK],
 		});
 		ftsIds = fts.rows.map((r) => String(r.id));
 	}
@@ -215,7 +199,7 @@ async function walkCurrent(
 ): Promise<RetrievedNode[]> {
 	const edgePred = `valid_to = ${FOREVER}${relFragment(rels)}`;
 	const sql = `
-WITH seeds(id) AS (SELECT value FROM json_each(?)),
+WITH RECURSIVE seeds(id) AS (${jsonArrayRows(dialectOf(raw))}),
 adj AS (
   ${adjCte(direction, edgePred)}
 ),
@@ -232,7 +216,7 @@ walk AS (
   JOIN node_versions n ON n.id = adj.b AND n.valid_to = ${FOREVER}
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
+SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
 
 	const args: (string | number)[] = [JSON.stringify(seedIds)];
 	const sides = direction === 'both' ? 2 : 1;
@@ -255,7 +239,7 @@ async function walkAsOf(
 ): Promise<RetrievedNode[]> {
 	const edgePred = `valid_from <= ? AND ? < valid_to${relFragment(rels)}`;
 	const sql = `
-WITH seeds(id) AS (SELECT value FROM json_each(?)),
+WITH RECURSIVE seeds(id) AS (${jsonArrayRows(dialectOf(raw))}),
 adj AS (
   ${adjCte(direction, edgePred)}
 ),
@@ -272,7 +256,7 @@ walk AS (
   JOIN node_versions n ON n.id = adj.b AND n.valid_from <= ? AND ? < n.valid_to
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
+SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
 
 	const args: (string | number)[] = [JSON.stringify(seedIds)];
 	const sides = direction === 'both' ? 2 : 1;
@@ -321,7 +305,7 @@ async function loadEmbeddings(
 	const pred = isPast ? `valid_from <= ? AND ? < valid_to` : `valid_to = ${FOREVER}`;
 	const args: (string | number)[] = isPast ? [...ids, t, t] : [...ids];
 	const r = await raw.execute({
-		sql: `SELECT id, vector_extract(emb) AS e
+		sql: `SELECT id, ${embExtract(dialectOf(raw))} AS e
 FROM node_versions
 WHERE id IN (${placeholders}) AND ${pred} AND emb IS NOT NULL`,
 		args,
@@ -401,8 +385,8 @@ export async function hybridRetrieve(
 	const t = isPast ? (opts.asOf as number) : FOREVER;
 
 	const lists = isPast
-		? await seedsAsOf(raw, qEmbJson, match, fetchK, t)
-		: await seedsCurrent(raw, qEmbJson, match, fetchK);
+		? await seedsAsOf(raw, qEmbJson, opts.query, match, fetchK, t)
+		: await seedsCurrent(raw, qEmbJson, opts.query, match, fetchK);
 
 	const seedIds = rrf(lists, rrfK).slice(0, k);
 	if (seedIds.length === 0) return [];

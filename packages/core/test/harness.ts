@@ -36,8 +36,11 @@ export interface MakeTestDbOpts {
 	file?: boolean;
 }
 
-/** Selected backend. `libsql` (default) preserves current behavior; `postgres` is later. */
+/** Selected backend. `libsql` (default) preserves current behavior; `postgres` opt-in via env. */
 const DRIVER = process.env.GRAPHX_TEST_DRIVER ?? 'libsql';
+
+/** The active test backend — for `test.skipIf(TEST_DRIVER === 'postgres')` on libSQL-only probes. */
+export const TEST_DRIVER = DRIVER;
 
 /**
  * Dialect-correct embedding value expression for raw-SQL test fixtures that bind a JSON
