@@ -5,7 +5,10 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, TEST_DRIVER } from './harness.ts';
+
+// The nv_emb_idx retrieval probe uses libSQL's vector_top_k; PG vector retrieval is covered by P4.
+const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P3 — data layer (§6, D1/D3/B5/M6). Round-trips nodes/edges through the
 // close-and-insert temporal store with ULID identity, exercising getNode (live
@@ -66,7 +69,7 @@ test('P3: addNode without emb inserts SQL NULL (no throw); node retrievable', as
 	client.close();
 });
 
-test('P3: addNode WITH emb stores a vector and is retrievable via nv_emb_idx', async () => {
+libsqlOnly('P3: addNode WITH emb stores a vector and is retrievable via nv_emb_idx', async () => {
 	const { client, g } = await freshGraph();
 	const created = await g.addNode({ kind: 'device', props: { type: 'sensor' }, emb: [1, 0, 0, 0] });
 	const r = await client.execute({

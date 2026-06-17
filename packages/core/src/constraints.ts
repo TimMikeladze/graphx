@@ -51,14 +51,24 @@ export async function declareUniqueNodeProp(
 	client: DbClient,
 	opts: { kind: string; prop: string },
 ): Promise<void> {
-	if (dialectOf(client) === 'postgres') {
-		// Postgres has no VIRTUAL generated columns; this becomes an expression index
-		// (`CREATE UNIQUE INDEX ... ON node_versions((props->>'prop')) WHERE ...`) when
-		// the Postgres adapter lands.
-		throw new Error('declareUniqueNodeProp: Postgres backend not implemented yet — later phase');
-	}
 	const kind = safeIdent(opts.kind, 'kind');
 	const prop = safeIdent(opts.prop, 'prop');
+	// Length-prefix the kind so distinct (kind, prop) pairs can't collapse to the same
+	// index name — `_`-joining alone is ambiguous (user_account+id vs user+account_id
+	// both → ux_user_account_id), which would make the 2nd CREATE IF NOT EXISTS a silent
+	// no-op and leave its uniqueness unenforced.
+	const idx = `ux_${kind.length}_${kind}_${prop}`;
+	const pred = `WHERE valid_to = ${FOREVER} AND kind = ${sqlLiteral(kind)}`;
+	if (dialectOf(client) === 'postgres') {
+		// Postgres has no VIRTUAL generated columns — use a partial UNIQUE EXPRESSION index
+		// over `props::jsonb ->> 'prop'` directly. NULLs (prop absent) are distinct, so nodes
+		// lacking the prop never collide, matching the libSQL generated-column behavior.
+		await client.execute(
+			`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions ((props::jsonb ->> '${prop}')) ${pred}`,
+		);
+		return;
+	}
+	// libSQL: a VIRTUAL generated column `gp_<prop>` + a partial UNIQUE index over it.
 	const col = `gp_${prop}`;
 	await ensureColumn(
 		client,
@@ -66,13 +76,7 @@ export async function declareUniqueNodeProp(
 		col,
 		`ALTER TABLE node_versions ADD COLUMN ${col} TEXT GENERATED ALWAYS AS (json_extract(props, '$.${prop}')) VIRTUAL`,
 	);
-	// Length-prefix the kind so distinct (kind, prop) pairs can't collapse to the same
-	// index name — `_`-joining alone is ambiguous (user_account+id vs user+account_id
-	// both → ux_user_account_id), which would make the 2nd CREATE IF NOT EXISTS a silent
-	// no-op and leave its uniqueness unenforced.
-	await client.execute(
-		`CREATE UNIQUE INDEX IF NOT EXISTS ux_${kind.length}_${kind}_${prop} ON node_versions(${col}) WHERE valid_to = ${FOREVER} AND kind = ${sqlLiteral(kind)}`,
-	);
+	await client.execute(`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions(${col}) ${pred}`);
 }
 
 /**

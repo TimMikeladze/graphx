@@ -2,7 +2,11 @@ import { expect, test } from 'bun:test';
 import { FOREVER } from '../src/db.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { ensureColumn, init, schema } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, TEST_DRIVER } from './harness.ts';
+
+// libSQL schema-MECHANICS probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, vector_top_k,
+// table_xinfo). The cross-backend schema contract is exercised by every other suite.
+const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P1 schema init (§4 + §4.1, D1/D5/B9). Proves the temporal schema, adjacency &
 // temporal indexes, the live-only views, the weight CHECK, and the vector index
@@ -26,7 +30,7 @@ test('P1: schema(dim) substitutes the embedding dimension', () => {
 	expect(guarded.length).toBe(creates.length);
 });
 
-test('P1: init() twice is a no-op (no throw)', async () => {
+libsqlOnly('P1: init() twice is a no-op (no throw)', async () => {
 	const c = mem();
 	await init(c);
 	await init(c); // re-run, idempotent via IF NOT EXISTS
@@ -35,7 +39,7 @@ test('P1: init() twice is a no-op (no throw)', async () => {
 	c.close();
 });
 
-test('P1: all tables and views exist after init()', async () => {
+libsqlOnly('P1: all tables and views exist after init()', async () => {
 	const c = mem();
 	await init(c);
 	const r = await c.execute(
@@ -52,7 +56,7 @@ test('P1: all tables and views exist after init()', async () => {
 	c.close();
 });
 
-test('P1: edge adjacency indexes used — src => ev_src_asof, dst => ev_dst_asof', async () => {
+libsqlOnly('P1: edge adjacency indexes used — src => ev_src_asof, dst => ev_dst_asof', async () => {
 	const c = mem();
 	await init(c);
 	// Insert a handful of rows + ANALYZE so the planner prefers the index over a
@@ -128,7 +132,7 @@ test('P1: nodes view returns only live rows (valid_to = FOREVER)', async () => {
 	c.close();
 });
 
-test('P1 EMPIRICAL: vector index nv_emb_idx is usable via vector_top_k', async () => {
+libsqlOnly('P1 EMPIRICAL: vector index nv_emb_idx is usable via vector_top_k', async () => {
 	const c = mem();
 	await init(c, 4); // dim 4 for the test
 	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
@@ -152,7 +156,7 @@ test('P1 EMPIRICAL: vector index nv_emb_idx is usable via vector_top_k', async (
 	c.close();
 });
 
-test('P1: ensureColumn adds a generated column once, idempotently', async () => {
+libsqlOnly('P1: ensureColumn adds a generated column once, idempotently', async () => {
 	const c = mem();
 	await init(c, 4);
 	await ensureColumn(

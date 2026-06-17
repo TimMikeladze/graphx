@@ -1,4 +1,4 @@
-import type { DbClient } from './dialect.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
 import { FOREVER } from './db.ts';
 
 /**
@@ -333,19 +333,25 @@ async function sqlShortestPath(
 	// Optional M17 depth bound: omitted = unbounded (the cycle guard still terminates
 	// the walk by restricting it to simple paths, so it agrees with memory-mode).
 	const depthClause = maxDepth !== undefined ? '\n    AND w.depth < ?' : '';
-	// Priority-queue recursive CTE: ORDER BY cumulative cost pulls the cheapest
-	// frontier first; the path-LIKE guard keeps it cycle-safe (so simple paths only,
-	// which is exactly the optimum for non-negative weights, B9).
+	// Priority-queue recursive CTE: ORDER BY cumulative cost pulls the cheapest frontier
+	// first; the path-LIKE guard keeps it cycle-safe (simple paths only — the optimum for
+	// non-negative weights, B9). Postgres forbids ORDER BY in a recursive term, so it is
+	// omitted there: the CTE then fully enumerates simple paths and the OUTER
+	// `ORDER BY cost LIMIT 1` still selects the optimum (no pruning, fine for small graphs).
+	const isPg = dialectOf(raw) === 'postgres';
+	const orderClause = isPg ? '' : `\n  ORDER BY w.cost + ${costExpr}`;
+	// Postgres requires the recursive column types to match the non-recursive term; the
+	// running cost is `double precision` (weight is `real`), so the anchor's 0 is cast.
+	const zeroCost = isPg ? 'CAST(0.0 AS double precision)' : '0.0';
 	const sql = `
 WITH RECURSIVE walk(node, cost, path, depth) AS (
-  SELECT ?, 0.0, ',' || ? || ',', 0
+  SELECT ?, ${zeroCost}, ',' || ? || ',', 0
   UNION ALL
   SELECT e.dst, w.cost + ${costExpr}, w.path || e.dst || ',', w.depth + 1
   FROM walk w
   JOIN edges e ON e.src = w.node${relClause}
   WHERE w.node <> ?${depthClause}
-    AND w.path NOT LIKE '%,' || e.dst || ',%'
-  ORDER BY w.cost + ${costExpr}
+    AND w.path NOT LIKE '%,' || e.dst || ',%'${orderClause}
 )
 SELECT cost, path FROM walk WHERE node = ? ORDER BY cost LIMIT 1`;
 	const args: (string | number)[] = [

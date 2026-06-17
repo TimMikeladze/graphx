@@ -6,7 +6,7 @@ import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
 import { asOfPredicate, diff, history } from '../src/temporal.ts';
-import { makeTestDb } from './harness.ts';
+import { embReadSql, makeTestDb } from './harness.ts';
 
 // P6 — temporal ops (§9, §19.1, B4/B5/D3). updateNode/deleteEdge use the
 // conditional-close + retry pattern; history/diff/asOf surface the temporal
@@ -112,7 +112,7 @@ test('P6 (B5): props-only patch carries emb BLOB forward (not null, dim-length, 
 
 	// emb is still a real dim-length vector — extract back and check length
 	const got = await client.execute({
-		sql: 'SELECT vector_extract(emb) AS v FROM node_versions WHERE id = ? AND valid_to = ?',
+		sql: `SELECT ${embReadSql(client)} AS v FROM node_versions WHERE id = ? AND valid_to = ?`,
 		args: [n.id, FOREVER],
 	});
 	const arr = JSON.parse(String(got.rows[0]!.v)) as number[];
@@ -127,7 +127,7 @@ test('P6 (B5): explicit emb patch replaces the embedding', async () => {
 	await g.updateNode(n.id, { emb: [0, 1, 0, 0] });
 
 	const got = await client.execute({
-		sql: 'SELECT vector_extract(emb) AS v FROM node_versions WHERE id = ? AND valid_to = ?',
+		sql: `SELECT ${embReadSql(client)} AS v FROM node_versions WHERE id = ? AND valid_to = ?`,
 		args: [n.id, FOREVER],
 	});
 	expect(JSON.parse(String(got.rows[0]!.v))).toEqual([0, 1, 0, 0]);

@@ -10,7 +10,7 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { jsonFieldSql, makeTestDb } from './harness.ts';
 
 // P14 — constraints (§19.5). Uniqueness is a partial UNIQUE index over LIVE rows only
 // (historical versions never collide); edge cardinality marks a rel single-valued so a
@@ -57,7 +57,7 @@ test('P14 unique: a duplicate LIVE unique prop value is rejected', async () => {
 	await expect(g.addNode({ kind: 'device', props: { serial: 'SN-1' } })).rejects.toThrow();
 	// the first one survives (exactly one live device with that serial)
 	const r = await client.execute({
-		sql: "SELECT COUNT(*) AS c FROM node_versions WHERE kind='device' AND valid_to=? AND json_extract(props,'$.serial')='SN-1'",
+		sql: `SELECT COUNT(*) AS c FROM node_versions WHERE kind='device' AND valid_to=? AND ${jsonFieldSql(client, 'props', 'serial')}='SN-1'`,
 		args: [FOREVER],
 	});
 	expect(Number(r.rows[0]?.c)).toBe(1);

@@ -3,7 +3,7 @@ import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { ulid } from 'ulidx';
 import { type DbClient, dialectOf } from '../src/dialect.ts';
-import { embFreshExpr } from '../src/dialect-sql.ts';
+import { embExtract, embFreshExpr, jsonField } from '../src/dialect-sql.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -51,6 +51,16 @@ export function embSql(client: DbClient): string {
 	return embFreshExpr(dialectOf(client));
 }
 
+/** Dialect-correct expression for READING an embedding back as a JSON-array string in raw fixtures. */
+export function embReadSql(client: DbClient): string {
+	return embExtract(dialectOf(client));
+}
+
+/** Dialect-correct `col ->> 'key'` JSON text extraction for raw-SQL test assertions. */
+export function jsonFieldSql(client: DbClient, col: string, key: string): string {
+	return jsonField(dialectOf(client), col, key);
+}
+
 /** Postgres test connection string; override via env for CI / a different host. */
 const PG_URL =
 	process.env.GRAPHX_TEST_PG_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5455/graphx_test';
@@ -77,9 +87,16 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 				return s;
 			},
 			teardown: async () => {
-				for (const s of siblings) await s.end();
-				await main.execute(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
-				await main.end();
+				// Drop the schema via a FRESH connection — a test may have already closed
+				// `main` (e.g. per-test client.close()), which would dead-pool a drop on it.
+				for (const s of siblings) await s.end().catch(() => {});
+				await main.end().catch(() => {});
+				const admin = createPgClient({ connectionString: PG_URL });
+				try {
+					await admin.execute(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+				} finally {
+					await admin.end();
+				}
 			},
 		};
 	}

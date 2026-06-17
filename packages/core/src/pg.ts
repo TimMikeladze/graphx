@@ -123,6 +123,7 @@ class PgTransaction implements DbTransaction {
 export class PgClient implements DbClient {
 	readonly dialect = 'postgres' as const;
 	private readonly pool: Pool;
+	private ended = false;
 	/** One-shot extension/schema bootstrap; every method awaits it before its first query. */
 	private readonly ready: Promise<void>;
 
@@ -197,11 +198,13 @@ export class PgClient implements DbClient {
 
 	/** Drain the pool. Fire-and-forget to satisfy the synchronous `DbClient.close()`. */
 	close(): void {
-		void this.pool.end();
+		void this.end();
 	}
 
-	/** Await full pool drain (test teardown). */
+	/** Await full pool drain (test teardown). Idempotent — a double close/end is a no-op. */
 	async end(): Promise<void> {
+		if (this.ended) return;
+		this.ended = true;
 		await this.pool.end();
 	}
 }

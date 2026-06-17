@@ -1,11 +1,13 @@
 import { expect, test } from 'bun:test';
 import { applyConnPragmas } from '../src/db.ts';
 import type { DbClient } from '../src/dialect.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, TEST_DRIVER } from './harness.ts';
 
 // P0 foundation + libSQL capability probe. Proves the engine features the whole
 // design rests on (native vectors, FTS5, generated columns) actually work on the
 // pinned @libsql/client before later phases build on them (§18, audit M16).
+// These probe libSQL-native capabilities and do not apply to the Postgres backend.
+const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 function mem(): DbClient {
 	return makeTestDb().client;
@@ -18,7 +20,7 @@ test('P0: SELECT 1 over libSQL', async () => {
 	c.close();
 });
 
-test('P0: connection pragmas apply (foreign_keys ON, busy_timeout set)', async () => {
+libsqlOnly('P0: connection pragmas apply (foreign_keys ON, busy_timeout set)', async () => {
 	const c = mem();
 	await applyConnPragmas(c);
 	const fk = await c.execute('PRAGMA foreign_keys');
@@ -28,7 +30,7 @@ test('P0: connection pragmas apply (foreign_keys ON, busy_timeout set)', async (
 	c.close();
 });
 
-test('P0 capability: native vectors — F32_BLOB + libsql_vector_idx + vector_top_k', async () => {
+libsqlOnly('P0 capability: native vectors — F32_BLOB + libsql_vector_idx + vector_top_k', async () => {
 	const c = mem();
 	await c.executeMultiple(
 		`CREATE TABLE items (ver INTEGER PRIMARY KEY, emb F32_BLOB(4));
@@ -53,7 +55,7 @@ test('P0 capability: native vectors — F32_BLOB + libsql_vector_idx + vector_to
 	c.close();
 });
 
-test('P0 capability: FTS5 virtual table + MATCH', async () => {
+libsqlOnly('P0 capability: FTS5 virtual table + MATCH', async () => {
 	const c = mem();
 	await c.executeMultiple(
 		`CREATE VIRTUAL TABLE docs USING fts5(body);
@@ -64,7 +66,7 @@ test('P0 capability: FTS5 virtual table + MATCH', async () => {
 	c.close();
 });
 
-test('P0 capability: generated column + json ->> operator', async () => {
+libsqlOnly('P0 capability: generated column + json ->> operator', async () => {
 	const c = mem();
 	await c.executeMultiple(
 		`CREATE TABLE n (ver INTEGER PRIMARY KEY, props TEXT NOT NULL DEFAULT '{}',
