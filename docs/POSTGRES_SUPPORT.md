@@ -24,9 +24,21 @@
 - **Phase 4 — full-text search (tsvector/GIN): DONE.** `nodes_fts MATCH`→`body_tsv @@ websearch_to_tsquery` (`ftsWhere`), hybrid vector+FTS seed legs ported (`vecSeedLive`/`ftsSeedLive`/`ftsSeedAsOf`, tsquery bound once via CTE), `json_each`→`jsonb_array_elements_text`, `WITH`→`WITH RECURSIVE`, `GROUP BY id`→`id,body,uri`, `vector_extract`→`emb`, bulk index/trigger/rebuild skipped on PG. libSQL FTS5-mechanics tests guarded `libsqlOnly`. **PG now 223 / 366 (+8 skip)**; libSQL 362/362.
 - **Phase 3c — cleanups: DONE.** shortestPath (drop recursive-term `ORDER BY` on PG + cast anchor cost to `double precision`), `declareUniqueNodeProp` (PG partial UNIQUE expression index over `props::jsonb ->>`), pg adapter idempotent `end()`/`close()` + teardown drops the per-test schema via a fresh connection (fixes "pool after end"), harness `embReadSql`/`jsonFieldSql` + dialect-aware p6-temporal/p14 assertions, libSQL-native capability probes guarded `libsqlOnly`. **PG now 237 / 366 (+18 skip)**; libSQL 362/362; lint+type green.
 - **Phase 5 — multi-tenant / serving (schema-per-tenant): DONE.** `getDb` gains a `driver` discriminator (`DbConfig.connectionString`/`ssl`/`poolMax`); the Postgres path maps namespace→PG schema via a factory the `pg` adapter registers on import (`registerPgDriver`) so `pg` stays an optional peer. `applyConnPragmas` no-ops on PG; `CONTROL_SCHEMA.created_at`→`bigint`; serve.ts/admin.ts map PG SQLSTATE class 23 → 400; `insertOrIgnore` fragment. Harness wires `getDb`→PG under the env; helpers `tableExistsSql`/`insertOrIgnoreSql`; p12-serve seeds via `getDb`. **All 9 serving/admin/authz/cdc suites green on PG.** PG **237 → 295 pass (+18 skip)**; libSQL 362/362.
-- **Remaining (~49, one chunk + edge):**
-  - **auth (~47):** `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, `WITH`→`WITH RECURSIVE` relation expansion, json — self-contained `packages/auth` (the `insertOrIgnore`/`jsonField` fragments already exist to reuse).
-  - **p14-concurrency (2):** MVCC vs libSQL `BEGIN IMMEDIATE`/`SQLITE_BUSY` write-contention semantics — needs a PG retry classifier (SQLSTATE 40001/40P01) or guarding.
+- **auth + MVCC concurrency: DONE.** auth `store.ts`/`check.ts` use `insertOrIgnore` + `jsonField`; `list.ts` recursive reachability already portable (72/72 both backends). The conditional-close race fixed: PG write transactions `BEGIN ISOLATION LEVEL SERIALIZABLE` (graphx relies on full writer serialization like libSQL `BEGIN IMMEDIATE`); `isRetryableContention` also retries PG SQLSTATE 40001/40P01/55P03.
+
+## ✅ COMPLETE — full dual-backend parity
+
+**libSQL 362/362 · Postgres 344 pass + 18 skip + 0 fail · lint+type green.** Every Postgres-applicable test passes. The 18 skips are libSQL-native capability/mechanics probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, F32_BLOB/vector_top_k, FTS5 virtual table, deferred-index speedup) with no Postgres analog — the user-facing contracts they cover are exercised by cross-backend tests. The user-facing API is unchanged; backend is selected by config (`DbConfig.driver` / `GRAPHX_DB_DRIVER`) only.
+
+**Phase 6 — remaining polish (NOT parity-blocking):**
+- `core/pg` subpath **export** in `packages/core/package.json` + a bunup build entry (tests import `../src/pg.ts` directly; shipped consumers need the subpath to register the adapter). Demote `@libsql/client` to optional peer + `core/libsql` subpath if desired.
+- CI: run the PG suite against a `pgvector/pgvector:pg16` service container (gate behind the driver env; Linux/macOS only).
+- pgvector **HNSW** partial index (currently exact KNN — correct but O(n); add `USING hnsw (emb vector_cosine_ops) WHERE valid_to=FOREVER` for scale).
+- README/docs for the `driver` config + `CREATE EXTENSION vector` prerequisite.
+
+---
+
+## Earlier phase log
 - **Superseded earlier "remaining" list:**
   - **auth (~47):** `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, recursive CTEs `WITH`→`WITH RECURSIVE`, MVCC idempotency.
   - **multi-tenant (~47):** `getDb`/control-plane schema-per-tenant on PG (Phase 5) — p11-serving, observability, admin-*, authz, cdc.
