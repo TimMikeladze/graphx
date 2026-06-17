@@ -34,7 +34,9 @@
 - ✅ `core/pg` subpath **export** in `packages/core/package.json` (`./pg` → `dist/pg.{js,d.ts}`) + a second bunup entry (`src/index.ts` + `src/pg.ts`). Shipped consumers `import 'core/pg'` once to register the adapter (side effect); the optional `pg` peer is only pulled in by that subpath. Tests still import `../src/pg.ts` directly. (`@libsql/client` left a hard dep — `getDb`'s default path imports it, so demoting it is not low-risk.)
 - ✅ pgvector **HNSW** partial index — `vectorIndexDDL('postgres')` now returns `CREATE INDEX … USING hnsw (emb vector_cosine_ops) WHERE valid_to=FOREVER`, embedded in `postgresSchema()` (mirrors libSQL's `${NV_EMB_IDX_DDL}`). Accelerates the live-seed ANN scan (`annSeedsLive`); the as-of path still over-fetches (live-only index). Default HNSW build/`ef_search` params — fine for tests, tunable at scale. PG suite unchanged (344/18skip/0fail; set-membership assertions tolerate ANN ordering).
 - ✅ CI: `.github/workflows/ci.yml` gains a `test-postgres` job — runs the same suite under `GRAPHX_TEST_DRIVER=postgres` against a `pgvector/pgvector:pg16` service container (`CREATE EXTENSION vector` step + `GRAPHX_TEST_PG_URL`). Linux-only (GH service containers don't run on macOS/Windows); the existing matrix job (renamed "… (libSQL)") still covers libSQL on all 3 OS.
-- README/docs for the `driver` config + `CREATE EXTENSION vector` prerequisite.
+- ✅ README "Database backend" section — backend selection (`driver` config / `GRAPHX_DB_DRIVER` env), the `import 'core/pg'` registration requirement, connection string (`connectionString` / `GRAPHX_PG_URL`, `ssl`/`poolMax`), the `CREATE EXTENSION vector` prerequisite, and the schema-per-tenant model; cross-links this doc.
+
+**Phase 6 is complete.** All four polish items done; the remaining root-README stub content (`greet` example) is a pre-existing, separate gap (see docs/GAPS.md §5), out of scope here.
 
 ---
 
