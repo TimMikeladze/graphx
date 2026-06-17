@@ -8,7 +8,7 @@ concurrency:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}
+    name: Test on ${{ matrix.os }} (libSQL)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -37,4 +37,49 @@ jobs:
         run: bun run lint
 
       - name: Run tests
+        run: bun run test
+
+  # Postgres backend — the same suite under GRAPHX_TEST_DRIVER=postgres against a
+  # pgvector service container. Linux-only: GitHub service containers don't run on
+  # macOS/Windows runners.
+  test-postgres:
+    name: Test (Postgres)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: graphx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      GRAPHX_TEST_DRIVER: postgres
+      GRAPHX_TEST_PG_URL: postgresql://postgres:postgres@localhost:5432/graphx_test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The test harness also runs CREATE EXTENSION (ensureExtension: true); this makes
+      # the pgvector prerequisite explicit and independent of test-time privileges.
+      - name: Create pgvector extension
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d graphx_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Run tests (Postgres)
         run: bun run test
