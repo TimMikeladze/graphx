@@ -22,7 +22,11 @@
   - 3b: vector search — `vector_top_k` JOIN rowid → `ORDER BY emb <=> ?::vector LIMIT k` (`annSeedsLive`/`annSeedsAsOf`); `WITH`→`WITH RECURSIVE`; `GROUP BY id`→`GROUP BY id, body, uri`; harness `embSql(client)` for raw fixtures. Greened **P4 retrieve 11/11** on PG.
   - **PG now 210 / 366** (libSQL still 362/362; lint+type green throughout).
 - **Phase 4 — full-text search (tsvector/GIN): DONE.** `nodes_fts MATCH`→`body_tsv @@ websearch_to_tsquery` (`ftsWhere`), hybrid vector+FTS seed legs ported (`vecSeedLive`/`ftsSeedLive`/`ftsSeedAsOf`, tsquery bound once via CTE), `json_each`→`jsonb_array_elements_text`, `WITH`→`WITH RECURSIVE`, `GROUP BY id`→`id,body,uri`, `vector_extract`→`emb`, bulk index/trigger/rebuild skipped on PG. libSQL FTS5-mechanics tests guarded `libsqlOnly`. **PG now 223 / 366 (+8 skip)**; libSQL 362/362.
-- **Remaining (~135, next phases):**
+- **Phase 3c — cleanups: DONE.** shortestPath (drop recursive-term `ORDER BY` on PG + cast anchor cost to `double precision`), `declareUniqueNodeProp` (PG partial UNIQUE expression index over `props::jsonb ->>`), pg adapter idempotent `end()`/`close()` + teardown drops the per-test schema via a fresh connection (fixes "pool after end"), harness `embReadSql`/`jsonFieldSql` + dialect-aware p6-temporal/p14 assertions, libSQL-native capability probes guarded `libsqlOnly`. **PG now 237 / 366 (+18 skip)**; libSQL 362/362; lint+type green.
+- **Remaining (~107, two chunks):**
+  - **auth (~47):** `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, `WITH`→`WITH RECURSIVE` relation expansion, json — self-contained `packages/auth`.
+  - **multi-tenant / serving (~59):** schema-per-tenant `getDb` + control-plane on PG (Phase 5) — p11-serving (19), observability, admin-*, authz, cdc, p15-*.
+- **Superseded earlier "remaining" list:**
   - **auth (~47):** `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, recursive CTEs `WITH`→`WITH RECURSIVE`, MVCC idempotency.
   - **multi-tenant (~47):** `getDb`/control-plane schema-per-tenant on PG (Phase 5) — p11-serving, observability, admin-*, authz, cdc.
   - **FTS (Phase 4):** `nodes_fts MATCH`→`body_tsv @@ websearch_to_tsquery`, `json_each`→`jsonb_array_elements_text`, `vector_extract`→read `emb` text — hybrid, bulk, listNodes(q), graphSlice(q).
