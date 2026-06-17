@@ -1,4 +1,5 @@
-import type { DbClient, SqlRow } from './dialect.ts';
+import { type DbClient, type Dialect, dialectOf, type SqlRow } from './dialect.ts';
+import { distinctSelect, jsonEqArg, jsonEqExpr } from './dialect-sql.ts';
 import { FOREVER } from './db.ts';
 import type { GraphSchema } from './graph.ts';
 import type { Kind, NodeOf } from './define-graph-schema.ts';
@@ -200,13 +201,19 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 		return this.asOfT === null ? 'edges' : 'edge_versions';
 	}
 
+	/** The backend dialect; defaults to libSQL when built without a client (the SQL contract). */
+	private dialect(): Dialect {
+		return this.raw ? dialectOf(this.raw) : 'libsql';
+	}
+
 	/** WHERE conds for one alias, appended to its source; pushes their args in order. */
 	private condsFor(alias: string, args: unknown[]): string {
+		const d = this.dialect();
 		let sql = '';
 		for (const c of this.conds) {
 			if (c.alias !== alias) continue;
-			sql += ` AND json_extract(${alias}.props, '$.${c.key}') = ?`;
-			args.push(c.value);
+			sql += ` AND ${jsonEqExpr(d, `${alias}.props`, c.key)}`;
+			args.push(jsonEqArg(d, c.value));
 		}
 		return sql;
 	}
@@ -396,11 +403,12 @@ WHERE walk.depth >= ${v.min}`;
 					whereClause = ` WHERE (${keyCols.join(', ')}) > (${key.map(() => '?').join(', ')})`;
 					pageArgs.push(...key);
 				}
-				// Wrap the (unchanged) compiled pattern; GROUP BY the composite id tuple so
+				// Wrap the (unchanged) compiled pattern; dedup by the composite id tuple so
 				// each distinct selected tuple is one keyset row (no duplicate, no skip even
 				// when the inner rows share a tuple — multi-edge / var-walk / partial select).
-				const paged = `SELECT * FROM (${sql}) sub${whereClause}
-GROUP BY ${keyCols.join(', ')}
+				const { select, group } = distinctSelect(dialectOf(raw), keyCols.join(', '), '*');
+				const paged = `${select} FROM (${sql}) sub${whereClause}
+${group}
 ORDER BY ${keyCols.join(', ')}
 LIMIT ?`;
 				pageArgs.push(pageSize + 1); // over-fetch one to detect a next page

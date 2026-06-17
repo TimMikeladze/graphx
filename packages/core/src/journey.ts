@@ -1,4 +1,5 @@
-import type { DbClient, SqlRow } from './dialect.ts';
+import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
+import { epochIntType, jsonField, scalarMax } from './dialect-sql.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -58,6 +59,7 @@ export interface JourneyRow {
 }
 
 export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow[]> {
+	const d = dialectOf(raw);
 	const dir = o.direction ?? 'forward';
 	const maxDepth = o.maxDepth ?? 6;
 	const rels = o.rels?.length ? o.rels : null;
@@ -99,9 +101,9 @@ WITH RECURSIVE deg(node, c) AS (
   ${degBody}
 ),
 journey(node, t_arrive, depth, path) AS (
-  SELECT ?, CAST(? AS INTEGER), 0, ',' || ? || ','
+  SELECT ?, CAST(? AS ${epochIntType(d)}), 0, ',' || ? || ','
   UNION ALL
-  SELECT ${nextExpr}, MAX(j.t_arrive, e.valid_from), j.depth+1, j.path || ${nextExpr} || ','
+  SELECT ${nextExpr}, ${scalarMax(d, 'j.t_arrive', 'e.valid_from')}, j.depth+1, j.path || ${nextExpr} || ','
   FROM journey j
   LEFT JOIN deg ON deg.node = j.node
   JOIN edge_versions e ON ${edgeMatch} AND e.valid_to > j.t_arrive${relClause}
@@ -110,7 +112,7 @@ journey(node, t_arrive, depth, path) AS (
 ),
 reached AS (SELECT node AS id, MIN(t_arrive) AS arrival_t, MIN(depth) AS hops
             FROM journey WHERE node <> ? GROUP BY node)
-SELECT r.id, r.arrival_t, r.hops, n.kind, n.props ->> 'name' AS name, n.props AS props_json
+SELECT r.id, r.arrival_t, r.hops, n.kind, ${jsonField(d, 'n.props', 'name')} AS name, n.props AS props_json
 FROM reached r JOIN node_versions n
   ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to
 ORDER BY r.arrival_t, r.hops`;

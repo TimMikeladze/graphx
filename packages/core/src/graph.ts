@@ -7,7 +7,7 @@ import {
 	type SqlStatement,
 	type SqlValue,
 } from './dialect.ts';
-import { embFreshExpr, embRebindExpr } from './dialect-sql.ts';
+import { distinctSelect, embFreshExpr, embRebindExpr } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
@@ -442,12 +442,17 @@ export class Graph<S extends GraphSchema> {
 			cursorClause = ' WHERE n.id > ?';
 			pageArgs.push(lastId as string);
 		}
-		// GROUP BY n.id makes the keyset key unique even when multiple edges reach the
+		// Dedup by n.id so the keyset key is unique even when multiple edges reach the
 		// same neighbor (a duplicate nid would otherwise break no-overlap/no-skip).
-		const sql = `SELECT n.id AS id, n.kind AS kind, n.props AS props
+		const { select, group } = distinctSelect(
+			dialectOf(this.raw),
+			'n.id',
+			'n.id AS id, n.kind AS kind, n.props AS props',
+		);
+		const sql = `${select}
 			FROM (${neighborSql}) nb
 			JOIN nodes n ON n.id = nb.nid${cursorClause}
-			GROUP BY n.id
+			${group}
 			ORDER BY n.id
 			LIMIT ?`;
 		pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
