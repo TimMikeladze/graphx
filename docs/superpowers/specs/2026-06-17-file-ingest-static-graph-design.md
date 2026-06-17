@@ -82,18 +82,21 @@ are unexported helpers.
 ## 5. Conventions (1 file = 1 node)
 
 - **Identity key** = the file's relative path from `dir`, POSIX-normalized (e.g.
-  `notes/foo.md`). Stored on the node as `props.path` and used as the link-resolution
-  target. The graph's own node id stays the auto-minted ULID; ingest maps key→ULID.
+  `notes/foo.md`), stored in the node's **`uri` column** as `file:notes/foo.md`. It is the
+  link-resolution target and the diff key. The graph's own node id stays the auto-minted
+  ULID; ingest maps key→ULID.
+  - **Why `uri`, not `props`:** node `props` are validated by the kind's zod schema, and
+    `z.object({…})` **strips unknown keys by default** — an injected `props.path` would be
+    silently dropped. `uri` and `content_hash` are first-class node columns
+    (`AddNodeInput.uri` / `.content_hash`), immune to props stripping.
 - **kind** = `frontmatter.kind`, else the top-level folder name (e.g. `notes/foo.md` →
-  `notes`). `kindOf` overrides.
-- **props** = the remaining frontmatter, plus the injected `path`. Reserved keys `kind`
-  and `path` are stripped from frontmatter before merging (the pipeline owns `path`; a
-  file at the vault root with no `frontmatter.kind` resolves to no kind → skipped). Props
-  are validated by the bound schema (graphx is schema-typed).
+  `notes`). `kindOf` overrides. A vault-root file with no `frontmatter.kind` → no kind → skipped.
+- **props** = the frontmatter minus the reserved key `kind`. Validated by the bound schema.
 - **body** = the markdown body (frontmatter stripped). This is also the embed input.
-- **content hash** = `sha256` of the raw file bytes. Stored in the node's `content_hash`
-  column (via `AddNodeInput.content_hash`) and mirrored to `props` so the diff scan can
-  read it back without depending on the column being surfaced on the returned node.
+- **content hash** = `sha256` of the raw file bytes, stored in the **`content_hash` column**
+  (`AddNodeInput.content_hash`). The diff reads `uri` + `content_hash` back via `graph.raw`
+  from the live `nodes` view (the typed node from `listNodes`/`getNode` carries only
+  `id`/`kind`/`props`).
 - **edges** = links found in the body:
   - `[[wikilink]]` → resolved by basename/slug against the path map.
   - `[text](./relative.md)` → resolved by relative path against the path map.
@@ -109,14 +112,14 @@ likewise skipped.
 1. **Discover** — walk `dir`, apply `include` globs → file list.
 2. **Parse** — for each file: split frontmatter (YAML) and body; compute
    `hash = sha256(raw)`; derive `kind`, `props`, `body`. Parse failures → `skipped`.
-3. **Load live map** — page `graph.listNodes({ kind?, cursor })` across all ingestable
-   kinds once, building `pathToNode: Map<path, { id, hash }>` from `props.path` +
-   `props`-mirrored hash.
+3. **Load live map** — one `graph.raw` query against the live `nodes` view
+   (`SELECT id, uri, content_hash FROM nodes WHERE uri LIKE 'file:%'`), building
+   `keyToNode: Map<key, { id, hash }>` (key = the `uri` with the `file:` prefix stripped).
 4. **Reconcile nodes (pass 1)** — for each parsed file, by key:
-   - **new** → `graph.addNode({ kind, body, props: { ...fm, path }, content_hash, emb: await embed(body) })`
-   - **known, hash changed** → `graph.updateNode(id, { body, props, content_hash, emb: await embed(body) })` (new temporal version; old one auto-closed)
+   - **new** → `graph.addNode({ kind, body, uri: 'file:'+key, props: fm, content_hash, emb: await embed(body) })`
+   - **known, hash changed** → `graph.updateNode(id, { kind, body, props: fm, content_hash, emb: await embed(body) })` (new temporal version; old one auto-closed)
    - **known, hash same** → skip (no write, **no re-embed**)
-   - record the resulting `path → nodeId` for every live file (needed for link resolution).
+   - record the resulting `key → nodeId` for every live file (needed for link resolution).
 5. **Reconcile edges (pass 2)** — only for files touched in pass 1 (added/updated): parse
    links → resolve targets via the path map → desired out-edge set `(src=fileNode, rel=links_to, dst=targetNode)`.
    Read the node's current live out-edges through `graph.raw`
@@ -178,6 +181,8 @@ noted as a follow-up, not built in v1.
 - `Graph.updateNode(id, { body?, uri?, content_hash?, content_type?, kind?, props?, emb? })`
   creates a new version — `graph.ts`.
 - `Graph.addEdge(AddEdgeInput) → EdgeRef { id, rel, ... }`; `Graph.deleteEdge(id)` — `graph.ts`.
-- `Graph.listNodes({ kind?, cursor? }) → page { rows, nextCursor }` (keyset) — `graph.ts`.
-- Live `edges` view exposes `id, src, dst, rel, weight, props` — `dialect-sql.ts` / `schema.ts`.
+- `Graph.listNodes({ kind?, cursor?, … }) → { nodes: AnyNode[], nextCursor: string | null }`
+  (keyset) — `graph.ts`. The typed node (`rowToNode`) carries only `id`, `kind`, `props`.
+- Live `nodes` view exposes `id, kind, body, uri, content_hash, content_type, props, emb`
+  (both dialects); live `edges` view exposes `id, src, dst, rel, weight, props` — `schema.ts` / `dialect-sql.ts`.
 - `graph.raw` is the public DbClient escape hatch — `graph.ts`.
