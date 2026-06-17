@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { ulid } from 'ulidx';
 import { applyConnPragmas } from './db.ts';
 
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
  * Create the control-plane schema on `client`, idempotent. Applies the
  * per-connection pragmas (`foreign_keys`, `busy_timeout`) then runs the DDL.
  */
-export async function initControl(client: Client): Promise<void> {
+export async function initControl(client: DbClient): Promise<void> {
 	await applyConnPragmas(client);
 	await client.executeMultiple(CONTROL_SCHEMA);
 }
 
 /** Insert a tenant; returns the generated ULID id. */
-export async function createTenant(control: Client, t: { name: string }): Promise<string> {
+export async function createTenant(control: DbClient, t: { name: string }): Promise<string> {
 	const id = ulid();
 	await control.execute({
 		sql: 'INSERT INTO tenants (id, name) VALUES (?, ?)',
@@ -43,7 +43,7 @@ export async function createTenant(control: Client, t: { name: string }): Promis
 }
 
 /** Insert a user; returns the generated ULID id. */
-export async function createUser(control: Client, u: { email: string }): Promise<string> {
+export async function createUser(control: DbClient, u: { email: string }): Promise<string> {
 	const id = ulid();
 	await control.execute({
 		sql: 'INSERT INTO users (id, email) VALUES (?, ?)',
@@ -54,7 +54,7 @@ export async function createUser(control: Client, u: { email: string }): Promise
 
 /** Grant a user a role in a tenant (composite PK user_id+tenant_id). */
 export async function addMembership(
-	control: Client,
+	control: DbClient,
 	m: { userId: string; tenantId: string; role: 'owner' | 'editor' | 'viewer' },
 ): Promise<void> {
 	await control.execute({
@@ -65,7 +65,7 @@ export async function addMembership(
 
 /** Insert a project in a tenant with its unique sqld namespace; returns the ULID id. */
 export async function createProject(
-	control: Client,
+	control: DbClient,
 	p: { tenantId: string; name: string; dbNamespace: string },
 ): Promise<string> {
 	const id = ulid();
@@ -77,14 +77,14 @@ export async function createProject(
 }
 
 /** List all tenants (registry read for the admin UI), ordered by name. */
-export async function listTenants(control: Client): Promise<Array<{ id: string; name: string }>> {
+export async function listTenants(control: DbClient): Promise<Array<{ id: string; name: string }>> {
 	const r = await control.execute('SELECT id, name FROM tenants ORDER BY name');
 	return r.rows.map((row) => ({ id: String(row.id), name: String(row.name) }));
 }
 
 /** List a tenant's projects (with their sqld namespace), ordered by name. */
 export async function listProjects(
-	control: Client,
+	control: DbClient,
 	tenantId: string,
 ): Promise<Array<{ id: string; name: string; dbNamespace: string }>> {
 	const r = await control.execute({
@@ -99,7 +99,7 @@ export async function listProjects(
 }
 
 /** List all users (registry read for the admin UI), ordered by email. */
-export async function listUsers(control: Client): Promise<Array<{ id: string; email: string }>> {
+export async function listUsers(control: DbClient): Promise<Array<{ id: string; email: string }>> {
 	const r = await control.execute('SELECT id, email FROM users ORDER BY email');
 	return r.rows.map((row) => ({ id: String(row.id), email: String(row.email) }));
 }
@@ -114,7 +114,7 @@ export function hashApiKey(key: string): string {
  * and returns the plaintext key exactly once — the caller must surface it immediately.
  */
 export async function createApiKey(
-	control: Client,
+	control: DbClient,
 	a: { tenantId: string; scopes: string[] },
 ): Promise<{ key: string }> {
 	const key = `gxk_${randomBytes(24).toString('base64url')}`;

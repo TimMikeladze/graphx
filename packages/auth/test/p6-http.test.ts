@@ -1,6 +1,7 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
+import { makeTestDb } from '../../core/test/harness.ts';
+import type { DbClient } from '../../core/src/dialect.ts';
 import { Graph, init } from '../../core/src/index.ts';
 import { Auth } from '../src/auth.ts';
 import { createAuthApp } from '../src/http.ts';
@@ -8,8 +9,8 @@ import { defineAuthModel, rel } from '../src/model.ts';
 
 const MODEL = defineAuthModel({ user: {}, doc: { editor: rel(), viewer: rel().or('editor') } });
 
-async function freshApp(): Promise<{ db: Client; app: ReturnType<typeof createAuthApp> }> {
-	const db = createClient({ url: ':memory:' });
+async function freshApp(): Promise<{ db: DbClient; app: ReturnType<typeof createAuthApp> }> {
+	const db = makeTestDb().client;
 	await init(db, 4);
 	const auth = new Auth(new Graph(db, MODEL.schema), MODEL);
 	const app = createAuthApp({
@@ -149,7 +150,7 @@ test('P6: /list-objects paginates via limit + cursor', async () => {
 });
 
 test('P6: 403 when resolveAuth throws a plain (non-HTTPException) error', async () => {
-	const db = createClient({ url: ':memory:' });
+	const db = makeTestDb().client;
 	await init(db, 4);
 	const _auth = new Auth(new Graph(db, MODEL.schema), MODEL);
 	const app = createAuthApp({

@@ -1,11 +1,12 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
+import { makeTestDb } from '../../core/test/harness.ts';
 import { FOREVER, Graph, init } from '../../core/src/index.ts';
+import type { DbClient } from '../../core/src/dialect.ts';
 import { defineAuthModel, rel } from '../src/model.ts';
 import { deleteTuple, ensureObject, liveTupleExists, writeTuple } from '../src/store.ts';
 
-async function freshDb(): Promise<Client> {
-	const client = createClient({ url: ':memory:' });
+async function freshDb(): Promise<DbClient> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return client;
 }

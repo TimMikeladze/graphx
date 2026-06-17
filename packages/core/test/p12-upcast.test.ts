@@ -1,11 +1,9 @@
-import { rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
 import { afterAll, expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
+import type { DbClient } from '../src/dialect.ts';
 import { FOREVER } from '../src/db.ts';
+import { makeTestDb } from './harness.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { Graph } from '../src/graph.ts';
 import { match } from '../src/pattern.ts';
@@ -191,31 +189,24 @@ test('P12 (unit): stamp on an unregistered kind is a no-op passthrough (no `_v` 
 // ---------- shared DB fixtures for the integration tests below ----------
 
 const DIM = 4;
-const tmpFiles: string[] = [];
+const teardowns: Array<() => Promise<void>> = [];
 
-async function freshClient(): Promise<Client> {
-	const file = join(tmpdir(), `graphx-p12-${ulid()}.db`);
-	tmpFiles.push(file);
-	const client = createClient({ url: `file:${file}` });
+async function freshClient(): Promise<DbClient> {
+	const { client, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(client, DIM);
 	return client;
 }
 
-afterAll(() => {
-	for (const f of tmpFiles) {
-		for (const suffix of ['', '-wal', '-shm']) {
-			try {
-				rmSync(f + suffix);
-			} catch {
-				// best-effort cleanup
-			}
-		}
+afterAll(async () => {
+	for (const teardown of teardowns) {
+		await teardown();
 	}
 });
 
 /** Insert a raw node version directly (controls props bytes + valid window). */
 async function rawNode(
-	client: Client,
+	client: DbClient,
 	props: Record<string, unknown>,
 	opts: { kind?: string; validFrom?: number; validTo?: number } = {},
 ): Promise<string> {
@@ -229,7 +220,7 @@ async function rawNode(
 }
 
 /** Read the raw stored props text for a node's live version (bypasses upcast). */
-async function rawProps(client: Client, id: string): Promise<string> {
+async function rawProps(client: DbClient, id: string): Promise<string> {
 	const r = await client.execute({
 		sql: 'SELECT props FROM node_versions WHERE id = ? AND valid_to = ?',
 		args: [id, FOREVER],

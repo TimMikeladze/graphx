@@ -1,12 +1,13 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { hybridRetrieve } from '../src/hybrid.ts';
 import { journey } from '../src/journey.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P14 — §19.2 governance applied to the walk read paths: the maxRows row cap and the
 // fan-out (supernode) guard. The guard is SQL-enforced in the recursive walk — a node
@@ -21,8 +22,8 @@ const SCHEMA = defineGraphSchema({
 
 const stubEmbed: EmbedFn = async () => [1, 0, 0, 0];
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }

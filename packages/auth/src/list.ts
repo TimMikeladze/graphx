@@ -1,5 +1,5 @@
-import type { Client } from '@libsql/client';
 import { runCheck } from './check.ts';
+import type { DbClient } from '../../core/src/index.ts';
 import type { AuthModel } from './model.ts';
 
 /** Max candidate objects scanned per page call (governance bound; full §19.2 wiring is P6). */
@@ -35,7 +35,7 @@ export interface ListObjectsPage {
  * tables with the half-open interval.
  */
 async function reachableOfType(
-	raw: Client,
+	raw: DbClient,
 	asOf: number | undefined,
 	subject: string,
 	type: string,
@@ -74,7 +74,7 @@ async function reachableOfType(
  * `check` (exact — applies exclusion/intersection). Keyset-paginated by object id.
  */
 export async function runListObjects(
-	raw: Client,
+	raw: DbClient,
 	model: AuthModel,
 	subject: string,
 	relation: string,

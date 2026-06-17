@@ -1,6 +1,8 @@
 import { rmSync } from 'node:fs';
-import { type Client, createClient } from '@libsql/client';
+import { createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
+import type { DbClient } from '../src/dialect.ts';
+import { makeTestDb } from './harness.ts';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
 import {
@@ -44,7 +46,7 @@ function authenticate(c: { req: { header: (n: string) => string | undefined } })
 }
 
 test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when ServeConfig.upcasters is set', async () => {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'Acme' });
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
@@ -60,7 +62,7 @@ test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when 
 	await app.request(`${base}/nodes/${ulid()}`, { headers: hdr });
 
 	// Inject a raw v1 device row directly into the project DB the server just init'd.
-	const projectDb: Client = createClient({ url: `file:${ns}.db` });
+	const projectDb: DbClient = createClient({ url: `file:${ns}.db` });
 	const id = ulid();
 	await projectDb.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await projectDb.execute({

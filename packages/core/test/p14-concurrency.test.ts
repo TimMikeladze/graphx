@@ -1,15 +1,12 @@
-import { rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
 import { afterAll, expect, test } from 'bun:test';
-import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { materializeConstraints } from '../src/constraints.ts';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P14 — the §19.1 write-correctness proof. The conditional-close + retry is ALREADY
 // implemented (P6); this proves the invariant under genuine contention: N racing
@@ -26,22 +23,9 @@ const SCHEMA = defineGraphSchema({
 	},
 });
 
-const tmpFiles: string[] = [];
-function freshFile(): string {
-	const file = join(tmpdir(), `graphx-p14race-${ulid()}.db`);
-	tmpFiles.push(file);
-	return file;
-}
-afterAll(() => {
-	for (const f of tmpFiles) {
-		for (const suffix of ['', '-wal', '-shm']) {
-			try {
-				rmSync(f + suffix);
-			} catch {
-				// best-effort
-			}
-		}
-	}
+const teardowns: Array<() => Promise<void>> = [];
+afterAll(async () => {
+	for (const t of teardowns) await t();
 });
 
 interface Interval {
@@ -50,7 +34,7 @@ interface Interval {
 }
 
 /** All version intervals for `id`, ascending by valid_from. */
-async function intervals(client: Client, id: string): Promise<Interval[]> {
+async function intervals(client: DbClient, id: string): Promise<Interval[]> {
 	const r = await client.execute({
 		sql: 'SELECT valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from, valid_to',
 		args: [id],
@@ -77,14 +61,14 @@ function assertNonOverlapping(rows: Interval[]): void {
 }
 
 test('P14 race: N concurrent updateNode never create overlapping intervals', async () => {
-	const file = freshFile();
-	const setup = createClient({ url: `file:${file}` });
+	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(setup, 4);
 	const seed = await new Graph(setup, SCHEMA).addNode({ kind: 'person', props: { name: 'race' } });
 
 	// N writers, each on its OWN connection → genuine write-lock contention.
 	const N = 8;
-	const clients = Array.from({ length: N }, () => createClient({ url: `file:${file}` }));
+	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
 	const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
 	const results = await Promise.allSettled(
@@ -96,14 +80,11 @@ test('P14 race: N concurrent updateNode never create overlapping intervals', asy
 	const rows = await intervals(setup, seed.id);
 	expect(rows.length).toBe(N + 1); // original + one new version per writer
 	assertNonOverlapping(rows);
-
-	setup.close();
-	for (const c of clients) c.close();
 });
 
 test('P14 race (F2): updateNode never creates an inverted/zero-width interval when the live valid_from leads the clock', async () => {
-	const file = freshFile();
-	const client = createClient({ url: `file:${file}` });
+	const { client, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(client, 4);
 	const g = new Graph(client, SCHEMA);
 	const n = await g.addNode({ kind: 'person', props: { name: 'x' } });
@@ -122,15 +103,14 @@ test('P14 race (F2): updateNode never creates an inverted/zero-width interval wh
 	expect(closed.length).toBe(1);
 	// the closed predecessor must be a real, non-zero, non-inverted [valid_from, valid_to)
 	expect((closed[0] as Interval).valid_to).toBeGreaterThan((closed[0] as Interval).valid_from);
-	client.close();
 });
 
 test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry envelope', async () => {
-	const file = freshFile();
-	const setup = createClient({ url: `file:${file}` });
+	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(setup, 4);
 
-	const clientA = createClient({ url: `file:${file}` });
+	const clientA = (sibling as () => DbClient)();
 	const gA = new Graph(clientA, SCHEMA);
 	// An interactive tx detaches/recreates A's connection, dropping busy_timeout to 0 →
 	// A's next batch BEGIN IMMEDIATE fails fast on a held lock instead of waiting.
@@ -138,7 +118,7 @@ test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry
 	await t0.commit();
 
 	// B holds the write lock; released after a beat.
-	const clientB = createClient({ url: `file:${file}` });
+	const clientB = (sibling as () => DbClient)();
 	const txB = await clientB.transaction('write');
 	await txB.execute({ sql: "INSERT INTO node_identity (id) VALUES ('lock')" });
 
@@ -151,15 +131,11 @@ test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry
 	expect(node.id.length).toBe(26);
 	const r = await setup.execute({ sql: 'SELECT 1 FROM nodes WHERE id = ?', args: [node.id] });
 	expect(r.rows.length).toBe(1); // it really persisted, not lost
-
-	setup.close();
-	clientA.close();
-	clientB.close();
 });
 
 test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-width/inverted closed interval', async () => {
-	const file = freshFile();
-	const setup = createClient({ url: `file:${file}` });
+	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(setup, 4);
 	await materializeConstraints(setup, SCHEMA);
 	const g0 = new Graph(setup, SCHEMA);
@@ -168,7 +144,7 @@ test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-wi
 		Array.from({ length: 16 }, (_, i) => g0.addNode({ kind: 'person', props: { name: `d${i}` } })),
 	);
 	const N = dsts.length;
-	const clients = Array.from({ length: N }, () => createClient({ url: `file:${file}` }));
+	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
 	const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
 	const results = await Promise.allSettled(
@@ -187,14 +163,11 @@ test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-wi
 		expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
 	}
 	expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
-
-	setup.close();
-	for (const c of clients) c.close();
 });
 
 test('P14 race: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
-	const file = freshFile();
-	const setup = createClient({ url: `file:${file}` });
+	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(setup, 4);
 	await materializeConstraints(setup, SCHEMA); // partial unique index on (src) for best_friend
 	const g0 = new Graph(setup, SCHEMA);
@@ -204,7 +177,7 @@ test('P14 race: N concurrent single-valued addEdge converge to exactly one live 
 	);
 
 	const N = dsts.length;
-	const clients = Array.from({ length: N }, () => createClient({ url: `file:${file}` }));
+	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
 	const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
 	const results = await Promise.allSettled(
@@ -226,7 +199,4 @@ test('P14 race: N concurrent single-valued addEdge converge to exactly one live 
 		args: [src.id, 'best_friend'],
 	});
 	expect(Number(total.rows[0]?.c)).toBe(N);
-
-	setup.close();
-	for (const c of clients) c.close();
 });

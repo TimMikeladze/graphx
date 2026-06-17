@@ -1,5 +1,6 @@
 import process from 'node:process';
-import { type Client, createClient } from '@libsql/client';
+import { createClient } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 
 /** Max JS Date ms — the open-interval sentinel for `valid_to` (§4). */
 export const FOREVER = 8640000000000000;
@@ -9,7 +10,7 @@ export const FOREVER = 8640000000000000;
  * file — they must run on every fresh client/connection, not only at init (§2.5,
  * §4.1). `journal_mode=WAL` is set once at init because it persists in the file.
  */
-export async function applyConnPragmas(client: Client): Promise<void> {
+export async function applyConnPragmas(client: DbClient): Promise<void> {
 	await client.execute('PRAGMA foreign_keys = ON');
 	await client.execute('PRAGMA busy_timeout = 5000');
 }
@@ -20,7 +21,7 @@ export interface DbConfig {
 	syncInterval?: number;
 }
 
-const clients = new Map<string, Client>();
+const clients = new Map<string, DbClient>();
 
 /**
  * One cached client per project namespace (B7/§3.2). NEVER a global singleton —
@@ -28,7 +29,7 @@ const clients = new Map<string, Client>();
  * guarantee. `namespace` is the control-plane `db_namespace` (e.g. `acme__alpha`);
  * in replica mode it is addressed off `SQLD_URL` via the URL/host.
  */
-export function getDb(namespace: string, cfg: DbConfig = {}): Client {
+export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	const existing = clients.get(namespace);
 	if (existing) return existing;
 	const base = cfg.syncUrl ?? process.env.SQLD_URL;
@@ -44,7 +45,7 @@ export function getDb(namespace: string, cfg: DbConfig = {}): Client {
 
 /** Pull the latest schema/rows before serving when running as an embedded replica. */
 export async function syncIfReplica(namespace: string): Promise<void> {
-	if (process.env.SQLD_URL) await getDb(namespace).sync();
+	if (process.env.SQLD_URL) await getDb(namespace).sync?.();
 }
 
 /** Drop a cached client (test teardown / namespace eviction). */

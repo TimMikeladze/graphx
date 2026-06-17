@@ -1,12 +1,13 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { bulkLoad, type BulkRow } from '../src/bulk.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { hybridRetrieve } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P13 — bulk ingestion (§19.8). dim 4.
 
@@ -34,8 +35,8 @@ function rows(n: number): BulkRow<typeof SCHEMA>[] {
 	}));
 }
 
-async function mem(): Promise<Client> {
-	const c = createClient({ url: ':memory:' });
+async function mem(): Promise<DbClient> {
+	const c = makeTestDb().client;
 	await init(c, 4);
 	return c;
 }

@@ -1,16 +1,14 @@
-import { rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
 import { afterAll, expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { changeFeed, diff } from '../src/temporal.ts';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { encodeCursor } from '../src/governance.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P15 — change feed / CDC (§19.10). "The temporal log IS the changelog." changeFeed
 // is the tailable sibling of diff(): new versions WHERE valid_from > cursor, ordered
@@ -28,27 +26,26 @@ const SCHEMA = defineGraphSchema({
 	},
 });
 
-const tmpFiles: string[] = [];
+const teardowns: Array<() => Promise<void>> = [];
 
 /** A pure :memory: client (read-only CDC + raw inserts; no transactions). */
-async function memClient(): Promise<Client> {
-	const client = createClient({ url: ':memory:' });
+async function memClient(): Promise<DbClient> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return client;
 }
 
 /** A file-backed graph (deleteEdge uses transaction() — needs a shared on-disk DB). */
-async function fileGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const file = join(tmpdir(), `graphx-p15-${ulid()}.db`);
-	tmpFiles.push(file);
-	const client = createClient({ url: `file:${file}` });
+async function fileGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const { client, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
 /** Insert a node version directly with an explicit valid_from (ver auto-assigned). */
 async function insertNodeVersion(
-	client: Client,
+	client: DbClient,
 	id: string,
 	props: Record<string, unknown>,
 	validFrom: number,
@@ -60,16 +57,8 @@ async function insertNodeVersion(
 	});
 }
 
-afterAll(() => {
-	for (const f of tmpFiles) {
-		for (const suffix of ['', '-wal', '-shm']) {
-			try {
-				rmSync(f + suffix);
-			} catch {
-				// best-effort cleanup
-			}
-		}
-	}
+afterAll(async () => {
+	for (const teardown of teardowns) await teardown();
 });
 
 test('P15 CDC: initial (no cursor) returns all node + edge versions from the beginning', async () => {

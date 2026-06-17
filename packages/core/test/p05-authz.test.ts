@@ -1,7 +1,8 @@
 import { rmSync } from 'node:fs';
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { AuthzError, authorize, type Principal, resolveProjectDb } from '../src/authz.ts';
+import type { DbClient } from '../src/dialect.ts';
+import { makeTestDb } from './harness.ts';
 import {
 	addMembership,
 	createProject,
@@ -24,12 +25,12 @@ function cleanupNamespace(namespace: string): void {
 // is rejected, the resolved object NEVER carries a sqld token, and lazy per-namespace
 // init() fires exactly once under concurrency (audit M9).
 
-function mem(): Client {
-	return createClient({ url: ':memory:' });
+function mem(): DbClient {
+	return makeTestDb().client;
 }
 
 interface Seed {
-	control: Client;
+	control: DbClient;
 	user: string;
 	tenantA: string;
 	tenantB: string;

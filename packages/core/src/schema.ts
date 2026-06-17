@@ -1,5 +1,12 @@
-import type { Client } from '@libsql/client';
 import { applyConnPragmas } from './db.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
+import {
+	embColumnType,
+	ftsTableDDL,
+	ftsTriggerDDL,
+	postgresSchema,
+	vectorIndexDDL,
+} from './dialect-sql.ts';
 
 /**
  * The partial live ANN index DDL (D5). Exported so the P13 bulk loader can DROP it
@@ -7,8 +14,7 @@ import { applyConnPragmas } from './db.ts';
  * The predicate `valid_to = 8640000000000000` (FOREVER) makes it partial over live
  * rows only; it is dim-independent (the `F32_BLOB(dim)` lives on the column).
  */
-export const NV_EMB_IDX_DDL: string =
-	`CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = 8640000000000000;`;
+export const NV_EMB_IDX_DDL: string = vectorIndexDDL('libsql');
 
 /**
  * The FTS5 external-content sync trigger DDL (M2, §19.3). External-content FTS5 does
@@ -18,10 +24,7 @@ export const NV_EMB_IDX_DDL: string =
  * lexical search. Exported so the bulk loader can DROP it during a load (per-row FTS
  * sync would defeat the deferral) and recreate it before the final `'rebuild'`.
  */
-export const NODES_FTS_TRIGGER_DDL: string =
-	`CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
-  INSERT INTO nodes_fts(rowid, body) VALUES (new.ver, new.body);
-END;`;
+export const NODES_FTS_TRIGGER_DDL: string = ftsTriggerDDL('libsql');
 
 /**
  * Full P1 DDL (§4 corrected + D1/D5/B9) with the embedding dimension substituted
@@ -51,7 +54,7 @@ CREATE TABLE IF NOT EXISTS node_versions (
   content_hash TEXT,
   content_type TEXT,
   props        TEXT NOT NULL DEFAULT '{}',
-  emb          F32_BLOB(${dim}),
+  emb          ${embColumnType('libsql', dim)},
   valid_from   INTEGER NOT NULL,
   valid_to     INTEGER NOT NULL DEFAULT 8640000000000000
 );
@@ -60,7 +63,7 @@ CREATE INDEX IF NOT EXISTS nv_kind ON node_versions(kind);
 ${NV_EMB_IDX_DDL}
 
 -- P13 (M2/§19.3): external-content FTS5 over node_versions, synced by the trigger below.
-CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');
+${ftsTableDDL('libsql')}
 ${NODES_FTS_TRIGGER_DDL}
 
 CREATE TABLE IF NOT EXISTS edge_versions (
@@ -109,7 +112,13 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  * the file; harmless on `:memory:`), applies the per-connection pragmas
  * (`foreign_keys`, `busy_timeout`), then runs the multi-statement DDL.
  */
-export async function init(client: Client, dim?: number): Promise<void> {
+export async function init(client: DbClient, dim?: number): Promise<void> {
+	if (dialectOf(client) === 'postgres') {
+		// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
+		// `vector` extension is expected to exist in `public` (on the search_path).
+		await client.executeMultiple(postgresSchema(dim));
+		return;
+	}
 	await client.execute('PRAGMA journal_mode = WAL');
 	await applyConnPragmas(client);
 	await client.executeMultiple(schema(dim));
@@ -123,7 +132,7 @@ export async function init(client: Client, dim?: number): Promise<void> {
  * what this guard adds, so it must see them to stay idempotent.
  */
 export async function ensureColumn(
-	client: Client,
+	client: DbClient,
 	table: string,
 	col: string,
 	ddl: string,

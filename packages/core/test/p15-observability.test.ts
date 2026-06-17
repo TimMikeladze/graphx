@@ -1,6 +1,5 @@
 import { rmSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
@@ -12,9 +11,11 @@ import {
 	initControl,
 } from '../src/control-plane.ts';
 import { evict } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { InMemoryMetrics, NOOP_METRICS, QueryTimeoutError, withTimeout } from '../src/governance.ts';
 import { createApp, createReadiness } from '../src/serve.ts';
+import { makeTestDb } from './harness.ts';
 
 // P15 — observability (§19.6). Pluggable MetricsSink threaded like `limits` (per-call,
 // never a module global). Structured slow-query log (> timeout/2) at withTimeout.
@@ -99,7 +100,7 @@ function authenticate(c: { req: { header: (n: string) => string | undefined } })
 }
 
 interface Setup {
-	control: Client;
+	control: DbClient;
 	tenantA: string;
 	editor: string;
 	pA: string;
@@ -107,7 +108,7 @@ interface Setup {
 }
 
 async function setup(): Promise<Setup> {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	const tenantA = await createTenant(control, { name: 'Acme' });
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });

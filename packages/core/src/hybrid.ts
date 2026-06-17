@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -128,7 +128,7 @@ function adjCte(direction: 'forward' | 'reverse' | 'both', edgePred: string): st
 
 /** Fetch the ANN + FTS seed id lists (current-time path), each in rank order. */
 async function seedsCurrent(
-	raw: Client,
+	raw: DbClient,
 	qEmbJson: string,
 	match: string | null,
 	fetchK: number,
@@ -160,7 +160,7 @@ LIMIT ?`,
 
 /** Fetch the ANN + FTS seed id lists (as-of-past path, `:t < FOREVER`), in rank order. */
 async function seedsAsOf(
-	raw: Client,
+	raw: DbClient,
 	qEmbJson: string,
 	match: string | null,
 	fetchK: number,
@@ -206,7 +206,7 @@ LIMIT ?`,
 
 /** Run the §7 cycle-safe walk from an explicit fused-seed id list (current-time). */
 async function walkCurrent(
-	raw: Client,
+	raw: DbClient,
 	seedIds: string[],
 	direction: 'forward' | 'reverse' | 'both',
 	rels: string[] | null,
@@ -245,7 +245,7 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 
 /** Run the §7 cycle-safe walk from an explicit fused-seed id list (as-of-past). */
 async function walkAsOf(
-	raw: Client,
+	raw: DbClient,
 	seedIds: string[],
 	direction: 'forward' | 'reverse' | 'both',
 	rels: string[] | null,
@@ -312,7 +312,7 @@ function cosine(a: number[], b: number[]): number {
 
 /** Load candidate embeddings (the version valid now / at :t) as JS vectors. */
 async function loadEmbeddings(
-	raw: Client,
+	raw: DbClient,
 	ids: string[],
 	isPast: boolean,
 	t: number,
@@ -381,7 +381,7 @@ function mmrSelect(
  * `mmr` post-processors before returning. Drop-in alongside P4's `retrieve`.
  */
 export async function hybridRetrieve(
-	raw: Client,
+	raw: DbClient,
 	embed: EmbedFn,
 	opts: HybridRetrieveOpts,
 ): Promise<RetrievedNode[]> {

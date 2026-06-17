@@ -1,15 +1,16 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { FOREVER } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { ensureColumn, init, schema } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P1 schema init (§4 + §4.1, D1/D5/B9). Proves the temporal schema, adjacency &
 // temporal indexes, the live-only views, the weight CHECK, and the vector index
 // are all created by init() on the pinned @libsql/client, and that re-running is
 // a no-op.
 
-function mem(): Client {
-	return createClient({ url: ':memory:' });
+function mem(): DbClient {
+	return makeTestDb().client;
 }
 
 const ULID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAA';

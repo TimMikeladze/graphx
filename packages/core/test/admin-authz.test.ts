@@ -1,11 +1,11 @@
-import { createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { authorize, AuthzError } from '../src/authz.ts';
 import { createProject, createTenant, initControl } from '../src/control-plane.ts';
+import { makeTestDb } from './harness.ts';
 
 async function controlWithProject() {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'Acme' });
 	const ns = `ns_${ulid().toLowerCase()}`;

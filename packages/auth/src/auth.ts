@@ -1,5 +1,4 @@
-import type { Client } from '@libsql/client';
-import type { Graph, GraphSchema } from '../../core/src/index.ts';
+import type { DbClient, Graph, GraphSchema } from '../../core/src/index.ts';
 import { runCheck } from './check.ts';
 import { runExpand, type UsersetTree } from './expand.ts';
 import { type ListObjectsOpts, type ListObjectsPage, runListObjects } from './list.ts';
@@ -25,7 +24,7 @@ export class Auth {
 		private readonly model: AuthModel,
 	) {}
 
-	private get raw(): Client {
+	private get raw(): DbClient {
 		return this.g.raw;
 	}
 

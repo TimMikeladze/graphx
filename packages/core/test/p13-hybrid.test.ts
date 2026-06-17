@@ -1,12 +1,13 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { FOREVER } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { Graph } from '../src/graph.ts';
 import { hybridRetrieve, sanitizeMatch } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR (§19.3–19.4). dim 4.
 
@@ -27,8 +28,8 @@ const VECTORS: Record<string, number[]> = {
 // Unknown query → a nonzero default so vector_top_k never sees a degenerate 0-vector.
 const stubEmbed: EmbedFn = async (text: string) => VECTORS[text] ?? [1, 0, 0, 0];
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }
@@ -46,7 +47,7 @@ test('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger', asy
 });
 
 test('P13 schema: init() is idempotent with the FTS table + trigger present', async () => {
-	const client = createClient({ url: ':memory:' });
+	const client = makeTestDb().client;
 	await init(client, 4);
 	await init(client, 4); // must not throw (IF NOT EXISTS on vtable + trigger)
 	const g = new Graph(client, SCHEMA);
@@ -134,7 +135,7 @@ test('P13 hybrid: recall beats vector-only (lexical finds an ANN-missed doc)', a
 // ---------------------------------------------------------------------------
 
 test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/temporal filters', async () => {
-	const client = createClient({ url: ':memory:' });
+	const client = makeTestDb().client;
 	await init(client, 4);
 	const x = '01ARZ3NDEKTSV4RRFFQ69G5FX1';
 	const z = '01ARZ3NDEKTSV4RRFFQ69G5FZ1';

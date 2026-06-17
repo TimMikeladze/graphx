@@ -1,4 +1,4 @@
-import type { Client, Row } from '@libsql/client';
+import type { DbClient, SqlRow } from './dialect.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -57,7 +57,7 @@ export interface JourneyRow {
 	name: unknown;
 }
 
-export async function journey(raw: Client, o: JourneyOpts): Promise<JourneyRow[]> {
+export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow[]> {
 	const dir = o.direction ?? 'forward';
 	const maxDepth = o.maxDepth ?? 6;
 	const rels = o.rels?.length ? o.rels : null;
@@ -120,7 +120,7 @@ ORDER BY r.arrival_t, r.hops`;
 		limits.timeoutMs,
 		o.metrics,
 	);
-	const rows = res.rows.map((row: Row): JourneyRow => {
+	const rows = res.rows.map((row: SqlRow): JourneyRow => {
 		const kind = String(row.kind);
 		// P12: with an upcaster, project `name` from the upcast LATEST shape; without one,
 		// keep the raw SQL `props ->> 'name'` projection byte-for-byte (pre-P12).

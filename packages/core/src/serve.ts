@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { zValidator } from '@hono/zod-validator';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
@@ -37,7 +37,7 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 /** Per-request server config. `authenticate` is authn layer 1; `embed` powers `retrieve`. */
 export interface ServeConfig<S extends GraphSchema> {
 	/** The shared control-plane client (registry of tenants/projects/memberships). */
-	control: Client;
+	control: DbClient;
 	/** The graph schema every project DB in this deployment is served with. */
 	schema: S;
 	/** Authn: verify the request → principal. Throw to reject (mapped to 401). */
@@ -102,7 +102,7 @@ export type ServeEnv<S extends GraphSchema> = {
  * returns a sqld token. Throws {@link AuthzError} (403/404) on a failed check.
  */
 export async function graphForProject<S extends GraphSchema>(
-	control: Client,
+	control: DbClient,
 	principal: Principal,
 	projectId: string,
 	op: Op,

@@ -1,6 +1,6 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
+import type { DbClient } from '../src/dialect.ts';
 import {
 	buildCSR,
 	centrality,
@@ -13,21 +13,22 @@ import {
 } from '../src/algorithms.ts';
 import { FOREVER } from '../src/db.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P8 — graph algorithms (§11). Fixtures built with RAW SQL so each test controls
 // weight / rel / valid_from / valid_to directly (independent of P3). dim 4 keeps
 // the schema small. Dense-int CSR indices are non-deterministic across ULIDs, so
 // every assertion translates back to ULID ids via the B8 dictionary.
 
-async function fresh(): Promise<Client> {
-	const client = createClient({ url: ':memory:' });
+async function fresh(): Promise<DbClient> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return client;
 }
 
 /** Insert a node identity + one version live for [validFrom, validTo). */
 async function node(
-	client: Client,
+	client: DbClient,
 	name: string,
 	opts: { kind?: string; validFrom?: number; validTo?: number } = {},
 ): Promise<string> {
@@ -42,7 +43,7 @@ async function node(
 
 /** Insert an edge identity + one version live for [validFrom, validTo). */
 async function edge(
-	client: Client,
+	client: DbClient,
 	src: string,
 	dst: string,
 	opts: { rel?: string; weight?: number; validFrom?: number; validTo?: number } = {},

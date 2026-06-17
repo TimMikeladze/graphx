@@ -1,11 +1,12 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { decodeCursor } from '../src/governance.ts';
 import { Graph } from '../src/graph.ts';
 import { match } from '../src/pattern.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P14 — keyset pagination (§19.7). neighbors (single stable key = neighbor id) and
 // match (composite row-value key over the selected alias ids). Pages must neither
@@ -16,8 +17,8 @@ const SCHEMA = defineGraphSchema({
 	edges: { knows: { from: 'person', to: 'person' } },
 });
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }

@@ -1,10 +1,11 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z, ZodError } from 'zod';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P3 — data layer (§6, D1/D3/B5/M6). Round-trips nodes/edges through the
 // close-and-insert temporal store with ULID identity, exercising getNode (live
@@ -24,8 +25,8 @@ const SCHEMA = defineGraphSchema({
 });
 
 // dim 4 so embeddings are cheap and the vector index is small.
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }

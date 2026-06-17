@@ -1,10 +1,10 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from '../../core/src/index.ts';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 
 /** Per-check context: one `asOf` snapshot, shared memo + cycle-guard across the recursion. */
 interface CheckCtx {
-	raw: Client;
+	raw: DbClient;
 	model: AuthModel;
 	asOf?: number;
 	memo: Map<string, boolean>;
@@ -13,7 +13,7 @@ interface CheckCtx {
 
 /** Edges pointing INTO (object, relation): `subjectRelation` is null for direct grants. */
 export async function edgesInto(
-	raw: Client,
+	raw: DbClient,
 	asOf: number | undefined,
 	object: string,
 	relation: string,
@@ -111,7 +111,7 @@ async function check(
 
 /** Entry point: evaluate a check against a fresh context (one `asOf` snapshot). */
 export function runCheck(
-	raw: Client,
+	raw: DbClient,
 	model: AuthModel,
 	object: string,
 	relation: string,

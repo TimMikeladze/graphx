@@ -1,9 +1,10 @@
 import { rmSync } from 'node:fs';
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
 import type { Principal } from '../src/authz.ts';
+import type { DbClient } from '../src/dialect.ts';
+import { makeTestDb } from './harness.ts';
 import { addMembership, createProject, createTenant, createUser, initControl } from '../src/control-plane.ts';
 import { evict } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
@@ -28,7 +29,7 @@ function authenticate(c: {
 }
 
 interface Setup {
-	control: Client;
+	control: DbClient;
 	app: ReturnType<typeof createApp<typeof SCHEMA>>;
 	tenantA: string;
 	editor: string;
@@ -37,7 +38,7 @@ interface Setup {
 }
 
 async function setup(): Promise<Setup> {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	const tenantA = await createTenant(control, { name: 'Acme' });
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });

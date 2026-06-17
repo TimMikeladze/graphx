@@ -1,9 +1,10 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { FOREVER } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { journey } from '../src/journey.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P7 — journey() (§10, B2). Earliest-arrival time-respecting cascade. Fixtures are
 // built with RAW SQL inserts so each test controls edge valid_from/valid_to (and
@@ -11,7 +12,7 @@ import { init } from '../src/schema.ts';
 
 /** Insert a node identity + one version live for [validFrom, validTo). Returns the ULID id. */
 async function node(
-	client: Client,
+	client: DbClient,
 	name: string,
 	opts: { kind?: string; validFrom?: number; validTo?: number } = {},
 ): Promise<string> {
@@ -30,7 +31,7 @@ async function node(
 
 /** Insert an edge identity + one version live for [validFrom, validTo). */
 async function edge(
-	client: Client,
+	client: DbClient,
 	src: string,
 	dst: string,
 	opts: { rel?: string; validFrom?: number; validTo?: number } = {},
@@ -48,8 +49,8 @@ async function edge(
 	return id;
 }
 
-async function fresh(): Promise<Client> {
-	const client = createClient({ url: ':memory:' });
+async function fresh(): Promise<DbClient> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return client;
 }

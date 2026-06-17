@@ -1,6 +1,7 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { makeTestDb } from '../../core/test/harness.ts';
+import type { DbClient } from '../../core/src/dialect.ts';
 import { Graph, init } from '../../core/src/index.ts';
 import { Auth } from '../src/auth.ts';
 import { defineAuthModel, rel, tupleToUserset } from '../src/model.ts';
@@ -21,8 +22,8 @@ const MODEL = defineAuthModel({
 	},
 });
 
-async function freshAuth(): Promise<{ db: Client; auth: Auth }> {
-	const db = createClient({ url: ':memory:' });
+async function freshAuth(): Promise<{ db: DbClient; auth: Auth }> {
+	const db = makeTestDb().client;
 	await init(db, 4);
 	return { db, auth: new Auth(new Graph(db, MODEL.schema), MODEL) };
 }

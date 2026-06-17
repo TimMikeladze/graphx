@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { FOREVER } from './db.ts';
 
 /**
@@ -115,7 +115,7 @@ export interface TopNode {
  * The node universe is the ascending scan of live node ids (deterministic → stable
  * dense indices, B8); edges whose endpoints are not both live are skipped.
  */
-async function loadCSR(raw: Client, t: number | null, rels: string[] | null): Promise<CSR> {
+async function loadCSR(raw: DbClient, t: number | null, rels: string[] | null): Promise<CSR> {
 	const relIn = rels ? ` AND rel IN (${rels.map(() => '?').join(',')})` : '';
 	let nodeRows: Array<{ id: unknown }>;
 	let edgeRows: Array<{ src: unknown; dst: unknown; weight: unknown }>;
@@ -173,7 +173,7 @@ async function loadCSR(raw: Client, t: number | null, rels: string[] | null): Pr
 }
 
 /** CSR over the current/live graph (`edges` view). */
-export function buildCSR(raw: Client, opts: { rels?: string[] } = {}): Promise<CSR> {
+export function buildCSR(raw: DbClient, opts: { rels?: string[] } = {}): Promise<CSR> {
 	return loadCSR(raw, null, opts.rels?.length ? opts.rels : null);
 }
 
@@ -182,7 +182,7 @@ export function buildCSR(raw: Client, opts: { rels?: string[] } = {}): Promise<C
  * at/after `FOREVER` means "now" and is routed to the live path — never bound into
  * a `:t < valid_to` predicate (which is false for every live row, D3).
  */
-export function snapshotCSR(raw: Client, t: number, opts: { rels?: string[] } = {}): Promise<CSR> {
+export function snapshotCSR(raw: DbClient, t: number, opts: { rels?: string[] } = {}): Promise<CSR> {
 	const rels = opts.rels?.length ? opts.rels : null;
 	return loadCSR(raw, t >= FOREVER ? null : t, rels);
 }
@@ -321,7 +321,7 @@ function dijkstra(
 }
 
 async function sqlShortestPath(
-	raw: Client,
+	raw: DbClient,
 	src: string,
 	dst: string,
 	weighted: boolean,
@@ -370,7 +370,7 @@ SELECT cost, path FROM walk WHERE node = ? ORDER BY cost LIMIT 1`;
  * is a zero-cost single-node path. Returns `null` when no route exists.
  */
 export async function shortestPath(
-	raw: Client,
+	raw: DbClient,
 	src: string,
 	dst: string,
 	opts: ShortestPathOpts = {},
@@ -396,7 +396,7 @@ export async function shortestPath(
 // ---------------------------------------------------------------------------
 
 /** UPSERT one metric column for many ids into `node_analytics` (chunked batches). */
-async function persist(raw: Client, metric: Metric, rows: Array<[string, number]>): Promise<void> {
+async function persist(raw: DbClient, metric: Metric, rows: Array<[string, number]>): Promise<void> {
 	if (rows.length === 0) return;
 	const now = Date.now();
 	const stmts = rows.map(([id, val]) => ({
@@ -449,7 +449,7 @@ function buildUndirected(csr: CSR): { uOff: Int32Array; uTar: Int32Array } {
  * redistributed uniformly so the vector stays a distribution (sums to ~1). Results
  * are persisted to `node_analytics.pagerank` and returned as `id → score`.
  */
-export async function pagerank(raw: Client, opts: PageRankOpts = {}): Promise<Map<string, number>> {
+export async function pagerank(raw: DbClient, opts: PageRankOpts = {}): Promise<Map<string, number>> {
 	const damping = opts.damping ?? 0.85;
 	const tol = opts.tol ?? 1e-9;
 	const maxIter = opts.maxIter ?? 100;
@@ -503,7 +503,7 @@ export async function pagerank(raw: Client, opts: PageRankOpts = {}): Promise<Ma
  * remapped to dense community ids in ascending-node order. Persisted to
  * `node_analytics.community`.
  */
-export async function community(raw: Client, opts: CommunityOpts = {}): Promise<Map<string, number>> {
+export async function community(raw: DbClient, opts: CommunityOpts = {}): Promise<Map<string, number>> {
 	const maxIter = opts.maxIter ?? 20;
 	const csr = await buildCSR(raw);
 	const { n, idxToId } = csr;
@@ -561,7 +561,7 @@ export async function community(raw: Client, opts: CommunityOpts = {}): Promise<
  * one side. Persisted to `node_analytics.degree`.
  */
 export async function centrality(
-	raw: Client,
+	raw: DbClient,
 	kind: CentralityKind = 'degree',
 ): Promise<Map<string, number>> {
 	const csr = await buildCSR(raw);
@@ -600,7 +600,7 @@ const METRIC_COL: Record<Metric, string> = {
  * Top nodes by a persisted metric. JOINs `node_analytics` with the live `nodes`
  * view (D4), optionally filters node `kind`, and orders by the metric DESC.
  */
-export async function topNodes(raw: Client, opts: TopNodesOpts): Promise<TopNode[]> {
+export async function topNodes(raw: DbClient, opts: TopNodesOpts): Promise<TopNode[]> {
 	// Own-property check: a plain-object lookup would inherit Object.prototype keys
 	// ('constructor', '__proto__', ...) as truthy, letting an untrusted `by` (P11
 	// serves this over the wire) escape the whitelist into the interpolated ORDER BY.

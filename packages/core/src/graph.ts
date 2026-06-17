@@ -1,5 +1,13 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { Client, InStatement, InValue, Row, Transaction } from '@libsql/client';
+import {
+	type DbClient,
+	type DbTransaction,
+	dialectOf,
+	type SqlRow,
+	type SqlStatement,
+	type SqlValue,
+} from './dialect.ts';
+import { embFreshExpr, embRebindExpr } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
@@ -198,7 +206,7 @@ export class Graph<S extends GraphSchema> {
 	private readonly upcaster: Upcaster;
 
 	constructor(
-		public raw: Client,
+		public raw: DbClient,
 		public schema: S,
 		upcasters?: UpcasterRegistry,
 	) {
@@ -244,10 +252,10 @@ export class Graph<S extends GraphSchema> {
 			JSON.stringify(storedProps),
 		];
 		// B5: emb present -> vector(?) with the JSON array; absent -> literal NULL.
-		const versionStmt: InStatement = n.emb
+		const versionStmt: SqlStatement = n.emb
 			? {
 					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-						VALUES (?,?,?,?,?,?,?, vector(?), ?)`,
+						VALUES (?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 					args: [...common, JSON.stringify(n.emb), ts],
 				}
 			: {
@@ -304,7 +312,7 @@ export class Graph<S extends GraphSchema> {
 		const id = ulid();
 		const props = JSON.stringify(parsedProps);
 		const weight = e.weight ?? 1.0;
-		const insertEdge = (ts: number): InStatement[] => [
+		const insertEdge = (ts: number): SqlStatement[] => [
 			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
 			{
 				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from)
@@ -621,10 +629,10 @@ export class Graph<S extends GraphSchema> {
 	 */
 	private async runConditionalClose(
 		label: string,
-		body: (tx: Transaction, now: number) => Promise<'committed' | 'superseded'>,
+		body: (tx: DbTransaction, now: number) => Promise<'committed' | 'superseded'>,
 	): Promise<void> {
 		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
-			let tx: Transaction | undefined;
+			let tx: DbTransaction | undefined;
 			try {
 				tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE (may throw SQLITE_BUSY)
 				const result = await body(tx, this.now());
@@ -710,27 +718,27 @@ export class Graph<S extends GraphSchema> {
 			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
-			const common: InValue[] = [
+			const common: SqlValue[] = [
 				id,
-				patch.kind ?? (cur.kind as InValue),
-				patch.body ?? (cur.body as InValue) ?? null,
-				patch.uri ?? (cur.uri as InValue) ?? null,
-				patch.content_hash ?? (cur.content_hash as InValue) ?? null,
-				patch.content_type ?? (cur.content_type as InValue) ?? null,
+				patch.kind ?? (cur.kind as SqlValue),
+				patch.body ?? (cur.body as SqlValue) ?? null,
+				patch.uri ?? (cur.uri as SqlValue) ?? null,
+				patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
+				patch.content_type ?? (cur.content_type as SqlValue) ?? null,
 				JSON.stringify(props),
 			];
 			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
 			// (carries a real F32 vector, or NULL when there was none).
-			const successor: InStatement = patch.emb
+			const successor: SqlStatement = patch.emb
 				? {
 						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?, vector(?), ?)`,
+							VALUES (?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 						args: [...common, JSON.stringify(patch.emb), now],
 					}
 				: {
 						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?, ?, ?)`,
-						args: [...common, (cur.emb as InValue) ?? null, now],
+							VALUES (?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
+						args: [...common, (cur.emb as SqlValue) ?? null, now],
 					};
 			await tx.execute(successor);
 			await tx.commit();
@@ -783,7 +791,7 @@ export class Graph<S extends GraphSchema> {
 	 * the P12 read-time upcaster (§15): stored props are migrated from their `_v` to the
 	 * latest shape and Zod-parsed. Empty registry ⇒ identity (raw JSON, pre-P12).
 	 */
-	private rowToNode(row: Row): AnyNode<S> {
+	private rowToNode(row: SqlRow): AnyNode<S> {
 		const kind = String(row.kind);
 		this.kindCache.set(String(row.id), kind);
 		return {
@@ -796,7 +804,7 @@ export class Graph<S extends GraphSchema> {
 
 /** Convenience: pair a raw client with a schema. (P11 wires the per-project factory.) */
 export function graphFor<S extends GraphSchema>(
-	raw: Client,
+	raw: DbClient,
 	schema: S,
 	upcasters?: UpcasterRegistry,
 ): Graph<S> {

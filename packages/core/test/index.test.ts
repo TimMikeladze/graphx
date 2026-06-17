@@ -1,13 +1,14 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { applyConnPragmas } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
+import { makeTestDb } from './harness.ts';
 
 // P0 foundation + libSQL capability probe. Proves the engine features the whole
 // design rests on (native vectors, FTS5, generated columns) actually work on the
 // pinned @libsql/client before later phases build on them (§18, audit M16).
 
-function mem(): Client {
-	return createClient({ url: ':memory:' });
+function mem(): DbClient {
+	return makeTestDb().client;
 }
 
 test('P0: SELECT 1 over libSQL', async () => {

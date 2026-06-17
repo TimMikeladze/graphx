@@ -1,9 +1,9 @@
-import { createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 const SCHEMA = defineGraphSchema({
 	nodes: {
@@ -14,7 +14,7 @@ const SCHEMA = defineGraphSchema({
 });
 
 async function graph() {
-	const raw = createClient({ url: ':memory:' });
+	const raw = makeTestDb().client;
 	await init(raw);
 	return new Graph(raw, SCHEMA);
 }

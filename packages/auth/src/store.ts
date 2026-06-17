@@ -1,6 +1,5 @@
-import type { Client } from '@libsql/client';
 import { ulid } from 'ulidx';
-import { FOREVER, type Graph, type GraphSchema } from '../../core/src/index.ts';
+import { type DbClient, FOREVER, type Graph, type GraphSchema } from '../../core/src/index.ts';
 import type { Tuple } from './types.ts';
 import { typeOf } from './types.ts';
 
@@ -9,7 +8,7 @@ import { typeOf } from './types.ts';
  * Idempotent: INSERT-OR-IGNORE the identity row, then insert a live version only if
  * none exists. Existence is binary — no temporal versioning of objects themselves.
  */
-export async function ensureObject(raw: Client, ref: string): Promise<void> {
+export async function ensureObject(raw: DbClient, ref: string): Promise<void> {
 	const kind = typeOf(ref);
 	// Idempotent: the NOT EXISTS guard runs inside the single write batch; SQLite serializes
 	// writers, so a concurrent ensureObject for the same ref sees the committed row and skips.
@@ -29,7 +28,7 @@ export async function ensureObject(raw: Client, ref: string): Promise<void> {
 
 /** Is there a live edge `src --rel--> dst`? (P1 direct-tuple existence check.) */
 export async function liveTupleExists(
-	raw: Client,
+	raw: DbClient,
 	src: string,
 	rel: string,
 	dst: string,
@@ -98,7 +97,7 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
  * past `valid_from` to keep the interval non-empty (M6). No-op if nothing live matches.
  */
 export async function deleteTuple(
-	raw: Client,
+	raw: DbClient,
 	src: string,
 	rel: string,
 	dst: string,

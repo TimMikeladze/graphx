@@ -1,15 +1,12 @@
-import { rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
 import { afterAll, expect, test } from 'bun:test';
-import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
 import { asOfPredicate, diff, history } from '../src/temporal.ts';
+import { makeTestDb } from './harness.ts';
 
 // P6 — temporal ops (§9, §19.1, B4/B5/D3). updateNode/deleteEdge use the
 // conditional-close + retry pattern; history/diff/asOf surface the temporal
@@ -35,30 +32,23 @@ const DIM = 4;
 // a separate empty DB ("no such table"), so updateNode/deleteEdge (which use
 // transactions) need a real on-disk file the connections can share. Each graph
 // gets a unique temp file; all are unlinked in afterAll.
-const tmpFiles: string[] = [];
+const teardowns: Array<() => Promise<void>> = [];
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const file = join(tmpdir(), `graphx-p6-${ulid()}.db`);
-	tmpFiles.push(file);
-	const client = createClient({ url: `file:${file}` });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const { client, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(client, DIM);
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
-afterAll(() => {
-	for (const f of tmpFiles) {
-		for (const suffix of ['', '-wal', '-shm']) {
-			try {
-				rmSync(f + suffix);
-			} catch {
-				// best-effort cleanup
-			}
-		}
+afterAll(async () => {
+	for (const teardown of teardowns) {
+		await teardown();
 	}
 });
 
 // Read a node version row directly (bypassing the live view) by valid_to.
-async function versionRows(client: Client, id: string): Promise<Record<string, unknown>[]> {
+async function versionRows(client: DbClient, id: string): Promise<Record<string, unknown>[]> {
 	const r = await client.execute({
 		sql: 'SELECT ver, kind, body, uri, content_hash, content_type, props, emb, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
 		args: [id],

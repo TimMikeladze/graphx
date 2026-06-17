@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { zValidator } from '@hono/zod-validator';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
@@ -25,7 +25,7 @@ import {
  */
 export interface AdminConfig {
 	/** The shared control-plane client (registry of tenants/projects/users/memberships/api_keys). */
-	control: Client;
+	control: DbClient;
 	/** Operator authn: verify the request is an operator. Throw to reject (mapped to 401). */
 	authenticate: (c: Context) => void | Promise<void>;
 }

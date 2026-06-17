@@ -1,9 +1,4 @@
-import { rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { type Client, createClient } from '@libsql/client';
 import { afterAll, expect, test } from 'bun:test';
-import { ulid } from 'ulidx';
 import { z } from 'zod';
 import {
 	declareSingleValuedRel,
@@ -12,8 +7,10 @@ import {
 } from '../src/constraints.ts';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P14 — constraints (§19.5). Uniqueness is a partial UNIQUE index over LIVE rows only
 // (historical versions never collide); edge cardinality marks a rel single-valued so a
@@ -32,27 +29,18 @@ const SCHEMA = defineGraphSchema({
 	},
 });
 
-const tmpFiles: string[] = [];
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const file = join(tmpdir(), `graphx-p14c-${ulid()}.db`);
-	tmpFiles.push(file);
-	const client = createClient({ url: `file:${file}` });
+const teardowns: Array<() => Promise<void>> = [];
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const { client, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }
-afterAll(() => {
-	for (const f of tmpFiles) {
-		for (const suffix of ['', '-wal', '-shm']) {
-			try {
-				rmSync(f + suffix);
-			} catch {
-				// best-effort
-			}
-		}
-	}
+afterAll(async () => {
+	for (const t of teardowns) await t();
 });
 
-async function liveEdgeCount(client: Client, src: string, rel: string): Promise<number> {
+async function liveEdgeCount(client: DbClient, src: string, rel: string): Promise<number> {
 	const r = await client.execute({
 		sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
 		args: [src, rel, FOREVER],

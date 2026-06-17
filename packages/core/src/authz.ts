@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { getDb } from './db.ts';
 import { init } from './schema.ts';
 
@@ -46,7 +46,7 @@ function roleAllows(role: Role, op: Op): boolean {
  * membership is 403.
  */
 export async function authorize(
-	control: Client,
+	control: DbClient,
 	principal: Principal,
 	projectId: string,
 	op: Op,
@@ -89,9 +89,9 @@ export async function authorize(
  * the namespace string) so an evicted-and-reopened namespace re-inits its fresh
  * client, and a GC'd client drops its guard automatically.
  */
-const inits = new WeakMap<Client, Promise<void>>();
+const inits = new WeakMap<DbClient, Promise<void>>();
 
-function initOnce(client: Client): Promise<void> {
+function initOnce(client: DbClient): Promise<void> {
 	let p = inits.get(client);
 	if (!p) {
 		p = init(client).catch((e: unknown) => {
@@ -110,11 +110,11 @@ function initOnce(client: Client): Promise<void> {
  * guard. Returns `{ namespace, client }` — NEVER a token (§2.9).
  */
 export async function resolveProjectDb(
-	control: Client,
+	control: DbClient,
 	principal: Principal,
 	projectId: string,
 	op: Op,
-): Promise<{ namespace: string; client: Client }> {
+): Promise<{ namespace: string; client: DbClient }> {
 	const { dbNamespace } = await authorize(control, principal, projectId, op);
 	const client = getDb(dbNamespace);
 	await initOnce(client);

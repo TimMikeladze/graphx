@@ -1,22 +1,23 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { ulid } from 'ulidx';
 import { createAdminApp } from '../src/admin.ts';
 import { initControl } from '../src/control-plane.ts';
+import type { DbClient } from '../src/dialect.ts';
+import { makeTestDb } from './harness.ts';
 
 function operatorAuth(c: Context): void {
 	if (c.req.header('x-admin-token') !== 'secret') throw new Error('forbidden');
 }
 
 interface Setup {
-	control: Client;
+	control: DbClient;
 	app: Hono;
 }
 
 async function setup(): Promise<Setup> {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	// Mount under /admin exactly as the deployment does.
 	const app = new Hono();

@@ -1,18 +1,19 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
+import { makeTestDb } from '../../core/test/harness.ts';
 import { Graph, init } from '../../core/src/index.ts';
+import type { DbClient } from '../../core/src/dialect.ts';
 import { defineAuthModel, rel } from '../src/model.ts';
 import { deleteTuple, writeTuple } from '../src/store.ts';
 
 const MODEL = defineAuthModel({ user: {}, group: { member: rel() }, doc: { viewer: rel() } });
 
-async function fresh(): Promise<{ db: Client; g: Graph<typeof MODEL.schema> }> {
-	const db = createClient({ url: ':memory:' });
+async function fresh(): Promise<{ db: DbClient; g: Graph<typeof MODEL.schema> }> {
+	const db = makeTestDb().client;
 	await init(db, 4);
 	return { db, g: new Graph(db, MODEL.schema) };
 }
 
-function liveCount(db: Client, src: string, rel: string, dst: string): Promise<number> {
+function liveCount(db: DbClient, src: string, rel: string, dst: string): Promise<number> {
 	return db
 		.execute({
 			sql: 'SELECT COUNT(*) AS n FROM edges WHERE src = ? AND rel = ? AND dst = ?',

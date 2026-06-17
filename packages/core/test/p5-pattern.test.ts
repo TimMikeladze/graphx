@@ -1,10 +1,11 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { match } from '../src/pattern.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P5 — PatternBuilder (§8). Verifies the fluent builder compiles to a valid SQL
 // JOIN chain, that param order matches textual placeholder order (acceptance §16 —
@@ -27,8 +28,8 @@ const SCHEMA = defineGraphSchema({
 
 type Schema = typeof SCHEMA;
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<Schema> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<Schema> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }

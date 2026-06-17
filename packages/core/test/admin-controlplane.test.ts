@@ -1,4 +1,3 @@
-import { createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import {
@@ -12,9 +11,10 @@ import {
 	listTenants,
 	listUsers,
 } from '../src/control-plane.ts';
+import { makeTestDb } from './harness.ts';
 
 async function freshControl() {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	return control;
 }

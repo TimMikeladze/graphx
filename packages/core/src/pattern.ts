@@ -1,4 +1,4 @@
-import type { Client, Row } from '@libsql/client';
+import type { DbClient, SqlRow } from './dialect.ts';
 import { FOREVER } from './db.ts';
 import type { GraphSchema } from './graph.ts';
 import type { Kind, NodeOf } from './define-graph-schema.ts';
@@ -128,7 +128,7 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 
 	constructor(
 		private readonly schemaDef: S,
-		private readonly raw: Client | undefined,
+		private readonly raw: DbClient | undefined,
 		upcasters?: UpcasterRegistry,
 	) {
 		this.upcaster = new Upcaster(schemaDef, upcasters ?? {});
@@ -428,7 +428,7 @@ function reshape<
 	S extends GraphSchema,
 	Acc extends Record<string, Kind<S>>,
 	Sel extends keyof Acc & string,
->(row: Row, aliases: Sel[], upcaster: Upcaster): PatternRow<S, Acc, Sel> {
+>(row: SqlRow, aliases: Sel[], upcaster: Upcaster): PatternRow<S, Acc, Sel> {
 	const out = {} as PatternRow<S, Acc, Sel>;
 	for (const alias of aliases) {
 		const id = String(row[`${alias}__id`]);
@@ -443,7 +443,7 @@ function reshape<
 /** Entry point (§8): start a pattern over `schema`; pass `raw` to enable `.run()`. */
 export function match<S extends GraphSchema>(
 	schema: S,
-	raw?: Client,
+	raw?: DbClient,
 	upcasters?: UpcasterRegistry,
 ): PatternBuilder<S, Record<never, Kind<S>>> {
 	return new PatternBuilder<S, Record<never, Kind<S>>>(schema, raw, upcasters);

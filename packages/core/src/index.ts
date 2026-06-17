@@ -11,6 +11,19 @@ export {
 	syncIfReplica,
 } from './db.ts';
 
+// Backend dialect seam — driver-neutral DB types every SDK entry point speaks.
+export {
+	type DbClient,
+	type DbTransaction,
+	type Dialect,
+	dialectOf,
+	type SqlResult,
+	type SqlRow,
+	type SqlStatement,
+	type SqlValue,
+	type TransactionMode,
+} from './dialect.ts';
+
 // P1 — schema init
 export {
 	ensureColumn,

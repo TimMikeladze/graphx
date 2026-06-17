@@ -1,5 +1,5 @@
-import type { Client } from '@libsql/client';
 import { FOREVER } from './db.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
 import type { GraphSchema } from './graph.ts';
 import { ensureColumn } from './schema.ts';
 
@@ -48,9 +48,15 @@ function sqlLiteral(s: string): string {
  * Idempotent.
  */
 export async function declareUniqueNodeProp(
-	client: Client,
+	client: DbClient,
 	opts: { kind: string; prop: string },
 ): Promise<void> {
+	if (dialectOf(client) === 'postgres') {
+		// Postgres has no VIRTUAL generated columns; this becomes an expression index
+		// (`CREATE UNIQUE INDEX ... ON node_versions((props->>'prop')) WHERE ...`) when
+		// the Postgres adapter lands.
+		throw new Error('declareUniqueNodeProp: Postgres backend not implemented yet — later phase');
+	}
 	const kind = safeIdent(opts.kind, 'kind');
 	const prop = safeIdent(opts.prop, 'prop');
 	const col = `gp_${prop}`;
@@ -74,7 +80,7 @@ export async function declareUniqueNodeProp(
  * over the live rows of that rel, so at most one live `(src, rel)` edge can exist.
  * Pairs with `Graph.addEdge`'s conditional-close for the upsert path. Idempotent.
  */
-export async function declareSingleValuedRel(client: Client, rel: string): Promise<void> {
+export async function declareSingleValuedRel(client: DbClient, rel: string): Promise<void> {
 	const safe = safeIdent(rel, 'rel');
 	await client.execute(
 		`CREATE UNIQUE INDEX IF NOT EXISTS ux_single_${safe} ON edge_versions(src) WHERE valid_to = ${FOREVER} AND rel = ${sqlLiteral(safe)}`,
@@ -93,7 +99,7 @@ export async function declareSingleValuedRel(client: Client, rel: string): Promi
  * separate validation pass, and it has no P14 acceptance criterion. The endpoint
  * kind + FK checks on `addEdge` are the write-path validation that IS in place.
  */
-export async function materializeConstraints(client: Client, schema: GraphSchema): Promise<void> {
+export async function materializeConstraints(client: DbClient, schema: GraphSchema): Promise<void> {
 	for (const [rel, def] of Object.entries(schema.edges)) {
 		if ((def as { single?: boolean } | undefined)?.single) {
 			await declareSingleValuedRel(client, rel);

@@ -1,4 +1,5 @@
-import type { Client, InStatement, InValue } from '@libsql/client';
+import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
+import { embFreshExpr } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { Kind } from './define-graph-schema.ts';
 import type { GraphSchema } from './graph.ts';
@@ -57,10 +58,10 @@ interface RawNodeDef {
 interface PreparedRow {
 	id: string;
 	kind: string;
-	body: InValue;
-	uri: InValue;
-	content_hash: InValue;
-	content_type: InValue;
+	body: SqlValue;
+	uri: SqlValue;
+	content_hash: SqlValue;
+	content_type: SqlValue;
 	props: string;
 	emb: number[] | null;
 }
@@ -78,13 +79,14 @@ function chunk<T>(arr: T[], size: number): T[][] {
  * partial-live ANN index and the trigger, rebuilds the FTS index, and `ANALYZE`s.
  */
 export async function bulkLoad<S extends GraphSchema>(
-	raw: Client,
+	raw: DbClient,
 	schema: S,
 	rows: BulkRow<S>[],
 	opts: BulkOpts = {},
 ): Promise<BulkResult> {
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
+	const embExpr = embFreshExpr(dialectOf(raw));
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
 	// 1. Validate + prepare everything up front — fail fast, BEFORE touching indexes.
@@ -113,7 +115,7 @@ export async function bulkLoad<S extends GraphSchema>(
 	// a `:memory:` DB on this client build, breaking every follow-on op). Identity rows
 	// precede their version rows in each chunk so the immediate FK check passes.
 	try {
-		const stmts: InStatement[] = [];
+		const stmts: SqlStatement[] = [];
 		for (const part of chunk(prepared, chunkSize)) {
 			stmts.push({
 				sql: `INSERT INTO node_identity (id) VALUES ${part.map(() => '(?)').join(',')}`,
@@ -122,9 +124,9 @@ export async function bulkLoad<S extends GraphSchema>(
 			// Version rows: per-row emb placeholder (vector(?) when present, else NULL);
 			// valid_to is omitted so the column DEFAULT (FOREVER) applies.
 			const valuesSql = part
-				.map((p) => (p.emb ? '(?,?,?,?,?,?,?,vector(?),?)' : '(?,?,?,?,?,?,?,NULL,?)'))
+				.map((p) => (p.emb ? `(?,?,?,?,?,?,?,${embExpr},?)` : '(?,?,?,?,?,?,?,NULL,?)'))
 				.join(',');
-			const args: InValue[] = [];
+			const args: SqlValue[] = [];
 			for (const p of part) {
 				args.push(p.id, p.kind, p.body, p.uri, p.content_hash, p.content_type, p.props);
 				if (p.emb) args.push(JSON.stringify(p.emb));

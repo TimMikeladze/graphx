@@ -1,11 +1,12 @@
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { FOREVER } from '../src/db.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { Graph } from '../src/graph.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
+import { makeTestDb } from './harness.ts';
 
 // P4 — vectors + GraphRAG retrieve (§7, D3/D5). ANN-seeded, cycle-safe temporal
 // walk. dim 4 so embeddings are cheap and the partial vector index is small.
@@ -28,8 +29,8 @@ const VECTORS: Record<string, number[]> = {
 };
 const stubEmbed: EmbedFn = async (text: string) => VECTORS[text] ?? [0, 0, 0, 0];
 
-async function freshGraph(): Promise<{ client: Client; g: Graph<typeof SCHEMA> }> {
-	const client = createClient({ url: ':memory:' });
+async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
+	const client = makeTestDb().client;
 	await init(client, 4);
 	return { client, g: new Graph(client, SCHEMA) };
 }
@@ -170,7 +171,7 @@ test('P4: rels filter restricts walk to matching relations', async () => {
 			cites: { from: 'doc', to: 'doc' },
 		},
 	});
-	const client = createClient({ url: ':memory:' });
+	const client = makeTestDb().client;
 	await init(client, 4);
 	const g = new Graph(client, SCHEMA2);
 	const a = await g.addNode({
@@ -229,7 +230,7 @@ test('P4: ordered by depth ascending', async () => {
 });
 
 test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal fixture)', async () => {
-	const client = createClient({ url: ':memory:' });
+	const client = makeTestDb().client;
 	await init(client, 4);
 	const id = '01ARZ3NDEKTSV4RRFFQ69G5FZ1';
 	const T1 = 1000; // v1 valid_from
@@ -266,7 +267,7 @@ test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal f
 });
 
 test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skipped', async () => {
-	const client = createClient({ url: ':memory:' });
+	const client = makeTestDb().client;
 	await init(client, 4);
 	const a = '01ARZ3NDEKTSV4RRFFQ69G5FA1';
 	const b = '01ARZ3NDEKTSV4RRFFQ69G5FB1';

@@ -1,5 +1,5 @@
-import type { Client } from '@libsql/client';
 import { edgesInto } from './check.ts';
+import type { DbClient } from '../../core/src/index.ts';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 
@@ -11,7 +11,7 @@ export type UsersetTree =
 	| { type: 'exclusion'; base: UsersetTree; subtract: UsersetTree };
 
 interface ExpandCtx {
-	raw: Client;
+	raw: DbClient;
 	model: AuthModel;
 	asOf?: number;
 	visited: Set<string>;
@@ -86,7 +86,7 @@ async function expand(ctx: ExpandCtx, object: string, relation: string): Promise
 
 /** Entry point: expand (object, relation) into a userset tree at one `asOf` snapshot. */
 export function runExpand(
-	raw: Client,
+	raw: DbClient,
 	model: AuthModel,
 	object: string,
 	relation: string,

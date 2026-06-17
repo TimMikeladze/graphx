@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { decodeCursor, encodeCursor, type QueryLimits, resolveLimits } from './governance.ts';
 
 /**
@@ -23,7 +23,7 @@ export interface TemporalDiff {
  * ordered by `valid_from`. Closed versions are byte-stable, so this is the
  * immutable audit trail for the id.
  */
-export async function history(raw: Client, id: string): Promise<Array<Record<string, unknown>>> {
+export async function history(raw: DbClient, id: string): Promise<Array<Record<string, unknown>>> {
 	const r = await raw.execute({
 		sql: 'SELECT ver, id, kind, body, uri, content_hash, content_type, props, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
 		args: [id],
@@ -37,7 +37,7 @@ export async function history(raw: Client, id: string): Promise<Array<Record<str
  * half-open window `(t1, t2]`. Covers both new versions and supersession
  * closes for nodes and edges.
  */
-export async function diff(raw: Client, t1: number, t2: number): Promise<TemporalDiff> {
+export async function diff(raw: DbClient, t1: number, t2: number): Promise<TemporalDiff> {
 	const where = '(valid_from > ? AND valid_from <= ?) OR (valid_to > ? AND valid_to <= ?)';
 	const args = [t1, t2, t1, t2];
 	const nodes = await raw.execute({
@@ -123,7 +123,7 @@ function decodeFeedCursor(cursor: string): { vf: number; ver: number } {
  * TEXT) — never `JSON.parse`d/upcast here; the changelog reports the bytes that were written.
  */
 async function feedStream(
-	raw: Client,
+	raw: DbClient,
 	table: string,
 	cols: string,
 	cursor: string | undefined,
@@ -173,7 +173,7 @@ async function feedStream(
  * bytes (a changelog must report what was written, not the P12 read-time shape).
  */
 export async function changeFeed(
-	raw: Client,
+	raw: DbClient,
 	cursor: ChangeFeedCursor = {},
 	opts: ChangeFeedOpts = {},
 ): Promise<ChangeFeedPage> {

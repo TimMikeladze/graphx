@@ -34,12 +34,18 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"@types/node": "^25.9.1"
+		"@types/node": "^25.9.1",
+		"@types/pg": "^8.11.10",
+		"pg": "^8.13.1"
 	},
 	"peerDependencies": {
+		"pg": "^8.11.0",
 		"typescript": ">=4.5.0"
 	},
 	"peerDependenciesMeta": {
+		"pg": {
+			"optional": true
+		},
 		"typescript": {
 			"optional": true
 		}

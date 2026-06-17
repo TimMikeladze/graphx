@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs';
-import { type Client, createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
 import { hc } from 'hono/client';
 import { ulid } from 'ulidx';
@@ -13,7 +12,9 @@ import {
 } from '../src/control-plane.ts';
 import { evict } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import { type AppType, createApp } from '../src/serve.ts';
+import { makeTestDb } from './harness.ts';
 
 // P11 — serving (§14, D2). The Hono app reuses the P0.5 control plane + authz to
 // route every request to ONE project DB, exposes the SDK over typed routes, and is
@@ -48,7 +49,7 @@ function authenticate(c: { req: { header: (n: string) => string | undefined } })
 }
 
 interface Setup {
-	control: Client;
+	control: DbClient;
 	app: ReturnType<typeof createApp<typeof SCHEMA>>;
 	tenantA: string;
 	tenantB: string;
@@ -62,7 +63,7 @@ interface Setup {
 }
 
 async function setup(): Promise<Setup> {
-	const control = createClient({ url: ':memory:' });
+	const control = makeTestDb().client;
 	await initControl(control);
 	const tenantA = await createTenant(control, { name: 'Acme' });
 	const tenantB = await createTenant(control, { name: 'Globex' });

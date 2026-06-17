@@ -1,4 +1,4 @@
-import type { Client } from '@libsql/client';
+import type { DbClient } from './dialect.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -93,7 +93,7 @@ function adjCte(direction: 'forward' | 'reverse' | 'both', edgePred: string): st
  * reachable from the ANN seeds within `maxDepth`, ordered by depth.
  */
 export async function retrieve(
-	raw: Client,
+	raw: DbClient,
 	embed: EmbedFn,
 	opts: RetrieveOpts,
 ): Promise<RetrievedNode[]> {
