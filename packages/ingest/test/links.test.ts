@@ -17,6 +17,12 @@ test('extractLinks: relative markdown links, external/anchor ignored', () => {
 	]);
 });
 
+test('extractLinks: image embeds are not treated as links', () => {
+	expect(
+		extractLinks('![alt](./pic.png) and ![[embed.md]] but [real](./b.md)'),
+	).toEqual([{ kind: 'path', target: './b.md' }]);
+});
+
 test('extractLinks: none', () => {
 	expect(extractLinks('plain text, no links')).toEqual([]);
 });
