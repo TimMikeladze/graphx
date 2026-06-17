@@ -30,10 +30,10 @@
 
 **libSQL 362/362 · Postgres 344 pass + 18 skip + 0 fail · lint+type green.** Every Postgres-applicable test passes. The 18 skips are libSQL-native capability/mechanics probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, F32_BLOB/vector_top_k, FTS5 virtual table, deferred-index speedup) with no Postgres analog — the user-facing contracts they cover are exercised by cross-backend tests. The user-facing API is unchanged; backend is selected by config (`DbConfig.driver` / `GRAPHX_DB_DRIVER`) only.
 
-**Phase 6 — remaining polish (NOT parity-blocking):**
-- `core/pg` subpath **export** in `packages/core/package.json` + a bunup build entry (tests import `../src/pg.ts` directly; shipped consumers need the subpath to register the adapter). Demote `@libsql/client` to optional peer + `core/libsql` subpath if desired.
-- CI: run the PG suite against a `pgvector/pgvector:pg16` service container (gate behind the driver env; Linux/macOS only).
-- pgvector **HNSW** partial index (currently exact KNN — correct but O(n); add `USING hnsw (emb vector_cosine_ops) WHERE valid_to=FOREVER` for scale).
+**Phase 6 — polish (NOT parity-blocking):**
+- ✅ `core/pg` subpath **export** in `packages/core/package.json` (`./pg` → `dist/pg.{js,d.ts}`) + a second bunup entry (`src/index.ts` + `src/pg.ts`). Shipped consumers `import 'core/pg'` once to register the adapter (side effect); the optional `pg` peer is only pulled in by that subpath. Tests still import `../src/pg.ts` directly. (`@libsql/client` left a hard dep — `getDb`'s default path imports it, so demoting it is not low-risk.)
+- ✅ pgvector **HNSW** partial index — `vectorIndexDDL('postgres')` now returns `CREATE INDEX … USING hnsw (emb vector_cosine_ops) WHERE valid_to=FOREVER`, embedded in `postgresSchema()` (mirrors libSQL's `${NV_EMB_IDX_DDL}`). Accelerates the live-seed ANN scan (`annSeedsLive`); the as-of path still over-fetches (live-only index). Default HNSW build/`ef_search` params — fine for tests, tunable at scale. PG suite unchanged (344/18skip/0fail; set-membership assertions tolerate ANN ordering).
+- CI: run the PG suite against a `pgvector/pgvector:pg16` service container (gate behind the driver env; Linux only).
 - README/docs for the `driver` config + `CREATE EXTENSION vector` prerequisite.
 
 ---
