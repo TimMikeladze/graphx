@@ -230,10 +230,12 @@ function onError(err: Error, c: Context) {
 	// Graph.addNode/addEdge throw `Error` with an `addNode:`/`addEdge:` prefix on bad
 	// input (unknown kind/rel, endpoint-kind mismatch) — those are client errors.
 	if (/^add(Node|Edge):/.test(err.message)) return c.json({ error: err.message }, 400);
-	// libSQL constraint violations that slip past wire validation are bad input, not a
-	// server fault: a FK to a non-existent node (unconstrained rel skips the kind check),
-	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500.
-	if (String((err as { code?: unknown }).code ?? '').startsWith('SQLITE_CONSTRAINT')) {
+	// Constraint violations that slip past wire validation are bad input, not a server
+	// fault: a FK to a non-existent node (unconstrained rel skips the kind check),
+	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
+	// `SQLITE_CONSTRAINT*`; Postgres uses SQLSTATE class 23 (integrity_constraint_violation).
+	const dbCode = String((err as { code?: unknown }).code ?? '');
+	if (dbCode.startsWith('SQLITE_CONSTRAINT') || /^23\d{3}$/.test(dbCode)) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
 	// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.

@@ -8,7 +8,7 @@ import type { DbClient } from '../src/dialect.ts';
 import { encodeCursor } from '../src/governance.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { insertOrIgnoreSql, makeTestDb } from './harness.ts';
 
 // P15 — change feed / CDC (§19.10). "The temporal log IS the changelog." changeFeed
 // is the tailable sibling of diff(): new versions WHERE valid_from > cursor, ordered
@@ -50,7 +50,10 @@ async function insertNodeVersion(
 	props: Record<string, unknown>,
 	validFrom: number,
 ): Promise<void> {
-	await client.execute({ sql: 'INSERT OR IGNORE INTO node_identity (id) VALUES (?)', args: [id] });
+	await client.execute({
+		sql: insertOrIgnoreSql(client, 'node_identity', 'id', '(?)'),
+		args: [id],
+	});
 	await client.execute({
 		sql: 'INSERT INTO node_versions (id, kind, props, valid_from) VALUES (?,?,?,?)',
 		args: [id, 'person', JSON.stringify(props), validFrom],

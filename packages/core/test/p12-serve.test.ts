@@ -1,7 +1,5 @@
 import { rmSync } from 'node:fs';
-import { createClient } from '@libsql/client';
 import { expect, test } from 'bun:test';
-import type { DbClient } from '../src/dialect.ts';
 import { makeTestDb } from './harness.ts';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
@@ -12,7 +10,7 @@ import {
 	createUser,
 	initControl,
 } from '../src/control-plane.ts';
-import { evict, FOREVER } from '../src/db.ts';
+import { evict, FOREVER, getDb } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { createApp } from '../src/serve.ts';
 import { defineUpcasters } from '../src/upcast.ts';
@@ -61,15 +59,15 @@ test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when 
 	// A first authorized request lazily init()s the project DB + schema (404 is fine).
 	await app.request(`${base}/nodes/${ulid()}`, { headers: hdr });
 
-	// Inject a raw v1 device row directly into the project DB the server just init'd.
-	const projectDb: DbClient = createClient({ url: `file:${ns}.db` });
+	// Inject a raw v1 device row directly into the project DB the server just init'd —
+	// the SAME cached client the server resolves via getDb (so it works on either backend).
+	const projectDb = getDb(ns);
 	const id = ulid();
 	await projectDb.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await projectDb.execute({
 		sql: 'INSERT INTO node_versions (id, kind, props, valid_from, valid_to) VALUES (?,?,?,?,?)',
 		args: [id, 'device', JSON.stringify({ name: 'r1', crit: 5, _v: 1 }), 1, FOREVER],
 	});
-	projectDb.close();
 
 	const res = await app.request(`${base}/nodes/${id}`, { headers: hdr });
 	expect(res.status).toBe(200);

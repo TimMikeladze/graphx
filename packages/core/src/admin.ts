@@ -44,7 +44,9 @@ const apiKeyBody = z.object({ tenantId: z.string(), scopes: z.array(z.string()).
 function adminError(err: Error, c: Context) {
 	if (err instanceof HTTPException) return err.getResponse();
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
-	if (String((err as { code?: unknown }).code ?? '').startsWith('SQLITE_CONSTRAINT')) {
+	// libSQL `SQLITE_CONSTRAINT*` or Postgres SQLSTATE class 23 (integrity constraints).
+	const dbCode = String((err as { code?: unknown }).code ?? '');
+	if (dbCode.startsWith('SQLITE_CONSTRAINT') || /^23\d{3}$/.test(dbCode)) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
 	return c.json({ error: 'internal' }, 500);

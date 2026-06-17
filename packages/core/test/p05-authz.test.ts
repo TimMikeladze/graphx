@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import { AuthzError, authorize, type Principal, resolveProjectDb } from '../src/authz.ts';
 import type { DbClient } from '../src/dialect.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, tableExistsSql } from './harness.ts';
 import {
 	addMembership,
 	createProject,
@@ -109,9 +109,7 @@ test('P0.5: resolveProjectDb returns {namespace, client} and never a token', asy
 	expect('token' in out).toBe(false);
 	expect('authToken' in out).toBe(false);
 	// the returned client has the project schema present (init ran)
-	const r = await out.client.execute(
-		"SELECT name FROM sqlite_master WHERE type='table' AND name='node_versions'",
-	);
+	const r = await out.client.execute(tableExistsSql(out.client, 'node_versions'));
 	expect(r.rows.length).toBe(1);
 	cleanupNamespace(s.nsA);
 	s.control.close();
@@ -145,10 +143,8 @@ test('P0.5 M9: concurrent first-touch inits the namespace only once', async () =
 	// all resolve to the same cached client (one DB); init() DDL ran exactly once
 	for (const r of results) expect(r.client).toBe(client);
 	expect(ddlRuns).toBe(1);
-	const r = await client.execute(
-		"SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name='node_versions'",
-	);
-	expect(Number(r.rows[0]!.n)).toBe(1);
+	const r = await client.execute(tableExistsSql(client, 'node_versions'));
+	expect(r.rows.length).toBe(1);
 	cleanupNamespace(s.nsA);
 	s.control.close();
 });

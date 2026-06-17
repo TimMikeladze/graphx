@@ -1,4 +1,6 @@
+import process from 'node:process';
 import { Pool, type PoolClient, type QueryResult } from 'pg';
+import { type DbConfig, registerPgDriver } from './db.ts';
 import type {
 	DbClient,
 	DbTransaction,
@@ -213,3 +215,20 @@ export class PgClient implements DbClient {
 export function createPgClient(opts: PgClientOptions): PgClient {
 	return new PgClient(opts);
 }
+
+/**
+ * Register the Postgres backend with {@link getDb} as a side effect of importing this
+ * module (the `core/pg` subpath). Schema-per-tenant: `getDb(namespace)` maps the
+ * namespace to a PG schema, lazily created. Connection comes from `cfg.connectionString`
+ * or the `GRAPHX_PG_URL` env. The `vector` extension is expected to exist in `public`.
+ */
+registerPgDriver(
+	(namespace: string, cfg: DbConfig): DbClient =>
+		new PgClient({
+			connectionString: cfg.connectionString ?? process.env.GRAPHX_PG_URL ?? '',
+			schema: namespace,
+			ensureSchema: true,
+			...(cfg.ssl !== undefined ? { ssl: cfg.ssl } : {}),
+			...(cfg.poolMax !== undefined ? { max: cfg.poolMax } : {}),
+		}),
+);

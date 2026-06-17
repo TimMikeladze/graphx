@@ -304,6 +304,21 @@ ORDER BY rank
 LIMIT ?`;
 }
 
+/**
+ * Build an idempotent INSERT. libSQL uses the `INSERT OR IGNORE` prefix; Postgres appends
+ * `ON CONFLICT DO NOTHING`. `values` is the full VALUES clause body, e.g. `(?)` or `(?,?,?)`.
+ */
+export function insertOrIgnore(
+	dialect: Dialect,
+	table: string,
+	columns: string,
+	values: string,
+): string {
+	return dialect === 'postgres'
+		? `INSERT INTO ${table} (${columns}) VALUES ${values} ON CONFLICT DO NOTHING`
+		: `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+}
+
 /** Expand a JSON-array string param into a single `id` column of rows. libSQL `json_each`, PG `jsonb_array_elements_text`. */
 export function jsonArrayRows(dialect: Dialect): string {
 	return dialect === 'postgres'

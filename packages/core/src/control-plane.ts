@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id),
   name TEXT NOT NULL, db_namespace TEXT NOT NULL UNIQUE);
 CREATE TABLE IF NOT EXISTS api_keys (
-  hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, scopes TEXT NOT NULL, created_at INTEGER);
+  hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, scopes TEXT NOT NULL, created_at BIGINT);
 `;
 
 /**

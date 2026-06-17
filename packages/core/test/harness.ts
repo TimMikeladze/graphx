@@ -3,7 +3,7 @@ import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { ulid } from 'ulidx';
 import { type DbClient, dialectOf } from '../src/dialect.ts';
-import { embExtract, embFreshExpr, jsonField } from '../src/dialect-sql.ts';
+import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../src/dialect-sql.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -61,9 +61,33 @@ export function jsonFieldSql(client: DbClient, col: string, key: string): string
 	return jsonField(dialectOf(client), col, key);
 }
 
+/** Query that returns one row iff `table` exists in the client's schema (sqlite_master / information_schema). */
+export function tableExistsSql(client: DbClient, table: string): string {
+	return dialectOf(client) === 'postgres'
+		? `SELECT table_name AS name FROM information_schema.tables WHERE table_name = '${table}' AND table_schema = current_schema()`
+		: `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`;
+}
+
+/** Dialect-correct idempotent INSERT for raw-SQL fixtures (libSQL OR IGNORE / PG ON CONFLICT). */
+export function insertOrIgnoreSql(
+	client: DbClient,
+	table: string,
+	columns: string,
+	values: string,
+): string {
+	return insertOrIgnore(dialectOf(client), table, columns, values);
+}
+
 /** Postgres test connection string; override via env for CI / a different host. */
 const PG_URL =
 	process.env.GRAPHX_TEST_PG_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5455/graphx_test';
+
+// Importing the harness under the postgres driver wires getDb() (multi-tenant project DBs)
+// to the same Postgres — schema-per-tenant — and registers the pg adapter (via the pg.ts import).
+if (DRIVER === 'postgres') {
+	process.env.GRAPHX_DB_DRIVER = 'postgres';
+	process.env.GRAPHX_PG_URL = PG_URL;
+}
 
 /** Provision a fresh, isolated test database + its teardown. */
 export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
