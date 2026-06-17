@@ -181,14 +181,25 @@ function toKindSet(spec: string | readonly string[] | undefined): Set<string> | 
  */
 const WRITE_MAX_RETRIES = 50;
 
-/** `SQLITE_BUSY`/`SQLITE_LOCKED` — transient write contention; safe to roll back + retry. */
+/**
+ * Transient write contention — safe to roll back + retry. libSQL: `SQLITE_BUSY`/`LOCKED`.
+ * Postgres: SQLSTATE 40001 (serialization_failure, raised by SERIALIZABLE conflicts),
+ * 40P01 (deadlock_detected), 55P03 (lock_not_available).
+ */
 function isRetryableContention(e: unknown): boolean {
 	const code = (e as { code?: unknown } | null)?.code;
-	if (code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT' || code === 'SQLITE_LOCKED') {
+	if (
+		code === 'SQLITE_BUSY' ||
+		code === 'SQLITE_BUSY_SNAPSHOT' ||
+		code === 'SQLITE_LOCKED' ||
+		code === '40001' ||
+		code === '40P01' ||
+		code === '55P03'
+	) {
 		return true;
 	}
 	const msg = String((e as { message?: unknown } | null)?.message ?? '');
-	return /database (?:table )?is locked|SQLITE_BUSY/i.test(msg);
+	return /database (?:table )?is locked|SQLITE_BUSY|could not serialize|deadlock detected/i.test(msg);
 }
 
 /** Full-jitter exponential backoff (capped) between contended write attempts. */

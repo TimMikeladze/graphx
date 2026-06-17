@@ -1,5 +1,6 @@
 import { ulid } from 'ulidx';
-import { type DbClient, FOREVER, type Graph, type GraphSchema } from '../../core/src/index.ts';
+import { insertOrIgnore, jsonField } from '../../core/src/dialect-sql.ts';
+import { type DbClient, dialectOf, FOREVER, type Graph, type GraphSchema } from '../../core/src/index.ts';
 import type { Tuple } from './types.ts';
 import { typeOf } from './types.ts';
 
@@ -10,11 +11,12 @@ import { typeOf } from './types.ts';
  */
 export async function ensureObject(raw: DbClient, ref: string): Promise<void> {
 	const kind = typeOf(ref);
-	// Idempotent: the NOT EXISTS guard runs inside the single write batch; SQLite serializes
-	// writers, so a concurrent ensureObject for the same ref sees the committed row and skips.
+	const d = dialectOf(raw);
+	// Idempotent: the NOT EXISTS guard runs inside the single write batch (Postgres ON
+	// CONFLICT / SQLite OR IGNORE on the identity row; the version insert guards on NOT EXISTS).
 	await raw.batch(
 		[
-			{ sql: 'INSERT OR IGNORE INTO node_identity (id) VALUES (?)', args: [ref] },
+			{ sql: insertOrIgnore(d, 'node_identity', 'id', '(?)'), args: [ref] },
 			{
 				sql: `INSERT INTO node_versions (id, kind, props, valid_from)
 					SELECT ?, ?, '{}', ?
@@ -52,14 +54,14 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 	await ensureObject(g.raw, tuple.subject);
 
 	const id = ulid();
+	const d = dialectOf(g.raw);
 	const propsJson =
 		tuple.subjectRelation !== undefined
 			? JSON.stringify({ subjectRelation: tuple.subjectRelation })
 			: '{}';
+	const srField = jsonField(d, 'props', 'subjectRelation');
 	const srPred =
-		tuple.subjectRelation === undefined
-			? `json_extract(props, '$.subjectRelation') IS NULL`
-			: `json_extract(props, '$.subjectRelation') = ?`;
+		tuple.subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = tuple.subjectRelation === undefined ? [] : [tuple.subjectRelation];
 	const guard = `NOT EXISTS (SELECT 1 FROM edges WHERE src = ? AND rel = ? AND dst = ? AND ${srPred})`;
 
@@ -103,10 +105,8 @@ export async function deleteTuple(
 	dst: string,
 	subjectRelation?: string,
 ): Promise<void> {
-	const srPred =
-		subjectRelation === undefined
-			? `json_extract(props, '$.subjectRelation') IS NULL`
-			: `json_extract(props, '$.subjectRelation') = ?`;
+	const srField = jsonField(dialectOf(raw), 'props', 'subjectRelation');
+	const srPred = subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = subjectRelation === undefined ? [] : [subjectRelation];
 
 	const live = (

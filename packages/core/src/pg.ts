@@ -175,11 +175,16 @@ export class PgClient implements DbClient {
 		}
 	}
 
-	async transaction(_mode?: TransactionMode): Promise<DbTransaction> {
+	async transaction(mode?: TransactionMode): Promise<DbTransaction> {
 		await this.ready;
 		const client = await this.pool.connect();
 		try {
-			await client.query('BEGIN');
+			// SERIALIZABLE for write transactions: graphx's conditional-close reads
+			// (SELECT MAX(valid_from)) then writes, and relies on full writer serialization
+			// (libSQL's BEGIN IMMEDIATE). Under READ COMMITTED a racing writer would read a
+			// stale snapshot and close a successor at an inverted timestamp; SERIALIZABLE
+			// raises 40001 on the conflict instead, which the caller's retry envelope handles.
+			await client.query(mode === 'read' ? 'BEGIN' : 'BEGIN ISOLATION LEVEL SERIALIZABLE');
 		} catch (e) {
 			client.release();
 			throw e;

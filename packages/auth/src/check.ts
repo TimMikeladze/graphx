@@ -1,4 +1,5 @@
-import type { DbClient } from '../../core/src/index.ts';
+import { jsonField } from '../../core/src/dialect-sql.ts';
+import { type DbClient, dialectOf } from '../../core/src/index.ts';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 
@@ -18,10 +19,11 @@ export async function edgesInto(
 	object: string,
 	relation: string,
 ): Promise<Array<{ src: string; subjectRelation: string | null }>> {
+	const sr = jsonField(dialectOf(raw), 'props', 'subjectRelation');
 	const sql =
 		asOf === undefined
-			? `SELECT src, json_extract(props, '$.subjectRelation') AS sr FROM edges WHERE dst = ? AND rel = ?`
-			: `SELECT src, json_extract(props, '$.subjectRelation') AS sr FROM edge_versions
+			? `SELECT src, ${sr} AS sr FROM edges WHERE dst = ? AND rel = ?`
+			: `SELECT src, ${sr} AS sr FROM edge_versions
 				WHERE dst = ? AND rel = ? AND valid_from <= ? AND valid_to > ?`;
 	const args = asOf === undefined ? [object, relation] : [object, relation, asOf, asOf];
 	const r = await raw.execute({ sql, args });
