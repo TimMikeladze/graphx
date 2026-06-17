@@ -2,7 +2,8 @@ import { rmSync } from 'node:fs';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { ulid } from 'ulidx';
-import type { DbClient } from '../src/dialect.ts';
+import { type DbClient, dialectOf } from '../src/dialect.ts';
+import { embFreshExpr } from '../src/dialect-sql.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -37,6 +38,15 @@ export interface MakeTestDbOpts {
 
 /** Selected backend. `libsql` (default) preserves current behavior; `postgres` is later. */
 const DRIVER = process.env.GRAPHX_TEST_DRIVER ?? 'libsql';
+
+/**
+ * Dialect-correct embedding value expression for raw-SQL test fixtures that bind a JSON
+ * embedding (e.g. `INSERT ... VALUES (..., ${embSql(client)}, ...)`). libSQL → `vector(?)`,
+ * Postgres → `?::vector`.
+ */
+export function embSql(client: DbClient): string {
+	return embFreshExpr(dialectOf(client));
+}
 
 /** Postgres test connection string; override via env for CI / a different host. */
 const PG_URL =

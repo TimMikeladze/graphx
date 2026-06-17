@@ -1,4 +1,5 @@
-import type { DbClient } from './dialect.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
+import { annSeedsAsOf, annSeedsLive } from './dialect-sql.ts';
 import { FOREVER } from './db.ts';
 import {
 	applyLimit,
@@ -104,6 +105,7 @@ export async function retrieve(
 	const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 	const qEmbJson = JSON.stringify(qEmb);
 	const limits = resolveLimits(opts.limits);
+	const d = dialectOf(raw);
 
 	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
 
@@ -121,20 +123,7 @@ export async function retrieve(
 		// Restrict seeds to ids that actually have a version valid at :t. Rank by the
 		// index rowid (proxy for ANN rank), dedup by id, truncate to k.
 		const sql = `
-WITH seeds AS (
-  SELECT live.id AS id, live.rk AS rk
-  FROM (
-    SELECT n.id AS id, MIN(v.id) AS rk
-    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-    JOIN node_versions n ON n.rowid = v.id
-    GROUP BY n.id
-  ) live
-  WHERE EXISTS (
-    SELECT 1 FROM node_versions h
-    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
-  )
-  ORDER BY rk
-  LIMIT ?
+WITH RECURSIVE seeds AS (${annSeedsAsOf(d)}
 ),
 adj AS (
   ${adjCte(direction, edgePred + relPredAdj)}
@@ -152,7 +141,7 @@ walk AS (
   JOIN node_versions n ON n.id = adj.b AND n.valid_from <= ? AND ? < n.valid_to
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
+SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
 
 		// Param order = textual SQL order.
 		const args: (string | number)[] = [
@@ -196,10 +185,7 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
 	const relPredAdj = rels ? ` AND rel IN (${rels.map(() => '?').join(',')})` : '';
 
 	const sql = `
-WITH seeds AS (
-  SELECT n.id AS id
-  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-  JOIN node_versions n ON n.rowid = v.id
+WITH RECURSIVE seeds AS (${annSeedsLive(d)}
 ),
 adj AS (
   ${adjCte(direction, edgePredLive + relPredAdj)}
@@ -217,7 +203,7 @@ walk AS (
   JOIN node_versions n ON n.id = adj.b AND n.valid_to = ${FOREVER}
   WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
 )
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id ORDER BY depth`;
+SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
 
 	const args: (string | number)[] = [qEmbJson, k];
 	const adjSides = direction === 'both' ? 2 : 1;

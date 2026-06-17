@@ -172,6 +172,68 @@ export function embFreshExpr(dialect: Dialect): string {
 }
 
 /**
+ * Current-time ANN seed sub-SELECT (the body of `seeds AS ( … )`). Consumes 2 bound args:
+ * the query embedding (JSON-array string) and k. libSQL uses the partial-live
+ * `vector_top_k` index function joined by rowid; pgvector orders live rows by cosine
+ * distance (`emb <=> $1::vector`). Both yield the top-k live node ids by ANN rank.
+ */
+export function annSeedsLive(dialect: Dialect): string {
+	if (dialect === 'postgres') {
+		return `
+  SELECT id
+  FROM node_versions
+  WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+  ORDER BY emb <=> ?::vector
+  LIMIT ?`;
+	}
+	return `
+  SELECT n.id AS id
+  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+  JOIN node_versions n ON n.rowid = v.id`;
+}
+
+/**
+ * As-of-past ANN seed sub-SELECT (the body of `seeds AS ( … )`). Consumes 5 bound args:
+ * embedding, over-fetch k, t, t, final k. Over-fetches live ANN candidates, keeps the
+ * ids that have a version valid at :t, ranks them, truncates to k. libSQL ranks by the
+ * index rowid proxy (`MIN(v.id)`); pgvector ranks by real cosine distance.
+ */
+export function annSeedsAsOf(dialect: Dialect): string {
+	if (dialect === 'postgres') {
+		return `
+  SELECT live.id AS id, live.rk AS rk
+  FROM (
+    SELECT id, MIN(emb <=> ?::vector) AS rk
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+    GROUP BY id
+    ORDER BY rk
+    LIMIT ?
+  ) live
+  WHERE EXISTS (
+    SELECT 1 FROM node_versions h
+    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
+  )
+  ORDER BY rk
+  LIMIT ?`;
+	}
+	return `
+  SELECT live.id AS id, live.rk AS rk
+  FROM (
+    SELECT n.id AS id, MIN(v.id) AS rk
+    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+    JOIN node_versions n ON n.rowid = v.id
+    GROUP BY n.id
+  ) live
+  WHERE EXISTS (
+    SELECT 1 FROM node_versions h
+    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
+  )
+  ORDER BY rk
+  LIMIT ?`;
+}
+
+/**
  * Value expression for REBINDING an embedding read back from an existing row (carry-forward
  * on `updateNode`). libSQL rebinds the raw `F32_BLOB` bytes directly (`?`); pgvector reads
  * `emb` back as its text form `[1,2,3]`, so it re-casts with `?::vector`.

@@ -6,7 +6,7 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { Graph } from '../src/graph.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { embSql, makeTestDb } from './harness.ts';
 
 // P4 — vectors + GraphRAG retrieve (§7, D3/D5). ANN-seeded, cycle-safe temporal
 // walk. dim 4 so embeddings are cheap and the partial vector index is small.
@@ -242,12 +242,12 @@ test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal f
 	// v1: body 'red-old', live emb so the partial live index seeds it... but we close
 	// it below. The seed for past asOf must come from the live index over-fetch+filter.
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,vector(?),?,?)',
+		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [1, id, 'doc', 'red-old', '[1,0,0,0]', T1, T2],
 	});
 	// v2: body 'red-new', live (valid_to = FOREVER), same emb so it's in the live index.
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,vector(?),?,?)',
+		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [2, id, 'doc', 'red-new', '[1,0,0,0]', T2, FOREVER],
 	});
 
@@ -277,7 +277,7 @@ test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skip
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [b] });
 	// a is live with emb (seed), b is live (no emb needed)
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,vector(?),?,?)',
+		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [1, a, 'doc', 'red', '[1,0,0,0]', 100, FOREVER],
 	});
 	await client.execute({
