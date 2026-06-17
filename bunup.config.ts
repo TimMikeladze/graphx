@@ -13,4 +13,8 @@ export default defineWorkspace([
 			entry: ['src/index.ts', 'src/pg.ts'],
 		},
 	},
+	{
+		name: 'ingest',
+		root: 'packages/ingest',
+	},
 ]);
