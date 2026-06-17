@@ -80,3 +80,35 @@ test('ingestDir: a file with no resolvable kind is skipped', async () => {
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
+
+test('ingestDir: links become edges; removing a link closes the edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\nlinks to [[b]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	const r1 = await ingestDir({ dir, graph: g, embed });
+	expect(r1.edgesAdded).toBe(1);
+	const e1 = await client.execute('SELECT src, dst FROM edges');
+	expect(e1.rows.length).toBe(1);
+
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\n---\nno more link');
+	const r2 = await ingestDir({ dir, graph: g, embed });
+	expect(r2.edgesClosed).toBe(1);
+	const e2 = await client.execute('SELECT src, dst FROM edges');
+	expect(e2.rows.length).toBe(0);
+
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a link to a missing file is skipped, not fatal', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\nkind: note\n---\nbroken [[ghost]]' });
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(1);
+	expect(res.edgesAdded).toBe(0);
+	expect(res.skipped).toContainEqual({ key: 'a.md', reason: 'unresolved link: ghost' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
