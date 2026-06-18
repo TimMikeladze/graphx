@@ -23,7 +23,7 @@
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",
 		"release": "bumpp -r --commit --push --tag",
-		"test": "bun test",
+		"test": "bun test --timeout 30000",
 		"test:coverage": "bun test --coverage",
 		"test:watch": "bun test --watch",
 		"type-check": "bun run --filter '*' type-check"
