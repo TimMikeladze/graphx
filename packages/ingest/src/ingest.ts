@@ -237,7 +237,7 @@ export async function ingestDir<S extends GraphSchema>(
 ): Promise<IngestResult> {
 	const g = opts.graph as unknown as LooseGraph;
 	const fileSource = opts.fileSource ?? (opts.dir != null ? fsSource(opts.dir, opts.include) : undefined);
-	if (!fileSource) throw new Error('ingestDir: requires `dir` or `source`');
+	if (!fileSource) throw new Error('ingestDir: requires `dir` or `fileSource`');
 	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
 	const idField = opts.idField ?? 'id';
 	const edgeFields = opts.edgeFields ?? {};

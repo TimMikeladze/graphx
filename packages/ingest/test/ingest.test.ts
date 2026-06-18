@@ -518,6 +518,6 @@ test('ingestDir: accepts a custom in-memory Source (no dir)', async () => {
 test('ingestDir: throws when neither dir nor fileSource is provided', async () => {
 	const { g, client } = await graph();
 	// @ts-expect-error intentionally omitting required dir/fileSource
-	await expect(ingestDir({ graph: g, embed })).rejects.toThrow('ingestDir: requires `dir` or `source`');
+	await expect(ingestDir({ graph: g, embed })).rejects.toThrow('ingestDir: requires `dir` or `fileSource`');
 	client.close();
 });

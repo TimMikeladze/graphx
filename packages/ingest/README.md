@@ -41,7 +41,9 @@ const result = await ingestDir({
 - Give a file a frontmatter `id` (the `idField` option, default `id`) for rename-stable
   identity: renaming the file keeps the same node, history, and edges. Without an `id`, a
   rename is delete+add (the old node is pruned only when `prune` is set).
-- Local filesystem only (no S3 source yet).
+- Filesystem by default (`dir`); for other backends pass a `fileSource` implementing
+  `Source { list(); read(key) }`. An optional S3 reader ships at `ingest/s3` (`s3Source`,
+  gated behind an optional `@aws-sdk/client-s3` peer — not pulled in unless you import it).
 - Wikilinks resolve by unique basename; a collision is disambiguated by a folder-qualified
   link (`[[dir/Note]]`) or a same-folder match, else reported as `ambiguous-link` (with the
   candidates) in `result.skipped` rather than silently guessed.
