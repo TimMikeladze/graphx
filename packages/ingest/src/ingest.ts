@@ -29,6 +29,7 @@ interface LooseGraph {
 	): Promise<void>;
 	addEdge(e: { rel: string; src: string; dst: string }): Promise<{ id: string }>;
 	deleteEdge(id: string): Promise<void>;
+	deleteNode(id: string): Promise<void>;
 	raw: {
 		execute(stmt: {
 			sql: string;
@@ -54,6 +55,15 @@ async function liveOutEdges(
 ): Promise<Array<{ id: string; rel: string; dst: string }>> {
 	const r = await g.raw.execute({ sql: 'SELECT id, rel, dst FROM edges WHERE src = ?', args: [srcId] });
 	return r.rows.map((row) => ({ id: String(row.id), rel: String(row.rel), dst: String(row.dst) }));
+}
+
+/** Live edge ids incident to a node (either endpoint), via the `edges` view. */
+async function liveIncidentEdges(g: LooseGraph, nodeId: string): Promise<string[]> {
+	const r = await g.raw.execute({
+		sql: 'SELECT id FROM edges WHERE src = ? OR dst = ?',
+		args: [nodeId, nodeId],
+	});
+	return r.rows.map((row) => String(row.id));
 }
 
 const REL = 'links_to';
@@ -103,6 +113,7 @@ export async function ingestDir<S extends GraphSchema>(
 		added: 0,
 		updated: 0,
 		unchanged: 0,
+		deleted: 0,
 		edgesAdded: 0,
 		edgesClosed: 0,
 		skipped: [],
@@ -191,6 +202,22 @@ export async function ingestDir<S extends GraphSchema>(
 				await g.deleteEdge(e.id);
 				result.edgesClosed++;
 			}
+		}
+	}
+
+	// Prune (opt-in): retract this source's nodes whose file vanished from disk. deleteNode
+	// does not cascade (fork A), so close the node's incident edges first — including inbound
+	// edges from files unchanged this run, which the edge pass above never revisits.
+	if (opts.prune) {
+		const discovered = new Set(keys);
+		for (const [key, entry] of live) {
+			if (discovered.has(key)) continue;
+			for (const edgeId of await liveIncidentEdges(g, entry.id)) {
+				await g.deleteEdge(edgeId);
+				result.edgesClosed++;
+			}
+			await g.deleteNode(entry.id);
+			result.deleted++;
 		}
 	}
 

@@ -36,7 +36,8 @@ const result = await ingestDir({
 
 ## v1 limitations
 
-- Deleted files leave stale live nodes (graphx has no public `deleteNode` yet).
+- Deleted files leave stale live nodes unless you pass `prune: true`, which retracts this
+  source's nodes (and their incident edges) for files removed from disk.
 - A rename creates a new node and orphans the old one.
 - Local filesystem only (no S3 source yet).
 - Links resolve only when the basename is unambiguous; otherwise the link is skipped.

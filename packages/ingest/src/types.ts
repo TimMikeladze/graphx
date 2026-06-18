@@ -31,12 +31,21 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * Default: `'default'`.
 	 */
 	source?: string;
+	/**
+	 * Retract nodes for files that vanished from the source since the last run (live-map
+	 * entries with no matching discovered file), plus their incident edges. Off by default —
+	 * pointing ingest at a partial or empty directory would otherwise silently retract the
+	 * whole source. The pruned set is scoped to this `source`.
+	 */
+	prune?: boolean;
 }
 
 export interface IngestResult {
 	added: number;
 	updated: number;
 	unchanged: number;
+	/** Nodes retracted because their file vanished (only when `prune` is set). */
+	deleted: number;
 	edgesAdded: number;
 	edgesClosed: number;
 	/** Files/links skipped, with a reason (no kind, schema reject, unresolved link). */

@@ -102,6 +102,61 @@ test('ingestDir: links become edges; removing a link closes the edge', async () 
 	client.close();
 });
 
+test('ingestDir: deleting a file does NOT prune by default (deleted=0, node stays live)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\nalpha',
+		'b.md': '---\nkind: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	await rm(join(dir, 'b.md'));
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.deleted).toBe(0);
+	const c = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(c.rows[0]!.c)).toBe(2); // b still live (no prune)
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: prune closes nodes for removed files and their incident edges', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\nlinks to [[b]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	const e0 = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(e0.rows[0]!.c)).toBe(1); // a -> b
+
+	await rm(join(dir, 'b.md')); // a.md is unchanged, so a is NOT touched this run
+	const res = await ingestDir({ dir, graph: g, embed, prune: true });
+	expect(res.deleted).toBe(1);
+	const live = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(live.rows[0]!.c)).toBe(1); // b dropped from the live view
+	// the inbound edge a->b is closed by the prune cascade (no dangling edge into a gone node)
+	const e1 = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(e1.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: prune is scoped per source (one source does not prune another)', async () => {
+	const { g, client } = await graph();
+	const dirA = await vault({ 'a.md': '---\nkind: note\n---\nA' });
+	const dirB = await vault({ 'b.md': '---\nkind: note\n---\nB' });
+	await ingestDir({ dir: dirA, graph: g, embed, source: 'A' });
+	await ingestDir({ dir: dirB, graph: g, embed, source: 'B' });
+
+	await rm(join(dirA, 'a.md')); // source A is now empty on disk
+	const res = await ingestDir({ dir: dirA, graph: g, embed, source: 'A', prune: true });
+	expect(res.deleted).toBe(1);
+	const live = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(live.rows[0]!.c)).toBe(1); // source B's node survives
+	await rm(dirA, { recursive: true, force: true });
+	await rm(dirB, { recursive: true, force: true });
+	client.close();
+});
+
 test('ingestDir: a link to a missing file is skipped, not fatal', async () => {
 	const { g, client } = await graph();
 	const dir = await vault({ 'a.md': '---\nkind: note\n---\nbroken [[ghost]]' });
