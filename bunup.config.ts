@@ -10,7 +10,7 @@ export default defineWorkspace([
 		// Postgres driver with `getDb` (side effect). It stays a separate entry so the
 		// optional `pg` peer is only pulled in by consumers that opt into Postgres.
 		config: {
-			entry: ['src/index.ts', 'src/pg.ts'],
+			entry: ['src/index.ts', 'src/pg.ts', 'src/blob.ts'],
 		},
 	},
 	{
