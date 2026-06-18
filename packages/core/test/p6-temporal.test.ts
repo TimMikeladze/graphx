@@ -263,6 +263,46 @@ test('P6: deleteEdge on missing live edge throws', async () => {
 	client.close();
 });
 
+test('P6: deleteNode closes the live node (no successor); view drops it; history/asOf still return it', async () => {
+	const { client, g } = await freshGraph();
+	const n = await g.addNode({ kind: 'device', props: { type: 'doomed' } });
+
+	// capture a t within the original version's interval BEFORE the delete
+	const beforeRows = await versionRows(client, n.id);
+	const original = beforeRows[0]!;
+	const beforeDelete = Number(original.valid_from);
+
+	await g.deleteNode(n.id);
+
+	// exactly ONE version row (the now-closed one); NO successor — unlike updateNode's 2.
+	const rows = await versionRows(client, n.id);
+	expect(rows.length).toBe(1);
+	expect(Number(rows[0]!.valid_to)).not.toBe(FOREVER);
+
+	// the `nodes` live view drops it
+	expect(await g.getNode(n.id)).toBeNull();
+
+	// history still sees the closed version (reads node_versions directly, ignores valid_to)
+	const h = await history(client, n.id);
+	expect(h.length).toBe(1);
+
+	// as-of a t inside the original interval STILL returns the props — the close preserved
+	// the past rather than destroying it.
+	const pred = asOfPredicate('nv');
+	const past = await client.execute({
+		sql: `SELECT props FROM node_versions nv WHERE nv.id = ? AND ${pred}`,
+		args: [n.id, beforeDelete, beforeDelete],
+	});
+	expect(JSON.parse(String(past.rows[0]!.props))).toEqual({ type: 'doomed', crit: 1 });
+	client.close();
+});
+
+test('P6: deleteNode on missing live version throws', async () => {
+	const { client, g } = await freshGraph();
+	await expect(g.deleteNode('01ARZ3NDEKTSV4RRFFQ69G5FZZ')).rejects.toThrow();
+	client.close();
+});
+
 test('P6 (§19.1): consecutive updates yield half-open, non-overlapping intervals', async () => {
 	const { client, g } = await freshGraph();
 	const n = await g.addNode({ kind: 'device', props: { type: 'a' } });

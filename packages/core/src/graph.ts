@@ -764,6 +764,45 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
+	 * Retract a node via the §19.1 conditional-close protocol ({@link runConditionalClose}):
+	 * close the live version (`valid_to = now`) with NO successor — the bitemporal mirror of
+	 * {@link deleteEdge}. The `nodes` view drops it (`getNode` returns null) while
+	 * `history`/as-of reads still return the closed version. Conditional on
+	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we retry
+	 * rather than racing.
+	 *
+	 * Scope: closes only the node version. The node's still-live incident edges are NOT
+	 * cascade-closed — node-identity rows are never deleted, so the edge FKs stay valid, but
+	 * the `edges` view and {@link neighbors} can still surface edges into a node `getNode` now
+	 * returns null for. Callers needing referential cleanup retract those edges first (ingest
+	 * reconciles outbound edges via {@link deleteEdge}).
+	 */
+	async deleteNode(id: string): Promise<void> {
+		await this.runConditionalClose('deleteNode', async (tx, rawNow) => {
+			const cur = (
+				await tx.execute({
+					sql: 'SELECT valid_from FROM node_versions WHERE id = ? AND valid_to = ?',
+					args: [id, FOREVER],
+				})
+			).rows[0];
+			if (!cur) throw new Error(`deleteNode: no live version for '${id}'`);
+
+			// M6 data-derived bump: close strictly after the node's valid_from (no zero-width).
+			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
+			const closed = await tx.execute({
+				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
+				args: [now, id, FOREVER],
+			});
+			if (closed.rowsAffected !== 1) return 'superseded';
+			await tx.commit();
+			return 'committed';
+		});
+		// A retracted id no longer resolves to a live kind; drop any cached entry so a later
+		// endpoint-kind check (or re-add of the same id) re-queries instead of trusting a stale kind.
+		this.kindCache.delete(id);
+	}
+
+	/**
 	 * Delete an edge via the §19.1 conditional-close protocol ({@link runConditionalClose}):
 	 * close the live version (`valid_to = now`) with NO successor. Conditional on
 	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we retry
