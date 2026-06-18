@@ -17,6 +17,11 @@ const SCHEMA = defineGraphSchema({
 		links_to: { from: 'note', to: 'note' },
 		cites: { from: 'note', to: 'note' },
 		related: { from: 'note', to: 'note', props: z.object({ note: z.string() }).partial() },
+		tagged: {
+			from: 'note',
+			to: 'note',
+			props: z.object({ meta: z.object({ score: z.number() }).partial() }).partial(),
+		},
 	},
 });
 
@@ -244,6 +249,31 @@ test('ingestDir: edgeFields object form with weight/props; re-ingest with drift 
 	const e2 = await client.execute('SELECT weight FROM edges');
 	expect(e2.rows.length).toBe(1);
 	expect(Number(e2.rows[0]!.weight)).toBeCloseTo(0.9);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: drift in NESTED edge props is detected and updates the edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\ntagged:\n  target: "[[b]]"\n  props:\n    meta:\n      score: 1\n---\nbody',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed, edgeFields: { tagged: 'tagged' } });
+	const e1 = await client.execute('SELECT props FROM edges');
+	expect(JSON.parse(String(e1.rows[0]!.props)).meta.score).toBe(1);
+
+	// only a NESTED value changes — a naive top-level-only key compare would miss this drift
+	await writeFile(
+		join(dir, 'a.md'),
+		'---\nkind: note\ntagged:\n  target: "[[b]]"\n  props:\n    meta:\n      score: 2\n---\nbody',
+	);
+	const r2 = await ingestDir({ dir, graph: g, embed, edgeFields: { tagged: 'tagged' } });
+	expect(r2.edgesClosed).toBeGreaterThanOrEqual(1);
+	expect(r2.edgesAdded).toBeGreaterThanOrEqual(1);
+	const e2 = await client.execute('SELECT props FROM edges');
+	expect(e2.rows.length).toBe(1);
+	expect(JSON.parse(String(e2.rows[0]!.props)).meta.score).toBe(2);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });

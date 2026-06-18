@@ -159,12 +159,28 @@ function normalizeFmValue(v: unknown): FmEdge | null {
 	return null;
 }
 
-/** Stable JSON stringify with sorted keys for deep-equality comparison of props. */
-function stableJson(v: Record<string, unknown>): string {
-	return JSON.stringify(v, Object.keys(v).sort());
+/**
+ * Canonical JSON with recursively sorted object keys, for deep-equality of props. (A plain
+ * `JSON.stringify(v, Object.keys(v).sort())` is WRONG: the array arg is a replacer applied at
+ * EVERY level, so nested keys absent from the top-level list are dropped.)
+ */
+function stableJson(v: unknown): string {
+	if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
+	if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+	const obj = v as Record<string, unknown>;
+	const body = Object.keys(obj)
+		.sort()
+		.map((k) => `${JSON.stringify(k)}:${stableJson(obj[k])}`)
+		.join(',');
+	return `{${body}}`;
 }
 
-/** True if the desired edge has drifted from the live edge. */
+/**
+ * True if the desired edge has drifted from the live edge. Note: `desired.props` is the RAW
+ * frontmatter value, while `live.props` was parsed by the rel's props schema — a schema that
+ * applies defaults/transforms can therefore report drift every run (extra edge versions; the
+ * live edge stays correct). Acceptable for now.
+ */
 function hasDrifted(
 	desired: DesiredEdge,
 	live: { weight: number; props: Record<string, unknown> },
