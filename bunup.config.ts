@@ -23,4 +23,13 @@ export default defineWorkspace([
 			entry: ['src/index.ts', 'src/s3.ts'],
 		},
 	},
+	{
+		name: 'cli',
+		root: 'packages/cli',
+		// The shebang makes dist/cli.js directly executable as a bin.
+		config: {
+			entry: ['src/cli.ts'],
+			banner: '#!/usr/bin/env bun',
+		},
+	},
 ]);

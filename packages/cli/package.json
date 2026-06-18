@@ -1,0 +1,39 @@
+{
+	"name": "graphx-cli",
+	"version": "0.1.0",
+	"description": "graphx CLI — ingest a vault into a graphx graph",
+	"license": "MIT",
+	"type": "module",
+	"module": "./dist/cli.js",
+	"types": "./dist/cli.d.ts",
+	"bin": {
+		"graphx": "./dist/cli.js"
+	},
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/cli.d.ts",
+				"default": "./dist/cli.js"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"type-check": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"core": "workspace:*",
+		"ingest": "workspace:*",
+		"typescript": ">=4.5.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@types/node": "^25.9.1",
+		"core": "workspace:*",
+		"ingest": "workspace:*"
+	}
+}
