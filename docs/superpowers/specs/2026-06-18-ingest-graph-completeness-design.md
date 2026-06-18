@@ -1,6 +1,7 @@
 # Ingest + Graph Completeness — Design / Roadmap
 
-> Status: approved (forks resolved 2026-06-18). Branch: `feat/ingest-graph-completeness`
+> Status: COMPLETE (all 11 clusters shipped + final review READY, 2026-06-18).
+> Final: libSQL 449/0, Postgres 431 pass/18 skip/0 fail. Branch: `feat/ingest-graph-completeness`
 > (off `feat/file-ingest`, which carries the Postgres dual-backend infra + `packages/ingest`).
 > Scope: close all 16 gaps surfaced after the file-ingest v1, plus the full P9 blob layer.
 
