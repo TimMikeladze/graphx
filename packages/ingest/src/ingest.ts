@@ -27,7 +27,13 @@ interface LooseGraph {
 			emb?: number[];
 		},
 	): Promise<void>;
-	addEdge(e: { rel: string; src: string; dst: string }): Promise<{ id: string }>;
+	addEdge(e: {
+		rel: string;
+		src: string;
+		dst: string;
+		weight?: number;
+		props?: Record<string, unknown>;
+	}): Promise<{ id: string }>;
 	deleteEdge(id: string): Promise<void>;
 	deleteNode(id: string): Promise<void>;
 	raw: {
@@ -48,13 +54,28 @@ interface LiveEntry {
 	hash: string;
 }
 
-/** Live out-edges of a node, via the `edges` view. */
+/** A desired edge entry: rel+dst keyed, with optional weight/props for drift detection. */
+interface DesiredEdge {
+	weight?: number;
+	props?: Record<string, unknown>;
+}
+
+/** Live out-edges of a node, via the `edges` view — includes weight and props for drift. */
 async function liveOutEdges(
 	g: LooseGraph,
 	srcId: string,
-): Promise<Array<{ id: string; rel: string; dst: string }>> {
-	const r = await g.raw.execute({ sql: 'SELECT id, rel, dst FROM edges WHERE src = ?', args: [srcId] });
-	return r.rows.map((row) => ({ id: String(row.id), rel: String(row.rel), dst: String(row.dst) }));
+): Promise<Array<{ id: string; rel: string; dst: string; weight: number; props: Record<string, unknown> }>> {
+	const r = await g.raw.execute({
+		sql: 'SELECT id, rel, dst, weight, props FROM edges WHERE src = ?',
+		args: [srcId],
+	});
+	return r.rows.map((row) => ({
+		id: String(row.id),
+		rel: String(row.rel),
+		dst: String(row.dst),
+		weight: row.weight == null ? 1.0 : Number(row.weight),
+		props: row.props == null ? {} : (typeof row.props === 'string' ? JSON.parse(row.props) : (row.props as Record<string, unknown>)),
+	}));
 }
 
 /** Live edge ids incident to a node (either endpoint), via the `edges` view. */
@@ -65,8 +86,6 @@ async function liveIncidentEdges(g: LooseGraph, nodeId: string): Promise<string[
 	});
 	return r.rows.map((row) => String(row.id));
 }
-
-const REL = 'links_to';
 
 /** Read the live identity map (key → node id + hash) from the `nodes` view via raw SQL. */
 async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string, LiveEntry>> {
@@ -97,10 +116,63 @@ function resolveKind(file: ParsedFile, kindOf?: (f: ParsedFile) => string | unde
 	return slash > 0 ? file.key.slice(0, slash) : undefined;
 }
 
-/** Frontmatter minus the reserved `kind` key. */
-function toProps(frontmatter: Record<string, unknown>): Record<string, unknown> {
-	const { kind: _kind, ...rest } = frontmatter;
-	return rest;
+/** Frontmatter minus reserved keys: `kind` and any configured `edgeFields` keys. */
+function toProps(
+	frontmatter: Record<string, unknown>,
+	edgeFieldKeys: Set<string>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = {};
+	for (const [k, v] of Object.entries(frontmatter)) {
+		if (k === 'kind') continue;
+		if (edgeFieldKeys.has(k)) continue;
+		out[k] = v;
+	}
+	return out;
+}
+
+/** Strip `[[...]]` wrapper and alias from a wikilink string, returning bare target. */
+function stripWikilink(raw: string): string {
+	const m = raw.match(/^\[\[([^\]|]+)(?:\|[^\]]*)?\]\]$/);
+	return m ? m[1]!.trim() : raw.trim();
+}
+
+/** Normalize a single frontmatter edge value to `{ target, weight?, props? }`. */
+interface FmEdge {
+	target: string;
+	weight?: number;
+	props?: Record<string, unknown>;
+}
+
+function normalizeFmValue(v: unknown): FmEdge | null {
+	if (typeof v === 'string') {
+		return { target: stripWikilink(v) };
+	}
+	if (v && typeof v === 'object' && !Array.isArray(v)) {
+		const obj = v as Record<string, unknown>;
+		if (typeof obj.target !== 'string') return null;
+		const fe: FmEdge = { target: stripWikilink(obj.target) };
+		if (typeof obj.weight === 'number') fe.weight = obj.weight;
+		if (obj.props && typeof obj.props === 'object' && !Array.isArray(obj.props))
+			fe.props = obj.props as Record<string, unknown>;
+		return fe;
+	}
+	return null;
+}
+
+/** Stable JSON stringify with sorted keys for deep-equality comparison of props. */
+function stableJson(v: Record<string, unknown>): string {
+	return JSON.stringify(v, Object.keys(v).sort());
+}
+
+/** True if the desired edge has drifted from the live edge. */
+function hasDrifted(
+	desired: DesiredEdge,
+	live: { weight: number; props: Record<string, unknown> },
+): boolean {
+	const desiredWeight = desired.weight ?? 1.0;
+	const desiredProps = desired.props ?? {};
+	if (desiredWeight !== live.weight) return true;
+	return stableJson(desiredProps) !== stableJson(live.props);
 }
 
 export async function ingestDir<S extends GraphSchema>(
@@ -109,6 +181,8 @@ export async function ingestDir<S extends GraphSchema>(
 	const g = opts.graph as unknown as LooseGraph;
 	const include = opts.include ?? DEFAULT_INCLUDE;
 	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
+	const edgeFields = opts.edgeFields ?? {};
+	const edgeFieldKeys = new Set(Object.keys(edgeFields));
 	const result: IngestResult = {
 		added: 0,
 		updated: 0,
@@ -136,7 +210,7 @@ export async function ingestDir<S extends GraphSchema>(
 			result.skipped.push({ key: file.key, reason: 'no kind' });
 			continue;
 		}
-		const props = toProps(file.frontmatter);
+		const props = toProps(file.frontmatter, edgeFieldKeys);
 		const prior = live.get(file.key);
 		try {
 			if (!prior) {
@@ -175,7 +249,11 @@ export async function ingestDir<S extends GraphSchema>(
 	for (const file of touched) {
 		const srcId = keyToId.get(file.key);
 		if (!srcId) continue;
-		const desired = new Set<string>();
+
+		// Build desired edge map: (rel, dst) → { weight?, props? }
+		const desired = new Map<string, DesiredEdge>();
+
+		// Body links (typed via Dataview inline fields, or plain links_to)
 		for (const link of extractLinks(file.body)) {
 			const targetKey = resolveLink(link, file.key, index);
 			if (!targetKey) {
@@ -183,23 +261,81 @@ export async function ingestDir<S extends GraphSchema>(
 				continue;
 			}
 			const dst = keyToId.get(targetKey);
-			if (dst && dst !== srcId) desired.add(dst);
+			if (!dst || dst === srcId) continue;
+			const rel = link.rel ?? 'links_to';
+			desired.set(`${rel}\0${dst}`, {});
 		}
+
+		// Frontmatter edge fields
+		for (const [field, rel] of Object.entries(edgeFields)) {
+			const raw = file.frontmatter[field];
+			if (raw == null) continue;
+			const values: unknown[] = Array.isArray(raw) ? raw : [raw];
+			for (const v of values) {
+				const fe = normalizeFmValue(v);
+				if (!fe) {
+					result.skipped.push({
+						key: file.key,
+						reason: `edgeField '${field}': cannot parse value`,
+					});
+					continue;
+				}
+				// Resolve target as a wiki link (bare string treated as wiki target)
+				const targetKey = resolveLink(
+					{ kind: 'wiki', target: fe.target },
+					file.key,
+					index,
+				);
+				if (!targetKey) {
+					result.skipped.push({
+						key: file.key,
+						reason: `unresolved link: ${fe.target}`,
+					});
+					continue;
+				}
+				const dst = keyToId.get(targetKey);
+				if (!dst || dst === srcId) continue;
+				const key = `${rel}\0${dst}`;
+				// Last write wins if same (rel, dst) appears multiple times
+				desired.set(key, { weight: fe.weight, props: fe.props });
+			}
+		}
+
+		// Reconcile: compare desired vs live out-edges
 		const existing = await liveOutEdges(g, srcId);
-		const have = new Set(existing.filter((e) => e.rel === REL).map((e) => e.dst));
-		for (const dst of desired) {
-			if (!have.has(dst)) {
+		const liveMap = new Map<string, typeof existing[number]>();
+		for (const e of existing) liveMap.set(`${e.rel}\0${e.dst}`, e);
+
+		// Add new edges and update drifted ones
+		for (const [key, desiredEdge] of desired) {
+			const [rel, dst] = key.split('\0') as [string, string];
+			const live2 = liveMap.get(key);
+			if (!live2) {
+				// new edge
 				try {
-					await g.addEdge({ rel: REL, src: srcId, dst });
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
+					result.edgesAdded++;
+				} catch (err) {
+					result.skipped.push({ key: file.key, reason: (err as Error).message });
+				}
+			} else if (hasDrifted(desiredEdge, live2)) {
+				// drift: delete old, add new
+				await g.deleteEdge(live2.id);
+				result.edgesClosed++;
+				try {
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push({ key: file.key, reason: (err as Error).message });
 				}
 			}
+			// else: matches live, nothing to do
 		}
-		for (const e of existing) {
-			if (e.rel === REL && !desired.has(e.dst)) {
-				await g.deleteEdge(e.id);
+
+		// Close edges that are no longer desired (ingest owns ALL out-edges of managed nodes)
+		for (const [key, liveEdge] of liveMap) {
+			if (!desired.has(key)) {
+				await g.deleteEdge(liveEdge.id);
 				result.edgesClosed++;
 			}
 		}

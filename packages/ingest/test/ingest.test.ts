@@ -13,7 +13,11 @@ import { ingestDir } from '../src/index.ts';
 
 const SCHEMA = defineGraphSchema({
 	nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
-	edges: { links_to: { from: 'note', to: 'note' } },
+	edges: {
+		links_to: { from: 'note', to: 'note' },
+		cites: { from: 'note', to: 'note' },
+		related: { from: 'note', to: 'note', props: z.object({ note: z.string() }).partial() },
+	},
 });
 
 const embed: EmbedFn = async () => [1, 0, 0, 0];
@@ -164,6 +168,115 @@ test('ingestDir: a link to a missing file is skipped, not fatal', async () => {
 	expect(res.added).toBe(1);
 	expect(res.edgesAdded).toBe(0);
 	expect(res.skipped).toContainEqual({ key: 'a.md', reason: 'unresolved link: ghost' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+// --- Edge expressiveness tests ---
+
+test('ingestDir: inline typed link [cites:: [[b]]] produces cites edge; plain [[b]] produces links_to', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\n[cites:: [[b]]] and [[b]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	const edges = await client.execute('SELECT rel FROM edges ORDER BY rel');
+	const rels = edges.rows.map((r) => String(r.rel)).sort();
+	expect(rels).toEqual(['cites', 'links_to']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: edgeFields frontmatter field becomes typed edge, field excluded from node props', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\nrelated: "[[b]]"\n---\nbody',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed, edgeFields: { related: 'related' } });
+	const edges = await client.execute('SELECT rel FROM edges');
+	expect(edges.rows.length).toBe(1);
+	expect(String(edges.rows[0]!.rel)).toBe('related');
+	// related field must NOT appear in stored node props
+	const nodes = await client.execute("SELECT props FROM nodes WHERE uri = 'ingest:default:a.md'");
+	const props = JSON.parse(String(nodes.rows[0]!.props));
+	expect(props).not.toHaveProperty('related');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: edgeFields array value becomes multiple edges', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\nrelated:\n  - "[[b]]"\n  - "[[c]]"\n---\nbody',
+		'b.md': '---\nkind: note\n---\nleaf',
+		'c.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed, edgeFields: { related: 'related' } });
+	const edges = await client.execute("SELECT rel FROM edges WHERE rel = 'related'");
+	expect(edges.rows.length).toBe(2);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: edgeFields object form with weight/props; re-ingest with drift updates edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\nrelated:\n  target: "[[b]]"\n  weight: 0.5\n  props:\n    note: x\n---\nbody',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed, edgeFields: { related: 'related' } });
+	const e1 = await client.execute('SELECT weight, props FROM edges');
+	expect(e1.rows.length).toBe(1);
+	expect(Number(e1.rows[0]!.weight)).toBe(0.5);
+	const p1 = JSON.parse(String(e1.rows[0]!.props));
+	expect(p1.note).toBe('x');
+
+	// re-ingest with weight changed to 0.9 → drift update
+	await writeFile(
+		join(dir, 'a.md'),
+		'---\nkind: note\nrelated:\n  target: "[[b]]"\n  weight: 0.9\n  props:\n    note: x\n---\nbody',
+	);
+	const r2 = await ingestDir({ dir, graph: g, embed, edgeFields: { related: 'related' } });
+	expect(r2.edgesClosed).toBeGreaterThanOrEqual(1);
+	expect(r2.edgesAdded).toBeGreaterThanOrEqual(1);
+	const e2 = await client.execute('SELECT weight FROM edges');
+	expect(e2.rows.length).toBe(1);
+	expect(Number(e2.rows[0]!.weight)).toBeCloseTo(0.9);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: removing a typed link on re-edit closes that typed edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\n[cites:: [[b]]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	const r1 = await ingestDir({ dir, graph: g, embed });
+	expect(r1.edgesAdded).toBe(1);
+
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\n---\nno more link');
+	const r2 = await ingestDir({ dir, graph: g, embed });
+	expect(r2.edgesClosed).toBe(1);
+	const edges = await client.execute('SELECT id FROM edges');
+	expect(edges.rows.length).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: inline link with unknown rel is skipped, run not fatal, node still added', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\n[bogus:: [[b]]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(2);
+	expect(res.skipped.some((s) => s.key === 'a.md' && s.reason.includes('bogus'))).toBe(true);
+	const nodes = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(nodes.rows[0]!.c)).toBe(2);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });

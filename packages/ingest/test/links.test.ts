@@ -26,3 +26,26 @@ test('extractLinks: image embeds are not treated as links', () => {
 test('extractLinks: none', () => {
 	expect(extractLinks('plain text, no links')).toEqual([]);
 });
+
+test('extractLinks: inline Dataview typed wikilink sets rel', () => {
+	expect(extractLinks('[cites:: [[paper-a]]]')).toEqual([
+		{ kind: 'wiki', target: 'paper-a', rel: 'cites' },
+	]);
+});
+
+test('extractLinks: inline Dataview typed path link sets rel', () => {
+	expect(extractLinks('[seealso:: [b](./b.md)]')).toEqual([
+		{ kind: 'path', target: './b.md', rel: 'seealso' },
+	]);
+});
+
+test('extractLinks: plain wikilink stays rel-less', () => {
+	expect(extractLinks('[[b]]')).toEqual([{ kind: 'wiki', target: 'b' }]);
+});
+
+test('extractLinks: mixed typed and plain links', () => {
+	expect(extractLinks('[cites:: [[paper-a]]] and [[b]]')).toEqual([
+		{ kind: 'wiki', target: 'paper-a', rel: 'cites' },
+		{ kind: 'wiki', target: 'b' },
+	]);
+});

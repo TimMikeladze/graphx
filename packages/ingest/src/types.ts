@@ -38,6 +38,12 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * whole source. The pruned set is scoped to this `source`.
 	 */
 	prune?: boolean;
+	/**
+	 * Frontmatter field name → edge relation. Each configured field's value(s) become typed
+	 * edges and are excluded from stored node props. Value forms: a wikilink string `"[[t]]"`,
+	 * a bare basename `"t"`, an object `{ target, weight?, props? }`, or an array mixing these.
+	 */
+	edgeFields?: Record<string, string>;
 }
 
 export interface IngestResult {
