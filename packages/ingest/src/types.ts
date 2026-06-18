@@ -1,4 +1,5 @@
 import type { EmbedFn, Graph, GraphSchema } from 'core';
+import type { Source } from './source.ts';
 
 /** A parsed source file. `key` is the relative POSIX path from the vault root. */
 export interface ParsedFile {
@@ -16,8 +17,10 @@ export interface ParsedFile {
 }
 
 export interface IngestOptions<S extends GraphSchema> {
-	/** Local vault root. */
-	dir: string;
+	/** Local vault root. Provide `dir` (filesystem sugar) OR `fileSource`. */
+	dir?: string;
+	/** Pluggable file source. Provide `fileSource` OR `dir`. */
+	fileSource?: Source;
 	/** Target graph, already bound to its DbClient + schema. */
 	graph: Graph<S>;
 	/** Embedding function — required (embeddings-on scope). */

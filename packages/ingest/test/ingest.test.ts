@@ -10,6 +10,7 @@ import type { EmbedFn } from '../../core/src/retrieve.ts';
 import { init } from '../../core/src/schema.ts';
 import { embReadSql, makeTestDb } from '../../core/test/harness.ts';
 import { ingestDir } from '../src/index.ts';
+import type { Source } from '../src/source.ts';
 
 const SCHEMA = defineGraphSchema({
 	nodes: {
@@ -489,5 +490,34 @@ test('ingestDir: batched embeds preserve per-file association (embedConcurrency=
 	}
 
 	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+// --- Source seam tests ---
+
+test('ingestDir: accepts a custom in-memory Source (no dir)', async () => {
+	const { g, client } = await graph();
+
+	const files: Record<string, string> = {
+		'a.md': '---\nkind: note\ntitle: Alpha\n---\nbody a',
+		'b.md': '---\nkind: note\ntitle: Beta\n---\nbody b',
+	};
+	const memSource: Source = {
+		list: async () => ['a.md', 'b.md'],
+		read: async (key: string) => files[key] ?? '',
+	};
+
+	const res = await ingestDir({ fileSource: memSource, graph: g, embed });
+	expect(res.added).toBe(2);
+	expect(res.skipped).toHaveLength(0);
+	const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(rows.rows[0]!.c)).toBe(2);
+	client.close();
+});
+
+test('ingestDir: throws when neither dir nor fileSource is provided', async () => {
+	const { g, client } = await graph();
+	// @ts-expect-error intentionally omitting required dir/fileSource
+	await expect(ingestDir({ graph: g, embed })).rejects.toThrow('ingestDir: requires `dir` or `source`');
 	client.close();
 });

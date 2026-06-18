@@ -1,10 +1,8 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { GraphSchema } from 'core';
-import { DEFAULT_INCLUDE, discover } from './discover.ts';
 import { extractLinks } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
+import { fsSource } from './source.ts';
 import type { IngestOptions, IngestResult, ParsedFile, SkipEntry } from './types.ts';
 
 /** The structural, non-generic slice of `Graph` that ingest drives. */
@@ -238,7 +236,8 @@ export async function ingestDir<S extends GraphSchema>(
 	opts: IngestOptions<S>,
 ): Promise<IngestResult> {
 	const g = opts.graph as unknown as LooseGraph;
-	const include = opts.include ?? DEFAULT_INCLUDE;
+	const fileSource = opts.fileSource ?? (opts.dir != null ? fsSource(opts.dir, opts.include) : undefined);
+	if (!fileSource) throw new Error('ingestDir: requires `dir` or `source`');
 	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
 	const idField = opts.idField ?? 'id';
 	const edgeFields = opts.edgeFields ?? {};
@@ -253,7 +252,7 @@ export async function ingestDir<S extends GraphSchema>(
 		skipped: [],
 	};
 
-	const keys = await discover(opts.dir, include);
+	const keys = await fileSource.list();
 	const index = buildPathIndex(keys);
 	const live = await loadLiveMap(g, keyPrefix);
 	const embedConcurrency = opts.embedConcurrency ?? 8;
@@ -282,7 +281,7 @@ export async function ingestDir<S extends GraphSchema>(
 	// Step 1: Stream files one at a time — parse, classify, buffer links for changed files.
 	// Bodies of unchanged files are dropped immediately (not retained).
 	for (const key of keys) {
-		const file = parseFile(key, await readFile(join(opts.dir, key), 'utf8'));
+		const file = parseFile(key, await fileSource.read(key));
 
 		const kind = resolveKind(file, opts.kindOf);
 		const identityKey = identityKeyOf(file, idField);
