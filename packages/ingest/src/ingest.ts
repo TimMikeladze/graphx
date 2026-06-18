@@ -37,7 +37,10 @@ interface LooseGraph {
 	};
 }
 
-const KEY_PREFIX = 'file:';
+/** The node `uri` namespace owned by an ingest source: `ingest:<source>:<key>`. */
+function keyPrefixFor(source: string): string {
+	return `ingest:${source}:`;
+}
 
 interface LiveEntry {
 	id: string;
@@ -56,15 +59,19 @@ async function liveOutEdges(
 const REL = 'links_to';
 
 /** Read the live identity map (key → node id + hash) from the `nodes` view via raw SQL. */
-async function loadLiveMap(g: LooseGraph): Promise<Map<string, LiveEntry>> {
+async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string, LiveEntry>> {
 	const map = new Map<string, LiveEntry>();
+	// Bind the pattern (never interpolate a caller-derived prefix) and escape LIKE
+	// metacharacters so a `%`/`_`/`\` in the source name can't widen the match. `ESCAPE '\'`
+	// is honored identically by SQLite (libSQL) and Postgres.
+	const pattern = `${keyPrefix.replace(/[\\%_]/g, '\\$&')}%`;
 	const r = await g.raw.execute({
-		sql: `SELECT id, uri, content_hash FROM nodes WHERE uri LIKE '${KEY_PREFIX}%'`,
-		args: [],
+		sql: `SELECT id, uri, content_hash FROM nodes WHERE uri LIKE ? ESCAPE '\\'`,
+		args: [pattern],
 	});
 	for (const row of r.rows) {
 		const uri = String(row.uri);
-		map.set(uri.slice(KEY_PREFIX.length), {
+		map.set(uri.slice(keyPrefix.length), {
 			id: String(row.id),
 			hash: row.content_hash == null ? '' : String(row.content_hash),
 		});
@@ -91,6 +98,7 @@ export async function ingestDir<S extends GraphSchema>(
 ): Promise<IngestResult> {
 	const g = opts.graph as unknown as LooseGraph;
 	const include = opts.include ?? DEFAULT_INCLUDE;
+	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
 	const result: IngestResult = {
 		added: 0,
 		updated: 0,
@@ -106,7 +114,7 @@ export async function ingestDir<S extends GraphSchema>(
 		files.push(parseFile(key, await readFile(join(opts.dir, key), 'utf8')));
 	}
 
-	const live = await loadLiveMap(g);
+	const live = await loadLiveMap(g, keyPrefix);
 
 	const keyToId = new Map<string, string>();
 	const touched: ParsedFile[] = [];
@@ -124,7 +132,7 @@ export async function ingestDir<S extends GraphSchema>(
 				const node = await g.addNode({
 					kind,
 					body: file.body,
-					uri: KEY_PREFIX + file.key,
+					uri: keyPrefix + file.key,
 					props,
 					content_hash: file.hash,
 					emb: await opts.embed(file.body),

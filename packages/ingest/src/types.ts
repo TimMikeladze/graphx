@@ -24,6 +24,13 @@ export interface IngestOptions<S extends GraphSchema> {
 	include?: string[];
 	/** Override kind resolution. Default: frontmatter.kind ?? top-level folder name. */
 	kindOf?: (file: ParsedFile) => string | undefined;
+	/**
+	 * Logical source id, used to namespace the node `uri` (`ingest:<source>:<key>`) so this
+	 * ingest only ever reconciles — and, with deletion, prunes — its OWN nodes. Two vaults
+	 * ingested into one graph MUST use distinct sources or they reconcile each other.
+	 * Default: `'default'`.
+	 */
+	source?: string;
 }
 
 export interface IngestResult {

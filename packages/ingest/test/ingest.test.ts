@@ -64,7 +64,7 @@ test('ingestDir: editing a file creates a new version (history preserved)', asyn
 	expect(res).toMatchObject({ added: 0, updated: 1, unchanged: 0 });
 	const versions = await client.execute({
 		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE uri = ?',
-		args: ['file:a.md'],
+		args: ['ingest:default:a.md'],
 	});
 	expect(Number(versions.rows[0]!.c)).toBe(2);
 	await rm(dir, { recursive: true, force: true });

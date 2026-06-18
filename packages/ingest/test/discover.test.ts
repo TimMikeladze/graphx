@@ -12,6 +12,7 @@ beforeAll(async () => {
 	await writeFile(join(dir, 'a.md'), 'a');
 	await writeFile(join(dir, 'notes', 'b.markdown'), 'b');
 	await writeFile(join(dir, 'notes', 'c.yaml'), 'c');
+	await writeFile(join(dir, 'notes', 'd.yml'), 'd');
 	await writeFile(join(dir, 'ignore.txt'), 'nope');
 });
 
@@ -24,5 +25,6 @@ test('discover: returns sorted POSIX keys for included extensions only', async (
 		'a.md',
 		'notes/b.markdown',
 		'notes/c.yaml',
+		'notes/d.yml',
 	]);
 });

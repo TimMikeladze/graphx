@@ -27,7 +27,7 @@ const result = await ingestDir({
 
 ## Conventions
 
-- **Identity** = relative path, stored in the node `uri` column as `file:<path>`.
+- **Identity** = relative path, stored in the node `uri` column as `ingest:<source>:<path>` (`source` defaults to `default`; set it per vault so each ingest only reconciles its own nodes).
 - **kind** = `frontmatter.kind`, else the top-level folder name (`kindOf` overrides).
 - **props** = frontmatter minus `kind`, validated by the node kind's schema.
 - **body** = markdown body (also the embed input).

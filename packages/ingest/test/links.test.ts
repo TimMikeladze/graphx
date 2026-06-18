@@ -10,7 +10,7 @@ test('extractLinks: wikilinks (with alias stripped)', () => {
 
 test('extractLinks: relative markdown links, external/anchor ignored', () => {
 	expect(
-		extractLinks('[x](./b.md) [y](../d.md) [ext](https://e.com) [a](#frag)'),
+		extractLinks('[x](./b.md) [y](../d.md) [s](https://e.com) [h](http://e.com) [a](#frag)'),
 	).toEqual([
 		{ kind: 'path', target: './b.md' },
 		{ kind: 'path', target: '../d.md' },
