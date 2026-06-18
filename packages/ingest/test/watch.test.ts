@@ -155,3 +155,41 @@ test('watchDir: single-flight — rapid writes produce at most two runs (in-flig
 	await rm(dir, { recursive: true, force: true });
 	await teardown();
 });
+
+test('watchDir: an ingest error is routed to onError; the watcher keeps running', async () => {
+	const { client, teardown } = makeTestDb({ file: true });
+	await init(client, 4);
+	const g = new Graph(client, SCHEMA);
+
+	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-err-'));
+
+	let calls = 0;
+	const flakyEmbed: EmbedFn = async () => {
+		calls++;
+		throw new Error('embed boom');
+	};
+
+	const errors: unknown[] = [];
+	const watcher = watchDir({
+		dir,
+		graph: g,
+		embed: flakyEmbed,
+		debounceMs: 30,
+		onError: (e) => errors.push(e),
+	});
+
+	// New file → watcher run → embed throws → onError (NOT an unhandled rejection / crash)
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\n---\nalpha');
+	const deadline = Date.now() + 3000;
+	while (Date.now() < deadline && errors.length === 0) {
+		await new Promise((r) => setTimeout(r, 50));
+	}
+
+	watcher.close();
+	expect(errors.length).toBeGreaterThanOrEqual(1);
+	expect((errors[0] as Error).message).toBe('embed boom');
+	expect(calls).toBeGreaterThanOrEqual(1);
+
+	await rm(dir, { recursive: true, force: true });
+	await teardown();
+});

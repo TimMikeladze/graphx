@@ -8,6 +8,8 @@ export interface WatchOptions<S extends GraphSchema> extends IngestOptions<S> {
 	debounceMs?: number;
 	/** Called after each ingest run completes. */
 	onRun?: (result: IngestResult) => void;
+	/** Called if an ingest run throws; the watcher keeps running. Default: console.error. */
+	onError?: (err: unknown) => void;
 }
 
 export interface Watcher {
@@ -28,6 +30,10 @@ export function watchDir<S extends GraphSchema>(opts: WatchOptions<S>): Watcher 
 		try {
 			const result = await ingestDir(opts);
 			opts.onRun?.(result);
+		} catch (err) {
+			// A transient ingest failure (e.g. a file edited mid-read) must not kill the watcher
+			// or surface as an unhandled rejection (runOnce is called fire-and-forget).
+			(opts.onError ?? ((e) => console.error('watchDir: ingest failed:', e)))(err);
 		} finally {
 			running = false;
 			if (pending && !closed) {
