@@ -16,6 +16,7 @@ const SCHEMA = defineGraphSchema({
 	nodes: {
 		note: z.object({ title: z.string().optional() }).passthrough(),
 		strict: z.object({ n: z.number() }),
+		asset: z.object({ path: z.string() }),
 	},
 	edges: {
 		links_to: { from: 'note', to: 'note' },
@@ -26,6 +27,7 @@ const SCHEMA = defineGraphSchema({
 			to: 'note',
 			props: z.object({ meta: z.object({ score: z.number() }).partial() }).partial(),
 		},
+		embeds: { from: 'note', to: ['note', 'asset'] },
 	},
 });
 
@@ -519,5 +521,83 @@ test('ingestDir: throws when neither dir nor fileSource is provided', async () =
 	const { g, client } = await graph();
 	// @ts-expect-error intentionally omitting required dir/fileSource
 	await expect(ingestDir({ graph: g, embed })).rejects.toThrow('ingestDir: requires `dir` or `fileSource`');
+	client.close();
+});
+
+// --- Lightweight image-asset ingestion ---
+
+test('ingestDir: an image embed becomes an asset node + embeds edge (assets opt-in)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'doc.md': '---\nkind: note\n---\nsee ![alt](./img/pic.png)' });
+	const res = await ingestDir({ dir, graph: g, embed, assets: { kind: 'asset' } });
+	expect(res.edgesAdded).toBe(1);
+	const asset = await client.execute("SELECT uri, content_type, props FROM nodes WHERE kind = 'asset'");
+	expect(asset.rows.length).toBe(1);
+	expect(String(asset.rows[0]!.uri)).toBe('ingest:default:asset:img/pic.png');
+	expect(String(asset.rows[0]!.content_type)).toBe('image/png');
+	expect(JSON.parse(String(asset.rows[0]!.props)).path).toBe('img/pic.png');
+	const edge = await client.execute("SELECT rel FROM edges");
+	expect(edge.rows.length).toBe(1);
+	expect(String(edge.rows[0]!.rel)).toBe('embeds');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: assets are ignored unless opted in', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'doc.md': '---\nkind: note\n---\n![alt](./pic.png)' });
+	await ingestDir({ dir, graph: g, embed }); // no `assets`
+	const assets = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE kind = 'asset'");
+	expect(Number(assets.rows[0]!.c)).toBe(0);
+	const edges = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(edges.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: the same asset embedded by two docs dedupes to one asset node, two edges', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\n![](./shared.png)',
+		'b.md': '---\nkind: note\n---\n![](./shared.png)',
+	});
+	await ingestDir({ dir, graph: g, embed, assets: { kind: 'asset' } });
+	const assets = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE kind = 'asset'");
+	expect(Number(assets.rows[0]!.c)).toBe(1);
+	const edges = await client.execute("SELECT COUNT(*) AS c FROM edges WHERE rel = 'embeds'");
+	expect(Number(edges.rows[0]!.c)).toBe(2);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: an embed of a known note links to that note (no asset node)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\nembed ![[b]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed, assets: { kind: 'asset' } });
+	const assets = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE kind = 'asset'");
+	expect(Number(assets.rows[0]!.c)).toBe(0); // resolved to note b, not an asset
+	const edge = await client.execute("SELECT rel FROM edges WHERE rel = 'embeds'");
+	expect(edge.rows.length).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: removing an embed closes its edge; asset node survives prune', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'doc.md': '---\nkind: note\n---\n![](./pic.png)' });
+	await ingestDir({ dir, graph: g, embed, assets: { kind: 'asset' } });
+	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM edges")).rows[0]!.c)).toBe(1);
+
+	// remove the embed AND prune — the embeds edge closes, but the asset node is never pruned
+	await writeFile(join(dir, 'doc.md'), '---\nkind: note\n---\nno embed now');
+	const res = await ingestDir({ dir, graph: g, embed, assets: { kind: 'asset' }, prune: true });
+	expect(res.edgesClosed).toBeGreaterThanOrEqual(1);
+	expect(res.deleted).toBe(0); // doc still present; asset never pruned
+	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM edges")).rows[0]!.c)).toBe(0);
+	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE kind = 'asset'")).rows[0]!.c)).toBe(1);
+	await rm(dir, { recursive: true, force: true });
 	client.close();
 });

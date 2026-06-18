@@ -79,3 +79,25 @@ export function extractLinks(body: string): Link[] {
 	entries.sort((a, b) => a.start - b.start);
 	return entries.map((e) => e.link);
 }
+
+/**
+ * Extract embeds — the `!`-prefixed forms `![[target]]` / `![alt](target)` that
+ * {@link extractLinks} deliberately skips. Used (opt-in) to turn embedded assets into nodes.
+ * External (`http(s)://`) and anchor (`#`) targets are skipped.
+ */
+export function extractEmbeds(body: string): Link[] {
+	const out: Link[] = [];
+	for (const m of body.matchAll(WIKILINK)) {
+		if (!isEmbed(body, m.index)) continue;
+		const target = m[1]!.split('|')[0]!.trim();
+		if (target) out.push({ kind: 'wiki', target });
+	}
+	for (const m of body.matchAll(MDLINK)) {
+		if (!isEmbed(body, m.index)) continue;
+		const target = m[1]!.trim();
+		if (!target || target.startsWith('http://') || target.startsWith('https://')) continue;
+		if (target.startsWith('#')) continue;
+		out.push({ kind: 'path', target });
+	}
+	return out;
+}

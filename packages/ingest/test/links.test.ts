@@ -1,5 +1,16 @@
 import { expect, test } from 'bun:test';
-import { extractLinks } from '../src/links.ts';
+import { extractEmbeds, extractLinks } from '../src/links.ts';
+
+test('extractEmbeds: returns only the `!`-prefixed embeds (wiki + path), skips plain links', () => {
+	expect(extractEmbeds('![[pic.png]] and ![alt](./img/p.jpg) but [real](./b.md) and [[note]]')).toEqual([
+		{ kind: 'wiki', target: 'pic.png' },
+		{ kind: 'path', target: './img/p.jpg' },
+	]);
+});
+
+test('extractEmbeds: none when there are no embeds', () => {
+	expect(extractEmbeds('just [a](./b.md) and [[c]]')).toEqual([]);
+});
 
 test('extractLinks: wikilinks (with alias stripped)', () => {
 	expect(extractLinks('see [[Bob]] and [[notes/c|C]]')).toEqual([

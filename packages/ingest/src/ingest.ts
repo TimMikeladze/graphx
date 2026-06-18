@@ -1,9 +1,28 @@
+import { dirname, join } from 'node:path/posix';
 import type { GraphSchema } from 'core';
-import { extractLinks } from './links.ts';
+import { extractEmbeds, extractLinks } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
 import { fsSource } from './source.ts';
 import type { IngestOptions, IngestResult, ParsedFile, SkipEntry } from './types.ts';
+
+/** Minimal extension → MIME map for asset nodes; unknown falls back to octet-stream. */
+const MIME: Record<string, string> = {
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.webp': 'image/webp',
+	'.svg': 'image/svg+xml',
+	'.pdf': 'application/pdf',
+	'.mp4': 'video/mp4',
+	'.mp3': 'audio/mpeg',
+};
+function mimeOf(path: string): string {
+	const dot = path.lastIndexOf('.');
+	const ext = dot >= 0 ? path.slice(dot).toLowerCase() : '';
+	return MIME[ext] ?? 'application/octet-stream';
+}
 
 /** The structural, non-generic slice of `Graph` that ingest drives. */
 interface LooseGraph {
@@ -14,6 +33,7 @@ interface LooseGraph {
 		props: Record<string, unknown>;
 		content_hash?: string;
 		embed_hash?: string;
+		content_type?: string;
 		emb?: number[];
 	}): Promise<{ id: string }>;
 	updateNode(
@@ -272,6 +292,8 @@ export async function ingestDir<S extends GraphSchema>(
 
 	// Buffer links for touched files only (small arrays, not bodies).
 	const bufferedLinks = new Map<string, ReturnType<typeof extractLinks>>();
+	// Embeds buffered only when asset ingestion is enabled.
+	const bufferedEmbeds = new Map<string, ReturnType<typeof extractEmbeds>>();
 
 	// Identity set for prune: built for EVERY parsed file (incl. no-kind ones) so an
 	// on-disk-but-skipped file isn't pruned.
@@ -311,6 +333,7 @@ export async function ingestDir<S extends GraphSchema>(
 		} else {
 			// Changed or new: buffer links and queue a work item.
 			bufferedLinks.set(file.key, extractLinks(file.body));
+			if (opts.assets) bufferedEmbeds.set(file.key, extractEmbeds(file.body));
 			workItems.push({ file, kind, identityKey, prior });
 		}
 	}
@@ -378,6 +401,31 @@ export async function ingestDir<S extends GraphSchema>(
 		}
 	}
 
+	// Asset nodes (opt-in): an embed target that isn't a known ingested file becomes a
+	// metadata-only node keyed `asset:<path>`, deduped across docs. Never pruned. Returns the
+	// node id, or null if the asset kind is rejected by the schema (caller records a skip).
+	const assetKeyToId = new Map<string, string>();
+	const assetKind = opts.assets?.kind;
+	async function ensureAsset(assetPath: string): Promise<string> {
+		const cached = assetKeyToId.get(assetPath);
+		if (cached) return cached;
+		const identityKey = `asset:${assetPath}`;
+		const prior = live.get(identityKey);
+		if (prior) {
+			assetKeyToId.set(assetPath, prior.id);
+			return prior.id;
+		}
+		const node = await g.addNode({
+			kind: assetKind!,
+			uri: keyPrefix + identityKey,
+			content_type: mimeOf(assetPath),
+			props: { path: assetPath },
+			body: '',
+		});
+		assetKeyToId.set(assetPath, node.id);
+		return node.id;
+	}
+
 	// Step 4: Edge pass — use buffered links (no re-parse of bodies).
 	for (const file of touched) {
 		const srcId = keyToId.get(file.key);
@@ -430,6 +478,28 @@ export async function ingestDir<S extends GraphSchema>(
 			}
 		}
 
+		// Embeds → asset nodes / edges (opt-in). An embed to a known ingested file becomes an
+		// edge to it; otherwise a metadata-only asset node, deduped across docs.
+		if (opts.assets) {
+			const rel = opts.assets.rel ?? 'embeds';
+			for (const emb of bufferedEmbeds.get(file.key) ?? []) {
+				const r = resolveLink(emb, file.key, index);
+				let dst: string;
+				if (r.status === 'resolved' && keyToId.has(r.key)) {
+					dst = keyToId.get(r.key)!;
+				} else {
+					const assetPath = emb.kind === 'path' ? join(dirname(file.key), emb.target) : emb.target;
+					try {
+						dst = await ensureAsset(assetPath);
+					} catch (err) {
+						result.skipped.push({ key: file.key, stage: 'node', code: 'asset-error', reason: (err as Error).message });
+						continue;
+					}
+				}
+				if (dst !== srcId) desired.set(`${rel}\0${dst}`, {});
+			}
+		}
+
 		// Reconcile: compare desired vs live out-edges
 		const existing = await liveOutEdges(g, srcId);
 		const liveMap = new Map<string, typeof existing[number]>();
@@ -478,6 +548,8 @@ export async function ingestDir<S extends GraphSchema>(
 		// NOT in the prune set (it became an update above), preserving its node/history/edges.
 		for (const [key, entry] of live) {
 			if (discoveredIdentity.has(key)) continue;
+			// Asset nodes (`asset:<path>`) aren't in the file stream; they are pointers, never pruned.
+			if (key.startsWith('asset:')) continue;
 			for (const edgeId of await liveIncidentEdges(g, entry.id)) {
 				await g.deleteEdge(edgeId);
 				result.edgesClosed++;

@@ -32,6 +32,8 @@ const result = await ingestDir({
 - **props** = frontmatter minus `kind`, validated by the node kind's schema.
 - **body** = markdown body (also the embed input).
 - **edges** = `[[wikilink]]` (by basename) and `[text](./rel.md)` (by path) → `links_to`.
+- **assets** (opt-in `assets: { kind, rel? }`) = `![[x]]` / `![alt](x)` embeds → an edge to the
+  embedded note if it's ingested, else a metadata-only asset node (path + MIME, no bytes).
 - **change detection** = sha256 of the file in `content_hash`; unchanged files are skipped (no re-embed).
 
 ## v1 limitations

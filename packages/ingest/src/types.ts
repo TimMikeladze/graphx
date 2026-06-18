@@ -60,6 +60,15 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * Maximum number of parallel embed calls during the batch-embed step. Default: 8.
 	 */
 	embedConcurrency?: number;
+	/**
+	 * Turn `![[asset]]` / `![alt](asset)` embeds into nodes. Off by default (embeds ignored).
+	 * An embed that resolves to a known ingested file becomes an edge to that node; otherwise a
+	 * metadata-only asset node (`uri = ingest:<source>:asset:<path>`, `content_type` from the
+	 * extension, `props.path`, empty body — no bytes; byte storage is the future blob layer) is
+	 * created and linked. `kind` (asset node kind) and `rel` (default `embeds`) must be declared
+	 * in the graph schema. Asset nodes are never pruned.
+	 */
+	assets?: { kind: string; rel?: string };
 }
 
 /** Pipeline stage at which a file/link/edge was skipped. */
