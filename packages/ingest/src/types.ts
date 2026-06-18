@@ -46,6 +46,19 @@ export interface IngestOptions<S extends GraphSchema> {
 	edgeFields?: Record<string, string>;
 }
 
+/** Pipeline stage at which a file/link/edge was skipped. */
+export type SkipStage = 'kind' | 'node' | 'link' | 'edge';
+
+/** A structured skip/validation entry. `reason` is human-readable; `code` is filterable; */
+/** `detail` carries stage-specific data (e.g. Zod issues, ambiguous-link candidates). */
+export interface SkipEntry {
+	key: string;
+	stage: SkipStage;
+	code: string;
+	reason: string;
+	detail?: unknown;
+}
+
 export interface IngestResult {
 	added: number;
 	updated: number;
@@ -54,6 +67,6 @@ export interface IngestResult {
 	deleted: number;
 	edgesAdded: number;
 	edgesClosed: number;
-	/** Files/links skipped, with a reason (no kind, schema reject, unresolved link). */
-	skipped: Array<{ key: string; reason: string }>;
+	/** Files/links/edges skipped, tagged by stage + code (see {@link SkipEntry}). */
+	skipped: SkipEntry[];
 }

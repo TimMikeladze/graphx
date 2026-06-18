@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -12,7 +12,10 @@ import { makeTestDb } from '../../core/test/harness.ts';
 import { ingestDir } from '../src/index.ts';
 
 const SCHEMA = defineGraphSchema({
-	nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
+	nodes: {
+		note: z.object({ title: z.string().optional() }).passthrough(),
+		strict: z.object({ n: z.number() }),
+	},
 	edges: {
 		links_to: { from: 'note', to: 'note' },
 		cites: { from: 'note', to: 'note' },
@@ -85,7 +88,8 @@ test('ingestDir: a file with no resolvable kind is skipped', async () => {
 	const dir = await vault({ 'a.md': 'no frontmatter here' });
 	const res = await ingestDir({ dir, graph: g, embed });
 	expect(res.added).toBe(0);
-	expect(res.skipped).toEqual([{ key: 'a.md', reason: 'no kind' }]);
+	expect(res.skipped).toHaveLength(1);
+	expect(res.skipped[0]).toMatchObject({ key: 'a.md', stage: 'kind', code: 'no-kind' });
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
@@ -172,7 +176,9 @@ test('ingestDir: a link to a missing file is skipped, not fatal', async () => {
 	const res = await ingestDir({ dir, graph: g, embed });
 	expect(res.added).toBe(1);
 	expect(res.edgesAdded).toBe(0);
-	expect(res.skipped).toContainEqual({ key: 'a.md', reason: 'unresolved link: ghost' });
+	expect(res.skipped).toContainEqual(
+		expect.objectContaining({ key: 'a.md', stage: 'link', code: 'unresolved-link' }),
+	);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
@@ -307,6 +313,36 @@ test('ingestDir: inline link with unknown rel is skipped, run not fatal, node st
 	expect(res.skipped.some((s) => s.key === 'a.md' && s.reason.includes('bogus'))).toBe(true);
 	const nodes = await client.execute('SELECT COUNT(*) AS c FROM nodes');
 	expect(Number(nodes.rows[0]!.c)).toBe(2);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: an ambiguous wikilink is reported distinctly (with candidates), not as missing', async () => {
+	const { g, client } = await graph();
+	const dir = await mkdtemp(join(tmpdir(), 'gx-ingest-'));
+	await mkdir(join(dir, 'x'), { recursive: true });
+	await mkdir(join(dir, 'y'), { recursive: true });
+	await writeFile(join(dir, 'x', 'dup.md'), '---\nkind: note\n---\nX');
+	await writeFile(join(dir, 'y', 'dup.md'), '---\nkind: note\n---\nY');
+	await writeFile(join(dir, 'src.md'), '---\nkind: note\n---\nsee [[dup]]');
+	const res = await ingestDir({ dir, graph: g, embed });
+	const amb = res.skipped.find((s) => s.code === 'ambiguous-link');
+	expect(amb).toBeDefined();
+	expect(amb!.detail).toEqual(['x/dup.md', 'y/dup.md']);
+	const edges = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(edges.rows[0]!.c)).toBe(0); // no edge for an ambiguous link
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a schema-rejected file yields a structured node skip carrying Zod issues', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\nkind: strict\nn: not-a-number\n---\nbody' });
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(0);
+	const skip = res.skipped.find((s) => s.key === 'a.md');
+	expect(skip).toMatchObject({ stage: 'node', code: 'schema-reject' });
+	expect(Array.isArray(skip!.detail)).toBe(true); // the Zod issues
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });

@@ -4,8 +4,8 @@ import type { GraphSchema } from 'core';
 import { DEFAULT_INCLUDE, discover } from './discover.ts';
 import { extractLinks } from './links.ts';
 import { parseFile } from './parse.ts';
-import { buildPathIndex, resolveLink } from './resolve.ts';
-import type { IngestOptions, IngestResult, ParsedFile } from './types.ts';
+import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
+import type { IngestOptions, IngestResult, ParsedFile, SkipEntry } from './types.ts';
 
 /** The structural, non-generic slice of `Graph` that ingest drives. */
 interface LooseGraph {
@@ -116,6 +116,35 @@ function resolveKind(file: ParsedFile, kindOf?: (f: ParsedFile) => string | unde
 	return slash > 0 ? file.key.slice(0, slash) : undefined;
 }
 
+/** Skip entry for a link that didn't resolve — distinguishes missing from ambiguous. */
+function linkResolutionSkip(key: string, target: string, r: Resolution): SkipEntry {
+	if (r.status === 'ambiguous') {
+		return {
+			key,
+			stage: 'link',
+			code: 'ambiguous-link',
+			reason: `ambiguous link: ${target} -> [${r.candidates.join(', ')}]`,
+			detail: r.candidates,
+		};
+	}
+	return { key, stage: 'link', code: 'unresolved-link', reason: `unresolved link: ${target}` };
+}
+
+/** Skip entry for a node write that threw — extracts Zod issues structurally (no zod import). */
+function nodeErrorSkip(key: string, err: unknown): SkipEntry {
+	const e = err as { name?: string; issues?: unknown; message?: string };
+	if (e?.name === 'ZodError' && Array.isArray(e.issues)) {
+		return { key, stage: 'node', code: 'schema-reject', reason: e.message ?? 'schema validation failed', detail: e.issues };
+	}
+	return { key, stage: 'node', code: 'node-error', reason: (err as Error).message };
+}
+
+/** Skip entry for an edge write that threw (unknown rel / kind mismatch). */
+function edgeErrorSkip(key: string, err: unknown): SkipEntry {
+	const msg = (err as Error).message;
+	return { key, stage: 'edge', code: /unknown rel/.test(msg) ? 'unknown-rel' : 'edge-error', reason: msg };
+}
+
 /** Frontmatter minus reserved keys: `kind` and any configured `edgeFields` keys. */
 function toProps(
 	frontmatter: Record<string, unknown>,
@@ -223,7 +252,7 @@ export async function ingestDir<S extends GraphSchema>(
 	for (const file of files) {
 		const kind = resolveKind(file, opts.kindOf);
 		if (!kind) {
-			result.skipped.push({ key: file.key, reason: 'no kind' });
+			result.skipped.push({ key: file.key, stage: 'kind', code: 'no-kind', reason: 'no kind' });
 			continue;
 		}
 		const props = toProps(file.frontmatter, edgeFieldKeys);
@@ -257,7 +286,7 @@ export async function ingestDir<S extends GraphSchema>(
 				result.unchanged++;
 			}
 		} catch (err) {
-			result.skipped.push({ key: file.key, reason: (err as Error).message });
+			result.skipped.push(nodeErrorSkip(file.key, err));
 		}
 	}
 
@@ -271,12 +300,12 @@ export async function ingestDir<S extends GraphSchema>(
 
 		// Body links (typed via Dataview inline fields, or plain links_to)
 		for (const link of extractLinks(file.body)) {
-			const targetKey = resolveLink(link, file.key, index);
-			if (!targetKey) {
-				result.skipped.push({ key: file.key, reason: `unresolved link: ${link.target}` });
+			const r = resolveLink(link, file.key, index);
+			if (r.status !== 'resolved') {
+				result.skipped.push(linkResolutionSkip(file.key, link.target, r));
 				continue;
 			}
-			const dst = keyToId.get(targetKey);
+			const dst = keyToId.get(r.key);
 			if (!dst || dst === srcId) continue;
 			const rel = link.rel ?? 'links_to';
 			desired.set(`${rel}\0${dst}`, {});
@@ -292,24 +321,19 @@ export async function ingestDir<S extends GraphSchema>(
 				if (!fe) {
 					result.skipped.push({
 						key: file.key,
+						stage: 'edge',
+						code: 'bad-edge-field',
 						reason: `edgeField '${field}': cannot parse value`,
 					});
 					continue;
 				}
 				// Resolve target as a wiki link (bare string treated as wiki target)
-				const targetKey = resolveLink(
-					{ kind: 'wiki', target: fe.target },
-					file.key,
-					index,
-				);
-				if (!targetKey) {
-					result.skipped.push({
-						key: file.key,
-						reason: `unresolved link: ${fe.target}`,
-					});
+				const r = resolveLink({ kind: 'wiki', target: fe.target }, file.key, index);
+				if (r.status !== 'resolved') {
+					result.skipped.push(linkResolutionSkip(file.key, fe.target, r));
 					continue;
 				}
-				const dst = keyToId.get(targetKey);
+				const dst = keyToId.get(r.key);
 				if (!dst || dst === srcId) continue;
 				const key = `${rel}\0${dst}`;
 				// Last write wins if same (rel, dst) appears multiple times
@@ -332,7 +356,7 @@ export async function ingestDir<S extends GraphSchema>(
 					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
 					result.edgesAdded++;
 				} catch (err) {
-					result.skipped.push({ key: file.key, reason: (err as Error).message });
+					result.skipped.push(edgeErrorSkip(file.key, err));
 				}
 			} else if (hasDrifted(desiredEdge, live2)) {
 				// drift: delete old, add new
@@ -342,7 +366,7 @@ export async function ingestDir<S extends GraphSchema>(
 					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
 					result.edgesAdded++;
 				} catch (err) {
-					result.skipped.push({ key: file.key, reason: (err as Error).message });
+					result.skipped.push(edgeErrorSkip(file.key, err));
 				}
 			}
 			// else: matches live, nothing to do

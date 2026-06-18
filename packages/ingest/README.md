@@ -40,6 +40,10 @@ const result = await ingestDir({
   source's nodes (and their incident edges) for files removed from disk.
 - A rename creates a new node and orphans the old one.
 - Local filesystem only (no S3 source yet).
-- Links resolve only when the basename is unambiguous; otherwise the link is skipped.
+- Wikilinks resolve by unique basename; a collision is disambiguated by a folder-qualified
+  link (`[[dir/Note]]`) or a same-folder match, else reported as `ambiguous-link` (with the
+  candidates) in `result.skipped` rather than silently guessed.
+- `result.skipped` entries are structured: `{ key, stage, code, reason, detail? }` — e.g.
+  `schema-reject` carries the Zod issues, `ambiguous-link` carries the candidate paths.
 
 See [`docs/superpowers/specs/2026-06-17-file-ingest-static-graph-design.md`](../../docs/superpowers/specs/2026-06-17-file-ingest-static-graph-design.md).
