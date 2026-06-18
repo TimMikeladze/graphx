@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS node_versions (
   body         text,
   uri          text,
   content_hash text,
+  embed_hash   text,
   content_type text,
   props        text NOT NULL DEFAULT '{}',
   emb          vector(${dim}),
@@ -130,7 +131,7 @@ CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_t
 CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE OR REPLACE VIEW nodes AS
-  SELECT id, kind, body, uri, content_hash, content_type, props, emb
+  SELECT id, kind, body, uri, content_hash, embed_hash, content_type, props, emb
   FROM node_versions WHERE valid_to = ${FOREVER_LIT};
 CREATE OR REPLACE VIEW edges AS
   SELECT id, src, dst, rel, weight, props

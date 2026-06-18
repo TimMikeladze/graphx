@@ -57,6 +57,7 @@ export interface AddNodeInput<S extends GraphSchema, K extends Kind<S>> {
 	body?: string;
 	uri?: string;
 	content_hash?: string;
+	embed_hash?: string;
 	content_type?: string;
 }
 
@@ -259,19 +260,20 @@ export class Graph<S extends GraphSchema> {
 			n.body ?? null,
 			n.uri ?? null,
 			n.content_hash ?? null,
+			n.embed_hash ?? null,
 			n.content_type ?? null,
 			JSON.stringify(storedProps),
 		];
 		// B5: emb present -> vector(?) with the JSON array; absent -> literal NULL.
 		const versionStmt: SqlStatement = n.emb
 			? {
-					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-						VALUES (?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
+					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+						VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 					args: [...common, JSON.stringify(n.emb), ts],
 				}
 			: {
-					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-						VALUES (?,?,?,?,?,?,?, NULL, ?)`,
+					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+						VALUES (?,?,?,?,?,?,?,?, NULL, ?)`,
 					args: [...common, ts],
 				};
 
@@ -687,13 +689,14 @@ export class Graph<S extends GraphSchema> {
 			body?: string;
 			uri?: string;
 			content_hash?: string;
+			embed_hash?: string;
 			content_type?: string;
 		},
 	): Promise<void> {
 		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
 			const cur = (
 				await tx.execute({
-					sql: `SELECT kind, body, uri, content_hash, content_type, props, emb, valid_from
+					sql: `SELECT kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from
 						FROM node_versions WHERE id = ? AND valid_to = ?`,
 					args: [id, FOREVER],
 				})
@@ -735,12 +738,14 @@ export class Graph<S extends GraphSchema> {
 			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
+			// Carried forward: kind, body, uri, content_hash, embed_hash, content_type, props, emb.
 			const common: SqlValue[] = [
 				id,
 				patch.kind ?? (cur.kind as SqlValue),
 				patch.body ?? (cur.body as SqlValue) ?? null,
 				patch.uri ?? (cur.uri as SqlValue) ?? null,
 				patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
+				patch.embed_hash ?? (cur.embed_hash as SqlValue) ?? null,
 				patch.content_type ?? (cur.content_type as SqlValue) ?? null,
 				JSON.stringify(props),
 			];
@@ -748,13 +753,13 @@ export class Graph<S extends GraphSchema> {
 			// (carries a real F32 vector, or NULL when there was none).
 			const successor: SqlStatement = patch.emb
 				? {
-						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
+						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+							VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 						args: [...common, JSON.stringify(patch.emb), now],
 					}
 				: {
-						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
+						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+							VALUES (?,?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
 						args: [...common, (cur.emb as SqlValue) ?? null, now],
 					};
 			await tx.execute(successor);

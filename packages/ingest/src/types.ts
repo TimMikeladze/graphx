@@ -7,6 +7,8 @@ export interface ParsedFile {
 	raw: string;
 	/** sha256 hex of `raw`. */
 	hash: string;
+	/** sha256 hex of `body` (the embed input — differs from `hash` when frontmatter is present). */
+	embedHash: string;
 	/** Parsed YAML frontmatter (empty object if none). */
 	frontmatter: Record<string, unknown>;
 	/** Markdown body, frontmatter stripped (empty string for pure-YAML files). */
@@ -51,6 +53,10 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * a bare basename `"t"`, an object `{ target, weight?, props? }`, or an array mixing these.
 	 */
 	edgeFields?: Record<string, string>;
+	/**
+	 * Maximum number of parallel embed calls during the batch-embed step. Default: 8.
+	 */
+	embedConcurrency?: number;
 }
 
 /** Pipeline stage at which a file/link/edge was skipped. */

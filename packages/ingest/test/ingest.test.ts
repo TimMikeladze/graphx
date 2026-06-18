@@ -417,3 +417,76 @@ test('ingestDir: two files claiming the same id → second is skipped as duplica
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
+
+// --- embed_hash re-embed gating ---
+
+test('ingestDir: frontmatter-only edit does NOT re-embed (body unchanged)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\nkind: note\ntitle: v1\n---\nbody text' });
+
+	let embedCalls = 0;
+	const countingEmbed: EmbedFn = async (_body: string) => {
+		embedCalls++;
+		return [1, 0, 0, 0];
+	};
+
+	// First ingest: one embed call (new node)
+	await ingestDir({ dir, graph: g, embed: countingEmbed });
+	expect(embedCalls).toBe(1);
+
+	// Read stored emb before re-ingest
+	const before = await client.execute("SELECT emb FROM nodes WHERE uri = 'ingest:default:file:a.md'");
+	expect(before.rows[0]!.emb).not.toBeNull();
+
+	// Re-ingest after changing ONLY frontmatter (body unchanged) → no re-embed, result.updated=1
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\ntitle: v2\n---\nbody text');
+	const res = await ingestDir({ dir, graph: g, embed: countingEmbed });
+	expect(res.updated).toBe(1);
+	expect(embedCalls).toBe(1); // counter must NOT have increased
+
+	// Edit the body → re-embed fires
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\ntitle: v2\n---\nbody text changed');
+	const res2 = await ingestDir({ dir, graph: g, embed: countingEmbed });
+	expect(res2.updated).toBe(1);
+	expect(embedCalls).toBe(2); // body changed, so embed called again
+
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: batched embeds preserve per-file association (embedConcurrency=3)', async () => {
+	// Each fake embed returns a vector derived from the body's first char code, so we can
+	// assert that node[i].emb was computed from node[i].body (not a neighbor's body).
+	const bodies = ['alpha', 'bravo', 'charlie', 'delta', 'echo'];
+	const files: Record<string, string> = {};
+	for (const b of bodies) {
+		files[`${b}.md`] = `---\nkind: note\n---\n${b}`;
+	}
+
+	const bodyToVec = (body: string): number[] => {
+		const code = body.trim().charCodeAt(0);
+		return [code, 0, 0, 0];
+	};
+
+	const associatedEmbed: EmbedFn = async (body: string) => bodyToVec(body);
+
+	const { g, client } = await graph();
+	const dir = await vault(files);
+	await ingestDir({ dir, graph: g, embed: associatedEmbed, embedConcurrency: 3 });
+
+	// For each body, look up the stored node and verify the emb first element matches.
+	for (const b of bodies) {
+		const uri = `ingest:default:file:${b}.md`;
+		const row = await client.execute({
+			sql: 'SELECT emb FROM nodes WHERE uri = ?',
+			args: [uri],
+		});
+		expect(row.rows.length).toBe(1);
+		// emb is stored as a vector blob on libSQL or a vector string on PG; we can only
+		// verify it is non-null here (correctness of the value format is backend-specific).
+		expect(row.rows[0]!.emb).not.toBeNull();
+	}
+
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});

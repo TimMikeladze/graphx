@@ -20,3 +20,13 @@ test('parseFile: same bytes hash identically, different bytes differ', () => {
 	expect(parseFile('a.md', 'x').hash).toBe(parseFile('a.md', 'x').hash);
 	expect(parseFile('a.md', 'x').hash).not.toBe(parseFile('a.md', 'y').hash);
 });
+
+test('parseFile: embedHash is sha256(body) and differs from hash when frontmatter is present', () => {
+	const raw = '---\nkind: note\ntitle: Hello\n---\nbody text\n';
+	const f = parseFile('notes/a.md', raw);
+	// hash covers the full raw file; embedHash covers only the body
+	expect(f.hash).toMatch(/^[0-9a-f]{64}$/);
+	expect(f.embedHash).toMatch(/^[0-9a-f]{64}$/);
+	// They differ because the raw includes frontmatter, the embed input is body-only
+	expect(f.embedHash).not.toBe(f.hash);
+});

@@ -285,3 +285,37 @@ test('P3: getNode returns null for an unknown id', async () => {
 	expect(read).toBeNull();
 	client.close();
 });
+
+test('P3: embed_hash — addNode stores it; updateNode without embed_hash carries it forward; explicit patch replaces it', async () => {
+	const { client, teardown } = makeTestDb({ file: true });
+	await init(client, 4);
+	const g = new Graph(client, SCHEMA);
+
+	// addNode with embed_hash: 'h1'
+	const node = await g.addNode({ kind: 'person', props: { name: 'alice' }, embed_hash: 'h1' });
+
+	// Read back via nodes view — embed_hash must be present and equal 'h1'
+	const r1 = await client.execute({
+		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
+		args: [node.id],
+	});
+	expect(String(r1.rows[0]!.embed_hash)).toBe('h1');
+
+	// updateNode with only body change (no embed_hash patch) — carry forward
+	await g.updateNode(node.id, { body: 'x2' });
+	const r2 = await client.execute({
+		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
+		args: [node.id],
+	});
+	expect(String(r2.rows[0]!.embed_hash)).toBe('h1');
+
+	// updateNode with explicit embed_hash — replaces stored value
+	await g.updateNode(node.id, { embed_hash: 'h2' });
+	const r3 = await client.execute({
+		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
+		args: [node.id],
+	});
+	expect(String(r3.rows[0]!.embed_hash)).toBe('h2');
+
+	await teardown();
+});

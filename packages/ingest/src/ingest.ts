@@ -15,6 +15,7 @@ interface LooseGraph {
 		uri?: string;
 		props: Record<string, unknown>;
 		content_hash?: string;
+		embed_hash?: string;
 		emb?: number[];
 	}): Promise<{ id: string }>;
 	updateNode(
@@ -24,6 +25,7 @@ interface LooseGraph {
 			body?: string;
 			props?: Record<string, unknown>;
 			content_hash?: string;
+			embed_hash?: string;
 			emb?: number[];
 		},
 	): Promise<void>;
@@ -62,6 +64,7 @@ function identityKeyOf(file: ParsedFile, idField: string): string {
 interface LiveEntry {
 	id: string;
 	hash: string;
+	embedHash: string;
 }
 
 /** A desired edge entry: rel+dst keyed, with optional weight/props for drift detection. */
@@ -97,7 +100,7 @@ async function liveIncidentEdges(g: LooseGraph, nodeId: string): Promise<string[
 	return r.rows.map((row) => String(row.id));
 }
 
-/** Read the live identity map (key → node id + hash) from the `nodes` view via raw SQL. */
+/** Read the live identity map (key → node id + hash + embedHash) from the `nodes` view via raw SQL. */
 async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string, LiveEntry>> {
 	const map = new Map<string, LiveEntry>();
 	// Bind the pattern (never interpolate a caller-derived prefix) and escape LIKE
@@ -105,7 +108,7 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 	// is honored identically by SQLite (libSQL) and Postgres.
 	const pattern = `${keyPrefix.replace(/[\\%_]/g, '\\$&')}%`;
 	const r = await g.raw.execute({
-		sql: `SELECT id, uri, content_hash FROM nodes WHERE uri LIKE ? ESCAPE '\\'`,
+		sql: `SELECT id, uri, content_hash, embed_hash FROM nodes WHERE uri LIKE ? ESCAPE '\\'`,
 		args: [pattern],
 	});
 	for (const row of r.rows) {
@@ -113,6 +116,7 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 		map.set(uri.slice(keyPrefix.length), {
 			id: String(row.id),
 			hash: row.content_hash == null ? '' : String(row.content_hash),
+			embedHash: row.embed_hash == null ? '' : String(row.embed_hash),
 		});
 	}
 	return map;
@@ -250,25 +254,45 @@ export async function ingestDir<S extends GraphSchema>(
 	};
 
 	const keys = await discover(opts.dir, include);
-	const files: ParsedFile[] = [];
-	for (const key of keys) {
-		files.push(parseFile(key, await readFile(join(opts.dir, key), 'utf8')));
-	}
-
+	const index = buildPathIndex(keys);
 	const live = await loadLiveMap(g, keyPrefix);
+	const embedConcurrency = opts.embedConcurrency ?? 8;
 
 	// link resolution keys by path; the live map / prune diff keys by identity (id: or file:).
 	const keyToId = new Map<string, string>();
 	const touched: ParsedFile[] = [];
+
+	// Work items for files that need a node add or update (hash changed or new).
+	interface WorkItem {
+		file: ParsedFile;
+		kind: string;
+		identityKey: string;
+		prior: LiveEntry | undefined;
+	}
+	const workItems: WorkItem[] = [];
+
+	// Buffer links for touched files only (small arrays, not bodies).
+	const bufferedLinks = new Map<string, ReturnType<typeof extractLinks>>();
+
+	// Identity set for prune: built for EVERY parsed file (incl. no-kind ones) so an
+	// on-disk-but-skipped file isn't pruned.
+	const discoveredIdentity = new Set<string>();
 	const seenIdentity = new Set<string>();
 
-	for (const file of files) {
+	// Step 1: Stream files one at a time — parse, classify, buffer links for changed files.
+	// Bodies of unchanged files are dropped immediately (not retained).
+	for (const key of keys) {
+		const file = parseFile(key, await readFile(join(opts.dir, key), 'utf8'));
+
 		const kind = resolveKind(file, opts.kindOf);
+		const identityKey = identityKeyOf(file, idField);
+		// Track every discovered identity (including no-kind files) so prune doesn't evict them.
+		discoveredIdentity.add(identityKey);
+
 		if (!kind) {
 			result.skipped.push({ key: file.key, stage: 'kind', code: 'no-kind', reason: 'no kind' });
 			continue;
 		}
-		const identityKey = identityKeyOf(file, idField);
 		if (seenIdentity.has(identityKey)) {
 			result.skipped.push({
 				key: file.key,
@@ -279,8 +303,46 @@ export async function ingestDir<S extends GraphSchema>(
 			continue;
 		}
 		seenIdentity.add(identityKey);
-		const props = toProps(file.frontmatter, edgeFieldKeys);
+
 		const prior = live.get(identityKey);
+		if (prior && prior.hash === file.hash) {
+			// Unchanged: record id for link resolution, drop the body.
+			keyToId.set(file.key, prior.id);
+			result.unchanged++;
+		} else {
+			// Changed or new: buffer links and queue a work item.
+			bufferedLinks.set(file.key, extractLinks(file.body));
+			workItems.push({ file, kind, identityKey, prior });
+		}
+	}
+
+	// Step 2: Batch-embed — collect bodies needing an embed (new nodes + body-changed updates).
+	// Index-aligned: workItems[i] corresponds to embedInputs[i] and embeddings[i].
+	interface EmbedInput {
+		body: string;
+		needsEmbed: boolean;
+	}
+	const embedInputs: EmbedInput[] = workItems.map(({ file, prior }) => {
+		if (!prior) {
+			// New node — always embed.
+			return { body: file.body, needsEmbed: true };
+		}
+		// Update — only re-embed if the body (embed input) changed.
+		return { body: file.body, needsEmbed: prior.embedHash !== file.embedHash };
+	});
+
+	// Run embeds with bounded concurrency, preserving index alignment.
+	const embeddings: (number[] | undefined)[] = await mapWithConcurrency(
+		embedInputs,
+		embedConcurrency,
+		(input) => (input.needsEmbed ? opts.embed(input.body) : Promise.resolve(undefined)),
+	);
+
+	// Step 3: Write nodes sequentially (write txns).
+	for (let i = 0; i < workItems.length; i++) {
+		const { file, kind, identityKey, prior } = workItems[i]!;
+		const emb = embeddings[i];
+		const props = toProps(file.frontmatter, edgeFieldKeys);
 		try {
 			if (!prior) {
 				const node = await g.addNode({
@@ -289,32 +351,35 @@ export async function ingestDir<S extends GraphSchema>(
 					uri: keyPrefix + identityKey,
 					props,
 					content_hash: file.hash,
-					emb: await opts.embed(file.body),
+					embed_hash: file.embedHash,
+					emb,
 				});
 				keyToId.set(file.key, node.id);
 				touched.push(file);
 				result.added++;
-			} else if (prior.hash !== file.hash) {
-				await g.updateNode(prior.id, {
+			} else {
+				// emb is only set when body changed; otherwise core carries both emb + embed_hash forward.
+				const patch: Parameters<typeof g.updateNode>[1] = {
 					kind,
 					body: file.body,
 					props,
 					content_hash: file.hash,
-					emb: await opts.embed(file.body),
-				});
+				};
+				if (emb !== undefined) {
+					patch.emb = emb;
+					patch.embed_hash = file.embedHash;
+				}
+				await g.updateNode(prior.id, patch);
 				keyToId.set(file.key, prior.id);
 				touched.push(file);
 				result.updated++;
-			} else {
-				keyToId.set(file.key, prior.id);
-				result.unchanged++;
 			}
 		} catch (err) {
 			result.skipped.push(nodeErrorSkip(file.key, err));
 		}
 	}
 
-	const index = buildPathIndex(files.map((f) => f.key));
+	// Step 4: Edge pass — use buffered links (no re-parse of bodies).
 	for (const file of touched) {
 		const srcId = keyToId.get(file.key);
 		if (!srcId) continue;
@@ -323,7 +388,8 @@ export async function ingestDir<S extends GraphSchema>(
 		const desired = new Map<string, DesiredEdge>();
 
 		// Body links (typed via Dataview inline fields, or plain links_to)
-		for (const link of extractLinks(file.body)) {
+		const links = bufferedLinks.get(file.key) ?? [];
+		for (const link of links) {
 			const r = resolveLink(link, file.key, index);
 			if (r.status !== 'resolved') {
 				result.skipped.push(linkResolutionSkip(file.key, link.target, r));
@@ -411,9 +477,8 @@ export async function ingestDir<S extends GraphSchema>(
 	if (opts.prune) {
 		// Compare by IDENTITY key, not path — a renamed file keeps its id: identity and so is
 		// NOT in the prune set (it became an update above), preserving its node/history/edges.
-		const discovered = new Set(files.map((f) => identityKeyOf(f, idField)));
 		for (const [key, entry] of live) {
-			if (discovered.has(key)) continue;
+			if (discoveredIdentity.has(key)) continue;
 			for (const edgeId of await liveIncidentEdges(g, entry.id)) {
 				await g.deleteEdge(edgeId);
 				result.edgesClosed++;
@@ -424,4 +489,31 @@ export async function ingestDir<S extends GraphSchema>(
 	}
 
 	return result;
+}
+
+/**
+ * Run `fn` over each item in `items` with at most `limit` concurrent calls,
+ * returning results index-aligned to `items`. A reorder is never performed —
+ * results[i] always corresponds to items[i].
+ */
+async function mapWithConcurrency<T, R>(
+	items: T[],
+	limit: number,
+	fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+	const results: R[] = Array.from({ length: items.length });
+	let next = 0;
+
+	async function worker(): Promise<void> {
+		while (true) {
+			const i = next++;
+			if (i >= items.length) return;
+			results[i] = await fn(items[i]!, i);
+		}
+	}
+
+	const slots = Math.min(limit, items.length);
+	if (slots === 0) return results;
+	await Promise.all(Array.from({ length: slots }, worker));
+	return results;
 }

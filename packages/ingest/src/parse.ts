@@ -13,11 +13,13 @@ export function parseFile(key: string, raw: string): ParsedFile {
 	const isYaml = YAML_EXT.test(key);
 	const src = isYaml ? `---\n${raw}\n---\n` : raw;
 	const parsed = matter(src);
+	const body = isYaml ? '' : parsed.content;
 	return {
 		key,
 		raw,
 		hash: createHash('sha256').update(raw).digest('hex'),
+		embedHash: createHash('sha256').update(body).digest('hex'),
 		frontmatter: (parsed.data ?? {}) as Record<string, unknown>,
-		body: isYaml ? '' : parsed.content,
+		body,
 	};
 }

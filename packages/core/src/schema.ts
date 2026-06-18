@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS node_versions (
   body         TEXT,
   uri          TEXT,
   content_hash TEXT,
+  embed_hash   TEXT,
   content_type TEXT,
   props        TEXT NOT NULL DEFAULT '{}',
   emb          ${embColumnType('libsql', dim)},
@@ -81,7 +82,7 @@ CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_t
 CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE VIEW IF NOT EXISTS nodes AS
-  SELECT id, kind, body, uri, content_hash, content_type, props, emb
+  SELECT id, kind, body, uri, content_hash, embed_hash, content_type, props, emb
   FROM node_versions WHERE valid_to = 8640000000000000;
 CREATE VIEW IF NOT EXISTS edges AS
   SELECT id, src, dst, rel, weight, props
