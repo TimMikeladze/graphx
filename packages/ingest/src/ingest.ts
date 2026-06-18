@@ -44,9 +44,19 @@ interface LooseGraph {
 	};
 }
 
-/** The node `uri` namespace owned by an ingest source: `ingest:<source>:<key>`. */
+/** The node `uri` namespace owned by an ingest source: `ingest:<source>:<identityKey>`. */
 function keyPrefixFor(source: string): string {
 	return `ingest:${source}:`;
+}
+
+/**
+ * A file's stable identity key within its source. `id:<value>` when frontmatter carries the
+ * `idField` (rename-stable — survives a path change); else `file:<path>` (path identity). The
+ * distinct `id:`/`file:` sub-namespaces can never collide in the live map.
+ */
+function identityKeyOf(file: ParsedFile, idField: string): string {
+	const v = file.frontmatter[idField];
+	return typeof v === 'string' && v.length > 0 ? `id:${v}` : `file:${file.key}`;
 }
 
 interface LiveEntry {
@@ -226,6 +236,7 @@ export async function ingestDir<S extends GraphSchema>(
 	const g = opts.graph as unknown as LooseGraph;
 	const include = opts.include ?? DEFAULT_INCLUDE;
 	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
+	const idField = opts.idField ?? 'id';
 	const edgeFields = opts.edgeFields ?? {};
 	const edgeFieldKeys = new Set(Object.keys(edgeFields));
 	const result: IngestResult = {
@@ -246,8 +257,10 @@ export async function ingestDir<S extends GraphSchema>(
 
 	const live = await loadLiveMap(g, keyPrefix);
 
+	// link resolution keys by path; the live map / prune diff keys by identity (id: or file:).
 	const keyToId = new Map<string, string>();
 	const touched: ParsedFile[] = [];
+	const seenIdentity = new Set<string>();
 
 	for (const file of files) {
 		const kind = resolveKind(file, opts.kindOf);
@@ -255,14 +268,25 @@ export async function ingestDir<S extends GraphSchema>(
 			result.skipped.push({ key: file.key, stage: 'kind', code: 'no-kind', reason: 'no kind' });
 			continue;
 		}
+		const identityKey = identityKeyOf(file, idField);
+		if (seenIdentity.has(identityKey)) {
+			result.skipped.push({
+				key: file.key,
+				stage: 'node',
+				code: 'duplicate-identity',
+				reason: `duplicate identity '${identityKey}' (another file already claimed it this run)`,
+			});
+			continue;
+		}
+		seenIdentity.add(identityKey);
 		const props = toProps(file.frontmatter, edgeFieldKeys);
-		const prior = live.get(file.key);
+		const prior = live.get(identityKey);
 		try {
 			if (!prior) {
 				const node = await g.addNode({
 					kind,
 					body: file.body,
-					uri: keyPrefix + file.key,
+					uri: keyPrefix + identityKey,
 					props,
 					content_hash: file.hash,
 					emb: await opts.embed(file.body),
@@ -385,7 +409,9 @@ export async function ingestDir<S extends GraphSchema>(
 	// does not cascade (fork A), so close the node's incident edges first — including inbound
 	// edges from files unchanged this run, which the edge pass above never revisits.
 	if (opts.prune) {
-		const discovered = new Set(keys);
+		// Compare by IDENTITY key, not path — a renamed file keeps its id: identity and so is
+		// NOT in the prune set (it became an update above), preserving its node/history/edges.
+		const discovered = new Set(files.map((f) => identityKeyOf(f, idField)));
 		for (const [key, entry] of live) {
 			if (discovered.has(key)) continue;
 			for (const edgeId of await liveIncidentEdges(g, entry.id)) {

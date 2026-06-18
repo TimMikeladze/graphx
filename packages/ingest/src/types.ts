@@ -32,6 +32,13 @@ export interface IngestOptions<S extends GraphSchema> {
 	 */
 	source?: string;
 	/**
+	 * Frontmatter key that, when present, gives a file a stable logical identity (uri
+	 * `ingest:<source>:id:<value>`) so a rename keeps the same node + history + edges instead
+	 * of orphaning the old path. Files without it fall back to path identity
+	 * (`ingest:<source>:file:<path>`); a rename of those is still delete+re-add. Default: `'id'`.
+	 */
+	idField?: string;
+	/**
 	 * Retract nodes for files that vanished from the source since the last run (live-map
 	 * entries with no matching discovered file), plus their incident edges. Off by default —
 	 * pointing ingest at a partial or empty directory would otherwise silently retract the

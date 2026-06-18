@@ -38,7 +38,9 @@ const result = await ingestDir({
 
 - Deleted files leave stale live nodes unless you pass `prune: true`, which retracts this
   source's nodes (and their incident edges) for files removed from disk.
-- A rename creates a new node and orphans the old one.
+- Give a file a frontmatter `id` (the `idField` option, default `id`) for rename-stable
+  identity: renaming the file keeps the same node, history, and edges. Without an `id`, a
+  rename is delete+add (the old node is pruned only when `prune` is set).
 - Local filesystem only (no S3 source yet).
 - Wikilinks resolve by unique basename; a collision is disambiguated by a folder-qualified
   link (`[[dir/Note]]`) or a same-folder match, else reported as `ambiguous-link` (with the

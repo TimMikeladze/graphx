@@ -76,7 +76,7 @@ test('ingestDir: editing a file creates a new version (history preserved)', asyn
 	expect(res).toMatchObject({ added: 0, updated: 1, unchanged: 0 });
 	const versions = await client.execute({
 		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE uri = ?',
-		args: ['ingest:default:a.md'],
+		args: ['ingest:default:file:a.md'],
 	});
 	expect(Number(versions.rows[0]!.c)).toBe(2);
 	await rm(dir, { recursive: true, force: true });
@@ -210,7 +210,7 @@ test('ingestDir: edgeFields frontmatter field becomes typed edge, field excluded
 	expect(edges.rows.length).toBe(1);
 	expect(String(edges.rows[0]!.rel)).toBe('related');
 	// related field must NOT appear in stored node props
-	const nodes = await client.execute("SELECT props FROM nodes WHERE uri = 'ingest:default:a.md'");
+	const nodes = await client.execute("SELECT props FROM nodes WHERE uri = 'ingest:default:file:a.md'");
 	const props = JSON.parse(String(nodes.rows[0]!.props));
 	expect(props).not.toHaveProperty('related');
 	await rm(dir, { recursive: true, force: true });
@@ -343,6 +343,77 @@ test('ingestDir: a schema-rejected file yields a structured node skip carrying Z
 	const skip = res.skipped.find((s) => s.key === 'a.md');
 	expect(skip).toMatchObject({ stage: 'node', code: 'schema-reject' });
 	expect(Array.isArray(skip!.detail)).toBe(true); // the Zod issues
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+// --- Identity & rename stability ---
+
+test('ingestDir: a frontmatter id keys the node by id: (not path)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'foo.md': '---\nkind: note\nid: stable-1\n---\nbody' });
+	await ingestDir({ dir, graph: g, embed });
+	const n = await client.execute('SELECT uri FROM nodes');
+	expect(n.rows.length).toBe(1);
+	expect(String(n.rows[0]!.uri)).toBe('ingest:default:id:stable-1');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: renaming a file with a stable id preserves the node + history (not delete+add)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'foo.md': '---\nkind: note\nid: stable-1\n---\nv1' });
+	await ingestDir({ dir, graph: g, embed });
+	const before = await client.execute("SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'");
+	const nodeId = String(before.rows[0]!.id);
+
+	// rename foo.md -> bar.md (same id), edit body
+	await rm(join(dir, 'foo.md'));
+	await writeFile(join(dir, 'bar.md'), '---\nkind: note\nid: stable-1\n---\nv2');
+	const res = await ingestDir({ dir, graph: g, embed, prune: true });
+
+	expect(res.deleted).toBe(0); // identity survived the rename → NOT pruned
+	expect(res.added).toBe(0); // NOT a new node
+	expect(res.updated).toBe(1); // body changed → one new version
+	const after = await client.execute("SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'");
+	expect(after.rows.length).toBe(1);
+	expect(String(after.rows[0]!.id)).toBe(nodeId); // SAME node id
+	const versions = await client.execute({
+		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE id = ?',
+		args: [nodeId],
+	});
+	expect(Number(versions.rows[0]!.c)).toBe(2); // history preserved
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: without a stable id, a rename is delete+add (prune removes the old path node)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'foo.md': '---\nkind: note\n---\nbody' });
+	await ingestDir({ dir, graph: g, embed });
+	await rm(join(dir, 'foo.md'));
+	await writeFile(join(dir, 'bar.md'), '---\nkind: note\n---\nbody');
+	const res = await ingestDir({ dir, graph: g, embed, prune: true });
+	expect(res.added).toBe(1); // bar.md is a new path-identity node
+	expect(res.deleted).toBe(1); // foo.md's node pruned
+	const live = await client.execute('SELECT uri FROM nodes');
+	expect(live.rows.length).toBe(1);
+	expect(String(live.rows[0]!.uri)).toBe('ingest:default:file:bar.md');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: two files claiming the same id → second is skipped as duplicate-identity', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\nid: dup\n---\nA',
+		'b.md': '---\nkind: note\nid: dup\n---\nB',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(1);
+	expect(res.skipped.some((s) => s.code === 'duplicate-identity')).toBe(true);
+	const live = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+	expect(Number(live.rows[0]!.c)).toBe(1);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
