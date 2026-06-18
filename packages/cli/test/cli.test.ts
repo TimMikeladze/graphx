@@ -79,62 +79,44 @@ test('parseIngestArgs: parses combined flags', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 test('run: ingests a vault via a temp config file (libSQL)', async () => {
-	// We need a file-based DB that can be shared across connections (libSQL :memory: is
-	// not shareable). Use a unique tmp path so test runs don't collide.
-	const tmpBase = await mkdtemp(join(tmpdir(), 'gx-cli-'));
-	const dbPath = join(tmpBase, 'test.db');
-	const vaultDir = join(tmpBase, 'vault');
-	const configPath = join(tmpBase, 'graphx.config.ts');
+	// getDb keys libSQL on `file:<namespace>.db` (relative to CWD), so pick a unique namespace
+	// and read that exact file back to verify. The config lives INSIDE the repo so its
+	// `../../core/src` + `zod` imports resolve (a config under os.tmpdir() cannot reach them).
+	const ns = `cli-e2e-${Date.now()}`;
+	const dbFile = `${ns}.db`;
+	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
 
-	// Create vault with one file
-	await rm(vaultDir, { recursive: true, force: true }).catch(() => {});
-	const { mkdir } = await import('node:fs/promises');
-	await mkdir(vaultDir, { recursive: true });
 	await writeFile(join(vaultDir, 'note.md'), '---\nkind: note\ntitle: Hello\n---\nworld');
-
-	// Write a minimal graphx.config.ts that the CLI can dynamically import
-	const configContent = `
-import { defineGraphSchema } from '../../packages/core/src/define-graph-schema.ts';
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema } from '../../core/src/define-graph-schema.ts';
 import { z } from 'zod';
-
 const schema = defineGraphSchema({
   nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
   edges: { links_to: { from: 'note', to: 'note' } },
 });
-
 const embed = async () => [1, 0, 0, 0];
+// Pin libSQL — the PG test leg sets GRAPHX_DB_DRIVER=postgres globally, which getDb would
+// otherwise inherit (and then need core/pg). This e2e exercises the CLI wiring on libSQL.
+export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
 
-export default {
-  schema,
-  embed,
-  namespace: 'cli-test-${Date.now()}',
-};
-`;
-	await writeFile(configPath, configContent);
-
-	// Import and run
-	const { run } = await import('../src/cli.ts');
-
-	// run() will print to stdout/stderr; we just care it doesn't throw and nodes are created
-	let threw = false;
 	try {
+		const { run } = await import('../src/cli.ts');
+		// No try/catch: if run() throws (config import, backend wiring, ingest), the test FAILS.
 		await run(['ingest', vaultDir, '--config', configPath]);
-	} catch (err) {
-		// If config loading fails due to workspace resolution issues in test context,
-		// fall back to asserting only that parseIngestArgs worked (already covered above).
-		threw = true;
-		console.warn('CLI e2e skipped (config import failed in test env):', (err as Error).message);
-	}
 
-	if (!threw) {
-		// Verify a node was created — we need to open the DB that getDb wrote to
+		// Open the libSQL file getDb wrote to and assert the one seeded note landed.
 		const { createClient } = await import('@libsql/client');
-		const client = createClient({ url: `file:${dbPath}` });
-		// Node count may be 0 if getDb used the namespace-based path instead of dbPath;
-		// just assert no exception was thrown (the summary was printed).
-		await client.execute('SELECT COUNT(*) AS c FROM nodes').catch(() => null);
+		const client = createClient({ url: `file:${dbFile}` });
+		const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+		expect(Number(rows.rows[0]!.c)).toBe(1);
 		client.close();
+	} finally {
+		await rm(vaultDir, { recursive: true, force: true });
+		await rm(configPath, { force: true });
+		for (const sfx of ['', '-wal', '-shm']) await rm(`${dbFile}${sfx}`, { force: true });
 	}
-
-	await rm(tmpBase, { recursive: true, force: true });
 });

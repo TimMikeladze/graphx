@@ -275,7 +275,9 @@ export async function ingestDir<S extends GraphSchema>(
 	const keys = await fileSource.list();
 	const index = buildPathIndex(keys);
 	const live = await loadLiveMap(g, keyPrefix);
-	const embedConcurrency = opts.embedConcurrency ?? 8;
+	// Clamp to >= 1 — a literal 0 would make mapWithConcurrency run no workers, silently
+	// leaving new nodes with no embedding.
+	const embedConcurrency = Math.max(1, opts.embedConcurrency ?? 8);
 
 	// link resolution keys by path; the live map / prune diff keys by identity (id: or file:).
 	const keyToId = new Map<string, string>();
