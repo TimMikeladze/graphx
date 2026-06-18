@@ -8,7 +8,7 @@ import type { DbClient } from '../../core/src/dialect.ts';
 import { Graph } from '../../core/src/graph.ts';
 import type { EmbedFn } from '../../core/src/retrieve.ts';
 import { init } from '../../core/src/schema.ts';
-import { makeTestDb } from '../../core/test/harness.ts';
+import { embReadSql, makeTestDb } from '../../core/test/harness.ts';
 import { ingestDir } from '../src/index.ts';
 
 const SCHEMA = defineGraphSchema({
@@ -474,17 +474,18 @@ test('ingestDir: batched embeds preserve per-file association (embedConcurrency=
 	const dir = await vault(files);
 	await ingestDir({ dir, graph: g, embed: associatedEmbed, embedConcurrency: 3 });
 
-	// For each body, look up the stored node and verify the emb first element matches.
+	// For each body, read the stored vector back (dialect-correct) and assert its first
+	// element equals THIS body's first char code — proving node[i].emb came from body[i],
+	// not a neighbor's (which a reorder in the concurrent embed step would cause).
 	for (const b of bodies) {
 		const uri = `ingest:default:file:${b}.md`;
 		const row = await client.execute({
-			sql: 'SELECT emb FROM nodes WHERE uri = ?',
+			sql: `SELECT ${embReadSql(client)} AS v FROM nodes WHERE uri = ?`,
 			args: [uri],
 		});
 		expect(row.rows.length).toBe(1);
-		// emb is stored as a vector blob on libSQL or a vector string on PG; we can only
-		// verify it is non-null here (correctness of the value format is backend-specific).
-		expect(row.rows[0]!.emb).not.toBeNull();
+		const arr = JSON.parse(String(row.rows[0]!.v)) as number[];
+		expect(arr[0]).toBe(b.charCodeAt(0));
 	}
 
 	await rm(dir, { recursive: true, force: true });
