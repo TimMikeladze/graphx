@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS edge_versions (
   rel        text NOT NULL,
   weight     real NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
   props      text NOT NULL DEFAULT '{}',
+  source     text,
   valid_from bigint NOT NULL,
   valid_to   bigint NOT NULL DEFAULT ${FOREVER_LIT}
 );
@@ -134,7 +135,7 @@ CREATE OR REPLACE VIEW nodes AS
   SELECT id, kind, body, uri, content_hash, embed_hash, content_type, props, emb
   FROM node_versions WHERE valid_to = ${FOREVER_LIT};
 CREATE OR REPLACE VIEW edges AS
-  SELECT id, src, dst, rel, weight, props
+  SELECT id, src, dst, rel, weight, props, source
   FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
 
 CREATE TABLE IF NOT EXISTS archival_state (

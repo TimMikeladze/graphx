@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS edge_versions (
   rel        TEXT NOT NULL,
   weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
   props      TEXT NOT NULL DEFAULT '{}',
+  source     TEXT,
   valid_from INTEGER NOT NULL,
   valid_to   INTEGER NOT NULL DEFAULT 8640000000000000
 );
@@ -85,7 +86,7 @@ CREATE VIEW IF NOT EXISTS nodes AS
   SELECT id, kind, body, uri, content_hash, embed_hash, content_type, props, emb
   FROM node_versions WHERE valid_to = 8640000000000000;
 CREATE VIEW IF NOT EXISTS edges AS
-  SELECT id, src, dst, rel, weight, props
+  SELECT id, src, dst, rel, weight, props, source
   FROM edge_versions WHERE valid_to = 8640000000000000;
 
 CREATE TABLE IF NOT EXISTS archival_state (

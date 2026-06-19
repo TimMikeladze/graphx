@@ -61,6 +61,14 @@ export interface IngestOptions<S extends GraphSchema> {
 	 */
 	embedConcurrency?: number;
 	/**
+	 * Opaque embedder identity (e.g. a model id + dimension, `'openai:text-embedding-3-small:1536'`).
+	 * Mixed into the stored `embed_hash` so that CHANGING it forces a re-embed of every node on the
+	 * next run — even when file bodies are byte-identical. Without it, a model swap silently keeps
+	 * stale vectors and query/document vectors end up in incompatible spaces. Unset = legacy
+	 * behavior (`embed_hash = sha256(body)`), so existing graphs are unaffected until an id is set.
+	 */
+	embedId?: string;
+	/**
 	 * Turn `![[asset]]` / `![alt](asset)` embeds into nodes. Off by default (embeds ignored).
 	 * An embed that resolves to a known ingested file becomes an edge to that node; otherwise a
 	 * metadata-only asset node (`uri = ingest:<source>:asset:<path>`, `content_type` from the
