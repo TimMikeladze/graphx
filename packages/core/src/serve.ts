@@ -12,6 +12,7 @@ import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
+import { match, type PatternBuilder } from './pattern.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
@@ -191,6 +192,37 @@ const graphSliceQuerySchema = z.object({
 	asOf: z.coerce.number().optional(),
 });
 
+/** Pattern hop direction (`out`/`in`/`both`) — the PatternBuilder vocab (not the retrieve fwd/rev/both). */
+const patternDirectionSchema = z.enum(['out', 'in', 'both']);
+
+/**
+ * POST /match body — a JSON-serialized PatternBuilder program (§8/§17). `steps` is an ordered
+ * node/edge/var chain (must start with a `node`); `select` names the aliases to project; an
+ * optional `page` keyset-paginates, else the whole result runs.
+ */
+const matchInputSchema = z.object({
+	steps: z.array(
+		z.union([
+			z.object({ node: z.object({ alias: z.string(), kind: z.string() }) }),
+			z.object({ edge: z.object({ rel: z.string(), direction: patternDirectionSchema.optional() }) }),
+			z.object({
+				var: z.object({
+					rel: z.string(),
+					min: z.number().int().nonnegative().optional(),
+					max: z.number().int().nonnegative().optional(),
+					direction: patternDirectionSchema.optional(),
+				}),
+			}),
+		]),
+	),
+	where: z.array(z.object({ alias: z.string(), key: z.string(), value: z.unknown() })).optional(),
+	asOf: z.number().optional(),
+	select: z.array(z.string()).nonempty(),
+	page: z
+		.object({ limit: z.number().int().positive().optional(), cursor: z.string().optional() })
+		.optional(),
+});
+
 /** One POST /bulk row. `kind`/`props` validated per-kind by `bulkLoad` (unknown kind / bad props → 400). */
 const bulkRowSchema = z.object({
 	kind: z.string(),
@@ -291,9 +323,12 @@ function onError(err: Error, c: Context) {
 	if (/^(updateNode|deleteEdge): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
-	// Graph.addNode/addEdge (unknown kind/rel, endpoint-kind mismatch) and bulkLoad
-	// (unknown kind) throw a prefixed `Error` on bad input — those are client errors.
-	if (/^(add(Node|Edge)|bulkLoad):/.test(err.message)) return c.json({ error: err.message }, 400);
+	// Graph.addNode/addEdge (unknown kind/rel, endpoint-kind mismatch), bulkLoad (unknown
+	// kind), and a malformed PatternBuilder program throw a prefixed `Error` on bad input —
+	// those are client errors.
+	if (/^(add(Node|Edge)|bulkLoad|PatternBuilder):/.test(err.message)) {
+		return c.json({ error: err.message }, 400);
+	}
 	// Constraint violations that slip past wire validation are bad input, not a server
 	// fault: a FK to a non-existent node (unconstrained rel skips the kind check),
 	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
@@ -491,6 +526,41 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					upcasters: cfg.upcasters,
 				});
 				return c.json(result, 201);
+			},
+		)
+		// Multi-hop pattern query (§8/§17). The JSON `steps` chain is replayed onto a
+		// PatternBuilder; `page` keyset-paginates, else `run()` returns the whole result.
+		// A malformed program (e.g. no node step) throws `PatternBuilder: ...` -> 400.
+		.post(
+			'/t/:tenant/p/:project/match',
+			requireGraph(cfg, 'read'),
+			zValidator('json', matchInputSchema),
+			async (c) => {
+				const { steps, where, asOf, select, page } = c.req.valid('json');
+				const builder = match(cfg.schema, c.get('graph').raw, cfg.upcasters) as PatternBuilder<
+					S,
+					Record<string, Kind<S>>
+				>;
+				for (const step of steps) {
+					if ('node' in step) builder.node(step.node.alias, step.node.kind as Kind<S>);
+					else if ('edge' in step) {
+						const dir = step.edge.direction ?? 'out';
+						if (dir === 'in') builder.in(step.edge.rel);
+						else if (dir === 'both') builder.both(step.edge.rel);
+						else builder.out(step.edge.rel);
+					} else {
+						builder.rel(step.var.rel, {
+							min: step.var.min,
+							max: step.var.max,
+							direction: step.var.direction,
+						});
+					}
+				}
+				for (const cond of where ?? []) builder.where(cond.alias, cond.key, cond.value);
+				if (asOf !== undefined) builder.asOf(asOf);
+				const query = await builder.select(...select);
+				if (page) return c.json(await query.page({ ...page, limits: cfg.limits }));
+				return c.json({ rows: await query.run(), nextCursor: null });
 			},
 		);
 	app.onError(onError);

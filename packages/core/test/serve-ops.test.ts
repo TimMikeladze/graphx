@@ -391,3 +391,96 @@ test('bulk: bad props (missing required) -> 400', async () => {
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
+
+// --- Group E: POST /match (PatternBuilder) ---------------------------------------
+
+async function postMatch(s: Setup, user: string, spec: unknown) {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/match`, {
+		method: 'POST',
+		headers: hdr(user, s.tenantA),
+		body: JSON.stringify(spec),
+	});
+	return { status: res.status, json: res.status === 200 ? await res.json() : null };
+}
+
+test('match: 2-hop pattern returns typed rows per alias (viewer read)', async () => {
+	const s = await setup();
+	const ada = await mkNode(s, s.editor, 'person', { name: 'ada' });
+	const router = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const cam = await mkNode(s, s.editor, 'device', { type: 'cam' });
+	await mkEdge(s, s.editor, 'owns', ada, router, { since: 1 });
+	await mkEdge(s, s.editor, 'owns', ada, cam, { since: 2 });
+
+	const { status, json } = await postMatch(s, s.viewer, {
+		steps: [
+			{ node: { alias: 'a', kind: 'person' } },
+			{ edge: { rel: 'owns', direction: 'out' } },
+			{ node: { alias: 'b', kind: 'device' } },
+		],
+		select: ['a', 'b'],
+	});
+	expect(status).toBe(200);
+	expect(json.rows.length).toBe(2);
+	expect(json.rows[0].a.id).toBe(ada);
+	expect(new Set(json.rows.map((r: { b: { id: string } }) => r.b.id))).toEqual(
+		new Set([router, cam]),
+	);
+	cleanup(s);
+});
+
+test('match: .where prop filter narrows the result', async () => {
+	const s = await setup();
+	const ada = await mkNode(s, s.editor, 'person', { name: 'ada' });
+	const router = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const cam = await mkNode(s, s.editor, 'device', { type: 'cam' });
+	await mkEdge(s, s.editor, 'owns', ada, router, { since: 1 });
+	await mkEdge(s, s.editor, 'owns', ada, cam, { since: 2 });
+
+	const { status, json } = await postMatch(s, s.editor, {
+		steps: [
+			{ node: { alias: 'a', kind: 'person' } },
+			{ edge: { rel: 'owns', direction: 'out' } },
+			{ node: { alias: 'b', kind: 'device' } },
+		],
+		where: [{ alias: 'b', key: 'type', value: 'router' }],
+		select: ['a', 'b'],
+	});
+	expect(status).toBe(200);
+	expect(json.rows.length).toBe(1);
+	expect(json.rows[0].b.id).toBe(router);
+	cleanup(s);
+});
+
+test('match: page caps + cursor resumes', async () => {
+	const s = await setup();
+	const ada = await mkNode(s, s.editor, 'person', { name: 'ada' });
+	const router = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const cam = await mkNode(s, s.editor, 'device', { type: 'cam' });
+	await mkEdge(s, s.editor, 'owns', ada, router, { since: 1 });
+	await mkEdge(s, s.editor, 'owns', ada, cam, { since: 2 });
+
+	const steps = [
+		{ node: { alias: 'a', kind: 'person' } },
+		{ edge: { rel: 'owns', direction: 'out' } },
+		{ node: { alias: 'b', kind: 'device' } },
+	];
+	const p1 = await postMatch(s, s.editor, { steps, select: ['b'], page: { limit: 1 } });
+	expect(p1.json.rows.length).toBe(1);
+	expect(typeof p1.json.nextCursor).toBe('string');
+
+	const p2 = await postMatch(s, s.editor, {
+		steps,
+		select: ['b'],
+		page: { limit: 1, cursor: p1.json.nextCursor },
+	});
+	expect(p2.json.rows.length).toBe(1);
+	expect(p2.json.rows[0].b.id).not.toBe(p1.json.rows[0].b.id);
+	cleanup(s);
+});
+
+test('match: a pattern with no node step -> 400', async () => {
+	const s = await setup();
+	const { status } = await postMatch(s, s.editor, { steps: [], select: ['a'] });
+	expect(status).toBe(400);
+	cleanup(s);
+});
