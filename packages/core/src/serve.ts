@@ -5,6 +5,14 @@ import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import { z, ZodError } from 'zod';
+import {
+	centrality,
+	type CentralityKind,
+	community,
+	pagerank,
+	shortestPath,
+	topNodes,
+} from './algorithms.ts';
 import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
 import { type BulkRow, bulkLoad } from './bulk.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
@@ -190,6 +198,36 @@ const graphSliceQuerySchema = z.object({
 	kind: z.string().optional(),
 	q: z.string().optional(),
 	asOf: z.coerce.number().optional(),
+});
+
+/** POST /algorithms/shortest-path body (§8). `heuristic` is SDK-only (a function, not wire-serializable). */
+const shortestPathSchema = z.object({
+	src: z.string(),
+	dst: z.string(),
+	weighted: z.boolean().optional(),
+	mode: z.enum(['sql', 'memory']).optional(),
+	rels: z.array(z.string()).optional(),
+	maxDepth: z.number().int().nonnegative().optional(),
+});
+
+/** POST /algorithms/pagerank body. */
+const pageRankSchema = z.object({
+	damping: z.number().optional(),
+	tol: z.number().optional(),
+	maxIter: z.number().int().positive().optional(),
+});
+
+/** POST /algorithms/community body. */
+const communitySchema = z.object({ maxIter: z.number().int().positive().optional() });
+
+/** POST /algorithms/centrality body. */
+const centralitySchema = z.object({ kind: z.enum(['degree', 'in', 'out']).optional() });
+
+/** GET /algorithms/top query — `by` is whitelisted to the persisted metric columns. */
+const topNodesQuerySchema = z.object({
+	by: z.enum(['pagerank', 'community', 'degree']),
+	kind: z.string().optional(),
+	limit: z.coerce.number().int().positive().optional(),
 });
 
 /** Pattern hop direction (`out`/`in`/`both`) — the PatternBuilder vocab (not the retrieve fwd/rev/both). */
@@ -561,6 +599,56 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const query = await builder.select(...select);
 				if (page) return c.json(await query.page({ ...page, limits: cfg.limits }));
 				return c.json({ rows: await query.run(), nextCursor: null });
+			},
+		)
+		// --- P8 analytics (§8). shortestPath/topNodes are reads; pagerank/community/centrality
+		// PERSIST to node_analytics, so they require `write`. Map results (id -> score) serialize
+		// as a plain `scores` object. ---
+		.post(
+			'/t/:tenant/p/:project/algorithms/shortest-path',
+			requireGraph(cfg, 'read'),
+			zValidator('json', shortestPathSchema),
+			async (c) => {
+				const { src, dst, ...opts } = c.req.valid('json');
+				return c.json(await shortestPath(c.get('graph').raw, src, dst, opts));
+			},
+		)
+		.post(
+			'/t/:tenant/p/:project/algorithms/pagerank',
+			requireGraph(cfg, 'write'),
+			zValidator('json', pageRankSchema),
+			async (c) => {
+				const scores = await pagerank(c.get('graph').raw, c.req.valid('json'));
+				return c.json({ scores: Object.fromEntries(scores) });
+			},
+		)
+		.post(
+			'/t/:tenant/p/:project/algorithms/community',
+			requireGraph(cfg, 'write'),
+			zValidator('json', communitySchema),
+			async (c) => {
+				const scores = await community(c.get('graph').raw, c.req.valid('json'));
+				return c.json({ scores: Object.fromEntries(scores) });
+			},
+		)
+		.post(
+			'/t/:tenant/p/:project/algorithms/centrality',
+			requireGraph(cfg, 'write'),
+			zValidator('json', centralitySchema),
+			async (c) => {
+				const scores = await centrality(
+					c.get('graph').raw,
+					c.req.valid('json').kind as CentralityKind | undefined,
+				);
+				return c.json({ scores: Object.fromEntries(scores) });
+			},
+		)
+		.get(
+			'/t/:tenant/p/:project/algorithms/top',
+			requireGraph(cfg, 'read'),
+			zValidator('query', topNodesQuerySchema),
+			async (c) => {
+				return c.json(await topNodes(c.get('graph').raw, c.req.valid('query')));
 			},
 		);
 	app.onError(onError);

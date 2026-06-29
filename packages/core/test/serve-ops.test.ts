@@ -484,3 +484,106 @@ test('match: a pattern with no node step -> 400', async () => {
 	expect(status).toBe(400);
 	cleanup(s);
 });
+
+// --- Group F: /algorithms/* ------------------------------------------------------
+
+/** a -knows-> b -knows-> c (default edge weight 1), returns the three ids. */
+async function chain(s: Setup): Promise<{ a: string; b: string; c: string }> {
+	const a = await mkNode(s, s.editor, 'person', { name: 'a' });
+	const b = await mkNode(s, s.editor, 'person', { name: 'b' });
+	const c = await mkNode(s, s.editor, 'person', { name: 'c' });
+	await mkEdge(s, s.editor, 'knows', a, b);
+	await mkEdge(s, s.editor, 'knows', b, c);
+	return { a, b, c };
+}
+
+async function post(s: Setup, user: string, path: string, body: unknown) {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/${path}`, {
+		method: 'POST',
+		headers: hdr(user, s.tenantA),
+		body: JSON.stringify(body),
+	});
+	return { status: res.status, json: res.status < 400 ? await res.json() : null };
+}
+
+test('algorithms: shortest-path returns the weighted route (viewer read)', async () => {
+	const s = await setup();
+	const { a, b, c } = await chain(s);
+	const { status, json } = await post(s, s.viewer, 'algorithms/shortest-path', { src: a, dst: c });
+	expect(status).toBe(200);
+	expect(json.path).toEqual([a, b, c]);
+	expect(json.cost).toBe(2);
+	cleanup(s);
+});
+
+test('algorithms: shortest-path with no route -> 200 null', async () => {
+	const s = await setup();
+	const { a, c } = await chain(s);
+	const { status, json } = await post(s, s.editor, 'algorithms/shortest-path', { src: c, dst: a });
+	expect(status).toBe(200);
+	expect(json).toBe(null);
+	cleanup(s);
+});
+
+test('algorithms: pagerank persists scores for every node (editor write)', async () => {
+	const s = await setup();
+	await chain(s);
+	const { status, json } = await post(s, s.editor, 'algorithms/pagerank', {});
+	expect(status).toBe(200);
+	expect(Object.keys(json.scores).length).toBe(3);
+	for (const v of Object.values(json.scores)) expect(typeof v).toBe('number');
+	cleanup(s);
+});
+
+test('algorithms: pagerank is a write op — viewer -> 403', async () => {
+	const s = await setup();
+	await chain(s);
+	const { status } = await post(s, s.viewer, 'algorithms/pagerank', {});
+	expect(status).toBe(403);
+	cleanup(s);
+});
+
+test('algorithms: community returns a label per node (editor write)', async () => {
+	const s = await setup();
+	await chain(s);
+	const { status, json } = await post(s, s.editor, 'algorithms/community', {});
+	expect(status).toBe(200);
+	expect(Object.keys(json.scores).length).toBe(3);
+	cleanup(s);
+});
+
+test('algorithms: centrality (out) returns out-degree per node (editor write)', async () => {
+	const s = await setup();
+	const { a, c } = await chain(s);
+	const { status, json } = await post(s, s.editor, 'algorithms/centrality', { kind: 'out' });
+	expect(status).toBe(200);
+	expect(json.scores[a]).toBe(1); // a -> b
+	expect(json.scores[c]).toBe(0); // c is a sink
+	cleanup(s);
+});
+
+test('algorithms: top by a persisted metric (viewer read)', async () => {
+	const s = await setup();
+	await chain(s);
+	await post(s, s.editor, 'algorithms/pagerank', {}); // persist pagerank first
+
+	const res = await s.app.request(
+		`/t/${s.tenantA}/p/${s.pA}/algorithms/top?by=pagerank&limit=2`,
+		{ headers: hdr(s.viewer, s.tenantA) },
+	);
+	expect(res.status).toBe(200);
+	const rows = await res.json();
+	expect(rows.length).toBe(2);
+	expect(typeof rows[0].pagerank).toBe('number');
+	expect(rows[0].pagerank).toBeGreaterThanOrEqual(rows[1].pagerank); // DESC
+	cleanup(s);
+});
+
+test('algorithms: top with an unknown metric -> 400', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/algorithms/top?by=bogus`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});
