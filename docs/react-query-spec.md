@@ -41,42 +41,63 @@ server-side.
 
 ## 3. Current HTTP surface (what hooks can wrap today)
 
-From `serve.ts`, the only routes that exist:
+From `serve.ts`, the routes that exist:
 
 | Method | Path | SDK call | React hook |
 |---|---|---|---|
 | POST | `/t/:tenant/p/:project/nodes` | `addNode` | `useAddNode` |
 | POST | `/t/:tenant/p/:project/edges` | `addEdge` | `useAddEdge` |
 | GET  | `/t/:tenant/p/:project/nodes/:id` | `getNode` | `useNode` |
+| PATCH | `/t/:tenant/p/:project/nodes/:id` | `updateNode` | `useUpdateNode` |
+| DELETE | `/t/:tenant/p/:project/edges/:id` | `deleteEdge` | `useDeleteEdge` |
 | GET  | `/t/:tenant/p/:project/nodes/:id/neighbors` | `neighbors` (unpaginated) | `useNeighbors` |
+| GET  | `/t/:tenant/p/:project/nodes/:id/history` | `history` | `useHistory` |
+| GET  | `/t/:tenant/p/:project/nodes` | `listNodes` | — |
+| GET  | `/t/:tenant/p/:project/graph` | `graphSlice` | — |
 | GET  | `/t/:tenant/p/:project/retrieve` | `retrieve` | `useRetrieve` |
+| POST | `/t/:tenant/p/:project/hybrid` | `hybridRetrieve` | — |
 | POST | `/t/:tenant/p/:project/journey` | `journey` | `useJourney` |
+| POST | `/t/:tenant/p/:project/match` | `match` / `PatternBuilder` | — |
+| POST | `/t/:tenant/p/:project/bulk` | `bulkLoad` | — |
+| GET  | `/t/:tenant/p/:project/changes` | `changeFeed` | `useChangeFeedSync` ← **CDC live-sync** |
+| GET  | `/t/:tenant/p/:project/diff` | `diff` | reconciliation (close events) |
+| POST | `/t/:tenant/p/:project/algorithms/shortest-path` | `shortestPath` | — |
+| POST | `/t/:tenant/p/:project/algorithms/pagerank` | `pagerank` | — |
+| POST | `/t/:tenant/p/:project/algorithms/community` | `community` | — |
+| POST | `/t/:tenant/p/:project/algorithms/centrality` | `centrality` | — |
+| GET  | `/t/:tenant/p/:project/algorithms/top` | `topNodes` | — |
 | GET  | `/health`, `/ready` | — | (ops, no hook) |
 
-**Not exposed over HTTP** (SDK-only today): `neighborsPage`, `updateNode`, `deleteEdge`, `history`,
-`diff`, `changeFeed`, `match`, `hybridRetrieve`, algorithms (`shortestPath`/`topNodes`/…).
+**Still SDK-only:** `neighborsPage` (the one remaining R0 route — backs the infinite-scroll
+`useNeighbors`); `buildCSR`/`snapshotCSR`/CSR `neighbors` and the `constraints` setup ops
+(reasonably SDK-only).
 
-## 4. Phase 0 — HTTP surface expansion (prerequisite)
+## 4. Phase 0 — HTTP surface expansion (DONE except neighborsPage)
 
-The hooks we want (infinite scroll, mutations, live sync) need routes that don't exist yet. Add these
-to `serve.ts`, each with a zod wire schema and `requireGraph(op)`:
+The hooks we want (infinite scroll, mutations, live sync) needed routes that didn't exist. All of
+these are now in `serve.ts`, each with a zod wire schema and `requireGraph(op)` — **except
+`neighborsPage`** (still to do):
 
-| Method | Path | SDK call | Op | Backs |
-|---|---|---|---|---|
-| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) |
-| PATCH| `/nodes/:id` | `updateNode` | write | `useUpdateNode` |
-| DELETE | `/edges/:id` | `deleteEdge` | write | `useDeleteEdge` |
-| GET  | `/nodes/:id/history` | `history` | read | `useHistory` |
-| GET  | `/changes` | `changeFeed` | read | `useChangeFeedSync` ← **the CDC live-sync route** |
-| GET  | `/diff` | `diff` | read | reconciliation (close events) |
+| Method | Path | SDK call | Op | Backs | Status |
+|---|---|---|---|---|---|
+| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) | TODO |
+| PATCH| `/nodes/:id` | `updateNode` | write | `useUpdateNode` | done |
+| DELETE | `/edges/:id` | `deleteEdge` | write | `useDeleteEdge` | done |
+| GET  | `/nodes/:id/history` | `history` | read | `useHistory` | done |
+| GET  | `/changes` | `changeFeed` | read | `useChangeFeedSync` ← **the CDC live-sync route** | done |
+| GET  | `/diff` | `diff` | read | reconciliation (close events) | done |
 
 Notes:
 - `/changes` takes opaque per-stream cursors as query params: `?nodes=<cursor>&edges=<cursor>&limit=`.
   Returns the `ChangeFeedPage` shape verbatim (`{ nodes, edges, nextCursor: { nodes, edges } }`).
-  changeFeed emits **raw stored bytes** (never upcast) — preserve that over the wire.
-- `match`/`hybridRetrieve`/algorithms are **out of scope** for v1 (complex bodies; add later if needed).
-- Reuse the existing `onError` mapping (ZodError→400, AuthzError→403/404, SQLITE_CONSTRAINT→400). The
-  P15 cursor fix means a malformed CDC cursor throws `invalid cursor` → add a 400 branch for it.
+  changeFeed emits **raw stored bytes** (never upcast) — preserved over the wire.
+- `match`/`hybridRetrieve`/algorithms were originally out of v1 scope but are now exposed too (see §3).
+  `match` accepts a JSON-serialized PatternBuilder program; `hybrid`/`algorithms` omit their
+  function-valued opts (`rerank`, shortest-path `heuristic`) since those aren't wire-serializable.
+  pagerank/community/centrality require `write` (they persist to `node_analytics`).
+- The `onError` mapping handles all of these (ZodError→400, AuthzError→403/404, SQLITE_CONSTRAINT/
+  SQLSTATE-23→400, `invalid cursor`→400, `updateNode|deleteEdge: no live version`→404, and the
+  `addNode|addEdge|bulkLoad|PatternBuilder:` client-input prefixes →400).
 
 ## 5. Package shape
 
