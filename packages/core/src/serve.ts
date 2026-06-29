@@ -128,6 +128,18 @@ const nodeInputSchema = z.object({
 	content_type: z.string().optional(),
 });
 
+/** PATCH /nodes/:id body — every field optional; `Graph.updateNode` merges onto the live version. */
+const patchNodeSchema = z.object({
+	kind: z.string().optional(),
+	props: z.record(z.string(), z.unknown()).optional(),
+	emb: z.array(z.number()).optional(),
+	body: z.string().optional(),
+	uri: z.string().optional(),
+	content_hash: z.string().optional(),
+	embed_hash: z.string().optional(),
+	content_type: z.string().optional(),
+});
+
 /** POST /edges body. `src`/`dst` are ULID node ids; props validated per-rel by `addEdge`. */
 const edgeInputSchema = z.object({
 	rel: z.string(),
@@ -240,6 +252,10 @@ function onError(err: Error, c: Context) {
 	if (err instanceof HTTPException) return err.getResponse();
 	if (err instanceof AuthzError) return c.json({ error: err.message }, err.status);
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
+	// Graph.updateNode/deleteEdge on a missing id -> the target doesn't exist (404, not 400).
+	if (/^(updateNode|deleteEdge): no live version/.test(err.message)) {
+		return c.json({ error: err.message }, 404);
+	}
 	// Graph.addNode/addEdge throw `Error` with an `addNode:`/`addEdge:` prefix on bad
 	// input (unknown kind/rel, endpoint-kind mismatch) — those are client errors.
 	if (/^add(Node|Edge):/.test(err.message)) return c.json({ error: err.message }, 400);
@@ -293,6 +309,24 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			const node = await c.get('graph').getNode(c.req.param('id'));
 			if (!node) throw new HTTPException(404, { message: 'node not found' });
 			return c.json(node);
+		})
+		// Edit a node's props/metadata in place (conditional-close successor, §19.1). Returns
+		// the refreshed (upcast) live version; an unknown id throws `no live version` -> 404.
+		.patch(
+			'/t/:tenant/p/:project/nodes/:id',
+			requireGraph(cfg, 'write'),
+			zValidator('json', patchNodeSchema),
+			async (c) => {
+				const graph = c.get('graph');
+				await graph.updateNode(c.req.param('id'), c.req.valid('json'));
+				return c.json(await graph.getNode(c.req.param('id')));
+			},
+		)
+		// Remove an edge (close the live version, no successor). 204 on success; an unknown
+		// id throws `no live version` -> 404.
+		.delete('/t/:tenant/p/:project/edges/:id', requireGraph(cfg, 'write'), async (c) => {
+			await c.get('graph').deleteEdge(c.req.param('id'));
+			return c.body(null, 204);
 		})
 		.get(
 			'/t/:tenant/p/:project/nodes/:id/neighbors',

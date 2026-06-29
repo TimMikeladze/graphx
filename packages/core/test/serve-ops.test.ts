@@ -189,3 +189,84 @@ test('diff: missing t1/t2 -> 400 validation', async () => {
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
+
+// --- Group B: PATCH /nodes/:id (updateNode) + DELETE /edges/:id (deleteEdge) ------
+
+test('patch node: shallow-merges props and round-trips via getNode (editor write)', async () => {
+	const s = await setup();
+	const id = await mkNode(s, s.editor, 'device', { type: 'router' }); // crit defaults to 1
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ props: { crit: 5 } }),
+	});
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.props).toEqual({ type: 'router', crit: 5 }); // type carried, crit patched
+	cleanup(s);
+});
+
+test('patch node: viewer cannot write -> 403', async () => {
+	const s = await setup();
+	const id = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: hdr(s.viewer, s.tenantA),
+		body: JSON.stringify({ props: { crit: 5 } }),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
+test('patch node: no live version for the id -> 404', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}`, {
+		method: 'PATCH',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ props: { crit: 5 } }),
+	});
+	expect(res.status).toBe(404);
+	cleanup(s);
+});
+
+test('delete edge: removes the edge (neighbors drops it) -> 204', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const p2 = await mkNode(s, s.editor, 'person', { name: 'p2' });
+	const eid = await mkEdge(s, s.editor, 'knows', p1, p2);
+
+	const del = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges/${eid}`, {
+		method: 'DELETE',
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(del.status).toBe(204);
+
+	const nbrs = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighbors`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect((await nbrs.json()).length).toBe(0);
+	cleanup(s);
+});
+
+test('delete edge: viewer cannot write -> 403', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const p2 = await mkNode(s, s.editor, 'person', { name: 'p2' });
+	const eid = await mkEdge(s, s.editor, 'knows', p1, p2);
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges/${eid}`, {
+		method: 'DELETE',
+		headers: hdr(s.viewer, s.tenantA),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
+test('delete edge: no live version for the id -> 404', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges/${ulid()}`, {
+		method: 'DELETE',
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(404);
+	cleanup(s);
+});
