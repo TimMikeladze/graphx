@@ -32,4 +32,16 @@ export default defineWorkspace([
 			banner: '#!/usr/bin/env bun',
 		},
 	},
+	{
+		name: 'react',
+		root: 'packages/react',
+		// React Query hooks layered over core's HTTP surface. `dts.inferTypes` makes bunup use
+		// TypeScript's compiler (not isolated declarations) to EMIT the inferred types — the
+		// generic `createGraphHooks` return (the whole hook set) can't be expressed under isolated
+		// declarations, so without this the published `.d.ts` collapses it to `{}`.
+		config: {
+			entry: ['src/index.ts'],
+			dts: { inferTypes: true },
+		},
+	},
 ]);

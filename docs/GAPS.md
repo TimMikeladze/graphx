@@ -68,18 +68,17 @@ Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the ke
 
 ---
 
-## 3. `@graphx/react` — proposed, 0% built
+## 3. `@graphx/react` — ✅ BUILT (2026-06-29)
 
-`docs/react-query-spec.md` is **DRAFT / not part of initial_spec.md**. No `packages/react` exists.
+`packages/react` (`@graphx/react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
 
-Proposed but absent:
-- `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen)
-- Query hooks: `useNode`, `useNeighbors` (infinite), `useRetrieve`, `useJourney`, `useHistory`
-- Mutation hooks: `useAddNode`, `useAddEdge`, `useUpdateNode`, `useDeleteEdge`
-- `useChangeFeedSync` — CDC-driven cache invalidation (the differentiator)
-- `<GraphProvider>`, query-key factory, invalidation matrix
+- `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen) — single closure binding `S`.
+- Query hooks: `useNode`, `useNeighbors` (infinite), `useListNodes` (infinite), `useGraphSlice`, `useHistory`, `useRetrieve`, `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
+- Mutation hooks: `useAddNode`, `useAddEdge`, `useUpdateNode`, `useDeleteEdge`, `useBulkLoad`, `usePagerank`, `useCommunity`, `useCentrality` — invalidate-on-settle.
+- `useChangeFeedSync` — CDC-driven cache invalidation (the differentiator), incremental keyset cursor.
+- `<GraphProvider>`, `graphKeys`/`useKeys` query-key factory, `GraphError`, `GraphTransport`.
 
-**Blocked on §2** — its R0 phase is "HTTP surface expansion": add `neighborsPage`, PATCH `/nodes/:id`, DELETE `/edges/:id`, `/changes`, `/diff` to `serve.ts` first. Then R1 (package), R2 (live-sync).
+**Remaining (react-query-spec §13 R3):** runtime response validation, CDC cursor persistence, the `valid_to` close-feed companion.
 
 ---
 
@@ -121,5 +120,5 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 2. **`packages/core` README** — cheapest high-value doc fix.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. **Expose `hybridRetrieve` + `retrieve` UI in admin** — the routes now exist; admin client still needs to call them to become a real GraphRAG console.
-5. **`@graphx/react` package** — R0 HTTP surface is ready; the hooks package (§3) is still unbuilt.
+5. ~~**`@graphx/react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
 6. **P10 tiering** (~300 LOC + DuckDB) — only when graph size demands it; biggest lift.

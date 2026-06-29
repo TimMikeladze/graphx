@@ -1,7 +1,15 @@
-# `@graphx/react` — React Query integration (DRAFT spec)
+# `@graphx/react` — React Query integration
 
-> Status: **DRAFT / proposed.** Not part of `initial_spec.md`. Net-new package layered over the
-> existing SDK + Hono serving layer. No phase number assigned yet.
+> Status: **IMPLEMENTED** (`packages/react`, 2026-06-29). Net-new package layered over the existing
+> SDK + Hono serving layer. Hooks for the whole HTTP surface (the "Everything" scope), CDC live-sync,
+> infinite scroll, mutation invalidation. Tests run on both backends via the in-process app.
+>
+> Two deviations from the draft below, both deliberate: (1) the hook set is **single-factory** —
+> every hook is defined inside `createGraphHooks<S>` (binds `S` cleanly) rather than split per-file;
+> (2) the published `.d.ts` is emitted with bunup `dts.inferTypes` (tsc inference) because the
+> generic factory return can't be expressed under isolated declarations — without it the type
+> collapses to `{}`. CDC cursor advance also goes beyond the draft: it advances to the last row seen
+> even when the feed reports `nextCursor: null`, so steady-state polling stays incremental.
 
 ## 1. Goal
 
@@ -250,12 +258,12 @@ No infra required — everything is local (libSQL `:memory:`/`file:` + in-proces
 `match` / `hybridRetrieve` / algorithms hooks; the `valid_to` close-feed; optimistic writes for
 server-derived shapes; SSE/WebSocket transport; GraphQL.
 
-## 13. Suggested build phases
+## 13. Build phases
 
-- **R0** — HTTP surface expansion (§4): `neighborsPage`, `updateNode`, `deleteEdge`, `history`,
-  `changes`, `diff` routes + wire schemas + tests. (In-scope polish; partly already flagged as the
-  §19.10 `/changes` route follow-up.)
-- **R1** — `@graphx/react` package: provider, `keys`, query hooks, infinite neighbors, mutation hooks
-  + invalidation matrix. TDD with mocked transport + in-process app.
-- **R2** — `useChangeFeedSync` live invalidation + the close-handling policy.
-- **R3** — optional: runtime response validation, cursor persistence, close-feed companion.
+- **R0** ✅ DONE — HTTP surface expansion (§4): `neighborsPage`, `updateNode`, `deleteEdge`,
+  `history`, `changes`, `diff` (+ `hybrid`/`bulk`/`match`/`algorithms`) routes + wire schemas + tests.
+- **R1** ✅ DONE — `@graphx/react` package: provider, `keys`, query hooks, infinite neighbors,
+  mutation hooks + invalidation matrix. TDD with the in-process app (real routes/zod/CDC keyset).
+- **R2** ✅ DONE — `useChangeFeedSync` live invalidation + the close-handling policy (closes
+  reconciled via mutation `onSettled`).
+- **R3** — not yet: runtime response validation, cursor persistence, close-feed companion.
