@@ -270,3 +270,62 @@ test('delete edge: no live version for the id -> 404', async () => {
 	expect(res.status).toBe(404);
 	cleanup(s);
 });
+
+// --- Group C: POST /hybrid (hybridRetrieve) --------------------------------------
+
+/** POST a node carrying free-text `body` (feeds the FTS leg of hybridRetrieve). */
+async function mkDoc(s: Setup, name: string, body: string, emb?: number[]): Promise<string> {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ kind: 'person', props: { name }, body, emb }),
+	});
+	return (await res.json()).id as string;
+}
+
+test('hybrid: FTS leg returns body matches (viewer read)', async () => {
+	const s = await setup();
+	const a = await mkDoc(s, 'a', 'alpha gateway router');
+	const b = await mkDoc(s, 'b', 'beta gateway switch');
+	await mkDoc(s, 'c', 'gamma firewall'); // no "gateway" — excluded
+
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/hybrid`, {
+		method: 'POST',
+		headers: hdr(s.viewer, s.tenantA),
+		body: JSON.stringify({ query: 'gateway', k: 10, maxDepth: 0 }),
+	});
+	expect(res.status).toBe(200);
+	const ids = new Set((await res.json()).map((r: { id: string }) => r.id));
+	expect(ids.has(a)).toBe(true);
+	expect(ids.has(b)).toBe(true);
+	cleanup(s);
+});
+
+test('hybrid: 501 when no embedder is configured', async () => {
+	const s = await setup();
+	const noEmbed = createApp({ control: s.control, schema: SCHEMA, authenticate });
+	const res = await noEmbed.request(`/t/${s.tenantA}/p/${s.pA}/hybrid`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ query: 'x' }),
+	});
+	expect(res.status).toBe(501);
+	cleanup(s);
+});
+
+test('hybrid: mmr.k caps the number of diversified results', async () => {
+	const s = await setup();
+	// give each doc a 768-dim embedding so the MMR similarity pass has vectors to work with
+	await mkDoc(s, 'a', 'red gateway', vec(1));
+	await mkDoc(s, 'b', 'red gateway', vec(2));
+	await mkDoc(s, 'c', 'red gateway', vec(3));
+
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/hybrid`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ query: 'gateway', k: 10, maxDepth: 0, mmr: { k: 2, lambda: 0.5 } }),
+	});
+	expect(res.status).toBe(200);
+	expect((await res.json()).length).toBeLessThanOrEqual(2);
+	cleanup(s);
+});

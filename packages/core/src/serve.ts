@@ -9,6 +9,7 @@ import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.t
 import type { Kind, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
+import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history } from './temporal.ts';
@@ -187,6 +188,21 @@ const graphSliceQuerySchema = z.object({
 	kind: z.string().optional(),
 	q: z.string().optional(),
 	asOf: z.coerce.number().optional(),
+});
+
+/**
+ * POST /hybrid body (§19.3–19.4). Superset of `retrieve` plus fusion/diversification knobs.
+ * `rerank` is omitted by design — it's a server-injected function, not wire-serializable.
+ */
+const hybridInputSchema = z.object({
+	query: z.string(),
+	k: z.number().int().positive().optional(),
+	maxDepth: z.number().int().nonnegative().optional(),
+	direction: directionSchema.optional(),
+	rels: z.array(z.string()).optional(),
+	asOf: z.number().optional(),
+	rrfK: z.number().positive().optional(),
+	mmr: z.object({ k: z.number().int().positive(), lambda: z.number().optional() }).optional(),
 });
 
 /** GET /changes query — opaque per-stream cursors + page size (CDC tail). */
@@ -425,6 +441,21 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			async (c) => {
 				const { t1, t2 } = c.req.valid('query');
 				return c.json(await diff(c.get('graph').raw, t1, t2));
+			},
+		)
+		// Hybrid GraphRAG search (ANN + FTS5 → RRF → walk → MMR). Needs an embedder (501
+		// otherwise, like /retrieve); `rerank` is SDK-only (not wire-serializable).
+		.post(
+			'/t/:tenant/p/:project/hybrid',
+			requireGraph(cfg, 'read'),
+			zValidator('json', hybridInputSchema),
+			async (c) => {
+				if (!cfg.embed) throw new HTTPException(501, { message: 'hybrid retrieve not configured' });
+				const rows = await hybridRetrieve(c.get('graph').raw, cfg.embed, {
+					...c.req.valid('json'),
+					limits: cfg.limits,
+				});
+				return c.json(rows);
 			},
 		);
 	app.onError(onError);
