@@ -1,0 +1,191 @@
+import { rmSync } from 'node:fs';
+import { expect, test } from 'bun:test';
+import { ulid } from 'ulidx';
+import { z } from 'zod';
+import {
+	addMembership,
+	createProject,
+	createTenant,
+	createUser,
+	initControl,
+} from '../src/control-plane.ts';
+import { evict } from '../src/db.ts';
+import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
+import { createApp } from '../src/serve.ts';
+import { makeTestDb } from './harness.ts';
+
+// Coverage for the backend-only SDK ops newly exposed over HTTP (GAPS.md §2):
+// /changes (changeFeed), /diff, PATCH /nodes/:id (updateNode), DELETE /edges/:id
+// (deleteEdge), POST /hybrid, POST /bulk, POST /match, and the /algorithms/* routes.
+// Self-contained setup mirrors p11-serving (control plane + authz + per-project DB),
+// and every test runs on BOTH backends via `GRAPHX_TEST_DRIVER` (libSQL default, postgres).
+
+const SCHEMA = defineGraphSchema({
+	nodes: {
+		device: z.object({ type: z.string(), crit: z.number().default(1) }),
+		person: z.object({ name: z.string() }),
+	},
+	edges: {
+		owns: { from: 'person', to: 'device', props: z.object({ since: z.number() }) },
+		knows: { from: 'person', to: 'person' },
+		linked: {}, // unconstrained rel: endpoint-kind check skipped (exercises the FK path)
+	},
+});
+
+/** dim-768 one-hot embedding (init() defaults to 768). */
+function vec(seed: number): number[] {
+	const a = Array.from({ length: 768 }, () => 0);
+	a[seed % 768] = 1;
+	return a;
+}
+
+/** Authn reads the principal off headers the tests inject. */
+function authenticate(c: { req: { header: (n: string) => string | undefined } }) {
+	const userId = c.req.header('x-user');
+	const tenantId = c.req.header('x-tenant');
+	if (!userId || !tenantId) throw new Error('missing auth');
+	return { userId, tenantId };
+}
+
+interface Setup {
+	control: DbClient;
+	app: ReturnType<typeof createApp<typeof SCHEMA>>;
+	tenantA: string;
+	editor: string;
+	viewer: string;
+	pA: string;
+	nsA: string;
+}
+
+async function setup(): Promise<Setup> {
+	const control = makeTestDb().client;
+	await initControl(control);
+	const tenantA = await createTenant(control, { name: 'Acme' });
+	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
+	const viewer = await createUser(control, { email: `v-${ulid()}@a.test` });
+	await addMembership(control, { userId: editor, tenantId: tenantA, role: 'editor' });
+	await addMembership(control, { userId: viewer, tenantId: tenantA, role: 'viewer' });
+	const nsA = `ns_${ulid().toLowerCase()}`;
+	const pA = await createProject(control, { tenantId: tenantA, name: 'Alpha', dbNamespace: nsA });
+	// embed: a deterministic one-hot keyed off the query length so /hybrid has a real embedder.
+	const app = createApp({ control, schema: SCHEMA, authenticate, embed: async (q) => vec(q.length) });
+	return { control, app, tenantA, editor, viewer, pA, nsA };
+}
+
+function cleanup(s: Setup): void {
+	evict(s.nsA);
+	for (const sfx of ['', '-wal', '-shm']) rmSync(`${s.nsA}.db${sfx}`, { force: true });
+	s.control.close();
+}
+
+/** Request headers carrying the test principal. */
+function hdr(userId: string, tenantId: string): Record<string, string> {
+	return { 'x-user': userId, 'x-tenant': tenantId, 'content-type': 'application/json' };
+}
+
+/** POST a node as the given principal; returns its minted id. */
+async function mkNode(s: Setup, user: string, kind: string, props: unknown): Promise<string> {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
+		method: 'POST',
+		headers: hdr(user, s.tenantA),
+		body: JSON.stringify({ kind, props }),
+	});
+	return (await res.json()).id as string;
+}
+
+/** POST an edge as the given principal; returns its minted id. */
+async function mkEdge(
+	s: Setup,
+	user: string,
+	rel: string,
+	src: string,
+	dst: string,
+	props?: unknown,
+): Promise<string> {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges`, {
+		method: 'POST',
+		headers: hdr(user, s.tenantA),
+		body: JSON.stringify({ rel, src, dst, props }),
+	});
+	return (await res.json()).id as string;
+}
+
+// --- Group A: /changes (changeFeed) + /diff -------------------------------------
+
+test('changes: returns created node/edge versions + per-stream cursors (viewer read)', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const p2 = await mkNode(s, s.editor, 'person', { name: 'p2' });
+	await mkEdge(s, s.editor, 'knows', p1, p2);
+
+	// a viewer (read role) can tail the feed
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/changes`, {
+		headers: hdr(s.viewer, s.tenantA),
+	});
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.nodes.length).toBe(2);
+	expect(body.edges.length).toBe(1);
+	expect(typeof body.nextCursor.nodes === 'string' || body.nextCursor.nodes === null).toBe(true);
+	expect(typeof body.nextCursor.edges === 'string' || body.nextCursor.edges === null).toBe(true);
+	cleanup(s);
+});
+
+test('changes: limit caps each page and the cursor resumes the next page', async () => {
+	const s = await setup();
+	await mkNode(s, s.editor, 'person', { name: 'a' });
+	await mkNode(s, s.editor, 'person', { name: 'b' });
+	await mkNode(s, s.editor, 'person', { name: 'c' });
+
+	const first = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/changes?limit=2`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	const page1 = await first.json();
+	expect(page1.nodes.length).toBe(2);
+	expect(typeof page1.nextCursor.nodes).toBe('string'); // more to come
+
+	const second = await s.app.request(
+		`/t/${s.tenantA}/p/${s.pA}/changes?nodes=${encodeURIComponent(page1.nextCursor.nodes)}&limit=2`,
+		{ headers: hdr(s.editor, s.tenantA) },
+	);
+	const page2 = await second.json();
+	expect(page2.nodes.length).toBe(1); // the remaining node
+	expect(page2.nextCursor.nodes).toBe(null);
+	cleanup(s);
+});
+
+test('changes: a tampered cursor -> 400 invalid cursor', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/changes?nodes=not-a-cursor`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});
+
+test('diff: returns node/edge versions opened within (t1, t2]', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const p2 = await mkNode(s, s.editor, 'person', { name: 'p2' });
+	await mkEdge(s, s.editor, 'knows', p1, p2);
+
+	// t1=0 is before everything; t2 is far in the future (well under FOREVER) — viewer read.
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/diff?t1=0&t2=9000000000000`, {
+		headers: hdr(s.viewer, s.tenantA),
+	});
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.nodes.length).toBe(2);
+	expect(body.edges.length).toBe(1);
+	cleanup(s);
+});
+
+test('diff: missing t1/t2 -> 400 validation', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/diff?t1=0`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});

@@ -11,7 +11,7 @@ import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { journey } from './journey.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
-import { history } from './temporal.ts';
+import { changeFeed, diff, history } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -175,6 +175,19 @@ const graphSliceQuerySchema = z.object({
 	kind: z.string().optional(),
 	q: z.string().optional(),
 	asOf: z.coerce.number().optional(),
+});
+
+/** GET /changes query — opaque per-stream cursors + page size (CDC tail). */
+const changesQuerySchema = z.object({
+	nodes: z.string().optional(),
+	edges: z.string().optional(),
+	limit: z.coerce.number().int().positive().optional(),
+});
+
+/** GET /diff query — both window bounds (epoch ms) are required. */
+const diffQuerySchema = z.object({
+	t1: z.coerce.number(),
+	t2: z.coerce.number(),
 });
 
 /** Authn middleware: run `cfg.authenticate`, put the principal on ctx, 401 on throw. */
@@ -351,6 +364,33 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 						: undefined,
 				});
 				return c.json(rows);
+			},
+		)
+		// §19.10 CDC tail — the headline live-sync route. RAW changelog (no upcaster):
+		// reports the bytes written, paged by opaque per-stream `(valid_from, ver)` cursors.
+		.get(
+			'/t/:tenant/p/:project/changes',
+			requireGraph(cfg, 'read'),
+			zValidator('query', changesQuerySchema),
+			async (c) => {
+				const { nodes, edges, limit } = c.req.valid('query');
+				const page = await changeFeed(
+					c.get('graph').raw,
+					{ nodes, edges },
+					{ limit, limits: cfg.limits },
+				);
+				return c.json(page);
+			},
+		)
+		// Snapshot delta over (t1, t2] — the close-aware companion to /changes (reconciles
+		// supersession/delete closes that the valid_from-only feed omits, per decision A.3).
+		.get(
+			'/t/:tenant/p/:project/diff',
+			requireGraph(cfg, 'read'),
+			zValidator('query', diffQuerySchema),
+			async (c) => {
+				const { t1, t2 } = c.req.valid('query');
+				return c.json(await diff(c.get('graph').raw, t1, t2));
 			},
 		);
 	app.onError(onError);
