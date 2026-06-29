@@ -3,7 +3,7 @@
 > What is spec'd or implied but **not built**. Original audit 2026-06-14 (`main` @ d1e459d, plus the unmerged `examples/file-ingest` admin work); **re-verified 2026-06-29** (`fix/ingest-top3-risks`).
 > Scope: `packages/core`, `packages/auth`, `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
 >
-> **2026-06-29 corrections:** §1 P9 (blob layer) is now **BUILT** (`packages/core/src/blob.ts`, commit `bc3b467`) — the original "MISSING" below was stale. §2 (SDK ops with no HTTP route) is **RESOLVED** — all listed ops except `neighborsPage` are now in `serve.ts`.
+> **2026-06-29 corrections:** §1 P9 (blob layer) is now **BUILT** (`packages/core/src/blob.ts`, commit `bc3b467`) — the original "MISSING" below was stale. §2 (SDK ops with no HTTP route) is **RESOLVED** — every listed op, including `neighborsPage`, is now in `serve.ts`. The full react-query R0 HTTP surface is live.
 
 Code hygiene is clean — no abandoned `TODO`/`FIXME`, no skipped tests, no stubbed `throw new Error('not implemented')`. The gaps below are **whole features that were never started** or **SDK capabilities not yet reachable from a client**, not half-finished code.
 
@@ -58,12 +58,13 @@ These were backend-only; **all are now exposed in `serve.ts`** with zod wire sch
 | `changeFeed()` | temporal.ts | `GET /changes?nodes=&edges=&limit=` (read) — **the headline CDC/live-sync route** |
 | `shortestPath`, `pagerank`, `community`, `centrality`, `topNodes` | algorithms.ts | `POST /algorithms/shortest-path` (read), `/pagerank` `/community` `/centrality` (write — they persist), `GET /algorithms/top` (read) |
 
-**Still SDK-only (intentional or remaining):**
-- `neighborsPage` — the one remaining react-query R0 route (infinite-scroll). Not yet exposed.
+Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the keyset-paginated neighbors that backs the infinite-scroll `useNeighbors`, completing react-query R0.
+
+**Still SDK-only (intentional):**
 - `buildCSR`, `snapshotCSR`, CSR `neighbors` (internal accel; fine SDK-only).
 - `declareUniqueNodeProp`, `declareSingleValuedRel`, `materializeConstraints` (schema setup; reasonably SDK-only).
 
-**Exposed and fine:** addNode, addEdge, getNode, neighbors, listNodes, graphSlice, history, retrieve, journey; all control-plane admin routes; all auth routes (check/tuples/expand/list-objects).
+**Exposed and fine:** addNode, addEdge, getNode, neighbors, neighborsPage, listNodes, graphSlice, history, retrieve, journey; all control-plane admin routes; all auth routes (check/tuples/expand/list-objects).
 
 ---
 
@@ -116,9 +117,9 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 ---
 
 ## Priority shortlist
-1. ~~**`/changes` (changeFeed) + PATCH/DELETE routes**~~ — ✅ DONE (2026-06-29), plus the rest of §2 (hybrid/bulk/match/diff/algorithms). Only `neighborsPage` remains for full react-query R0.
+1. ~~**`/changes` + PATCH/DELETE + the rest of §2**~~ — ✅ DONE (2026-06-29): changeFeed/diff/hybrid/bulk/match/algorithms **and** neighborsPage. Full react-query R0 HTTP surface is live.
 2. **`packages/core` README** — cheapest high-value doc fix.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. **Expose `hybridRetrieve` + `retrieve` UI in admin** — the routes now exist; admin client still needs to call them to become a real GraphRAG console.
-5. **P10 tiering** (~300 LOC + DuckDB) — only when graph size demands it; biggest lift.
-6. **`neighborsPage` route + `@graphx/react` package** — the remaining R0 route and the unbuilt hooks package (§3).
+5. **`@graphx/react` package** — R0 HTTP surface is ready; the hooks package (§3) is still unbuilt.
+6. **P10 tiering** (~300 LOC + DuckDB) — only when graph size demands it; biggest lift.

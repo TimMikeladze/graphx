@@ -587,3 +587,48 @@ test('algorithms: top with an unknown metric -> 400', async () => {
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
+
+// --- Group G: GET /nodes/:id/neighborsPage (neighborsPage, infinite scroll) -------
+
+test('neighborsPage: keyset-paginates neighbors via cursor (viewer read)', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const p2 = await mkNode(s, s.editor, 'person', { name: 'p2' });
+	const p3 = await mkNode(s, s.editor, 'person', { name: 'p3' });
+	await mkEdge(s, s.editor, 'knows', p1, p2);
+	await mkEdge(s, s.editor, 'knows', p1, p3);
+
+	const seen = new Set<string>();
+	const first = await s.app.request(
+		`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighborsPage?limit=1`,
+		{ headers: hdr(s.viewer, s.tenantA) },
+	);
+	expect(first.status).toBe(200);
+	const page1 = await first.json();
+	expect(page1.rows.length).toBe(1);
+	expect(typeof page1.nextCursor).toBe('string'); // more to come
+	seen.add(page1.rows[0].id);
+
+	const second = await s.app.request(
+		`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighborsPage?limit=1&cursor=${encodeURIComponent(page1.nextCursor)}`,
+		{ headers: hdr(s.viewer, s.tenantA) },
+	);
+	const page2 = await second.json();
+	expect(page2.rows.length).toBe(1);
+	expect(page2.nextCursor).toBe(null); // last page
+	seen.add(page2.rows[0].id);
+
+	expect(seen).toEqual(new Set([p2, p3])); // no skip, no duplicate
+	cleanup(s);
+});
+
+test('neighborsPage: a tampered cursor -> 400 invalid cursor', async () => {
+	const s = await setup();
+	const p1 = await mkNode(s, s.editor, 'person', { name: 'p1' });
+	const res = await s.app.request(
+		`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighborsPage?cursor=not-a-cursor`,
+		{ headers: hdr(s.editor, s.tenantA) },
+	);
+	expect(res.status).toBe(400);
+	cleanup(s);
+});

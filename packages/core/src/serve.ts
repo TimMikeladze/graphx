@@ -166,6 +166,12 @@ const neighborQuerySchema = z.object({
 	rel: z.string().optional(),
 });
 
+/** GET /nodes/:id/neighborsPage query — neighbor filters + keyset pagination (§19.7). */
+const neighborPageQuerySchema = neighborQuerySchema.extend({
+	limit: z.coerce.number().int().positive().optional(),
+	cursor: z.string().optional(),
+});
+
 /** GET /retrieve query (§14). `asOf`/`k`/`maxDepth` coerced from strings. */
 const retrieveQuerySchema = z.object({
 	query: z.string(),
@@ -448,6 +454,24 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					limits: cfg.limits,
 				});
 				return c.json(list);
+			},
+		)
+		// Keyset-paginated neighbors (§19.7) — backs the infinite-scroll `useNeighbors`.
+		// A tampered cursor throws `invalid cursor` -> 400.
+		.get(
+			'/t/:tenant/p/:project/nodes/:id/neighborsPage',
+			requireGraph(cfg, 'read'),
+			zValidator('query', neighborPageQuerySchema),
+			async (c) => {
+				const { direction, rel, limit, cursor } = c.req.valid('query');
+				const page = await c.get('graph').neighborsPage(c.req.param('id'), {
+					direction,
+					rels: rel ? [rel] : undefined,
+					limit,
+					cursor,
+					limits: cfg.limits,
+				});
+				return c.json(page);
 			},
 		)
 		.get(

@@ -51,6 +51,7 @@ From `serve.ts`, the routes that exist:
 | PATCH | `/t/:tenant/p/:project/nodes/:id` | `updateNode` | `useUpdateNode` |
 | DELETE | `/t/:tenant/p/:project/edges/:id` | `deleteEdge` | `useDeleteEdge` |
 | GET  | `/t/:tenant/p/:project/nodes/:id/neighbors` | `neighbors` (unpaginated) | `useNeighbors` |
+| GET  | `/t/:tenant/p/:project/nodes/:id/neighborsPage` | `neighborsPage` (keyset) | `useNeighbors` (infinite) |
 | GET  | `/t/:tenant/p/:project/nodes/:id/history` | `history` | `useHistory` |
 | GET  | `/t/:tenant/p/:project/nodes` | `listNodes` | — |
 | GET  | `/t/:tenant/p/:project/graph` | `graphSlice` | — |
@@ -68,19 +69,17 @@ From `serve.ts`, the routes that exist:
 | GET  | `/t/:tenant/p/:project/algorithms/top` | `topNodes` | — |
 | GET  | `/health`, `/ready` | — | (ops, no hook) |
 
-**Still SDK-only:** `neighborsPage` (the one remaining R0 route — backs the infinite-scroll
-`useNeighbors`); `buildCSR`/`snapshotCSR`/CSR `neighbors` and the `constraints` setup ops
-(reasonably SDK-only).
+**Still SDK-only:** `buildCSR`/`snapshotCSR`/CSR `neighbors` and the `constraints` setup ops
+(reasonably SDK-only). The whole R0 HTTP surface is now live.
 
-## 4. Phase 0 — HTTP surface expansion (DONE except neighborsPage)
+## 4. Phase 0 — HTTP surface expansion (DONE)
 
 The hooks we want (infinite scroll, mutations, live sync) needed routes that didn't exist. All of
-these are now in `serve.ts`, each with a zod wire schema and `requireGraph(op)` — **except
-`neighborsPage`** (still to do):
+these are now in `serve.ts`, each with a zod wire schema and `requireGraph(op)`:
 
 | Method | Path | SDK call | Op | Backs | Status |
 |---|---|---|---|---|---|
-| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) | TODO |
+| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) | done |
 | PATCH| `/nodes/:id` | `updateNode` | write | `useUpdateNode` | done |
 | DELETE | `/edges/:id` | `deleteEdge` | write | `useDeleteEdge` | done |
 | GET  | `/nodes/:id/history` | `history` | read | `useHistory` | done |
