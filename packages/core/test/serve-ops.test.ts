@@ -329,3 +329,65 @@ test('hybrid: mmr.k caps the number of diversified results', async () => {
 	expect((await res.json()).length).toBeLessThanOrEqual(2);
 	cleanup(s);
 });
+
+// --- Group D: POST /bulk (bulkLoad) ----------------------------------------------
+
+test('bulk: loads rows -> 201 with minted ids, persisted + readable (editor write)', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({
+			rows: [
+				{ kind: 'person', props: { name: 'x' } },
+				{ kind: 'person', props: { name: 'y' } },
+				{ kind: 'device', props: { type: 'router' } },
+			],
+		}),
+	});
+	expect(res.status).toBe(201);
+	const body = await res.json();
+	expect(body.count).toBe(3);
+	expect(body.ids.length).toBe(3);
+	expect(body.ids[0].length).toBe(26);
+
+	// the loaded rows are real nodes
+	const get = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${body.ids[2]}`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect((await get.json()).props).toEqual({ type: 'router', crit: 1 });
+	cleanup(s);
+});
+
+test('bulk: viewer cannot write -> 403', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
+		method: 'POST',
+		headers: hdr(s.viewer, s.tenantA),
+		body: JSON.stringify({ rows: [{ kind: 'person', props: { name: 'x' } }] }),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
+test('bulk: unknown kind in a row -> 400', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ rows: [{ kind: 'ghost', props: {} }] }),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});
+
+test('bulk: bad props (missing required) -> 400', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ rows: [{ kind: 'device', props: {} }] }), // missing `type`
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});

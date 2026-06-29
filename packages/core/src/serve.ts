@@ -6,6 +6,7 @@ import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import { z, ZodError } from 'zod';
 import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
+import { type BulkRow, bulkLoad } from './bulk.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
@@ -190,6 +191,24 @@ const graphSliceQuerySchema = z.object({
 	asOf: z.coerce.number().optional(),
 });
 
+/** One POST /bulk row. `kind`/`props` validated per-kind by `bulkLoad` (unknown kind / bad props → 400). */
+const bulkRowSchema = z.object({
+	kind: z.string(),
+	props: z.record(z.string(), z.unknown()).default({}),
+	emb: z.array(z.number()).optional(),
+	body: z.string().optional(),
+	uri: z.string().optional(),
+	content_hash: z.string().optional(),
+	content_type: z.string().optional(),
+});
+
+/** POST /bulk body (§19.8) — batch node ingestion. `loadTs` shares one `valid_from` across rows. */
+const bulkInputSchema = z.object({
+	rows: z.array(bulkRowSchema),
+	chunkSize: z.number().int().positive().optional(),
+	loadTs: z.number().optional(),
+});
+
 /**
  * POST /hybrid body (§19.3–19.4). Superset of `retrieve` plus fusion/diversification knobs.
  * `rerank` is omitted by design — it's a server-injected function, not wire-serializable.
@@ -272,9 +291,9 @@ function onError(err: Error, c: Context) {
 	if (/^(updateNode|deleteEdge): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
-	// Graph.addNode/addEdge throw `Error` with an `addNode:`/`addEdge:` prefix on bad
-	// input (unknown kind/rel, endpoint-kind mismatch) — those are client errors.
-	if (/^add(Node|Edge):/.test(err.message)) return c.json({ error: err.message }, 400);
+	// Graph.addNode/addEdge (unknown kind/rel, endpoint-kind mismatch) and bulkLoad
+	// (unknown kind) throw a prefixed `Error` on bad input — those are client errors.
+	if (/^(add(Node|Edge)|bulkLoad):/.test(err.message)) return c.json({ error: err.message }, 400);
 	// Constraint violations that slip past wire validation are bad input, not a server
 	// fault: a FK to a non-existent node (unconstrained rel skips the kind check),
 	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
@@ -456,6 +475,22 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					limits: cfg.limits,
 				});
 				return c.json(rows);
+			},
+		)
+		// Batch node ingestion (§19.8). Validates every row up front (unknown kind / bad props →
+		// 400 before any index is dropped), loads in chunks, returns the minted ids + count.
+		.post(
+			'/t/:tenant/p/:project/bulk',
+			requireGraph(cfg, 'write'),
+			zValidator('json', bulkInputSchema),
+			async (c) => {
+				const { rows, chunkSize, loadTs } = c.req.valid('json');
+				const result = await bulkLoad(c.get('graph').raw, cfg.schema, rows as BulkRow<S>[], {
+					chunkSize,
+					loadTs,
+					upcasters: cfg.upcasters,
+				});
+				return c.json(result, 201);
 			},
 		);
 	app.onError(onError);
