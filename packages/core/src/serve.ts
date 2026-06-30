@@ -20,6 +20,7 @@ import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
+import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history } from './temporal.ts';
@@ -80,6 +81,8 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * ready immediately (the non-replica case — there is no sync to wait on).
 	 */
 	readiness?: Readiness;
+	/** Title/version/servers for the `GET /openapi.json` document. Omit ⇒ defaults. */
+	openapi?: OpenApiOptions;
 }
 
 /**
@@ -313,6 +316,34 @@ const diffQuerySchema = z.object({
 	t2: z.coerce.number(),
 });
 
+/**
+ * The route wire schemas, keyed for the OpenAPI generator ({@link buildOpenApiDocument}). Exported as
+ * a `Record<string, z.ZodType>` (not the individual consts) so the export stays isolated-declarable
+ * while the routes keep using the precise local consts for `zValidator` typing. Single source of
+ * truth: the same objects feed both runtime validation and the published contract.
+ */
+export const WIRE_SCHEMAS: Record<string, z.ZodType> = {
+	nodeInput: nodeInputSchema,
+	nodeListQuery: nodeListQuerySchema,
+	patchNode: patchNodeSchema,
+	edgeInput: edgeInputSchema,
+	neighborQuery: neighborQuerySchema,
+	neighborPageQuery: neighborPageQuerySchema,
+	graphSliceQuery: graphSliceQuerySchema,
+	retrieveQuery: retrieveQuerySchema,
+	hybridInput: hybridInputSchema,
+	journeyInput: journeyInputSchema,
+	matchInput: matchInputSchema,
+	bulkInput: bulkInputSchema,
+	changesQuery: changesQuerySchema,
+	diffQuery: diffQuerySchema,
+	shortestPath: shortestPathSchema,
+	pageRank: pageRankSchema,
+	community: communitySchema,
+	centrality: centralitySchema,
+	topNodesQuery: topNodesQuerySchema,
+};
+
 /** Authn middleware: run `cfg.authenticate`, put the principal on ctx, 401 on throw. */
 function authn<S extends GraphSchema>(cfg: ServeConfig<S>): MiddlewareHandler<ServeEnv<S>> {
 	return createMiddleware<ServeEnv<S>>(async (c, next) => {
@@ -403,6 +434,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			const ready = cfg.readiness ? cfg.readiness.isReady() : true;
 			return c.json({ status: ready ? 'ready' : 'not-ready' }, ready ? 200 : 503);
 		})
+		// Machine-readable HTTP contract (§14). Unauthenticated + tenant-agnostic, like /health.
+		// Request/query schemas are generated from the same Zod wire schemas the routes validate.
+		.get('/openapi.json', (c) => c.json(buildOpenApiDocument(cfg.openapi)))
 		.use('/t/:tenant/p/:project/*', authn(cfg))
 		.post(
 			'/t/:tenant/p/:project/nodes',

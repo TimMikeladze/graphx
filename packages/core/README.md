@@ -107,6 +107,27 @@ it with [`@graphx/react`](../react) for typed hooks.
 > `hc<AppType>` is runtime-correct but statically `unknown` — consume the source for precise route
 > types, or use `@graphx/react`.
 
+### Machine-readable contract
+
+`GET /openapi.json` serves an OpenAPI 3.1 document (unauthenticated, like `/health`). Request bodies
+and query params are generated from the same Zod wire schemas the routes validate against, so the
+spec can't drift; a test pins the documented routes to the live `app.routes`. Use it to generate
+clients in any language. (`buildOpenApiDocument({ servers, title, version })` is also exported for
+emitting a static spec.)
+
+### Pagination
+
+Two models — know which a route uses:
+
+- **Keyset cursor** (stable; no skip/duplicate; thread the prior `nextCursor` back as `cursor`):
+  `GET /nodes`, `GET /nodes/:id/neighborsPage`, `POST /match` (with a `page`), and `GET /changes`
+  (per-stream `nextCursor.{nodes,edges}` — the CDC tail).
+- **Bounded single response** (no cursor; the set is capped server-side by the `maxRows` governance
+  limit): `GET /nodes/:id/neighbors`, `GET /graph`, `GET /retrieve`, `POST /hybrid`, `POST /journey`,
+  `GET /diff`, `GET /nodes/:id/history`, and `/algorithms/*`. These return depth-ordered/deduped or
+  whole-window results that aren't a flat keyset, so they're bounded rather than paged (raise the cap
+  via operator `limits`, not from the client).
+
 ## Backends
 
 Default is libSQL. For Postgres, import `@graphx/core/pg` once (registers the driver) and select it via
