@@ -63,6 +63,49 @@ test('useChangeFeedSync: an out-of-band edge add invalidates neighbors', async (
 	h.cleanup();
 });
 
+test('useChangeFeedSync: an out-of-band node insert refreshes useListNodes', async () => {
+	const h = await setup();
+	const { Wrapper, qc } = makeWrapper(h, h.editor);
+
+	const list = renderHook(() => hooks.useListNodes(), { wrapper: Wrapper });
+	const cdc = renderHook(() => hooks.useChangeFeedSync({ intervalMs: 10_000_000 }), {
+		wrapper: Wrapper,
+	});
+	await waitFor(() => expect(list.result.current.isSuccess).toBe(true));
+	await waitFor(() => expect(cdc.result.current.isSuccess).toBe(true));
+	expect(list.result.current.data!.pages.flatMap((p) => p.nodes).length).toBe(0);
+
+	const id = await mkNode(h, h.editor, 'person', { name: 'x' }); // out-of-band insert
+	await poll(qc, h);
+
+	await waitFor(() => {
+		const ids = list.result.current.data!.pages.flatMap((p) => p.nodes.map((n) => n.id));
+		expect(ids).toContain(id);
+	});
+	h.cleanup();
+});
+
+test('useChangeFeedSync fromNow: skips the existing backlog, reacts to new writes', async () => {
+	const h = await setup();
+	await mkNode(h, h.editor, 'person', { name: 'old' }); // backlog written before mount
+	const { Wrapper, qc } = makeWrapper(h, h.editor);
+
+	const cdc = renderHook(() => hooks.useChangeFeedSync({ intervalMs: 10_000_000, fromNow: true }), {
+		wrapper: Wrapper,
+	});
+	await waitFor(() => expect(cdc.result.current.isSuccess).toBe(true)); // prime poll
+	expect(cdc.result.current.data!.nodes.length).toBe(0); // backlog skipped
+
+	const id = await mkNode(h, h.editor, 'person', { name: 'new' });
+	await poll(qc, h);
+	await waitFor(() =>
+		expect(cdc.result.current.data!.nodes.map((n) => String((n as { id: unknown }).id))).toContain(
+			id,
+		),
+	);
+	h.cleanup();
+});
+
 test('useChangeFeedSync: advances its keyset cursor (a quiet poll sees nothing new)', async () => {
 	const h = await setup();
 	await mkNode(h, h.editor, 'person', { name: 'p1' });

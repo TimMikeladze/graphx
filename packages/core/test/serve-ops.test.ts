@@ -632,3 +632,80 @@ test('neighborsPage: a tampered cursor -> 400 invalid cursor', async () => {
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
+
+// --- Review fixes: error-body JSON normalization, deleteNode, match alias validation ----
+
+test('errors: HTTPException bodies are JSON with the actual message (not text)', async () => {
+	const s = await setup();
+	// getNode on a missing id throws HTTPException(404, 'node not found')
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(404);
+	expect(res.headers.get('content-type')).toContain('application/json');
+	expect((await res.json()).error).toBe('node not found');
+	cleanup(s);
+});
+
+test('errors: 501 (no embedder) is JSON with the message', async () => {
+	const s = await setup();
+	const noEmbed = createApp({ control: s.control, schema: SCHEMA, authenticate });
+	const res = await noEmbed.request(`/t/${s.tenantA}/p/${s.pA}/hybrid`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({ query: 'x' }),
+	});
+	expect(res.status).toBe(501);
+	expect((await res.json()).error).toBe('hybrid retrieve not configured');
+	cleanup(s);
+});
+
+test('delete node: removes the node (getNode 404) -> 204', async () => {
+	const s = await setup();
+	const id = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const del = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'DELETE',
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(del.status).toBe(204);
+	const get = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(get.status).toBe(404);
+	cleanup(s);
+});
+
+test('delete node: viewer cannot write -> 403', async () => {
+	const s = await setup();
+	const id = await mkNode(s, s.editor, 'device', { type: 'router' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'DELETE',
+		headers: hdr(s.viewer, s.tenantA),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
+test('delete node: no live version for the id -> 404', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}`, {
+		method: 'DELETE',
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(404);
+	cleanup(s);
+});
+
+test('match: select referencing an undeclared alias -> 400', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/match`, {
+		method: 'POST',
+		headers: hdr(s.editor, s.tenantA),
+		body: JSON.stringify({
+			steps: [{ node: { alias: 'a', kind: 'person' } }],
+			select: ['a', 'zzz'], // zzz is not a declared node alias
+		}),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});

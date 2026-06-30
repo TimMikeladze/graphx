@@ -55,11 +55,22 @@ export async function request<T>(t: GraphTransport, opts: RequestOpts): Promise<
 	const res = await doFetch(url, { method: opts.method, headers, body });
 
 	if (!res.ok) {
-		const parsed = (await res.json().catch(() => null)) as {
-			error?: string;
-			issues?: unknown;
-		} | null;
-		throw new GraphError(res.status, parsed?.error ?? res.statusText, parsed?.issues);
+		// Read the body once as text, then try JSON. The serving layer returns `{ error, issues }`
+		// JSON for most errors, but a bare string for some paths — fall back to the raw text so the
+		// message is never lost (otherwise it collapses to the generic statusText).
+		const raw = await res.text().catch(() => '');
+		let message = res.statusText;
+		let issues: unknown;
+		if (raw) {
+			try {
+				const parsed = JSON.parse(raw) as { error?: string; issues?: unknown };
+				message = parsed.error ?? raw;
+				issues = parsed.issues;
+			} catch {
+				message = raw;
+			}
+		}
+		throw new GraphError(res.status, message, issues);
 	}
 	if (res.status === 204) return undefined as T;
 	const text = await res.text();

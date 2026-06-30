@@ -1,6 +1,7 @@
 import './dom-setup.ts';
 import { expect, test } from 'bun:test';
 import { renderHook, waitFor } from '@testing-library/react';
+import { GraphError } from '../src/index.ts';
 import { type Harness, hooks, makeWrapper, mkEdge, mkNode, setup, vec } from './harness.tsx';
 
 /** Render a query hook as the given user, wait for success, return its data. */
@@ -115,5 +116,26 @@ test('useTopNodes: returns an array (smoke)', async () => {
 	await mkNode(h, h.editor, 'person', { name: 'a' });
 	const rows = await read<unknown[]>(h, h.viewer, () => hooks.useTopNodes({ by: 'degree' }));
 	expect(Array.isArray(rows)).toBe(true);
+	h.cleanup();
+});
+
+test('useKeys: exposes the project-scoped key factory from context', async () => {
+	const h = await setup();
+	const { Wrapper } = makeWrapper(h, h.editor);
+	const { result } = renderHook(() => hooks.useKeys(), { wrapper: Wrapper });
+	expect(result.current.node('n1')).toEqual(['graphx', h.project, 'node', 'n1']);
+	h.cleanup();
+});
+
+test('useMatch: a server-rejected pattern surfaces a GraphError (400)', async () => {
+	const h = await setup();
+	const { Wrapper } = makeWrapper(h, h.editor);
+	// select references an alias not declared in steps -> the route 400s
+	const { result } = renderHook(
+		() => hooks.useMatch({ steps: [{ node: { alias: 'a', kind: 'person' } }], select: ['ghost'] }),
+		{ wrapper: Wrapper },
+	);
+	await waitFor(() => expect(result.current.isError).toBe(true));
+	expect((result.current.error as GraphError).status).toBe(400);
 	h.cleanup();
 });

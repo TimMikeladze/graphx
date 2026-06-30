@@ -360,11 +360,14 @@ function requireGraph<S extends GraphSchema>(
 
 /** Map domain errors to HTTP: HTTPException passthrough, AuthzError→403/404, validation→400. */
 function onError(err: Error, c: Context) {
-	if (err instanceof HTTPException) return err.getResponse();
+	// Normalize HTTPException to the same JSON `{ error }` shape every other branch uses.
+	// Hono's default getResponse() emits a text/plain body, which clients parsing JSON (e.g.
+	// @graphx/react) can't read — so 401/404/501 messages would be lost. Status is preserved.
+	if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
 	if (err instanceof AuthzError) return c.json({ error: err.message }, err.status);
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
-	// Graph.updateNode/deleteEdge on a missing id -> the target doesn't exist (404, not 400).
-	if (/^(updateNode|deleteEdge): no live version/.test(err.message)) {
+	// Graph.updateNode/deleteEdge/deleteNode on a missing id -> the target doesn't exist (404, not 400).
+	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
 	// Graph.addNode/addEdge (unknown kind/rel, endpoint-kind mismatch), bulkLoad (unknown
@@ -440,6 +443,12 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		// id throws `no live version` -> 404.
 		.delete('/t/:tenant/p/:project/edges/:id', requireGraph(cfg, 'write'), async (c) => {
 			await c.get('graph').deleteEdge(c.req.param('id'));
+			return c.body(null, 204);
+		})
+		// Retract a node (bitemporal close, no successor). 204 on success; an unknown id
+		// throws `no live version` -> 404. Mirrors deleteEdge.
+		.delete('/t/:tenant/p/:project/nodes/:id', requireGraph(cfg, 'write'), async (c) => {
+			await c.get('graph').deleteNode(c.req.param('id'));
 			return c.body(null, 204);
 		})
 		.get(
@@ -599,6 +608,16 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			zValidator('json', matchInputSchema),
 			async (c) => {
 				const { steps, where, asOf, select, page } = c.req.valid('json');
+				// Guard select against undeclared aliases up front — otherwise the compiled SQL
+				// references a non-existent `sub.<alias>__id` column and fails as a 500.
+				const nodeAliases = new Set(
+					steps.flatMap((s) => ('node' in s ? [s.node.alias] : [])),
+				);
+				for (const a of select) {
+					if (!nodeAliases.has(a)) {
+						throw new HTTPException(400, { message: `match: select references undeclared alias '${a}'` });
+					}
+				}
 				const builder = match(cfg.schema, c.get('graph').raw, cfg.upcasters) as PatternBuilder<
 					S,
 					Record<string, Kind<S>>

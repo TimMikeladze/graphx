@@ -125,6 +125,38 @@ test('usePagerank: persists scores for every node', async () => {
 	h.cleanup();
 });
 
+test('useDeleteNode: removes the node so useNode resolves to null', async () => {
+	const h = await setup();
+	const id = await mkNode(h, h.editor, 'device', { type: 'router' });
+	const { Wrapper } = makeWrapper(h, h.editor);
+
+	const node = renderHook(() => hooks.useNode(id), { wrapper: Wrapper });
+	const del = renderHook(() => hooks.useDeleteNode(), { wrapper: Wrapper });
+	await waitFor(() => expect(node.result.current.data?.id).toBe(id));
+
+	await act(async () => {
+		await del.result.current.mutateAsync({ id });
+	});
+	await waitFor(() => expect(node.result.current.data).toBe(null));
+	h.cleanup();
+});
+
+test('useCommunity: returns a label per node', async () => {
+	const h = await setup();
+	const a = await mkNode(h, h.editor, 'person', { name: 'a' });
+	const b = await mkNode(h, h.editor, 'person', { name: 'b' });
+	await mkEdge(h, h.editor, 'knows', a, b);
+	const { Wrapper } = makeWrapper(h, h.editor);
+	const { result } = renderHook(() => hooks.useCommunity(), { wrapper: Wrapper });
+
+	let out: any;
+	await act(async () => {
+		out = await result.current.mutateAsync({});
+	});
+	expect(Object.keys(out.scores).length).toBe(2);
+	h.cleanup();
+});
+
 test('useCentrality: returns degree scores', async () => {
 	const h = await setup();
 	const a = await mkNode(h, h.editor, 'person', { name: 'a' });

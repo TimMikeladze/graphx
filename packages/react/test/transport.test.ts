@@ -60,6 +60,14 @@ test('request: non-2xx throws GraphError with status, message, issues', async ()
 	expect(err.issues).toEqual([{ path: ['k'] }]);
 });
 
+test('request: a plain-text error body (Hono HTTPException) becomes the GraphError message', async () => {
+	const f = fakeFetch(new Response('node not found', { status: 404 }));
+	const err = await request(t(f), { method: 'GET', path: '/nodes/x' }).catch((e) => e);
+	expect(err).toBeInstanceOf(GraphError);
+	expect(err.status).toBe(404);
+	expect(err.message).toBe('node not found');
+});
+
 test('request: 204 No Content resolves to undefined', async () => {
 	const f = fakeFetch(new Response(null, { status: 204 }));
 	expect(await request(t(f), { method: 'DELETE', path: '/edges/e1' })).toBeUndefined();

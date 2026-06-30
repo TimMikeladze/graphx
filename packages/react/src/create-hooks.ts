@@ -389,6 +389,23 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		});
 	}
 
+	/** Retract a node. Invalidates node(id) + history(id) + the node-list/canvas-slice queries. */
+	function useDeleteNode() {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		return useMutation({
+			mutationFn: ({ id }: { id: string }) =>
+				request<void>(t, { method: 'DELETE', path: `/nodes/${encodeURIComponent(id)}` }),
+			onSettled: (_d, _e, vars) => {
+				const k = graphKeys(t.project);
+				qc.invalidateQueries({ queryKey: k.node(vars.id) });
+				qc.invalidateQueries({ queryKey: k.history(vars.id) });
+				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
+				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+			},
+		});
+	}
+
 	/** Batch node ingestion. Invalidates the node-list + canvas-slice queries. */
 	function useBulkLoad() {
 		const t = useGraphTransport();
@@ -435,10 +452,13 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 	 * UPDATE-successors, NOT pure closes (`deleteEdge`, single-valued supersession). Edge REMOVALS
 	 * are therefore reconciled by the mutation hooks' `onSettled`, not here.
 	 */
-	function useChangeFeedSync(opts: { intervalMs?: number; enabled?: boolean } = {}) {
+	function useChangeFeedSync(
+		opts: { intervalMs?: number; enabled?: boolean; fromNow?: boolean } = {},
+	) {
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		const cursor = useRef<{ nodes?: string; edges?: string }>({});
+		const primed = useRef(false);
 		return useQuery({
 			queryKey: graphKeys(t.project).changes(),
 			refetchInterval: opts.intervalMs ?? 2000,
@@ -455,20 +475,32 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 					path: '/changes',
 					query: { nodes: cursor.current.nodes, edges: cursor.current.edges },
 				});
+				// `fromNow`: the first poll only POSITIONS the cursor past the existing backlog — it
+				// neither invalidates nor surfaces those rows (avoids a mount-time invalidation storm
+				// over a large graph). A backlog spanning >1 page advances one page per poll.
+				const skip = opts.fromNow === true && !primed.current;
+				primed.current = true;
 				const k = graphKeys(t.project);
-				for (const n of page.nodes) {
-					qc.invalidateQueries({ queryKey: k.node(String((n as { id: unknown }).id)) });
-				}
-				for (const e of page.edges) {
-					const edge = e as { src: unknown; dst: unknown };
-					qc.invalidateQueries({ queryKey: k.neighbors(String(edge.src)) });
-					qc.invalidateQueries({ queryKey: k.neighbors(String(edge.dst)) });
+				if (!skip) {
+					for (const n of page.nodes) {
+						qc.invalidateQueries({ queryKey: k.node(String((n as { id: unknown }).id)) });
+					}
+					for (const e of page.edges) {
+						const edge = e as { src: unknown; dst: unknown };
+						qc.invalidateQueries({ queryKey: k.neighbors(String(edge.src)) });
+						qc.invalidateQueries({ queryKey: k.neighbors(String(edge.dst)) });
+					}
+					// out-of-band inserts/updates also affect the list + canvas-slice views
+					if (page.nodes.length > 0 || page.edges.length > 0) {
+						qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
+						qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+					}
 				}
 				cursor.current = {
 					nodes: advanceCursor(cursor.current.nodes, page.nodes, page.nextCursor.nodes),
 					edges: advanceCursor(cursor.current.edges, page.edges, page.nextCursor.edges),
 				};
-				return page;
+				return skip ? { nodes: [], edges: [], nextCursor: page.nextCursor } : page;
 			},
 		});
 	}
@@ -491,6 +523,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		useAddEdge,
 		useUpdateNode,
 		useDeleteEdge,
+		useDeleteNode,
 		useBulkLoad,
 		usePagerank,
 		useCommunity,
