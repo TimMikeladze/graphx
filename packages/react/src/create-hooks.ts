@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+	useInfiniteQuery,
+	useMutation,
+	useQuery,
+	useQueryClient,
+	type UseQueryResult,
+} from '@tanstack/react-query';
 import type {
 	AddEdgeInput,
 	AddNodeInput,
@@ -157,8 +163,18 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		return graphKeys(useGraphTransport().project);
 	}
 
-	/** A single node by id. Resolves to `null` (not an error) when the node doesn't exist. */
-	function useNode(id: string) {
+	/**
+	 * A single node by id. Resolves to `null` (not an error) when the node doesn't exist.
+	 *
+	 * Pass the expected `kind` to narrow the result to `NodeOf<S, K>` — the server can't infer kind
+	 * from an id alone, so without it you get the `AnyNode<S>` union and must discriminate. The kind
+	 * is also checked at runtime: a node whose stored kind differs resolves to `null` (so the
+	 * narrowed type is honest, not an unchecked cast). Both forms share one cached fetch — the kind
+	 * filter runs per-observer via `select`.
+	 */
+	function useNode<K extends Kind<S>>(id: string, kind: K): UseQueryResult<NodeOf<S, K> | null>;
+	function useNode(id: string): UseQueryResult<AnyNode<S> | null>;
+	function useNode(id: string, kind?: Kind<S>) {
 		const t = useGraphTransport();
 		return useQuery({
 			queryKey: graphKeys(t.project).node(id),
@@ -174,6 +190,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 					throw e;
 				}
 			},
+			select: kind ? (n) => (n && n.kind === kind ? n : null) : undefined,
 		});
 	}
 

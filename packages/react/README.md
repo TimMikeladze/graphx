@@ -64,7 +64,9 @@ function NodeCard({ id }: { id: string }) {
 
 ## Hooks
 
-**Queries** (`useQuery`): `useNode` (→ `null` on 404), `useHistory`, `useGraphSlice`, `useRetrieve`,
+**Queries** (`useQuery`): `useNode(id)` → `AnyNode<S> | null` (→ `null` on 404); pass the expected
+kind — `useNode(id, 'device')` → `NodeOf<S,'device'> | null` (narrowed, and runtime-checked: a
+mismatched stored kind resolves to `null`, so no discriminating). `useHistory`, `useGraphSlice`, `useRetrieve`,
 `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
 
 **Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
