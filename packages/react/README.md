@@ -69,6 +69,17 @@ kind — `useNode(id, 'device')` → `NodeOf<S,'device'> | null` (narrowed, and 
 mismatched stored kind resolves to `null`, so no discriminating). `useHistory`, `useGraphSlice`, `useRetrieve`,
 `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
 
+`useMatch` is fully typed per alias — pass the spec inline and each selected alias's row is
+kind-narrowed from the pattern:
+```ts
+const m = g.useMatch({
+  steps: [{ node: { alias: 'p', kind: 'person' } }, { edge: { rel: 'owns' } },
+          { node: { alias: 'd', kind: 'device' } }],
+  select: ['p', 'd'],
+});
+m.data?.rows[0]?.d.props.type;   // ^? typed NodeOf<S,'device'> — node.kind & rel are schema-checked
+```
+
 **Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
 `useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`. Both narrow when you scope
 them: `useNeighbors(id, { rel: 'owns' })` → rows typed `NodeOf<S,'device'>[]` (the schema's

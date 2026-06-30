@@ -156,6 +156,43 @@ export interface MatchResult {
 }
 
 /**
+ * Kind/rel-checked, const-friendly input for the typed {@link createGraphHooks} `useMatch`. Pass the
+ * spec as an inline literal so TypeScript keeps the alias/kind/select literals and can infer the
+ * per-alias row type (a `const` type parameter does the capturing). `node.kind` and `edge`/`var.rel`
+ * are validated against the schema.
+ */
+export type MatchStepInput<S extends GraphSchema> =
+	| { node: { alias: string; kind: Kind<S> } }
+	| { edge: { rel: Rel<S>; direction?: HopDirection } }
+	| { var: { rel: Rel<S>; min?: number; max?: number; direction?: HopDirection } };
+export interface MatchSpecInput<S extends GraphSchema> {
+	steps: readonly MatchStepInput<S>[];
+	where?: ReadonlyArray<{ alias: string; key: string; value: unknown }>;
+	asOf?: number;
+	select: readonly string[];
+	page?: { limit?: number; cursor?: string };
+}
+/** alias → kind map read out of a spec's `steps` tuple (node steps only). */
+type AliasMap<Steps extends readonly unknown[]> = {
+	[N in Steps[number] as N extends { node: { alias: infer A extends string } } ? A : never]: N extends {
+		node: { kind: infer K };
+	}
+		? K
+		: never;
+};
+/** One typed `useMatch` row: each SELECTED alias → its node, kind-narrowed from the spec. */
+export type MatchRowOf<S extends GraphSchema, Spec extends MatchSpecInput<S>> = {
+	[A in Spec['select'][number] & keyof AliasMap<Spec['steps']>]: NodeOf<
+		S,
+		AliasMap<Spec['steps']>[A] & Kind<S>
+	>;
+};
+export interface MatchResultOf<S extends GraphSchema, Spec extends MatchSpecInput<S>> {
+	rows: Array<MatchRowOf<S, Spec>>;
+	nextCursor: string | null;
+}
+
+/**
  * Next per-stream change-feed cursor. The feed returns `null` whenever a page isn't full, so a
  * partial page (rows present, `next === null`) advances to the LAST ROW's `(valid_from, ver)` —
  * keeping the tail incremental; an empty page keeps the prior position.
@@ -336,12 +373,15 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 	}
 
 	/** Multi-hop pattern query (JSON PatternBuilder program). */
-	function useMatch(spec: MatchSpec) {
+	function useMatch<const Spec extends MatchSpecInput<S>>(spec: Spec) {
 		const t = useGraphTransport();
 		return useQuery({
 			queryKey: graphKeys(t.project).match(spec),
 			enabled: spec.select.length > 0,
-			queryFn: () => request<MatchResult>(t, { method: 'POST', path: '/match', body: spec }),
+			// Server-backed cast: the /match reshape returns `{ [alias]: { id, kind, props } }` with
+			// the kind's (upcast) props, so the per-alias `NodeOf<S, kind>` typing is honest.
+			queryFn: () =>
+				request<MatchResultOf<S, Spec>>(t, { method: 'POST', path: '/match', body: spec }),
 		});
 	}
 
