@@ -141,6 +141,50 @@ test('useDeleteNode: removes the node so useNode resolves to null', async () => 
 	h.cleanup();
 });
 
+test('useDeleteNode: a retracted node drops from other nodes neighbor lists', async () => {
+	const h = await setup();
+	const a = await mkNode(h, h.editor, 'person', { name: 'a' });
+	const b = await mkNode(h, h.editor, 'person', { name: 'b' });
+	await mkEdge(h, h.editor, 'knows', b, a); // b -> a, so a is b's neighbor
+	const { Wrapper } = makeWrapper(h, h.editor);
+
+	const nbrs = renderHook(() => hooks.useNeighbors(b), { wrapper: Wrapper });
+	const del = renderHook(() => hooks.useDeleteNode(), { wrapper: Wrapper });
+	await waitFor(() =>
+		expect(nbrs.result.current.data!.pages.flatMap((p) => p.rows.map((r) => r.id))).toContain(a),
+	);
+
+	await act(async () => {
+		await del.result.current.mutateAsync({ id: a });
+	});
+	await waitFor(() =>
+		expect(
+			nbrs.result.current.data!.pages.flatMap((p) => p.rows.map((r) => r.id)),
+		).not.toContain(a),
+	);
+	h.cleanup();
+});
+
+test('useUpdateNode: invalidates listNodes so list views show the new props', async () => {
+	const h = await setup();
+	const id = await mkNode(h, h.editor, 'device', { type: 'router' });
+	const { Wrapper } = makeWrapper(h, h.editor);
+
+	const list = renderHook(() => hooks.useListNodes(), { wrapper: Wrapper });
+	const upd = renderHook(() => hooks.useUpdateNode(), { wrapper: Wrapper });
+	const crit = () =>
+		list.result.current
+			.data!.pages.flatMap((p) => p.nodes)
+			.find((n) => n.id === id)?.props.crit;
+	await waitFor(() => expect(crit()).toBe(1));
+
+	await act(async () => {
+		await upd.result.current.mutateAsync({ id, patch: { props: { crit: 9 } } });
+	});
+	await waitFor(() => expect(crit()).toBe(9));
+	h.cleanup();
+});
+
 test('useCommunity: returns a label per node', async () => {
 	const h = await setup();
 	const a = await mkNode(h, h.editor, 'person', { name: 'a' });

@@ -366,6 +366,9 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 				const k = graphKeys(t.project);
 				qc.invalidateQueries({ queryKey: k.node(vars.id) });
 				qc.invalidateQueries({ queryKey: k.history(vars.id) });
+				// changed props/kind also show in list + canvas-slice views
+				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
+				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
 			},
 		});
 	}
@@ -402,6 +405,9 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 				qc.invalidateQueries({ queryKey: k.history(vars.id) });
 				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
 				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+				// a retracted node drops from the live `nodes` view, so it disappears from EVERY
+				// neighbor result — but we don't know which nodes were adjacent, so invalidate broadly.
+				qc.invalidateQueries({ queryKey: [...k.all, 'neighbors'] });
 			},
 		});
 	}
@@ -458,7 +464,12 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		const cursor = useRef<{ nodes?: string; edges?: string }>({});
-		const primed = useRef(false);
+		// `draining` stays true while a `fromNow` mount is fast-forwarding past the backlog (possibly
+		// several pages); it clears only once BOTH streams report they're caught up.
+		const draining = useRef(opts.fromNow === true);
+		// the project this cursor belongs to — reset the tail if the provider swaps project/tenant
+		// in place (the query key changes, but a plain ref would otherwise carry the old position).
+		const boundTo = useRef(`${t.tenant}/${t.project}`);
 		return useQuery({
 			queryKey: graphKeys(t.project).changes(),
 			refetchInterval: opts.intervalMs ?? 2000,
@@ -470,16 +481,24 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 			staleTime: 0,
 			gcTime: 0,
 			queryFn: async (): Promise<ChangeFeedPage> => {
+				const bind = `${t.tenant}/${t.project}`;
+				if (boundTo.current !== bind) {
+					cursor.current = {};
+					draining.current = opts.fromNow === true;
+					boundTo.current = bind;
+				}
 				const page = await request<ChangeFeedPage>(t, {
 					method: 'GET',
 					path: '/changes',
 					query: { nodes: cursor.current.nodes, edges: cursor.current.edges },
 				});
-				// `fromNow`: the first poll only POSITIONS the cursor past the existing backlog — it
-				// neither invalidates nor surfaces those rows (avoids a mount-time invalidation storm
-				// over a large graph). A backlog spanning >1 page advances one page per poll.
-				const skip = opts.fromNow === true && !primed.current;
-				primed.current = true;
+				// `fromNow`: while draining, polls only POSITION the cursor past the existing backlog —
+				// neither invalidating nor surfacing those rows (avoids a mount-time invalidation storm
+				// over a large graph). Drain ends when BOTH streams report caught-up (nextCursor null).
+				const skip = draining.current;
+				if (skip && page.nextCursor.nodes === null && page.nextCursor.edges === null) {
+					draining.current = false;
+				}
 				const k = graphKeys(t.project);
 				if (!skip) {
 					for (const n of page.nodes) {
