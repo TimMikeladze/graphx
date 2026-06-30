@@ -19,8 +19,8 @@ import type {
 	ShortestPathResult,
 	TemporalDiff,
 	TopNode,
-} from 'core';
-import { encodeCursor } from 'core';
+} from '@graphx/core';
+import { encodeCursor } from '@graphx/core';
 import { useRef } from 'react';
 import { GraphError } from './errors.ts';
 import { graphKeys } from './keys.ts';

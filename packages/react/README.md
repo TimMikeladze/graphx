@@ -10,14 +10,14 @@ are inferred from the same `defineGraphSchema(...)` that validates writes server
 bun add @graphx/react @tanstack/react-query react
 ```
 
-`@tanstack/react-query`, `react`, and `core` are peer dependencies.
+`@tanstack/react-query`, `react`, and `@graphx/core` are peer dependencies.
 
 ## Quickstart
 
 ```tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createGraphHooks, GraphProvider } from '@graphx/react';
-import { defineGraphSchema } from 'core';
+import { defineGraphSchema } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({

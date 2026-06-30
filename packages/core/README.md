@@ -16,16 +16,16 @@ single dialect seam.
 ## Install
 
 ```sh
-bun add core zod
+bun add @graphx/core zod
 ```
 
-Optional subpaths pull optional peers only when imported: `core/pg` (Postgres, peer `pg`),
-`core/blob` (content-addressed blob store, peer `@aws-sdk/client-s3`).
+Optional subpaths pull optional peers only when imported: `@graphx/core/pg` (Postgres, peer `pg`),
+`@graphx/core/blob` (content-addressed blob store, peer `@aws-sdk/client-s3`).
 
 ## Quickstart
 
 ```ts
-import { getDb, init, defineGraphSchema, Graph } from 'core';
+import { getDb, init, defineGraphSchema, Graph } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -53,7 +53,7 @@ const neighbors = await g.neighbors(ada.id);
 ### Retrieval
 
 ```ts
-import { retrieve, hybridRetrieve } from 'core';
+import { retrieve, hybridRetrieve } from '@graphx/core';
 
 const embed = async (text: string) => /* your embedding model */ [/* ...768 floats */];
 
@@ -67,7 +67,7 @@ const hybrid = await hybridRetrieve(client, embed, { query: 'computing', k: 10, 
 ### Time travel
 
 ```ts
-import { history, diff, changeFeed, retrieve } from 'core';
+import { history, diff, changeFeed, retrieve } from '@graphx/core';
 
 const versions = await history(client, id);   // full immutable version trail for an id
 const delta = await diff(client, t1, t2);     // what changed in (t1, t2]
@@ -85,7 +85,7 @@ traversal), `bulkLoad()` (batch ingest), graph algorithms (`shortestPath`, `page
 ## Serving over HTTP
 
 ```ts
-import { createApp, initControl } from 'core';
+import { createApp, initControl } from '@graphx/core';
 
 const app = createApp({
   control,                       // control-plane DB (tenants/projects/memberships)
@@ -109,7 +109,7 @@ it with [`@graphx/react`](../react) for typed hooks.
 
 ## Backends
 
-Default is libSQL. For Postgres, import `core/pg` once (registers the driver) and select it via
+Default is libSQL. For Postgres, import `@graphx/core/pg` once (registers the driver) and select it via
 `getDb(ns, { driver: 'postgres', connectionString })` or `GRAPHX_DB_DRIVER=postgres`. The namespace
 becomes a libSQL DB file or a Postgres schema. A few libSQL-native probes (FTS5 internals, `F32_BLOB`)
 have no Postgres analog; the user-facing contracts run on both.

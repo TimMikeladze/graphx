@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path/posix';
-import type { GraphSchema } from 'core';
+import type { GraphSchema } from '@graphx/core';
 import { extractEmbeds, extractLinks } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';

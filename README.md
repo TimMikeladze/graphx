@@ -11,7 +11,7 @@ bun add core
 ## Usage
 
 ```typescript
-import { greet } from 'core';
+import { greet } from '@graphx/core';
 
 console.log(greet('World')); // Hello, World!
 ```
@@ -25,7 +25,7 @@ Connections come from `getDb(namespace, config)`, which caches one client per pr
 ### libSQL (default)
 
 ```ts
-import { getDb } from 'core';
+import { getDb } from '@graphx/core';
 
 const db = getDb('acme__alpha'); // file:acme__alpha.db
 ```
@@ -37,8 +37,8 @@ No `driver` is needed. For embedded-replica mode, set `SQLD_URL` / `SQLD_TOKEN` 
 Import the `core/pg` subpath once to register the Postgres adapter with `getDb`. This is a side effect, and it keeps `pg` an optional peer dependency — loaded only by consumers who opt in:
 
 ```ts
-import 'core/pg'; // registers the Postgres driver (side effect)
-import { getDb } from 'core';
+import '@graphx/core/pg'; // registers the Postgres driver (side effect)
+import { getDb } from '@graphx/core';
 
 const db = getDb('acme__alpha', {
   driver: 'postgres',
@@ -48,7 +48,7 @@ const db = getDb('acme__alpha', {
 });
 ```
 
-Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import 'core/pg'` once, or `getDb` throws.
+Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import '@graphx/core/pg'` once, or `getDb` throws.
 
 **Tenant model.** Each namespace maps to a Postgres **schema** on a shared connection pool, created lazily — one server credential serves every tenant. (libSQL uses one file/replica per namespace instead.)
 

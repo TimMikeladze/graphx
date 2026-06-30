@@ -1,10 +1,10 @@
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import type { GraphSchema, EmbedFn, DbConfig } from 'core';
-import { getDb, init, Graph } from 'core';
-import { ingestDir, watchDir } from 'ingest';
-import type { IngestResult } from 'ingest';
+import type { GraphSchema, EmbedFn, DbConfig } from '@graphx/core';
+import { getDb, init, Graph } from '@graphx/core';
+import { ingestDir, watchDir } from '@graphx/ingest';
+import type { IngestResult } from '@graphx/ingest';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Arg parsing (exported for unit tests)
@@ -136,7 +136,7 @@ export async function run(argv: string[]): Promise<void> {
 
 	// Register the Postgres adapter BEFORE calling getDb, if needed
 	if (cfg.db?.driver === 'postgres') {
-		await import('core/pg');
+		await import('@graphx/core/pg');
 	}
 
 	// `dim` MUST be set explicitly: it is baked into the vector column at first init and cannot be
