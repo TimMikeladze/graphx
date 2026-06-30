@@ -1,5 +1,7 @@
 import {
+	type InfiniteData,
 	useInfiniteQuery,
+	type UseInfiniteQueryResult,
 	useMutation,
 	useQuery,
 	useQueryClient,
@@ -35,6 +37,24 @@ import { request } from './transport.ts';
 
 type Direction = 'forward' | 'reverse' | 'both';
 type HopDirection = 'out' | 'in' | 'both';
+
+// --- rel-aware neighbor-kind inference (uses the schema's edge `from`/`to`) ---
+type EdgesOf<S> = S extends { edges: infer E } ? E : never;
+type Endpoints<T> = T extends readonly (infer U)[] ? U : T;
+/** The `to`-side node kind(s) of rel `R` (a forward hop lands here); all kinds when unconstrained. */
+type RelToKind<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { to: infer T }
+	? Endpoints<T> & Kind<S>
+	: Kind<S>;
+/** The `from`-side node kind(s) of rel `R` (a reverse hop lands here); all kinds when unconstrained. */
+type RelFromKind<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { from: infer F }
+	? Endpoints<F> & Kind<S>
+	: Kind<S>;
+/** The neighbor kind reached over rel `R` in direction `D` (forward → `to`, reverse → `from`, both → either). */
+type NeighborKind<S extends GraphSchema, R extends Rel<S>, D extends Direction> = D extends 'forward'
+	? RelToKind<S, R>
+	: D extends 'reverse'
+		? RelFromKind<S, R>
+		: RelToKind<S, R> | RelFromKind<S, R>;
 
 /** Client-facing read params — `limits`/`metrics` are deliberately absent (server-set, §19.2). */
 export interface RetrieveParams {
@@ -210,7 +230,25 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		});
 	}
 
-	/** Keyset-paginated neighbors as an infinite query (`nextCursor` threads the pages). */
+	/**
+	 * Keyset-paginated neighbors as an infinite query (`nextCursor` threads the pages).
+	 *
+	 * Pass a `rel` to narrow the neighbor rows to that relation's endpoint kind — the schema's
+	 * `from`/`to` pin it (forward hop → `to`, reverse → `from`), so e.g. `{ rel: 'owns' }` yields
+	 * `NodeOf<S,'device'>[]` instead of the `AnyNode<S>` union. The server enforces the rel filter,
+	 * so the narrowed kind is server-backed, not an unchecked cast. An unconstrained rel (no
+	 * `from`/`to`) stays the union.
+	 */
+	function useNeighbors<R extends Rel<S>, D extends Direction = 'forward'>(
+		id: string,
+		opts: { rel: R; direction?: D; limit?: number },
+	): UseInfiniteQueryResult<
+		InfiniteData<{ rows: NodeOf<S, NeighborKind<S, R, D>>[]; nextCursor: string | null }>
+	>;
+	function useNeighbors(
+		id: string,
+		opts?: NeighborFilter & { limit?: number },
+	): UseInfiniteQueryResult<InfiniteData<NeighborPage<S>>>;
 	function useNeighbors(id: string, opts: NeighborFilter & { limit?: number } = {}) {
 		const t = useGraphTransport();
 		return useInfiniteQuery({
@@ -227,7 +265,16 @@ export function createGraphHooks<S extends GraphSchema>(_schema: S) {
 		});
 	}
 
-	/** Keyset-paginated node list as an infinite query. */
+	/**
+	 * Keyset-paginated node list as an infinite query. Pass `kind` to narrow rows to
+	 * `NodeOf<S, K>[]` (the server filters by kind, so the narrowing is server-backed).
+	 */
+	function useListNodes<K extends Kind<S>>(
+		opts: NodeFilter & { kind: K; limit?: number },
+	): UseInfiniteQueryResult<InfiniteData<{ nodes: NodeOf<S, K>[]; nextCursor: string | null }>>;
+	function useListNodes(
+		opts?: NodeFilter & { limit?: number },
+	): UseInfiniteQueryResult<InfiniteData<NodeListPage<S>>>;
 	function useListNodes(opts: NodeFilter & { limit?: number } = {}) {
 		const t = useGraphTransport();
 		return useInfiniteQuery({

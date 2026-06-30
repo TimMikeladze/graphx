@@ -70,7 +70,10 @@ mismatched stored kind resolves to `null`, so no discriminating). `useHistory`, 
 `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
 
 **Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
-`useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`.
+`useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`. Both narrow when you scope
+them: `useNeighbors(id, { rel: 'owns' })` → rows typed `NodeOf<S,'device'>[]` (the schema's
+`owns.to` pins it; reverse hops use `from`); `useListNodes({ kind: 'device' })` → `NodeOf<S,'device'>[]`.
+The server enforces the rel/kind filter, so the narrowing is server-backed, not a blind cast.
 
 **Mutations** (`useMutation`, invalidate-on-settle): `useAddNode`, `useAddEdge`, `useUpdateNode`,
 `useDeleteEdge`, `useDeleteNode`, `useBulkLoad`, and the persisted-analytics ops `usePagerank`,
