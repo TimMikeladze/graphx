@@ -58,7 +58,7 @@ These were backend-only; **all are now exposed in `serve.ts`** with zod wire sch
 | `changeFeed()` | temporal.ts | `GET /changes?nodes=&edges=&limit=` (read) — **the headline CDC/live-sync route** |
 | `shortestPath`, `pagerank`, `community`, `centrality`, `topNodes` | algorithms.ts | `POST /algorithms/shortest-path` (read), `/pagerank` `/community` `/centrality` (write — they persist), `GET /algorithms/top` (read) |
 
-Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the keyset-paginated neighbors that backs the infinite-scroll `useNeighbors`, completing react-query R0.
+Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the keyset-paginated neighbors that backs the infinite-scroll `useNeighbors`, completing react-query R0. And `deleteNode` → `DELETE /nodes/:id` (write; the SDK op was added on the ingest branch after the original audit, so it wasn't in the table above) — caught in the post-build review.
 
 **Still SDK-only (intentional):**
 - `buildCSR`, `snapshotCSR`, CSR `neighbors` (internal accel; fine SDK-only).
@@ -74,7 +74,7 @@ Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the ke
 
 - `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen) — single closure binding `S`.
 - Query hooks: `useNode`, `useNeighbors` (infinite), `useListNodes` (infinite), `useGraphSlice`, `useHistory`, `useRetrieve`, `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
-- Mutation hooks: `useAddNode`, `useAddEdge`, `useUpdateNode`, `useDeleteEdge`, `useBulkLoad`, `usePagerank`, `useCommunity`, `useCentrality` — invalidate-on-settle.
+- Mutation hooks: `useAddNode`, `useAddEdge`, `useUpdateNode`, `useDeleteEdge`, `useDeleteNode`, `useBulkLoad`, `usePagerank`, `useCommunity`, `useCentrality` — invalidate-on-settle.
 - `useChangeFeedSync` — CDC-driven cache invalidation (the differentiator), incremental keyset cursor.
 - `<GraphProvider>`, `graphKeys`/`useKeys` query-key factory, `GraphError`, `GraphTransport`.
 
@@ -108,16 +108,17 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 ---
 
 ## 5. Documentation gaps
-- **`packages/core` — no README.** Largest package, primary public API, undocumented at package root.
+- ~~**`packages/core` — no README.**~~ ✅ written 2026-06-29.
+- ~~**`packages/react` — no README.**~~ ✅ written 2026-06-29 (with the package).
 - **`packages/auth` — no README.**
 - **Root `README.md` is a 25-line stub** (install/usage/contributing skeleton).
-- **`docs/react-query-spec.md` §3/§4 tables are stale** — list `history` (and effectively neighbor pagination) as unexposed; `history` is live at `serve.ts:318`. Refresh before using the doc to plan R0.
+- ~~**`docs/react-query-spec.md` §3/§4 tables are stale**~~ ✅ refreshed 2026-06-29 (all live routes listed; R0 marked done).
 
 ---
 
 ## Priority shortlist
 1. ~~**`/changes` + PATCH/DELETE + the rest of §2**~~ — ✅ DONE (2026-06-29): changeFeed/diff/hybrid/bulk/match/algorithms **and** neighborsPage. Full react-query R0 HTTP surface is live.
-2. **`packages/core` README** — cheapest high-value doc fix.
+2. ~~**`packages/core` README**~~ — ✅ DONE (2026-06-29). `packages/auth` README + root README still stubs.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. **Expose `hybridRetrieve` + `retrieve` UI in admin** — the routes now exist; admin client still needs to call them to become a real GraphRAG console.
 5. ~~**`@graphx/react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
