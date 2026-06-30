@@ -200,3 +200,6 @@ export {
 	type ServeConfig,
 	type ServeEnv,
 } from './serve.ts';
+
+// HTTP contract — OpenAPI 3.1 document generator (served at GET /openapi.json)
+export { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';

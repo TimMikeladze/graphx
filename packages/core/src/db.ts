@@ -73,7 +73,7 @@ export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	if (resolveDriver(cfg) === 'postgres') {
 		if (!pgFactory) {
 			throw new Error(
-				"getDb: postgres driver selected but the pg adapter is not registered — import 'core/pg'",
+				"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
 			);
 		}
 		client = pgFactory(namespace, cfg);

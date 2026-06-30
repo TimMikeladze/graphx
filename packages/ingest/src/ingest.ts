@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path/posix';
-import type { GraphSchema } from 'core';
+import type { GraphSchema } from '@graphx/core';
 import { extractEmbeds, extractLinks } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
@@ -53,6 +54,7 @@ interface LooseGraph {
 		dst: string;
 		weight?: number;
 		props?: Record<string, unknown>;
+		source?: string;
 	}): Promise<{ id: string }>;
 	deleteEdge(id: string): Promise<void>;
 	deleteNode(id: string): Promise<void>;
@@ -91,14 +93,20 @@ interface DesiredEdge {
 	props?: Record<string, unknown>;
 }
 
-/** Live out-edges of a node, via the `edges` view — includes weight and props for drift. */
+/**
+ * Live out-edges of a node that THIS ingest source authored, via the `edges` view — includes
+ * weight and props for drift. Scoped by the `source` provenance column so the reconcile only ever
+ * closes edges ingest created; edges added by other writers (admin UI, enrichment) have a different
+ * or null `source` and are invisible here, hence never retracted.
+ */
 async function liveOutEdges(
 	g: LooseGraph,
 	srcId: string,
+	source: string,
 ): Promise<Array<{ id: string; rel: string; dst: string; weight: number; props: Record<string, unknown> }>> {
 	const r = await g.raw.execute({
-		sql: 'SELECT id, rel, dst, weight, props FROM edges WHERE src = ?',
-		args: [srcId],
+		sql: 'SELECT id, rel, dst, weight, props FROM edges WHERE src = ? AND source = ?',
+		args: [srcId, source],
 	});
 	return r.rows.map((row) => ({
 		id: String(row.id),
@@ -262,6 +270,11 @@ export async function ingestDir<S extends GraphSchema>(
 	const idField = opts.idField ?? 'id';
 	const edgeFields = opts.edgeFields ?? {};
 	const edgeFieldKeys = new Set(Object.keys(edgeFields));
+	// The effective embed-cache key: sha256(body), optionally fingerprinted by the embedder
+	// identity so that swapping models (changing `embedId`) re-embeds even byte-identical bodies.
+	const embedId = opts.embedId;
+	const effEmbedHash = (f: ParsedFile): string =>
+		embedId ? createHash('sha256').update(`${embedId}\0${f.embedHash}`).digest('hex') : f.embedHash;
 	const result: IngestResult = {
 		added: 0,
 		updated: 0,
@@ -328,8 +341,8 @@ export async function ingestDir<S extends GraphSchema>(
 		seenIdentity.add(identityKey);
 
 		const prior = live.get(identityKey);
-		if (prior && prior.hash === file.hash) {
-			// Unchanged: record id for link resolution, drop the body.
+		if (prior && prior.hash === file.hash && prior.embedHash === effEmbedHash(file)) {
+			// Unchanged in content AND embedder identity: record id for link resolution, drop the body.
 			keyToId.set(file.key, prior.id);
 			result.unchanged++;
 		} else {
@@ -351,8 +364,8 @@ export async function ingestDir<S extends GraphSchema>(
 			// New node — always embed.
 			return { body: file.body, needsEmbed: true };
 		}
-		// Update — only re-embed if the body (embed input) changed.
-		return { body: file.body, needsEmbed: prior.embedHash !== file.embedHash };
+		// Update — re-embed if the body OR the embedder identity changed.
+		return { body: file.body, needsEmbed: prior.embedHash !== effEmbedHash(file) };
 	});
 
 	// Run embeds with bounded concurrency, preserving index alignment.
@@ -375,7 +388,7 @@ export async function ingestDir<S extends GraphSchema>(
 					uri: keyPrefix + identityKey,
 					props,
 					content_hash: file.hash,
-					embed_hash: file.embedHash,
+					embed_hash: effEmbedHash(file),
 					emb,
 				});
 				keyToId.set(file.key, node.id);
@@ -391,7 +404,7 @@ export async function ingestDir<S extends GraphSchema>(
 				};
 				if (emb !== undefined) {
 					patch.emb = emb;
-					patch.embed_hash = file.embedHash;
+					patch.embed_hash = effEmbedHash(file);
 				}
 				await g.updateNode(prior.id, patch);
 				keyToId.set(file.key, prior.id);
@@ -502,8 +515,8 @@ export async function ingestDir<S extends GraphSchema>(
 			}
 		}
 
-		// Reconcile: compare desired vs live out-edges
-		const existing = await liveOutEdges(g, srcId);
+		// Reconcile: compare desired vs live out-edges THIS source authored (foreign edges excluded)
+		const existing = await liveOutEdges(g, srcId, keyPrefix);
 		const liveMap = new Map<string, typeof existing[number]>();
 		for (const e of existing) liveMap.set(`${e.rel}\0${e.dst}`, e);
 
@@ -514,7 +527,7 @@ export async function ingestDir<S extends GraphSchema>(
 			if (!live2) {
 				// new edge
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props, source: keyPrefix });
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));
@@ -524,7 +537,7 @@ export async function ingestDir<S extends GraphSchema>(
 				await g.deleteEdge(live2.id);
 				result.edgesClosed++;
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props });
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props, source: keyPrefix });
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));

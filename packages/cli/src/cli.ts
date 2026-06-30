@@ -1,10 +1,10 @@
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import type { GraphSchema, EmbedFn, DbConfig } from 'core';
-import { getDb, init, Graph } from 'core';
-import { ingestDir, watchDir } from 'ingest';
-import type { IngestResult } from 'ingest';
+import type { GraphSchema, EmbedFn, DbConfig } from '@graphx/core';
+import { getDb, init, Graph } from '@graphx/core';
+import { ingestDir, watchDir } from '@graphx/ingest';
+import type { IngestResult } from '@graphx/ingest';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Arg parsing (exported for unit tests)
@@ -65,12 +65,23 @@ interface GraphxConfig {
 // Summary printer
 // ──────────────────────────────────────────────────────────────────────────────
 
+/** Group skip entries by `code` into a compact `code=count code=count` string (empty if none). */
+export function skipBreakdown(skipped: IngestResult['skipped']): string {
+	if (skipped.length === 0) return '';
+	const counts = new Map<string, number>();
+	for (const s of skipped) counts.set(s.code, (counts.get(s.code) ?? 0) + 1);
+	return [...counts].map(([code, n]) => `${code}=${n}`).join(' ');
+}
+
 function printSummary(result: IngestResult): void {
 	const { added, updated, unchanged, deleted, edgesAdded, edgesClosed, skipped } = result;
 	console.log(
 		`added=${added} updated=${updated} unchanged=${unchanged} deleted=${deleted} ` +
 			`edgesAdded=${edgesAdded} edgesClosed=${edgesClosed} skipped=${skipped.length}`,
 	);
+	// A bare count hides systemic failure (a schema/kind/dim error rejecting every file). Surface
+	// the codes so an operator can see WHY, not just that something was skipped.
+	if (skipped.length > 0) console.log(`  skips: ${skipBreakdown(skipped)}`);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -125,11 +136,19 @@ export async function run(argv: string[]): Promise<void> {
 
 	// Register the Postgres adapter BEFORE calling getDb, if needed
 	if (cfg.db?.driver === 'postgres') {
-		await import('core/pg');
+		await import('@graphx/core/pg');
 	}
 
+	// `dim` MUST be set explicitly: it is baked into the vector column at first init and cannot be
+	// changed later (CREATE TABLE IF NOT EXISTS). A wrong/default value silently rejects every node
+	// at insert time (dimension mismatch), so refuse to guess.
+	if (cfg.dim == null) {
+		throw new Error(
+			"graphx: config must set `dim` (the embedding dimension, e.g. 768) — it must match your embedder's output and cannot be changed after the first run",
+		);
+	}
 	const client = getDb(cfg.namespace ?? 'graphx', cfg.db ?? {});
-	await init(client, cfg.dim ?? 4);
+	await init(client, cfg.dim);
 	const graph = new Graph(client, cfg.schema);
 
 	const ingestOpts = {
@@ -145,6 +164,12 @@ export async function run(argv: string[]): Promise<void> {
 	// Initial ingest run
 	const result = await ingestDir(ingestOpts);
 	printSummary(result);
+
+	// Systemic failure: nothing was written but files were rejected (schema/kind/dim error). Signal
+	// it with a nonzero exit so CI/scripts don't read a total failure as a successful no-op.
+	if (result.added === 0 && result.updated === 0 && result.skipped.length > 0) {
+		process.exitCode = 1;
+	}
 
 	if (args.watch) {
 		console.log(`Watching ${args.dir} for changes…`);

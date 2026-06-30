@@ -457,6 +457,63 @@ test('ingestDir: frontmatter-only edit does NOT re-embed (body unchanged)', asyn
 	client.close();
 });
 
+test('ingestDir: changing embedId re-embeds even when the body is unchanged (model swap)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\nkind: note\n---\nbody text' });
+
+	let calls = 0;
+	const counting: EmbedFn = async () => {
+		calls++;
+		return [1, 0, 0, 0];
+	};
+
+	// First ingest under model 'm1' → one embed.
+	await ingestDir({ dir, graph: g, embed: counting, embedId: 'm1' });
+	expect(calls).toBe(1);
+
+	// Same embedId, unchanged body → no re-embed.
+	const r1 = await ingestDir({ dir, graph: g, embed: counting, embedId: 'm1' });
+	expect(r1.unchanged).toBe(1);
+	expect(calls).toBe(1);
+
+	// Swap embedId → must re-embed despite identical body (otherwise vector spaces mix).
+	const r2 = await ingestDir({ dir, graph: g, embed: counting, embedId: 'm2' });
+	expect(r2.updated).toBe(1);
+	expect(r2.unchanged).toBe(0);
+	expect(calls).toBe(2);
+
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: foreign edges (authored outside ingest) survive a reconcile of the source', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\nkind: note\n---\nlinks to [[b]]',
+		'b.md': '---\nkind: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed });
+
+	const ids = await client.execute('SELECT uri, id FROM nodes');
+	const byUri = new Map(ids.rows.map((r) => [String(r.uri), String(r.id)]));
+	const aId = byUri.get('ingest:default:file:a.md')!;
+	const bId = byUri.get('ingest:default:file:b.md')!;
+
+	// A user / enrichment job adds a TYPED-PROPS edge directly (no ingest provenance). A typed
+	// rel is used on purpose: it proves provenance can't ride in props (zod strips unknown keys).
+	await g.addEdge({ rel: 'related', src: aId, dst: bId, props: { note: 'manual' } });
+	expect(Number((await client.execute('SELECT COUNT(*) AS c FROM edges')).rows[0]!.c)).toBe(2);
+
+	// Re-reconcile a.md (edit forces it into `touched`). Ingest must NOT close the foreign edge.
+	await writeFile(join(dir, 'a.md'), '---\nkind: note\n---\nstill links [[b]] after an edit');
+	await ingestDir({ dir, graph: g, embed });
+
+	const rels = (await client.execute('SELECT rel FROM edges ORDER BY rel')).rows.map((r) => String(r.rel));
+	expect(rels).toEqual(['links_to', 'related']); // ingest's own edge + the surviving foreign edge
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
 test('ingestDir: batched embeds preserve per-file association (embedConcurrency=3)', async () => {
 	// Each fake embed returns a vector derived from the body's first char code, so we can
 	// assert that node[i].emb was computed from node[i].body (not a neighbor's body).

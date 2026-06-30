@@ -1,0 +1,9 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"declaration": true,
+		"isolatedDeclarations": false,
+		"types": ["node", "react", "react-dom"]
+	},
+	"include": ["src/**/*"]
+}

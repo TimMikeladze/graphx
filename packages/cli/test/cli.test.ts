@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { parseIngestArgs } from '../src/cli.ts';
+import { parseIngestArgs, skipBreakdown } from '../src/cli.ts';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Unit tests for parseIngestArgs
@@ -75,6 +75,24 @@ test('parseIngestArgs: parses combined flags', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Unit tests for skipBreakdown
+// ──────────────────────────────────────────────────────────────────────────────
+
+test('skipBreakdown: groups skip entries by code with counts', () => {
+	const out = skipBreakdown([
+		{ key: 'a', stage: 'node', code: 'schema-reject', reason: 'x' },
+		{ key: 'b', stage: 'node', code: 'schema-reject', reason: 'y' },
+		{ key: 'c', stage: 'link', code: 'unresolved-link', reason: 'z' },
+	]);
+	expect(out).toContain('schema-reject=2');
+	expect(out).toContain('unresolved-link=1');
+});
+
+test('skipBreakdown: empty for no skips', () => {
+	expect(skipBreakdown([])).toBe('');
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // End-to-end: run() with a temp graphx.config.ts + vault dir (libSQL only)
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -99,7 +117,7 @@ const schema = defineGraphSchema({
 const embed = async () => [1, 0, 0, 0];
 // Pin libSQL — the PG test leg sets GRAPHX_DB_DRIVER=postgres globally, which getDb would
 // otherwise inherit (and then need core/pg). This e2e exercises the CLI wiring on libSQL.
-export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
+export default { schema, embed, dim: 4, db: { driver: 'libsql' }, namespace: '${ns}' };
 `,
 	);
 
@@ -118,5 +136,29 @@ export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
 		await rm(vaultDir, { recursive: true, force: true });
 		await rm(configPath, { force: true });
 		for (const sfx of ['', '-wal', '-shm']) await rm(`${dbFile}${sfx}`, { force: true });
+	}
+});
+
+test('run: throws a clear error when the config omits dim', async () => {
+	const ns = `cli-nodim-${Date.now()}`;
+	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(join(vaultDir, 'note.md'), '---\nkind: note\n---\nhi');
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema } from '../../core/src/define-graph-schema.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({}).passthrough() }, edges: {} });
+const embed = async () => [1, 0, 0, 0];
+export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		const { run } = await import('../src/cli.ts');
+		await expect(run(['ingest', vaultDir, '--config', configPath])).rejects.toThrow(/must set .?dim/);
+	} finally {
+		await rm(vaultDir, { recursive: true, force: true });
+		await rm(configPath, { force: true });
+		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
 	}
 });

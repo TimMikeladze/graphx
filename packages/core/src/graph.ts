@@ -68,6 +68,12 @@ export interface AddEdgeInput<S extends GraphSchema, R extends Rel<S>> {
 	dst: string;
 	weight?: number;
 	props?: EdgePropsInput<S, R>;
+	/**
+	 * Optional provenance tag for the edge writer (e.g. `ingest:<source>:`). Stored verbatim in
+	 * the `source` column; `null` when unset. Lets an authority (ingest) reconcile only the edges
+	 * it authored and leave edges added by other writers (admin UI, enrichment) untouched.
+	 */
+	source?: string;
 }
 
 /** Result of {@link Graph.addEdge}. */
@@ -328,9 +334,9 @@ export class Graph<S extends GraphSchema> {
 		const insertEdge = (ts: number): SqlStatement[] => [
 			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
 			{
-				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from)
-						VALUES (?,?,?,?,?,?,?)`,
-				args: [id, e.src, e.dst, e.rel, weight, props, ts],
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, source, valid_from)
+						VALUES (?,?,?,?,?,?,?,?)`,
+				args: [id, e.src, e.dst, e.rel, weight, props, e.source ?? null, ts],
 			},
 		];
 
