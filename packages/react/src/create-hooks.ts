@@ -28,7 +28,6 @@ import type {
 	TemporalDiff,
 	TopNode,
 } from '@graphx/core';
-import { encodeCursor } from '@graphx/core';
 import { useRef } from 'react';
 import { GraphError } from './errors.ts';
 import { graphKeys } from './keys.ts';
@@ -193,6 +192,15 @@ export interface MatchResultOf<S extends GraphSchema, Spec extends MatchSpecInpu
 }
 
 /**
+ * Encode a keyset cursor as base64(JSON array) — byte-identical to `@graphx/core`'s `encodeCursor`
+ * for the ASCII numeric-string parts a feed cursor holds, but via `btoa` so this package pulls in
+ * NO `@graphx/core` runtime (only erased types) and stays browser-safe.
+ */
+function encodeCursor(parts: string[]): string {
+	return btoa(JSON.stringify(parts));
+}
+
+/**
  * Next per-stream change-feed cursor. The feed returns `null` whenever a page isn't full, so a
  * partial page (rows present, `next === null`) advances to the LAST ROW's `(valid_from, ver)` —
  * keeping the tail incremental; an empty page keeps the prior position.
@@ -213,8 +221,12 @@ function advanceCursor(
  * scope and export the result. Every hook reads its transport from {@link GraphProvider} context,
  * so the hooks carry no config themselves — only `S`-derived types. `schema` is accepted purely to
  * bind `S` for inference (the wire contracts are deliberately loose, so per-kind typing needs it).
+ * The value is used ONLY for inference — you can either `createGraphHooks(schema)` (infer `S` from
+ * the arg) or, in a browser bundle that shouldn't ship the SDK/schema runtime, pass the type
+ * explicitly and omit the value: `createGraphHooks<typeof schema>()`. This package pulls in NO
+ * `@graphx/core` runtime, so the client stays SDK-free — it's typed by `S` alone (the "no codegen").
  */
-export function createGraphHooks<S extends GraphSchema>(_schema: S) {
+export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
 	/** The project-scoped key factory for the current provider (manual invalidation/prefetch). */
 	function useKeys() {
 		return graphKeys(useGraphTransport().project);

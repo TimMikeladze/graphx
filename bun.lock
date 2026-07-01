@@ -14,6 +14,26 @@
         "typescript": "^6.0.3",
       },
     },
+    "examples/iot-fleet": {
+      "name": "@graphx/example-iot-fleet",
+      "version": "0.0.0",
+      "dependencies": {
+        "@graphx/core": "workspace:*",
+        "@graphx/react": "workspace:*",
+        "@tanstack/react-query": "^5.101.0",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "@vitejs/plugin-react": "^6",
+        "typescript": "^6.0.3",
+        "vite": "^8",
+      },
+    },
     "packages/admin": {
       "name": "@graphx/admin",
       "version": "0.0.1",
@@ -347,6 +367,8 @@
     "@graphx/cli": ["@graphx/cli@workspace:packages/cli"],
 
     "@graphx/core": ["@graphx/core@workspace:packages/core"],
+
+    "@graphx/example-iot-fleet": ["@graphx/example-iot-fleet@workspace:examples/iot-fleet"],
 
     "@graphx/ingest": ["@graphx/ingest@workspace:packages/ingest"],
 

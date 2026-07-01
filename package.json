@@ -11,7 +11,8 @@
 		"url": "git+https://github.com/TimMikeladze/graphx.git"
 	},
 	"workspaces": [
-		"packages/*"
+		"packages/*",
+		"examples/*"
 	],
 	"type": "module",
 	"scripts": {

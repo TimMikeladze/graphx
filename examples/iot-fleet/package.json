@@ -1,0 +1,29 @@
+{
+	"name": "@graphx/example-iot-fleet",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Vite + Bun + SQLite (libSQL) React example — an IoT fleet graph over @graphx/core + @graphx/react",
+	"scripts": {
+		"server": "bun run server.ts",
+		"dev": "vite",
+		"build": "vite build",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@graphx/core": "workspace:*",
+		"@graphx/react": "workspace:*",
+		"@tanstack/react-query": "^5.101.0",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"@vitejs/plugin-react": "^6",
+		"typescript": "^6.0.3",
+		"vite": "^8"
+	}
+}
