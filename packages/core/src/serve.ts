@@ -1,3 +1,4 @@
+import { createClient } from '@libsql/client';
 import type { DbClient } from './dialect.ts';
 import { zValidator } from '@hono/zod-validator';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -15,6 +16,13 @@ import {
 } from './algorithms.ts';
 import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
 import { type BulkRow, bulkLoad } from './bulk.ts';
+import {
+	addMembership,
+	createProject,
+	createTenant,
+	createUser,
+	initControl,
+} from './control-plane.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
@@ -748,10 +756,86 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 export type AppType = Hono<ServeEnv<GraphSchema>>;
 
 /**
- * Build the serving app for `cfg`. Mount it (e.g. `Bun.serve({ fetch: app.fetch })`)
- * and consume it with the typed client `hc<AppType>(url)`. The returned value is the
- * fully chained app, so a same-module `typeof` recovers precise route types.
+ * Batteries-included dev config — pass a `schema` (no `control`/`authenticate`) and `createApp`
+ * bootstraps an in-memory control plane, one tenant/project/user, seeds via `seed`, and mounts a
+ * permissive header-auth + `GET /demo`. NOT for production (in-memory control, no real auth).
  */
-export function createApp<S extends GraphSchema>(cfg: ServeConfig<S>): Hono<ServeEnv<S>> {
-	return buildApp(cfg);
+export interface DevServeConfig<S extends GraphSchema> {
+	schema: S;
+	embed?: EmbedFn;
+	limits?: Partial<QueryLimits>;
+	upcasters?: UpcasterRegistry;
+	metrics?: MetricsSink;
+	readiness?: Readiness;
+	openapi?: OpenApiOptions;
+	/** Project DB namespace (libSQL file / PG schema). Default `'graphx_dev'`. */
+	db?: string;
+	/** Seed the graph before serving; runs with an operator principal. */
+	seed?: (g: Graph<S>) => void | Promise<void>;
+}
+
+/** What the dev `createApp` returns: the app plus the bootstrapped ids + a seed-graph handle. */
+export interface CreateAppResult<S extends GraphSchema> {
+	app: Hono<ServeEnv<S>>;
+	control: DbClient;
+	tenant: string;
+	project: string;
+	user: string;
+	graph: Graph<S>;
+}
+
+/** Dev bootstrap: fresh in-memory control plane + one tenant/project/user, seeded, header auth. */
+async function bootstrapDevApp<S extends GraphSchema>(
+	cfg: DevServeConfig<S>,
+): Promise<CreateAppResult<S>> {
+	const control = createClient({ url: ':memory:' });
+	await initControl(control);
+	const tenant = await createTenant(control, { name: 'dev' });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'dev',
+		dbNamespace: cfg.db ?? 'graphx_dev',
+	});
+	const user = await createUser(control, { email: 'dev@local' });
+	await addMembership(control, { userId: user, tenantId: tenant, role: 'editor' });
+	const graph = await graphForProject(
+		control,
+		{ userId: 'seed', tenantId: tenant, operator: true },
+		project,
+		'write',
+		cfg.schema,
+		cfg.upcasters,
+	);
+	if (cfg.seed) await cfg.seed(graph);
+	const app = buildApp<S>({
+		...cfg,
+		control,
+		// dev auth: honor the client's x-user/x-tenant headers, else default to the seeded principal.
+		authenticate: (c) => ({
+			userId: c.req.header('x-user') ?? user,
+			tenantId: c.req.header('x-tenant') ?? tenant,
+		}),
+	});
+	app.get('/demo', (c) => c.json({ tenant, project, user }));
+	return { app, control, tenant, project, user, graph };
+}
+
+/**
+ * Build the serving app.
+ *
+ * - **Production / multi-tenant** — pass `control` + `authenticate` (+ `schema`); returns the fully
+ *   chained `Hono` app synchronously. Consume with `hc<AppType>(url)`; a same-module `typeof`
+ *   recovers precise route types.
+ * - **Dev / single-tenant** — omit `control`/`authenticate`; `createApp` auto-bootstraps an
+ *   in-memory control plane, seeds via `seed`, and resolves to `{ app, tenant, project, user, graph }`.
+ */
+export function createApp<S extends GraphSchema>(
+	cfg: DevServeConfig<S>,
+): Promise<CreateAppResult<S>>;
+export function createApp<S extends GraphSchema>(cfg: ServeConfig<S>): Hono<ServeEnv<S>>;
+export function createApp<S extends GraphSchema>(
+	cfg: ServeConfig<S> | DevServeConfig<S>,
+): Hono<ServeEnv<S>> | Promise<CreateAppResult<S>> {
+	if ('control' in cfg && cfg.control) return buildApp(cfg as ServeConfig<S>);
+	return bootstrapDevApp(cfg as DevServeConfig<S>);
 }

@@ -84,16 +84,30 @@ traversal), `bulkLoad()` (batch ingest), graph algorithms (`shortestPath`, `page
 
 ## Serving over HTTP
 
-```ts
-import { createApp, initControl } from '@graphx/core';
+**Dev / single-tenant** — pass a `schema` (no control/auth) and `createApp` bootstraps an in-memory
+control plane, seeds, and serves. One call:
 
+```ts
+import { createApp } from '@graphx/core';
+
+const { app, tenant, project, user } = await createApp({
+  schema,
+  embed,                         // optional; enables /retrieve and /hybrid
+  seed: async (g) => { await g.addNode({ kind: 'device', props: { name: 'temp-1' } }); },
+});
+export default { fetch: app.fetch };  // GET /demo returns { tenant, project, user }
+```
+
+**Production / multi-tenant** — supply your own `control` + `authenticate`; returns the app
+synchronously:
+
+```ts
 const app = createApp({
   control,                       // control-plane DB (tenants/projects/memberships)
   schema,
   authenticate: (c) => verifyToken(c), // -> { userId, tenantId }; throw to 401
-  embed,                         // enables /retrieve and /hybrid
+  embed,
 });
-
 export default { fetch: app.fetch }; // Bun.serve / Cloudflare / Node
 ```
 

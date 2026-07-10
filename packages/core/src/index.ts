@@ -194,7 +194,9 @@ export {
 export {
 	type AppType,
 	createApp,
+	type CreateAppResult,
 	createReadiness,
+	type DevServeConfig,
 	graphForProject,
 	type Readiness,
 	type ServeConfig,
