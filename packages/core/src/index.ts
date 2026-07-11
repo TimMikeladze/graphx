@@ -30,6 +30,7 @@ export {
 	init,
 	NODES_FTS_TRIGGER_DDL,
 	NV_EMB_IDX_DDL,
+	readEmbDim,
 	schema,
 } from './schema.ts';
 
@@ -126,7 +127,14 @@ export {
 } from './graph.ts';
 
 // P4 — vectors + GraphRAG retrieve
-export { type EmbedFn, retrieve, type RetrievedNode, type RetrieveOpts } from './retrieve.ts';
+export {
+	dimOf,
+	type EmbedFn,
+	hashEmbed,
+	retrieve,
+	type RetrievedNode,
+	type RetrieveOpts,
+} from './retrieve.ts';
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR
 export {

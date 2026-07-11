@@ -3,8 +3,10 @@ import type { DbClient } from './dialect.ts';
 import { zValidator } from '@hono/zod-validator';
 import type { Context, MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
+import { logger as honoLogger } from 'hono/logger';
 import { z, ZodError } from 'zod';
 import {
 	centrality,
@@ -23,14 +25,16 @@ import {
 	createUser,
 	initControl,
 } from './control-plane.ts';
+import { getDb } from './db.ts';
 import type { Kind, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
+import { init } from './schema.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
 import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
 import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
 import { match, type PatternBuilder } from './pattern.ts';
-import { type EmbedFn, retrieve } from './retrieve.ts';
+import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
@@ -91,6 +95,44 @@ export interface ServeConfig<S extends GraphSchema> {
 	readiness?: Readiness;
 	/** Title/version/servers for the `GET /openapi.json` document. Omit ⇒ defaults. */
 	openapi?: OpenApiOptions;
+	/**
+	 * Cross-origin access. `true` ⇒ permissive (`origin: '*'`, no `Allow-Credentials` — fine for the
+	 * token/header auth graphx uses; for cookie auth pass an explicit `origin` + `credentials: true`),
+	 * so a browser SPA on another origin can call the API without a dev proxy. Pass a {@link cors}
+	 * options object to restrict origins / methods / credentials. Omit ⇒ no CORS headers (same-origin
+	 * only). Applied before routing, so it also answers `OPTIONS` preflight.
+	 */
+	cors?: boolean | CorsConfig;
+	/** Log every request (method, path, status, timing) to the console via Hono's logger. Omit ⇒ silent. */
+	logger?: boolean;
+	/**
+	 * Interactive API reference (Scalar) at `GET /docs`, pointing at `/openapi.json` — unauthenticated
+	 * and tenant-agnostic like the contract itself. ON by default; set `false` to disable (then `/docs`
+	 * is 404). The viewer JS is loaded from a public CDN (jsdelivr), so `/docs` needs network and trusts
+	 * that CDN — the page only renders the already-public spec (no secrets), but for a hardened or
+	 * air-gapped deployment set `docs: false` and self-host the reference. `/openapi.json` works offline.
+	 */
+	docs?: boolean;
+}
+
+/** Options accepted by Hono's {@link cors} middleware (origin/methods/headers/credentials/…). */
+type CorsConfig = NonNullable<Parameters<typeof cors>[0]>;
+
+/** Self-contained HTML that embeds the Scalar API reference (from CDN) reading `/openapi.json`. */
+function docsHtml(title: string): string {
+	const safe = title.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] ?? c);
+	return `<!doctype html>
+<html>
+  <head>
+    <title>${safe}</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <script id="api-reference" data-url="/openapi.json"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+  </body>
+</html>`;
 }
 
 /**
@@ -432,7 +474,12 @@ function onError(err: Error, c: Context) {
 function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	// journey takes its own opt-in upcaster (getNode/neighbors upcast via the project Graph).
 	const journeyUpcaster = cfg.upcasters ? new Upcaster(cfg.schema, cfg.upcasters) : undefined;
-	const app = new Hono<ServeEnv<S>>()
+	const base = new Hono<ServeEnv<S>>();
+	// Cross-cutting middleware must register BEFORE the route handlers (Hono dispatches in
+	// registration order), so a `.use('*')` added after the chain wouldn't wrap earlier routes.
+	if (cfg.logger) base.use('*', honoLogger());
+	if (cfg.cors) base.use('*', cors(cfg.cors === true ? { origin: '*' } : cfg.cors));
+	const app = base
 		// §19.6 ops endpoints — UNAUTHENTICATED + tenant-agnostic by construction: mounted
 		// OUTSIDE the `/t/:tenant/p/:project/*` authn group, so they never touch the
 		// confused-deputy guard. /health = process up (always 200); /ready gates the load
@@ -445,6 +492,11 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		// Machine-readable HTTP contract (§14). Unauthenticated + tenant-agnostic, like /health.
 		// Request/query schemas are generated from the same Zod wire schemas the routes validate.
 		.get('/openapi.json', (c) => c.json(buildOpenApiDocument(cfg.openapi)))
+		// Interactive API reference (Scalar, loaded from CDN) at /docs — points at /openapi.json.
+		// On by default (unauthenticated, tenant-agnostic like /openapi.json); `docs: false` disables it.
+		.get('/docs', (c) =>
+			cfg.docs === false ? c.notFound() : c.html(docsHtml(cfg.openapi?.title ?? 'graphx API')),
+		)
 		.use('/t/:tenant/p/:project/*', authn(cfg))
 		.post(
 			'/t/:tenant/p/:project/nodes',
@@ -768,8 +820,21 @@ export interface DevServeConfig<S extends GraphSchema> {
 	metrics?: MetricsSink;
 	readiness?: Readiness;
 	openapi?: OpenApiOptions;
+	/** See {@link ServeConfig.cors}. `true` ⇒ permissive — the common dev case (browser SPA, no proxy). */
+	cors?: boolean | CorsConfig;
+	/** See {@link ServeConfig.logger}. Log every request. */
+	logger?: boolean;
+	/** See {@link ServeConfig.docs}. Interactive API reference at `/docs` — on by default. */
+	docs?: boolean;
 	/** Project DB namespace (libSQL file / PG schema). Default `'graphx_dev'`. */
 	db?: string;
+	/**
+	 * Embedding dimension for the vector column. Omit and it's derived from `embed` ({@link dimOf}) so
+	 * `/retrieve` + `/hybrid` line up with the model automatically; falls back to 768 when there's no
+	 * embedder. Baked at first init and immutable — if it disagrees with an already-materialized
+	 * namespace, `createApp` throws (fail-fast) instead of silently keeping the old width.
+	 */
+	dim?: number;
 	/** Seed the graph before serving; runs with an operator principal. */
 	seed?: (g: Graph<S>) => void | Promise<void>;
 }
@@ -791,11 +856,14 @@ async function bootstrapDevApp<S extends GraphSchema>(
 	const control = createClient({ url: ':memory:' });
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'dev' });
-	const project = await createProject(control, {
-		tenantId: tenant,
-		name: 'dev',
-		dbNamespace: cfg.db ?? 'graphx_dev',
-	});
+	const namespace = cfg.db ?? 'graphx_dev';
+	const project = await createProject(control, { tenantId: tenant, name: 'dev', dbNamespace: namespace });
+	// Auto-dim: create the project DB's vector column at the embedder's width (or an explicit `dim`)
+	// BEFORE the lazy `initOnce` in graphForProject bakes the 768 default. `init` is idempotent
+	// (CREATE ... IF NOT EXISTS), so the later re-init is a no-op and the column keeps this width —
+	// no manual dim/embedder sync, and `/retrieve` + `/hybrid` just work.
+	const dim = cfg.dim ?? (cfg.embed ? await dimOf(cfg.embed) : undefined);
+	if (dim !== undefined) await init(getDb(namespace), dim);
 	const user = await createUser(control, { email: 'dev@local' });
 	await addMembership(control, { userId: user, tenantId: tenant, role: 'editor' });
 	const graph = await graphForProject(

@@ -7,33 +7,25 @@
  */
 import { rmSync } from 'node:fs';
 import process from 'node:process';
-import { createApp } from '@graphx/core';
+import { createApp, hashEmbed } from '@graphx/core';
 import { schema } from './schema.ts';
 
 const PORT = Number(process.env.PORT ?? 8899);
-const NS = 'iot_demo';
+const db = 'iot_demo';
 
 // Fresh graph every start (cwd = this dir).
-for (const sfx of ['', '-wal', '-shm']) rmSync(`${NS}.db${sfx}`, { force: true });
-
-/** Deterministic 768-dim bag-of-tokens embedding — no model needed for the retrieve/hybrid demo. */
-function embed(text: string): Promise<number[]> {
-	const v = Array.from({ length: 768 }, () => 0);
-	for (const tok of text.toLowerCase().split(/\W+/).filter(Boolean)) {
-		let h = 0;
-		for (let i = 0; i < tok.length; i++) h = (h * 31 + tok.charCodeAt(i)) >>> 0;
-		const idx = h % 768;
-		v[idx] = (v[idx] ?? 0) + 1;
-	}
-	return Promise.resolve(v);
-}
+for (const sfx of ['', '-wal', '-shm']) rmSync(`${db}.db${sfx}`, { force: true });
 
 const { app } = await createApp({
 	schema,
-	embed,
-	db: NS,
+	// Model-free dev embedder; auto-dim sizes the vector column to match it (no `dim` bookkeeping).
+	embed: hashEmbed(),
+	db: db,
+	// CORS lets a browser SPA on another origin call this directly (the Vite proxy also covers dev).
+	cors: true,
 	openapi: { title: 'iot-fleet', servers: [{ url: `http://localhost:${PORT}` }] },
 	seed: async (g) => {
+
 		const usEast = await g.addNode({ kind: 'site', props: { name: 'us-east-1', region: 'us' } });
 		const euWest = await g.addNode({ kind: 'site', props: { name: 'eu-west-1', region: 'eu' } });
 

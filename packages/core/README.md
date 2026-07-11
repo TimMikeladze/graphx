@@ -53,9 +53,11 @@ const neighbors = await g.neighbors(ada.id);
 ### Retrieval
 
 ```ts
-import { retrieve, hybridRetrieve } from '@graphx/core';
+import { retrieve, hybridRetrieve, hashEmbed } from '@graphx/core';
 
-const embed = async (text: string) => /* your embedding model */ [/* ...768 floats */];
+// Your embedding model in production; `hashEmbed()` is a deterministic, model-free stand-in for
+// dev/tests/demos (its default width is 768, matching `init`'s — no dimension bookkeeping).
+const embed = hashEmbed();
 
 // vector ANN + graph expansion
 const hits = await retrieve(client, embed, { query: 'computing', k: 10, maxDepth: 2 });
@@ -92,11 +94,17 @@ import { createApp } from '@graphx/core';
 
 const { app, tenant, project, user } = await createApp({
   schema,
-  embed,                         // optional; enables /retrieve and /hybrid
+  embed: hashEmbed(),            // optional; enables /retrieve + /hybrid. Auto-dim sizes the vector column to it.
+  cors: true,                    // optional; browser SPA on another origin, no dev proxy
+  logger: true,                  // optional; log every request
   seed: async (g) => { await g.addNode({ kind: 'device', props: { name: 'temp-1' } }); },
 });
 export default { fetch: app.fetch };  // GET /demo returns { tenant, project, user }
 ```
+
+Or skip the file entirely: `bunx @graphx/cli new my-app && cd my-app && bun run serve` scaffolds a
+project and `graphx serve` (loads `graphx.config.ts`) exposes the graph — the same one `graphx
+ingest` writes to.
 
 **Production / multi-tenant** — supply your own `control` + `authenticate`; returns the app
 synchronously:
@@ -125,7 +133,9 @@ it with [`@graphx/react`](../react) for typed hooks.
 
 `GET /openapi.json` serves an OpenAPI 3.1 document (unauthenticated, like `/health`). Request bodies
 and query params are generated from the same Zod wire schemas the routes validate against, so the
-spec can't drift; a test pins the documented routes to the live `app.routes`. Use it to generate
+spec can't drift; a test pins the documented routes to the live `app.routes`. An interactive
+reference (Scalar) is served at `GET /docs` by default — pass `docs: false` to disable it (it loads
+the viewer from a CDN; the spec itself is served locally). Use the spec to generate
 clients in any language. (`buildOpenApiDocument({ servers, title, version })` is also exported for
 emitting a static spec.)
 

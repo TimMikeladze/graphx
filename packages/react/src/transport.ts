@@ -28,6 +28,27 @@ export interface RequestOpts {
 	body?: unknown;
 }
 
+/** The subset of a Hono app the {@link appFetch} adapter needs (kept structural so this package
+ * pulls in no `hono` / `@graphx/core` runtime — pass any object with a `request` method). */
+export interface RequestLike {
+	request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>;
+}
+
+/**
+ * Adapt an in-process Hono app to a `fetch`, so `<GraphProvider fetch={appFetch(app)} baseUrl="">`
+ * drives the hooks against real routes with NO server, port, or CORS. Ideal for tests and SSR: the
+ * transport builds same-origin `/t/:tenant/...` paths, which `app.request` serves directly.
+ *
+ * ```ts
+ * const { app, tenant, project } = await createApp({ schema });
+ * render(<GraphProvider baseUrl="" tenant={tenant} project={project} fetch={appFetch(app)}><App/></GraphProvider>);
+ * ```
+ */
+export function appFetch(app: RequestLike): typeof fetch {
+	return ((input: string | URL | Request, init?: RequestInit) =>
+		Promise.resolve(app.request(input, init))) as typeof fetch;
+}
+
 function qs(query: Record<string, unknown> | undefined): string {
 	if (!query) return '';
 	const params = new URLSearchParams();
@@ -52,7 +73,15 @@ export async function request<T>(t: GraphTransport, opts: RequestOpts): Promise<
 		headers['content-type'] = 'application/json';
 	}
 	const doFetch = t.fetch ?? globalThis.fetch;
-	const res = await doFetch(url, { method: opts.method, headers, body });
+	let res: Response;
+	try {
+		res = await doFetch(url, { method: opts.method, headers, body });
+	} catch (e) {
+		// The server was unreachable / the request never completed (DNS, offline, CORS-blocked).
+		// Surface it as a GraphError with status 0 (`code: 'network'`) so hooks classify it the same
+		// way as HTTP errors, instead of a raw TypeError leaking through.
+		throw new GraphError(0, e instanceof Error ? e.message : 'network error');
+	}
 
 	if (!res.ok) {
 		// Read the body once as text, then try JSON. The serving layer returns `{ error, issues }`

@@ -114,7 +114,46 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  * the file; harmless on `:memory:`), applies the per-connection pragmas
  * (`foreign_keys`, `busy_timeout`), then runs the multi-statement DDL.
  */
+/**
+ * The embedding dimension baked into the live `node_versions.emb` column, or `null` when the table
+ * doesn't exist yet (a fresh namespace). Parsed from the stored column type (`F32_BLOB(<dim>)` on
+ * libSQL, `vector(<dim>)` on Postgres) — used by {@link init} to reject a conflicting dim.
+ */
+export async function readEmbDim(client: DbClient): Promise<number | null> {
+	if (dialectOf(client) === 'postgres') {
+		const r = await client.execute(
+			`SELECT format_type(a.atttypid, a.atttypmod) AS t
+			 FROM pg_attribute a
+			 JOIN pg_class c ON a.attrelid = c.oid
+			 JOIN pg_namespace n ON c.relnamespace = n.oid
+			 WHERE c.relname = 'node_versions' AND a.attname = 'emb'
+			   AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped`,
+		);
+		const t = r.rows[0]?.t;
+		const m = typeof t === 'string' ? /vector\((\d+)\)/.exec(t) : null;
+		return m ? Number(m[1]) : null;
+	}
+	const r = await client.execute(
+		`SELECT sql FROM sqlite_master WHERE type='table' AND name='node_versions'`,
+	);
+	const sql = r.rows[0]?.sql;
+	const m = typeof sql === 'string' ? /emb\s+F32_BLOB\((\d+)\)/i.exec(sql) : null;
+	return m ? Number(m[1]) : null;
+}
+
 export async function init(client: DbClient, dim?: number): Promise<void> {
+	// Fail fast on a dimension mismatch: the emb column's width is baked at first CREATE and the DDL
+	// is `IF NOT EXISTS`, so re-`init`ing an existing namespace at a DIFFERENT explicit dim would
+	// silently keep the old width — then every embed insert / ANN query fails as an opaque dimension
+	// mismatch. Only checked when `dim` is given (the defaulted path stays a no-op).
+	if (dim !== undefined) {
+		const existing = await readEmbDim(client);
+		if (existing !== null && existing !== dim) {
+			throw new Error(
+				`init: node_versions.emb already exists at dim ${existing}, but dim ${dim} was requested — the embedding dimension is immutable. Delete the namespace or use dim ${existing}.`,
+			);
+		}
+	}
 	if (dialectOf(client) === 'postgres') {
 		// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
 		// `vector` extension is expected to exist in `public` (on the search_path).

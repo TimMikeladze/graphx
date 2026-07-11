@@ -14,8 +14,27 @@ bun run server.ts   # graphx API on :8899 (SQLite file iot_demo.db, seeded each 
 bun run dev         # Vite on :5173, proxies /t + /demo + /openapi.json -> :8899
 ```
 
-Open the Vite URL. `GET /demo` hands the client the seeded tenant/project/user ids; the API contract
-is at `GET /openapi.json`.
+Open the Vite URL. The client uses `<GraphProvider bootstrap="/demo">` — it fetches the seeded
+tenant/project/user ids itself (no hardcoded ids). Interactive API docs (Scalar) are at
+[`/docs`](http://localhost:5173/docs); the raw contract is at `GET /openapi.json`.
+
+## Test it (no server, no port)
+
+```sh
+bun test   # runs app.test.tsx
+```
+
+`app.test.tsx` renders the UI against an **in-process** `createApp` via `fetch={appFetch(app)}` — real
+routes, real Zod validation, real CDC keyset, no listener. It also turns on `{ validate: true }`
+(runtime response validation) since the schema value is already in scope there.
+
+## DX helpers shown here
+
+- **`bootstrap="/demo"`** — `src/main.tsx`: id-less provider setup.
+- **`hashEmbed()` + `cors: true`** — `server.ts`: model-free embedder (auto-dim) + no dev proxy needed.
+- **Fluent `useMatch`** — `src/App.tsx`: `q => q.node('d','device').in('raised').node('a','alert').select('d','a')`.
+- **`GraphError.code`** — `src/App.tsx`: the ack button surfaces a typed error `code` (e.g. `forbidden`).
+- **`appFetch` + `validate`** — `app.test.tsx`: in-process testing + runtime validation.
 
 ## The graph
 
@@ -36,7 +55,8 @@ alert   --raised------> device
   - `g.useNeighbors(id, { rel: 'deployedAt' })` → `site[]` (from `deployedAt.to`);
     `{ rel: 'connectedTo', direction: 'reverse' }` → `device[]` (from `connectedTo.from`)
   - `g.useListNodes({ kind: 'alert' })` → `alert[]`
-  - `g.useMatch({ steps: [...], select: ['d','a'] })` → rows typed per alias (`{ d: device; a: alert }`)
+  - `g.useMatch(q => q.node('d','device').in('raised').node('a','alert').select('d','a'))` → rows
+    typed per alias (`{ d: device; a: alert }`); the object form (`{ steps, select }`) works too
 - `g.useChangeFeedSync()` tails `/changes` and invalidates exactly the affected query keys — ack an
   alert (or run the server's seed again) and the live feed updates.
 

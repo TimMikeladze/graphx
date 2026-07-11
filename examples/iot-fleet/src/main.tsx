@@ -1,42 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GraphProvider } from '@graphx/react';
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 
 const queryClient = new QueryClient();
 
-interface Demo {
-	tenant: string;
-	project: string;
-	user: string;
-}
-
-/** Fetch the seeded session ids from the server, then configure the provider. */
-function Boot() {
-	const [demo, setDemo] = useState<Demo | null>(null);
-	useEffect(() => {
-		fetch('/demo')
-			.then((r) => r.json())
-			.then(setDemo);
-	}, []);
-	if (!demo) return <p style={{ padding: 20, fontFamily: 'system-ui' }}>connecting…</p>;
-	return (
-		<GraphProvider
-			baseUrl=""
-			tenant={demo.tenant}
-			project={demo.project}
-			headers={() => ({ 'x-user': demo.user, 'x-tenant': demo.tenant })}
-		>
-			<App />
-		</GraphProvider>
-	);
-}
-
+// `bootstrap="/demo"` fetches the seeded { tenant, project, user } from the dev server and wires the
+// transport (incl. the x-user/x-tenant auth headers) itself — no Boot component, no hardcoded ids.
 createRoot(document.getElementById('root')!).render(
 	<StrictMode>
 		<QueryClientProvider client={queryClient}>
-			<Boot />
+			<GraphProvider
+				bootstrap="/demo"
+				fallback={<p style={{ padding: 20, fontFamily: 'system-ui' }}>connecting…</p>}
+			>
+				<App />
+			</GraphProvider>
 		</QueryClientProvider>
 	</StrictMode>,
 );

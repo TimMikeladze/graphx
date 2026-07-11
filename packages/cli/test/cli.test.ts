@@ -1,8 +1,12 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { parseIngestArgs, skipBreakdown } from '../src/cli.ts';
+import { buildServeApp, parseIngestArgs, parseNewArgs, parseServeArgs, skipBreakdown } from '../src/cli.ts';
+
+// The PG test leg sets GRAPHX_DB_DRIVER=postgres process-wide, which the dev `createApp` (via
+// getDb with no DbConfig) would inherit — so the libSQL-file serve test is pinned to that leg.
+const PG = process.env.GRAPHX_TEST_DRIVER === 'postgres';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Unit tests for parseIngestArgs
@@ -72,6 +76,118 @@ test('parseIngestArgs: parses combined flags', () => {
 	expect(args.watch).toBe(true);
 	expect(args.idField).toBe('slug');
 	expect(args.assetsKind).toBe('media');
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Unit tests for parseServeArgs / parseNewArgs
+// ──────────────────────────────────────────────────────────────────────────────
+
+test('parseServeArgs: defaults', () => {
+	const args = parseServeArgs(['serve']);
+	expect(args.config).toBe('./graphx.config.ts');
+	expect(args.port).toBe(8899);
+});
+
+test('parseServeArgs: parses --port and --config', () => {
+	const args = parseServeArgs(['serve', '--port', '3000', '--config', './my.config.ts']);
+	expect(args.port).toBe(3000);
+	expect(args.config).toBe('./my.config.ts');
+});
+
+test('parseServeArgs: parses short flags -p/-c', () => {
+	const args = parseServeArgs(['serve', '-p', '4000', '-c', './x.ts']);
+	expect(args.port).toBe(4000);
+	expect(args.config).toBe('./x.ts');
+});
+
+test('parseNewArgs: parses dir', () => {
+	expect(parseNewArgs(['new', 'my-app']).dir).toBe('my-app');
+});
+
+test('parseNewArgs: throws when dir is missing', () => {
+	expect(() => parseNewArgs(['new'])).toThrow('missing <dir>');
+});
+
+test('run: `new <dir>` scaffolds a runnable project', async () => {
+	const base = await mkdtemp(join(tmpdir(), 'gx-new-'));
+	const dir = join(base, 'app');
+	try {
+		const { run } = await import('../src/cli.ts');
+		await run(['new', dir]);
+		const config = await readFile(join(dir, 'graphx.config.ts'), 'utf8');
+		expect(config).toContain('defineGraphSchema');
+		expect(config).toContain('hashEmbed');
+		const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
+		expect(pkg.scripts.serve).toBe('graphx serve');
+		// Deps pin the CLI's real version, not the misleading `latest`.
+		expect(pkg.dependencies['@graphx/core']).not.toBe('latest');
+		expect(pkg.dependencies['@graphx/core']).toMatch(/^\^\d/);
+		expect(pkg.dependencies['@graphx/cli']).toMatch(/^\^\d/);
+		expect(await readFile(join(dir, 'README.md'), 'utf8')).toContain('bun run serve');
+	} finally {
+		await rm(base, { recursive: true, force: true });
+	}
+});
+
+test('run: `new <dir>` refuses to overwrite an existing project', async () => {
+	const base = await mkdtemp(join(tmpdir(), 'gx-new2-'));
+	const dir = join(base, 'app');
+	try {
+		const { run } = await import('../src/cli.ts');
+		await run(['new', dir]); // first scaffold succeeds
+		await expect(run(['new', dir])).rejects.toThrow(/already exists/); // second refuses
+	} finally {
+		await rm(base, { recursive: true, force: true });
+	}
+});
+
+// buildServeApp is the testable core of `graphx serve` (loads config → builds the app, no listener).
+test.skipIf(PG)('buildServeApp: loads a config and serves the seeded graph via /demo (libSQL)', async () => {
+	const ns = `cli-serve-${Date.now()}`;
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema, hashEmbed } from '../../core/src/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({ title: z.string().optional() }) }, edges: {} });
+export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		const { app, control, tenant, project, user } = await buildServeApp(configPath);
+		expect(await (await app.request('/demo')).json()).toEqual({ tenant, project, user });
+		const res = await app.request(`/t/${tenant}/p/${project}/nodes`);
+		expect(res.status).toBe(200);
+		control.close();
+	} finally {
+		await rm(configPath, { force: true });
+		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
+	}
+});
+
+// buildServeApp bridges a postgres config through GRAPHX_DB_DRIVER/PG_URL env for the dev createApp,
+// then MUST restore them — otherwise a later call / the rest of the process inherits the wrong
+// backend. Uses a refused port so the build fails fast; the `finally` restore must still run.
+test('buildServeApp: restores env after a postgres config even when the build fails (no leak)', async () => {
+	const beforeDriver = process.env.GRAPHX_DB_DRIVER;
+	const beforeUrl = process.env.GRAPHX_PG_URL;
+	const ns = `cli-pgleak-${Date.now()}`;
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema, hashEmbed } from '../../core/src/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({}).passthrough() }, edges: {} });
+export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'postgres', connectionString: 'postgresql://postgres:postgres@127.0.0.1:1/nope' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		await expect(buildServeApp(configPath)).rejects.toThrow(); // connection refused
+		expect(process.env.GRAPHX_DB_DRIVER).toBe(beforeDriver);
+		expect(process.env.GRAPHX_PG_URL).toBe(beforeUrl);
+	} finally {
+		await rm(configPath, { force: true });
+	}
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

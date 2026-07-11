@@ -37,6 +37,18 @@ import { request } from './transport.ts';
 type Direction = 'forward' | 'reverse' | 'both';
 type HopDirection = 'out' | 'in' | 'both';
 
+/** Options for {@link createGraphHooks}. */
+export interface CreateHooksOptions {
+	/**
+	 * Validate the node reads (`useNode`, `useListNodes`, `useNeighbors`, `useMatch`) against the
+	 * schema at runtime — defense against server/contract drift. Requires passing the schema VALUE:
+	 * `createGraphHooks(schema, { validate: true })`, not the type-only form. A mismatch throws
+	 * `GraphError` with `code: 'validation'`. Off by default (retrieve/hybrid/journey return
+	 * projection shapes, not full nodes, so they're not validated).
+	 */
+	validate?: boolean;
+}
+
 // --- rel-aware neighbor-kind inference (uses the schema's edge `from`/`to`) ---
 type EdgesOf<S> = S extends { edges: infer E } ? E : never;
 type Endpoints<T> = T extends readonly (infer U)[] ? U : T;
@@ -191,6 +203,133 @@ export interface MatchResultOf<S extends GraphSchema, Spec extends MatchSpecInpu
 	nextCursor: string | null;
 }
 
+/** The spec a {@link MatchBuilder.select} emits — a {@link MatchSpecInput} with the `steps`/`select`
+ * tuples captured literally, so {@link useMatch} can infer the per-alias row type from it. */
+export interface BuiltMatchSpec<
+	S extends GraphSchema,
+	Steps extends readonly MatchStepInput<S>[],
+	Sel extends readonly string[],
+> {
+	steps: Steps;
+	select: Sel;
+	where?: ReadonlyArray<{ alias: string; key: string; value: unknown }>;
+	asOf?: number;
+	page?: { limit?: number; cursor?: string };
+}
+
+/**
+ * A fluent, kind/rel-checked builder for a {@link useMatch} spec — reads left-to-right like the SDK's
+ * `PatternBuilder` and keeps the full type chain (each `.node(alias, kind)` extends an alias→kind
+ * accumulator, so `.select(...)` only accepts declared aliases and yields per-alias-typed rows):
+ *
+ * ```ts
+ * const q = useMatch((m) => m.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
+ * // q.data.rows[0].d is NodeOf<S,'device'>, .a is NodeOf<S,'alert'>
+ * ```
+ *
+ * The `Steps`/`Acc` type params are internal (they accumulate through the chain); construct one via
+ * the `useMatch(build)` overload, not directly.
+ */
+export class MatchBuilder<
+	S extends GraphSchema,
+	Steps extends readonly MatchStepInput<S>[] = readonly [],
+	Acc extends Record<string, Kind<S>> = Record<never, never>,
+> {
+	private readonly _steps: MatchStepInput<S>[] = [];
+	private readonly _where: Array<{ alias: string; key: string; value: unknown }> = [];
+	private _asOf?: number;
+	private _page?: { limit?: number; cursor?: string };
+
+	/** Add an aliased node bound to `kind`; extends the alias→kind accumulator. */
+	node<A extends string, K extends Kind<S>>(
+		alias: A,
+		kind: K,
+	): MatchBuilder<S, readonly [...Steps, { node: { alias: A; kind: K } }], Acc & Record<A, K>> {
+		this._steps.push({ node: { alias, kind } });
+		return this as unknown as MatchBuilder<
+			S,
+			readonly [...Steps, { node: { alias: A; kind: K } }],
+			Acc & Record<A, K>
+		>;
+	}
+
+	/** Forward hop over `rel` (prev.id = edge.src). */
+	out<R extends Rel<S>>(
+		rel: R,
+	): MatchBuilder<S, readonly [...Steps, { edge: { rel: R; direction: 'out' } }], Acc> {
+		this._steps.push({ edge: { rel, direction: 'out' } });
+		return this as unknown as MatchBuilder<
+			S,
+			readonly [...Steps, { edge: { rel: R; direction: 'out' } }],
+			Acc
+		>;
+	}
+
+	/** Reverse hop over `rel` (prev.id = edge.dst). */
+	in<R extends Rel<S>>(
+		rel: R,
+	): MatchBuilder<S, readonly [...Steps, { edge: { rel: R; direction: 'in' } }], Acc> {
+		this._steps.push({ edge: { rel, direction: 'in' } });
+		return this as unknown as MatchBuilder<
+			S,
+			readonly [...Steps, { edge: { rel: R; direction: 'in' } }],
+			Acc
+		>;
+	}
+
+	/** Undirected hop over `rel` (prev.id on either side). */
+	both<R extends Rel<S>>(
+		rel: R,
+	): MatchBuilder<S, readonly [...Steps, { edge: { rel: R; direction: 'both' } }], Acc> {
+		this._steps.push({ edge: { rel, direction: 'both' } });
+		return this as unknown as MatchBuilder<
+			S,
+			readonly [...Steps, { edge: { rel: R; direction: 'both' } }],
+			Acc
+		>;
+	}
+
+	/** The one variable-length segment (`min`..`max` hops over `rel`). */
+	rel<R extends Rel<S>>(
+		rel: R,
+		o: { min?: number; max?: number; direction?: HopDirection } = {},
+	): MatchBuilder<S, readonly [...Steps, { var: { rel: R } }], Acc> {
+		this._steps.push({ var: { rel, ...o } });
+		return this as unknown as MatchBuilder<S, readonly [...Steps, { var: { rel: R } }], Acc>;
+	}
+
+	/** Prop filter `alias.props.key === value`; `alias` must already be declared. */
+	where(alias: keyof Acc & string, key: string, value: unknown): this {
+		this._where.push({ alias, key, value });
+		return this;
+	}
+
+	/** Time-travel the whole pattern to epoch-ms `t`. */
+	asOf(t: number): this {
+		this._asOf = t;
+		return this;
+	}
+
+	/** Keyset-paginate the result (thread the prior page's `nextCursor` back as `cursor`). */
+	page(opts: { limit?: number; cursor?: string }): this {
+		this._page = opts;
+		return this;
+	}
+
+	/** Project the named (declared) aliases and finalize the spec. */
+	select<Sel extends readonly (keyof Acc & string)[]>(
+		...sel: Sel
+	): BuiltMatchSpec<S, Steps, Sel> {
+		return {
+			steps: this._steps as unknown as Steps,
+			select: sel,
+			...(this._where.length ? { where: this._where } : {}),
+			...(this._asOf !== undefined ? { asOf: this._asOf } : {}),
+			...(this._page ? { page: this._page } : {}),
+		};
+	}
+}
+
 /**
  * Encode a keyset cursor as base64(JSON array) — byte-identical to `@graphx/core`'s `encodeCursor`
  * for the ASCII numeric-string parts a feed cursor holds, but via `btoa` so this package pulls in
@@ -226,7 +365,30 @@ function advanceCursor(
  * explicitly and omit the value: `createGraphHooks<typeof schema>()`. This package pulls in NO
  * `@graphx/core` runtime, so the client stays SDK-free — it's typed by `S` alone (the "no codegen").
  */
-export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
+export function createGraphHooks<S extends GraphSchema>(
+	_schema?: S,
+	opts?: CreateHooksOptions,
+) {
+	/**
+	 * When `{ validate: true }` AND the schema VALUE was passed, assert a returned node's `props`
+	 * against its kind's Zod schema — catching a server that drifts from the contract. Throws a
+	 * `GraphError(422, …, issues)` (`code: 'validation'`) on mismatch, so it surfaces as the hook
+	 * `error` like any other. No-op without the runtime schema (the type-only `createGraphHooks<S>()`
+	 * form) or when disabled — zero overhead.
+	 */
+	function validateNode<N extends { kind: string; props: unknown } | null | undefined>(n: N): N {
+		if (!opts?.validate || !_schema || n == null) return n;
+		const zt = (_schema.nodes as Record<string, { parse?: (v: unknown) => unknown }>)[n.kind];
+		if (!zt?.parse) return n;
+		try {
+			zt.parse(n.props);
+		} catch (e) {
+			const issues = (e as { issues?: unknown }).issues;
+			throw new GraphError(422, `response validation failed for kind '${n.kind}'`, issues);
+		}
+		return n;
+	}
+
 	/** The project-scoped key factory for the current provider (manual invalidation/prefetch). */
 	function useKeys() {
 		return graphKeys(useGraphTransport().project);
@@ -250,10 +412,12 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
 			enabled: id.length > 0,
 			queryFn: async (): Promise<AnyNode<S> | null> => {
 				try {
-					return await request<AnyNode<S>>(t, {
-						method: 'GET',
-						path: `/nodes/${encodeURIComponent(id)}`,
-					});
+					return validateNode(
+						await request<AnyNode<S>>(t, {
+							method: 'GET',
+							path: `/nodes/${encodeURIComponent(id)}`,
+						}),
+					);
 				} catch (e) {
 					if (e instanceof GraphError && e.status === 404) return null;
 					throw e;
@@ -304,12 +468,15 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
 			queryKey: graphKeys(t.project).neighbors(id, opts),
 			enabled: id.length > 0,
 			initialPageParam: undefined as string | undefined,
-			queryFn: ({ pageParam }) =>
-				request<NeighborPage<S>>(t, {
+			queryFn: async ({ pageParam }) => {
+				const page = await request<NeighborPage<S>>(t, {
 					method: 'GET',
 					path: `/nodes/${encodeURIComponent(id)}/neighborsPage`,
 					query: { direction: opts.direction, rel: opts.rel, limit: opts.limit, cursor: pageParam },
-				}),
+				});
+				for (const n of page.rows) validateNode(n as { kind: string; props: unknown });
+				return page;
+			},
 			getNextPageParam: (last) => last.nextCursor ?? undefined,
 		});
 	}
@@ -329,12 +496,15 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
 		return useInfiniteQuery({
 			queryKey: graphKeys(t.project).listNodes(opts),
 			initialPageParam: undefined as string | undefined,
-			queryFn: ({ pageParam }) =>
-				request<NodeListPage<S>>(t, {
+			queryFn: async ({ pageParam }) => {
+				const page = await request<NodeListPage<S>>(t, {
 					method: 'GET',
 					path: '/nodes',
 					query: { kind: opts.kind, q: opts.q, asOf: opts.asOf, limit: opts.limit, cursor: pageParam },
-				}),
+				});
+				for (const n of page.nodes) validateNode(n as { kind: string; props: unknown });
+				return page;
+			},
 			getNextPageParam: (last) => last.nextCursor ?? undefined,
 		});
 	}
@@ -384,16 +554,38 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S) {
 		});
 	}
 
-	/** Multi-hop pattern query (JSON PatternBuilder program). */
-	function useMatch<const Spec extends MatchSpecInput<S>>(spec: Spec) {
+	/**
+	 * Multi-hop pattern query. Pass a spec object, or build one fluently with the const-typed
+	 * {@link MatchBuilder} — both yield per-alias-typed rows:
+	 *
+	 * ```ts
+	 * useMatch({ steps: [{ node: { alias: 'd', kind: 'device' } }, …], select: ['d'] });
+	 * useMatch((m) => m.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
+	 * ```
+	 */
+	function useMatch<const Spec extends MatchSpecInput<S>>(
+		spec: Spec,
+	): UseQueryResult<MatchResultOf<S, Spec>>;
+	function useMatch<const Spec extends MatchSpecInput<S>>(
+		build: (m: MatchBuilder<S>) => Spec,
+	): UseQueryResult<MatchResultOf<S, Spec>>;
+	function useMatch<const Spec extends MatchSpecInput<S>>(
+		arg: Spec | ((m: MatchBuilder<S>) => Spec),
+	) {
 		const t = useGraphTransport();
+		const spec = typeof arg === 'function' ? arg(new MatchBuilder<S>()) : arg;
 		return useQuery({
 			queryKey: graphKeys(t.project).match(spec),
 			enabled: spec.select.length > 0,
 			// Server-backed cast: the /match reshape returns `{ [alias]: { id, kind, props } }` with
 			// the kind's (upcast) props, so the per-alias `NodeOf<S, kind>` typing is honest.
-			queryFn: () =>
-				request<MatchResultOf<S, Spec>>(t, { method: 'POST', path: '/match', body: spec }),
+			queryFn: async () => {
+				const res = await request<MatchResultOf<S, Spec>>(t, { method: 'POST', path: '/match', body: spec });
+				for (const row of res.rows) {
+					for (const node of Object.values(row)) validateNode(node as { kind: string; props: unknown });
+				}
+				return res;
+			},
 		});
 	}
 

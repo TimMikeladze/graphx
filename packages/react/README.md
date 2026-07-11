@@ -58,9 +58,19 @@ function NodeCard({ id }: { id: string }) {
 | Prop | Required | Notes |
 |---|---|---|
 | `baseUrl` | no (default `''`) | Origin the server is mounted at. `''` = same-origin / in-process. |
-| `tenant`, `project` | yes | Routes are `/t/:tenant/p/:project/...`. |
+| `tenant`, `project` | yes\* | Routes are `/t/:tenant/p/:project/...`. \*Or supply `bootstrap` instead. |
+| `bootstrap` | no | URL returning `{ tenant, project, user }` (e.g. `createApp`'s `/demo`) — fetched on mount, wires the transport + `x-user`/`x-tenant` for you. |
+| `fallback` | no | Rendered while a `bootstrap` fetch is in flight. |
 | `headers` | no | `() => Record<string,string> \| Promise<...>` — re-read per request (refreshed tokens). |
-| `fetch` | no (default global) | Inject for SSR or to point at an in-process Hono app (`app.request`). |
+| `fetch` | no (default global) | Inject for SSR, or `appFetch(app)` to drive an in-process Hono app with no server/port. |
+
+**Dev bootstrap** — against a `createApp` dev server, skip the ids entirely:
+
+```tsx
+<GraphProvider bootstrap="/demo" fallback={<Spinner />}>
+  <App />
+</GraphProvider>
+```
 
 ## Hooks
 
@@ -80,6 +90,12 @@ const m = g.useMatch({
 m.data?.rows[0]?.d.props.type;   // ^? typed NodeOf<S,'device'> — node.kind & rel are schema-checked
 ```
 
+…or build the same spec fluently (kind/rel-checked, same per-alias row types):
+
+```ts
+const m = g.useMatch((q) => q.node('p', 'person').out('owns').node('d', 'device').select('p', 'd'));
+```
+
 **Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
 `useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`. Both narrow when you scope
 them: `useNeighbors(id, { rel: 'owns' })` → rows typed `NodeOf<S,'device'>[]` (the schema's
@@ -93,8 +109,22 @@ The server enforces the rel/kind filter, so the narrowing is server-backed, not 
 **Live sync:** `useChangeFeedSync({ intervalMs?, fromNow? })` — see below.
 
 **Utilities:** `useKeys()` (the project-scoped query-key factory for manual invalidation/prefetch),
-`graphKeys(project)` (standalone), `GraphError` (`{ status, message, issues? }`, the React Query
-`error` for any non-2xx).
+`graphKeys(project)` (standalone), `appFetch(app)` (adapt an in-process Hono app to a `fetch`),
+`GraphError` — the React Query `error` for any non-2xx: `{ status, message, issues? }` plus a stable
+`code` (`'validation' | 'unauthenticated' | 'forbidden' | 'not_found' | 'conflict' | 'unimplemented'
+| 'server' | 'network' | 'unknown'`) to `switch` on instead of parsing messages (a failed request is
+`status: 0`, `code: 'network'`).
+
+## Response validation (opt-in)
+
+Pass the schema **value** plus `{ validate: true }` and the node reads (`useNode`, `useListNodes`,
+`useNeighbors`, `useMatch`) are checked against their kind's Zod schema at runtime — a server that
+drifts from the contract throws a `GraphError` with `code: 'validation'` instead of silently
+returning a wrong shape:
+
+```ts
+export const g = createGraphHooks(schema, { validate: true }); // needs the value, not just the type
+```
 
 ## CDC live sync
 
@@ -132,5 +162,5 @@ source for precise route types.)
 ## Testing
 
 Hooks are tested with `@testing-library/react` + `happy-dom`, rendering against an **in-process**
-`createApp(...)` (`fetch` pointed at `app.request`) — real routes, real zod validation, real CDC
-keyset, on both libSQL and Postgres. See `test/` for the harness.
+`createApp(...)` via `fetch={appFetch(app)}` — real routes, real zod validation, real CDC keyset, on
+both libSQL and Postgres. See `test/` for the harness.

@@ -34,6 +34,37 @@ import {
 /** Caller-provided embedder: text → dense vector (§3). */
 export type EmbedFn = (text: string) => Promise<number[]>;
 
+/**
+ * A deterministic, model-free embedder for dev / tests / demos: a hashed bag-of-tokens vector of
+ * width `dim`. Same text → same vector; texts sharing tokens share dimensions, so `retrieve` /
+ * `hybridRetrieve` return sensible neighbors with NO embedding model, API key, or network. It is
+ * lexical, not semantic — swap in a real model for production. `dim` defaults to 768 (the same
+ * default as {@link init}'s vector width), so `hashEmbed()` and `init(client)` line up with zero
+ * dimension bookkeeping.
+ */
+export function hashEmbed(dim = 768): EmbedFn {
+	return (text: string) => {
+		const v = Array.from({ length: dim }, () => 0);
+		for (const tok of text.toLowerCase().split(/\W+/).filter(Boolean)) {
+			let h = 0;
+			for (let i = 0; i < tok.length; i++) h = (h * 31 + tok.charCodeAt(i)) >>> 0;
+			const idx = h % dim;
+			v[idx] = (v[idx] ?? 0) + 1;
+		}
+		return Promise.resolve(v);
+	};
+}
+
+/**
+ * Probe an embedder for its output dimension (embeds one tiny constant). Use it to line `init`'s
+ * vector width up with the model instead of hardcoding a number that must be kept in sync — a
+ * mismatch silently rejects every insert (dimension error). The width is fixed per model, so one
+ * probe is authoritative.
+ */
+export async function dimOf(embed: EmbedFn): Promise<number> {
+	return (await embed('graphx')).length;
+}
+
 /** Options for {@link retrieve}. `asOf` (epoch ms) time-travels; omitted = now. */
 export interface RetrieveOpts {
 	query: string;

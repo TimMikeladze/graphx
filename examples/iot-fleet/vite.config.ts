@@ -10,6 +10,7 @@ export default defineConfig({
 		proxy: {
 			'/t': { target: API_TARGET, changeOrigin: true },
 			'/demo': { target: API_TARGET, changeOrigin: true },
+			'/docs': { target: API_TARGET, changeOrigin: true },
 			'/openapi.json': { target: API_TARGET, changeOrigin: true },
 		},
 	},

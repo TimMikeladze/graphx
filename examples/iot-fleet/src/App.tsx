@@ -1,3 +1,4 @@
+import { type GraphError } from '@graphx/react';
 import { useState } from 'react';
 import { g } from './hooks.ts';
 
@@ -51,17 +52,14 @@ function GatewayList({
 
 function GatewayDetail({ id }: { id: string }) {
 	const gw = g.useNode(id, 'gateway'); // NodeOf<Schema,'gateway'> | null
+
 	const site = g.useNeighbors(id, { rel: 'deployedAt' }); // site[] (deployedAt.to = site)
 	const devices = g.useNeighbors(id, { rel: 'connectedTo', direction: 'reverse' }); // device[] (from = device)
-	// devices → the alerts raised on them, typed per alias
-	const alerts = g.useMatch({
-		steps: [
-			{ node: { alias: 'd', kind: 'device' } },
-			{ edge: { rel: 'raised', direction: 'in' } },
-			{ node: { alias: 'a', kind: 'alert' } },
-		],
-		select: ['d', 'a'],
-	});
+	// devices → the alerts raised on them, typed per alias. Fluent builder form (kind/rel-checked,
+	// same per-alias row types as the object form): device <-[raised]- alert.
+	const alerts = g.useMatch((q) =>
+		q.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'),
+	);
 
 	if (gw.isLoading) return <p>…</p>;
 	if (!gw.data) return <p>Not found.</p>;
@@ -101,9 +99,17 @@ function AlertFeed() {
 	const alerts = g.useListNodes({ kind: 'alert' }); // alert[]
 	const ack = g.useUpdateNode();
 	const rank = { critical: 0, warning: 1, info: 2 } as const;
+	// GraphError carries a typed `code` (`'validation' | 'forbidden' | 'not_found' | …`) — switch on
+	// it instead of parsing the message. A viewer (read-only) role would get `code: 'forbidden'` here.
+	const ackErr = ack.error as GraphError | null;
 	return (
 		<div>
 			<h3>Alerts (live)</h3>
+			{ackErr && (
+				<p style={{ color: '#c33' }}>
+					ack failed [{ackErr.code}]: {ackErr.message}
+				</p>
+			)}
 			{alerts.data?.pages
 				.flatMap((p) => p.nodes)
 				.sort((a, b) => rank[a.props.severity] - rank[b.props.severity])
