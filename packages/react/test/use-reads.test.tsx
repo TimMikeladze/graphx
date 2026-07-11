@@ -77,9 +77,9 @@ test('useMatch: 2-hop pattern returns typed rows', async () => {
 		() =>
 			hooks.useMatch({
 				steps: [
-					{ node: { alias: 'a', kind: 'person' } },
+					{ node: { alias: 'a', type: 'person' } },
 					{ edge: { rel: 'owns', direction: 'out' } },
-					{ node: { alias: 'b', kind: 'device' } },
+					{ node: { alias: 'b', type: 'device' } },
 				],
 				select: ['a', 'b'],
 			}),
@@ -132,7 +132,7 @@ test('useMatch: a server-rejected pattern surfaces a GraphError (400)', async ()
 	const { Wrapper } = makeWrapper(h, h.editor);
 	// select references an alias not declared in steps -> the route 400s
 	const { result } = renderHook(
-		() => hooks.useMatch({ steps: [{ node: { alias: 'a', kind: 'person' } }], select: ['ghost'] }),
+		() => hooks.useMatch({ steps: [{ node: { alias: 'a', type: 'person' } }], select: ['ghost'] }),
 		{ wrapper: Wrapper },
 	);
 	await waitFor(() => expect(result.current.isError).toBe(true));

@@ -19,7 +19,7 @@ export async function edgesInto(
 	object: string,
 	relation: string,
 ): Promise<Array<{ src: string; subjectRelation: string | null }>> {
-	const sr = jsonField(dialectOf(raw), 'props', 'subjectRelation');
+	const sr = jsonField(dialectOf(raw), 'data', 'subjectRelation');
 	const sql =
 		asOf === undefined
 			? `SELECT src, ${sr} AS sr FROM edges WHERE dst = ? AND rel = ?`

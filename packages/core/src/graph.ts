@@ -11,7 +11,7 @@ import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
-import type { AnyNode, Kind, NodeOf, Rel } from './define-graph-schema.ts';
+import type { AnyNode, NodeType, NodeOf, Rel } from './define-graph-schema.ts';
 import {
 	applyLimit,
 	decodeCursor,
@@ -33,26 +33,26 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 export type GraphSchema = { nodes: Record<string, unknown>; edges: Record<string, unknown> };
 
 /**
- * Zod INPUT prop type for node kind `K` — the shape a caller passes to `addNode`
- * (defaults optional), as opposed to `PropsOf` which is the parsed OUTPUT.
+ * Zod INPUT prop type for node type `K` — the shape a caller passes to `addNode`
+ * (defaults optional), as opposed to `DataOf` which is the parsed OUTPUT.
  */
-export type PropsInput<S extends GraphSchema, K extends Kind<S>> = S['nodes'][K] extends z.ZodType
+export type DataInput<S extends GraphSchema, K extends NodeType<S>> = S['nodes'][K] extends z.ZodType
 	? z.input<S['nodes'][K]>
 	: Record<string, unknown>;
 
-/** Zod INPUT edge-prop type for rel `R` (or `undefined` when the rel has no props schema). */
-export type EdgePropsInput<S extends GraphSchema, R extends Rel<S>> = S['edges'][R] extends {
-	props: infer P;
+/** Zod INPUT edge-prop type for rel `R` (or `undefined` when the rel has no data schema). */
+export type EdgeDataInput<S extends GraphSchema, R extends Rel<S>> = S['edges'][R] extends {
+	data: infer P;
 }
 	? P extends z.ZodType
 		? z.input<P>
 		: Record<string, unknown>
 	: Record<string, unknown> | undefined;
 
-/** Input to {@link Graph.addNode}. `props` is the unparsed prop object for the kind. */
-export interface AddNodeInput<S extends GraphSchema, K extends Kind<S>> {
-	kind: K;
-	props: PropsInput<S, K>;
+/** Input to {@link Graph.addNode}. `data` is the unparsed prop object for the type. */
+export interface AddNodeInput<S extends GraphSchema, K extends NodeType<S>> {
+	type: K;
+	data: DataInput<S, K>;
 	emb?: number[];
 	body?: string;
 	uri?: string;
@@ -67,7 +67,7 @@ export interface AddEdgeInput<S extends GraphSchema, R extends Rel<S>> {
 	src: string;
 	dst: string;
 	weight?: number;
-	props?: EdgePropsInput<S, R>;
+	data?: EdgeDataInput<S, R>;
 	/**
 	 * Optional provenance tag for the edge writer (e.g. `ingest:<source>:`). Stored verbatim in
 	 * the `source` column; `null` when unset. Lets an authority (ingest) reconcile only the edges
@@ -109,8 +109,8 @@ export interface NeighborPage<S extends GraphSchema> {
 
 /** Filter/pagination options for {@link Graph.listNodes}. */
 export interface NodeListOpts {
-	/** Restrict to one node kind. */
-	kind?: string;
+	/** Restrict to one node type. */
+	type?: string;
 	/** Full-text query over `body` (FTS5). No usable tokens ⇒ empty page. */
 	q?: string;
 	/** As-of epoch ms (D3 half-open read). Omit ⇒ current (live) nodes. */
@@ -132,7 +132,7 @@ export interface NodeListPage<S extends GraphSchema> {
 
 /** Filter options for {@link Graph.graphSlice}. */
 export interface GraphSliceOpts {
-	kind?: string;
+	type?: string;
 	q?: string;
 	asOf?: number;
 	limits?: Partial<QueryLimits>;
@@ -141,7 +141,7 @@ export interface GraphSliceOpts {
 /** A canvas node in a {@link GraphSlice}. */
 export interface GraphSliceNode {
 	id: string;
-	kind: string;
+	type: string;
 }
 
 /** A canvas link in a {@link GraphSlice} (Cosmograph `source`/`target` naming). */
@@ -161,9 +161,9 @@ export interface GraphSlice {
 	truncated: boolean;
 }
 
-/** One edge def as carried by P2 (props/from/to/single all optional). */
+/** One edge def as carried by P2 (data/from/to/single all optional). */
 interface RawEdgeDef {
-	props?: { parse: (v: unknown) => unknown };
+	data?: { parse: (v: unknown) => unknown };
 	from?: string | readonly string[];
 	to?: string | readonly string[];
 	single?: boolean;
@@ -174,7 +174,7 @@ interface RawNodeDef {
 	parse: (v: unknown) => unknown;
 }
 
-function toKindSet(spec: string | readonly string[] | undefined): Set<string> | null {
+function toTypeSet(spec: string | readonly string[] | undefined): Set<string> | null {
 	if (spec === undefined) return null;
 	return new Set(typeof spec === 'string' ? [spec] : spec);
 }
@@ -218,8 +218,8 @@ function backoff(attempt: number): Promise<void> {
 export class Graph<S extends GraphSchema> {
 	/** Monotonic write clock high-water mark (M6) — avoids same-ms zero-width versions. */
 	private lastTs = 0;
-	/** id -> kind cache, populated on write and on getNode/lookup (endpoint checks). */
-	private kindCache = new Map<string, string>();
+	/** id -> type cache, populated on write and on getNode/lookup (endpoint checks). */
+	private typeCache = new Map<string, string>();
 	/** P12 read-time upcaster (§15). Empty registry ⇒ identity (pre-P12 behavior). */
 	private readonly upcaster: Upcaster;
 
@@ -242,43 +242,43 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Insert a node: validate props (parsed output stored), mint a ULID, write the
+	 * Insert a node: validate data (parsed output stored), mint a ULID, write the
 	 * identity row + the first open version atomically. B5: omit-emb inserts SQL
 	 * NULL (never `vector('[]')`, which throws on dim 0); a supplied embedding binds
 	 * `vector(?)` with its JSON form.
 	 */
-	async addNode<K extends Kind<S>>(n: AddNodeInput<S, K>): Promise<NodeOf<S, K>> {
-		const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[n.kind];
-		if (!def) throw new Error(`addNode: unknown kind '${n.kind}'`);
-		const parsed = def.parse(n.props) as NodeOf<S, K>['props'];
+	async addNode<K extends NodeType<S>>(n: AddNodeInput<S, K>): Promise<NodeOf<S, K>> {
+		const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[n.type];
+		if (!def) throw new Error(`addNode: unknown type '${n.type}'`);
+		const parsed = def.parse(n.data) as NodeOf<S, K>['data'];
 		const id = ulid();
 		const ts = this.now();
 
-		// P12: stamp the kind's current `_v` into the STORED props (so future readers
+		// P12: stamp the type's current `_v` into the STORED data (so future readers
 		// know which upcasters to run). The in-memory return stays the clean parsed
-		// shape (no `_v`). An unregistered kind stamps nothing — byte-identical to pre-P12;
-		// a kind that itself declares the reserved `_v` throws (no silent clobber).
-		const storedProps = this.upcaster.stamp(n.kind, parsed as Record<string, unknown>);
+		// shape (no `_v`). An unregistered type stamps nothing — byte-identical to pre-P12;
+		// a type that itself declares the reserved `_v` throws (no silent clobber).
+		const storedData = this.upcaster.stamp(n.type, parsed as Record<string, unknown>);
 
 		const common = [
 			id,
-			n.kind,
+			n.type,
 			n.body ?? null,
 			n.uri ?? null,
 			n.content_hash ?? null,
 			n.embed_hash ?? null,
 			n.content_type ?? null,
-			JSON.stringify(storedProps),
+			JSON.stringify(storedData),
 		];
 		// B5: emb present -> vector(?) with the JSON array; absent -> literal NULL.
 		const versionStmt: SqlStatement = n.emb
 			? {
-					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+					sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 						VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 					args: [...common, JSON.stringify(n.emb), ts],
 				}
 			: {
-					sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+					sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 						VALUES (?,?,?,?,?,?,?,?, NULL, ?)`,
 					args: [...common, ts],
 				};
@@ -295,48 +295,48 @@ export class Graph<S extends GraphSchema> {
 			),
 		);
 
-		this.kindCache.set(id, n.kind);
-		return { id, kind: n.kind, props: parsed };
+		this.typeCache.set(id, n.type);
+		return { id, type: n.type, data: parsed };
 	}
 
 	/**
-	 * Insert an edge: validate props per rel (when a props schema is defined), check
-	 * src/dst kinds against the rel's `from`/`to`, mint a ULID, write identity + the
+	 * Insert an edge: validate data per rel (when a data schema is defined), check
+	 * src/dst types against the rel's `from`/`to`, mint a ULID, write identity + the
 	 * first open version atomically. `valid_from` uses the monotonic clock.
 	 */
 	async addEdge<R extends Rel<S>>(e: AddEdgeInput<S, R>): Promise<EdgeRef> {
 		const def = (this.schema.edges as Record<string, RawEdgeDef | undefined>)[e.rel];
 		if (!def) throw new Error(`addEdge: unknown rel '${e.rel}'`);
-		const parsedProps = def.props ? def.props.parse(e.props ?? {}) : (e.props ?? {});
+		const parsedData = def.data ? def.data.parse(e.data ?? {}) : (e.data ?? {});
 
-		const fromSet = toKindSet(def.from);
-		const toSet = toKindSet(def.to);
+		const fromSet = toTypeSet(def.from);
+		const toSet = toTypeSet(def.to);
 		if (fromSet) {
-			const srcKind = await this.kindOf(e.src);
-			if (srcKind === null || !fromSet.has(srcKind)) {
+			const srcType = await this.typeOf(e.src);
+			if (srcType === null || !fromSet.has(srcType)) {
 				throw new Error(
-					`addEdge: rel '${e.rel}' src '${e.src}' has kind '${srcKind}', expected one of ${[...fromSet].join(', ')}`,
+					`addEdge: rel '${e.rel}' src '${e.src}' has type '${srcType}', expected one of ${[...fromSet].join(', ')}`,
 				);
 			}
 		}
 		if (toSet) {
-			const dstKind = await this.kindOf(e.dst);
-			if (dstKind === null || !toSet.has(dstKind)) {
+			const dstType = await this.typeOf(e.dst);
+			if (dstType === null || !toSet.has(dstType)) {
 				throw new Error(
-					`addEdge: rel '${e.rel}' dst '${e.dst}' has kind '${dstKind}', expected one of ${[...toSet].join(', ')}`,
+					`addEdge: rel '${e.rel}' dst '${e.dst}' has type '${dstType}', expected one of ${[...toSet].join(', ')}`,
 				);
 			}
 		}
 
 		const id = ulid();
-		const props = JSON.stringify(parsedProps);
+		const data = JSON.stringify(parsedData);
 		const weight = e.weight ?? 1.0;
 		const insertEdge = (ts: number): SqlStatement[] => [
 			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
 			{
-				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, source, valid_from)
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from)
 						VALUES (?,?,?,?,?,?,?,?)`,
-				args: [id, e.src, e.dst, e.rel, weight, props, e.source ?? null, ts],
+				args: [id, e.src, e.dst, e.rel, weight, data, e.source ?? null, ts],
 			},
 		];
 
@@ -379,12 +379,12 @@ export class Graph<S extends GraphSchema> {
 
 	/**
 	 * Read the LIVE version of a node through the `nodes` view (D3). Returns the
-	 * typed `{ id, kind, props }` shape with props parsed back to an object, or
+	 * typed `{ id, type, data }` shape with data parsed back to an object, or
 	 * `null` if no live version exists.
 	 */
 	async getNode(id: string): Promise<AnyNode<S> | null> {
 		const r = await this.raw.execute({
-			sql: 'SELECT id, kind, props FROM nodes WHERE id = ?',
+			sql: 'SELECT id, type, data FROM nodes WHERE id = ?',
 			args: [id],
 		});
 		const row = r.rows[0];
@@ -430,7 +430,7 @@ export class Graph<S extends GraphSchema> {
 	async neighbors(id: string, opts: NeighborOpts = {}): Promise<AnyNode<S>[]> {
 		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
 		const sql = applyLimit(
-			`SELECT n.id AS id, n.kind AS kind, n.props AS props
+			`SELECT n.id AS id, n.type AS type, n.data AS data
 			FROM (${neighborSql}) nb
 			JOIN nodes n ON n.id = nb.nid
 			ORDER BY n.id`,
@@ -466,7 +466,7 @@ export class Graph<S extends GraphSchema> {
 		const { select, group } = distinctSelect(
 			dialectOf(this.raw),
 			'n.id',
-			'n.id AS id, n.kind AS kind, n.props AS props',
+			'n.id AS id, n.type AS type, n.data AS data',
 		);
 		const sql = `${select}
 			FROM (${neighborSql}) nb
@@ -500,11 +500,11 @@ export class Graph<S extends GraphSchema> {
 	/**
 	 * Build the node-filter WHERE for {@link listNodes}/{@link graphSlice} over `node_versions`
 	 * aliased `nv`: a temporal predicate (live via the FOREVER sentinel, or as-of half-open),
-	 * an optional `kind`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
+	 * an optional `type`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
 	 * `null` when `q` is present but yields no tokens (⇒ caller returns an empty result).
 	 */
 	private nodeFilter(opts: {
-		kind?: string;
+		type?: string;
 		q?: string;
 		asOf?: number;
 	}): { where: string; args: (string | number)[] } | null {
@@ -517,9 +517,9 @@ export class Graph<S extends GraphSchema> {
 			where.push('nv.valid_to = ?');
 			args.push(FOREVER);
 		}
-		if (opts.kind) {
-			where.push('nv.kind = ?');
-			args.push(opts.kind);
+		if (opts.type) {
+			where.push('nv.type = ?');
+			args.push(opts.type);
 		}
 		if (opts.q !== undefined) {
 			const match = this.ftsMatch(opts.q);
@@ -532,7 +532,7 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * List nodes with optional `kind`/full-text/as-of filters, keyset-paginated by id (§19.7)
+	 * List nodes with optional `type`/full-text/as-of filters, keyset-paginated by id (§19.7)
 	 * and bounded by the §19.2 row cap. Each id has exactly one matching version (live, or the
 	 * single as-of version), so the id keyset is a strict total order — no skip, no overlap.
 	 * Props are upcast + parsed via the same path as `getNode`/`neighbors` (P12).
@@ -552,7 +552,7 @@ export class Graph<S extends GraphSchema> {
 			cursorClause = ' AND nv.id > ?';
 			args.push(lastId as string);
 		}
-		const sql = `SELECT nv.id AS id, nv.kind AS kind, nv.props AS props
+		const sql = `SELECT nv.id AS id, nv.type AS type, nv.data AS data
 			FROM node_versions nv
 			WHERE ${filter.where}${cursorClause}
 			ORDER BY nv.id
@@ -579,8 +579,8 @@ export class Graph<S extends GraphSchema> {
 		if (filter === null) return { nodes: [], links: [], truncated: false };
 		const maxRows = resolveLimits(opts.limits).maxRows;
 
-		// 1) The capped node set (id + kind). Reused as a subquery for the edge endpoint filter.
-		const nodeSub = `SELECT nv.id AS id, nv.kind AS kind
+		// 1) The capped node set (id + type). Reused as a subquery for the edge endpoint filter.
+		const nodeSub = `SELECT nv.id AS id, nv.type AS type
 			FROM node_versions nv
 			WHERE ${filter.where}
 			ORDER BY nv.id
@@ -588,7 +588,7 @@ export class Graph<S extends GraphSchema> {
 		const nodesRes = await this.raw.execute({ sql: nodeSub, args: filter.args });
 		const nodes: GraphSliceNode[] = nodesRes.rows.map((r) => ({
 			id: String(r.id),
-			kind: String(r.kind),
+			type: String(r.type),
 		}));
 		const truncated = nodes.length >= maxRows;
 
@@ -681,16 +681,16 @@ export class Graph<S extends GraphSchema> {
 	 * retry instead of creating overlapping intervals.
 	 *
 	 * Carry-forward (B4/B5): every column the patch omits is copied from the
-	 * current live version — `body/uri/content_hash/content_type/kind` via
-	 * `patch.X ?? cur.X`, props by shallow-merge, and the `emb` BLOB by rebinding
+	 * current live version — `body/uri/content_hash/content_type/type` via
+	 * `patch.X ?? cur.X`, data by shallow-merge, and the `emb` BLOB by rebinding
 	 * the raw `cur.emb` bytes (NEVER `vector('[]')`, which throws on a dim
 	 * mismatch). A supplied `emb` binds `vector(?)`; a NULL stays NULL.
 	 */
 	async updateNode(
 		id: string,
 		patch: {
-			kind?: string;
-			props?: Record<string, unknown>;
+			type?: string;
+			data?: Record<string, unknown>;
 			emb?: number[];
 			body?: string;
 			uri?: string;
@@ -702,7 +702,7 @@ export class Graph<S extends GraphSchema> {
 		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
 			const cur = (
 				await tx.execute({
-					sql: `SELECT kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from
+					sql: `SELECT type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from
 						FROM node_versions WHERE id = ? AND valid_to = ?`,
 					args: [id, FOREVER],
 				})
@@ -723,48 +723,48 @@ export class Graph<S extends GraphSchema> {
 
 			// P12: produce a successor that is genuinely current-shaped and honestly `_v`-stamped
 			// (never "v2-tagged but v1-shaped"). The OLD version row is untouched (closed above) —
-			// only this new successor moves forward (no backfill). Unregistered kind ⇒ both
+			// only this new successor moves forward (no backfill). Unregistered type ⇒ both
 			// `apply` and `stamp` are identity → exactly the pre-P12 behavior.
-			const successorKind = patch.kind ?? String(cur.kind);
-			const curRaw = JSON.parse(String(cur.props)) as Record<string, unknown>;
-			let props: Record<string, unknown>;
-			if (successorKind !== String(cur.kind) && this.upcaster.stampVersion(successorKind) !== undefined) {
-				// Kind change INTO a registered kind: the live props were shaped by the OLD kind's
+			const successorType = patch.type ?? String(cur.type);
+			const curRaw = JSON.parse(String(cur.data)) as Record<string, unknown>;
+			let data: Record<string, unknown>;
+			if (successorType !== String(cur.type) && this.upcaster.stampVersion(successorType) !== undefined) {
+				// NodeType change INTO a registered type: the live data were shaped by the OLD type's
 				// chain, meaningless under the successor. Re-parse the merged result against the
 				// SUCCESSOR's Zod schema (drops foreign fields, applies its defaults, throws if a
 				// required successor field is missing) before stamping, so the stamp matches the shape.
-				const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[successorKind];
-				const reshaped = (def ? def.parse({ ...curRaw, ...patch.props }) : { ...curRaw, ...patch.props }) as Record<string, unknown>;
-				props = this.upcaster.stamp(successorKind, reshaped);
+				const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[successorType];
+				const reshaped = (def ? def.parse({ ...curRaw, ...patch.data }) : { ...curRaw, ...patch.data }) as Record<string, unknown>;
+				data = this.upcaster.stamp(successorType, reshaped);
 			} else {
-				// Same-kind (or unregistered successor): migrate the live props to the latest shape,
+				// Same-type (or unregistered successor): migrate the live data to the latest shape,
 				// merge the patch, stamp.
-				const merged = { ...this.upcaster.apply(String(cur.kind), curRaw), ...patch.props };
-				props = this.upcaster.stamp(successorKind, merged);
+				const merged = { ...this.upcaster.apply(String(cur.type), curRaw), ...patch.data };
+				data = this.upcaster.stamp(successorType, merged);
 			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
-			// Carried forward: kind, body, uri, content_hash, embed_hash, content_type, props, emb.
+			// Carried forward: type, body, uri, content_hash, embed_hash, content_type, data, emb.
 			const common: SqlValue[] = [
 				id,
-				patch.kind ?? (cur.kind as SqlValue),
+				patch.type ?? (cur.type as SqlValue),
 				patch.body ?? (cur.body as SqlValue) ?? null,
 				patch.uri ?? (cur.uri as SqlValue) ?? null,
 				patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
 				patch.embed_hash ?? (cur.embed_hash as SqlValue) ?? null,
 				patch.content_type ?? (cur.content_type as SqlValue) ?? null,
-				JSON.stringify(props),
+				JSON.stringify(data),
 			];
 			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
 			// (carries a real F32 vector, or NULL when there was none).
 			const successor: SqlStatement = patch.emb
 				? {
-						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 							VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
 						args: [...common, JSON.stringify(patch.emb), now],
 					}
 				: {
-						sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, embed_hash, content_type, props, emb, valid_from)
+						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 							VALUES (?,?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
 						args: [...common, (cur.emb as SqlValue) ?? null, now],
 					};
@@ -808,9 +808,9 @@ export class Graph<S extends GraphSchema> {
 			await tx.commit();
 			return 'committed';
 		});
-		// A retracted id no longer resolves to a live kind; drop any cached entry so a later
-		// endpoint-kind check (or re-add of the same id) re-queries instead of trusting a stale kind.
-		this.kindCache.delete(id);
+		// A retracted id no longer resolves to a live type; drop any cached entry so a later
+		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
+		this.typeCache.delete(id);
 	}
 
 	/**
@@ -841,30 +841,30 @@ export class Graph<S extends GraphSchema> {
 		});
 	}
 
-	/** Resolve a node's live kind, caching it (used by endpoint-kind checks). */
-	private async kindOf(id: string): Promise<string | null> {
-		const cached = this.kindCache.get(id);
+	/** Resolve a node's live type, caching it (used by endpoint-type checks). */
+	private async typeOf(id: string): Promise<string | null> {
+		const cached = this.typeCache.get(id);
 		if (cached !== undefined) return cached;
-		const r = await this.raw.execute({ sql: 'SELECT kind FROM nodes WHERE id = ?', args: [id] });
+		const r = await this.raw.execute({ sql: 'SELECT type FROM nodes WHERE id = ?', args: [id] });
 		const row = r.rows[0];
 		if (!row) return null;
-		const kind = String(row.kind);
-		this.kindCache.set(id, kind);
-		return kind;
+		const type = String(row.type);
+		this.typeCache.set(id, type);
+		return type;
 	}
 
 	/**
-	 * Reshape a `{ id, kind, props }` row from a view into the typed node shape, applying
-	 * the P12 read-time upcaster (§15): stored props are migrated from their `_v` to the
+	 * Reshape a `{ id, type, data }` row from a view into the typed node shape, applying
+	 * the P12 read-time upcaster (§15): stored data are migrated from their `_v` to the
 	 * latest shape and Zod-parsed. Empty registry ⇒ identity (raw JSON, pre-P12).
 	 */
 	private rowToNode(row: SqlRow): AnyNode<S> {
-		const kind = String(row.kind);
-		this.kindCache.set(String(row.id), kind);
+		const type = String(row.type);
+		this.typeCache.set(String(row.id), type);
 		return {
 			id: String(row.id),
-			kind,
-			props: this.upcaster.apply(kind, JSON.parse(String(row.props)) as Record<string, unknown>),
+			type,
+			data: this.upcaster.apply(type, JSON.parse(String(row.data)) as Record<string, unknown>),
 		} as AnyNode<S>;
 	}
 }

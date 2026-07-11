@@ -23,7 +23,7 @@ export function parseExplorerSearch(raw: Record<string, unknown>): ExplorerSearc
         ? Number(asOfRaw)
         : undefined
   return {
-    kind: str(raw.kind),
+    type: str(raw.type),
     q: str(raw.q),
     asOf,
     node: str(raw.node),
@@ -40,7 +40,7 @@ function parseExpand(raw: unknown): string[] {
 
 /** The filter subset of the search (what the data hooks key on). */
 export function filtersOf(search: ExplorerSearch): ExplorerFilters {
-  return { kind: search.kind, q: search.q, asOf: search.asOf }
+  return { type: search.type, q: search.q, asOf: search.asOf }
 }
 
 /** Add an id to the expand set (immutably). */

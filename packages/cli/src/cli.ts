@@ -18,7 +18,7 @@ export interface ParsedIngestArgs {
 	idField: string | undefined;
 	prune: boolean;
 	watch: boolean;
-	assetsKind: string | undefined;
+	assetsType: string | undefined;
 }
 
 export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
@@ -31,7 +31,7 @@ export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
 			'id-field': { type: 'string' },
 			prune: { type: 'boolean', default: false },
 			watch: { type: 'boolean', short: 'w', default: false },
-			'assets-kind': { type: 'string' },
+			'assets-type': { type: 'string' },
 		},
 	});
 
@@ -46,7 +46,7 @@ export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
 		idField: values['id-field'] as string | undefined,
 		prune: (values.prune as boolean | undefined) ?? false,
 		watch: (values.watch as boolean | undefined) ?? false,
-		assetsKind: values['assets-kind'] as string | undefined,
+		assetsType: values['assets-type'] as string | undefined,
 	};
 }
 
@@ -119,7 +119,7 @@ function printSummary(result: IngestResult): void {
 		`added=${added} updated=${updated} unchanged=${unchanged} deleted=${deleted} ` +
 			`edgesAdded=${edgesAdded} edgesClosed=${edgesClosed} skipped=${skipped.length}`,
 	);
-	// A bare count hides systemic failure (a schema/kind/dim error rejecting every file). Surface
+	// A bare count hides systemic failure (a schema/type/dim error rejecting every file). Surface
 	// the codes so an operator can see WHY, not just that something was skipped.
 	if (skipped.length > 0) console.log(`  skips: ${skipBreakdown(skipped)}`);
 }
@@ -142,7 +142,7 @@ ingest options:
   --id-field <name>       Frontmatter key for stable identity (default: 'id')
   --prune                 Retract nodes for files that vanished
   --watch, -w             Watch dir for changes after initial ingest
-  --assets-kind <kind>    Enable asset nodes with this kind
+  --assets-type <type>    Enable asset nodes with this type
 
 serve options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -204,14 +204,14 @@ async function runIngest(argv: string[]): Promise<void> {
 		source: args.source,
 		idField: args.idField,
 		prune: args.prune,
-		assets: args.assetsKind ? { kind: args.assetsKind } : undefined,
+		assets: args.assetsType ? { type: args.assetsType } : undefined,
 	};
 
 	// Initial ingest run
 	const result = await ingestDir(ingestOpts);
 	printSummary(result);
 
-	// Systemic failure: nothing was written but files were rejected (schema/kind/dim error). Signal
+	// Systemic failure: nothing was written but files were rejected (schema/type/dim error). Signal
 	// it with a nonzero exit so CI/scripts don't read a total failure as a successful no-op.
 	if (result.added === 0 && result.updated === 0 && result.skipped.length > 0) {
 		process.exitCode = 1;
@@ -365,7 +365,7 @@ function scaffoldPkg(range: string): string {
 const SCAFFOLD_CONFIG = `import { defineGraphSchema, hashEmbed } from '@graphx/core';
 import { z } from 'zod';
 
-// Your graph's shape — kinds (node types) and rels (edge types).
+// Your graph's shape — types (node types) and rels (edge types).
 export const schema = defineGraphSchema({
 	nodes: {
 		note: z.object({ title: z.string().optional() }),

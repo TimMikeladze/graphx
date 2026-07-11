@@ -71,9 +71,9 @@ function jsonSchema(s: z.ZodType): Record<string, unknown> {
 /** Lower a Zod query schema into a list of OpenAPI `parameters` (one per top-level property). */
 function queryParameters(s: z.ZodType): Array<Record<string, unknown>> {
 	const schema = jsonSchema(s);
-	const props = (schema.properties as Record<string, unknown>) ?? {};
+	const data = (schema.properties as Record<string, unknown>) ?? {};
 	const required = new Set((schema.required as string[]) ?? []);
-	return Object.entries(props).map(([name, propSchema]) => ({
+	return Object.entries(data).map(([name, propSchema]) => ({
 		name,
 		in: 'query',
 		required: required.has(name),

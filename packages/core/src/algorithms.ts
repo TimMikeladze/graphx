@@ -90,17 +90,17 @@ export type CentralityKind = 'degree' | 'in' | 'out';
 /** A persisted analytics metric, orderable by {@link topNodes}. */
 export type Metric = 'pagerank' | 'community' | 'degree';
 
-/** Options for {@link topNodes}. `by` orders the result; `kind` filters node kind. */
+/** Options for {@link topNodes}. `by` orders the result; `type` filters node type. */
 export interface TopNodesOpts {
 	by: Metric;
-	kind?: string;
+	type?: string;
 	limit?: number;
 }
 
 /** One `topNodes` row: a live node plus its persisted analytics (null if uncomputed). */
 export interface TopNode {
 	id: string;
-	kind: string;
+	type: string;
 	pagerank: number | null;
 	community: number | null;
 	degree: number | null;
@@ -604,7 +604,7 @@ const METRIC_COL: Record<Metric, string> = {
 
 /**
  * Top nodes by a persisted metric. JOINs `node_analytics` with the live `nodes`
- * view (D4), optionally filters node `kind`, and orders by the metric DESC.
+ * view (D4), optionally filters node `type`, and orders by the metric DESC.
  */
 export async function topNodes(raw: DbClient, opts: TopNodesOpts): Promise<TopNode[]> {
 	// Own-property check: a plain-object lookup would inherit Object.prototype keys
@@ -613,17 +613,17 @@ export async function topNodes(raw: DbClient, opts: TopNodesOpts): Promise<TopNo
 	if (!Object.hasOwn(METRIC_COL, opts.by)) throw new Error(`topNodes: unknown metric '${opts.by}'`);
 	const col = METRIC_COL[opts.by];
 	const limit = opts.limit ?? 10;
-	const kindClause = opts.kind ? ' AND n.kind = ?' : '';
-	const sql = `SELECT n.id AS id, n.kind AS kind, na.pagerank AS pagerank, na.community AS community, na.degree AS degree
+	const typeClause = opts.type ? ' AND n.type = ?' : '';
+	const sql = `SELECT n.id AS id, n.type AS type, na.pagerank AS pagerank, na.community AS community, na.degree AS degree
 		FROM node_analytics na JOIN nodes n ON n.id = na.id
-		WHERE na.${col} IS NOT NULL${kindClause}
+		WHERE na.${col} IS NOT NULL${typeClause}
 		ORDER BY na.${col} DESC
 		LIMIT ?`;
-	const args: (string | number)[] = opts.kind ? [opts.kind, limit] : [limit];
+	const args: (string | number)[] = opts.type ? [opts.type, limit] : [limit];
 	const r = await raw.execute({ sql, args });
 	return r.rows.map((row) => ({
 		id: String(row.id),
-		kind: String(row.kind),
+		type: String(row.type),
 		pagerank: row.pagerank === null ? null : Number(row.pagerank),
 		community: row.community === null ? null : Number(row.community),
 		degree: row.degree === null ? null : Number(row.degree),

@@ -69,11 +69,11 @@ libsqlOnly('P0 capability: FTS5 virtual table + MATCH', async () => {
 libsqlOnly('P0 capability: generated column + json ->> operator', async () => {
 	const c = mem();
 	await c.executeMultiple(
-		`CREATE TABLE n (ver INTEGER PRIMARY KEY, props TEXT NOT NULL DEFAULT '{}',
-		   etype TEXT GENERATED ALWAYS AS (props ->> 'etype'));`,
+		`CREATE TABLE n (ver INTEGER PRIMARY KEY, data TEXT NOT NULL DEFAULT '{}',
+		   etype TEXT GENERATED ALWAYS AS (data ->> 'etype'));`,
 	);
 	await c.execute({
-		sql: 'INSERT INTO n (ver, props) VALUES (1, ?)',
+		sql: 'INSERT INTO n (ver, data) VALUES (1, ?)',
 		args: [JSON.stringify({ etype: 'device' })],
 	});
 	const r = await c.execute('SELECT etype FROM n WHERE ver = 1');

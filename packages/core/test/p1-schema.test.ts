@@ -118,17 +118,17 @@ test('P1: nodes view returns only live rows (valid_to = FOREVER)', async () => {
 	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
 	// one closed (historical) version + one live version for the same id
 	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, valid_from, valid_to) VALUES (?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)',
 		args: [1, ULID_A, 'old', 1, 100],
 	});
 	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, valid_from, valid_to) VALUES (?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)',
 		args: [2, ULID_A, 'new', 100, FOREVER],
 	});
 	// view filters out the closed row; only the live one shows
-	const r = await c.execute({ sql: 'SELECT kind FROM nodes WHERE id = ?', args: [ULID_A] });
+	const r = await c.execute({ sql: 'SELECT type FROM nodes WHERE id = ?', args: [ULID_A] });
 	expect(r.rows.length).toBe(1);
-	expect(String(r.rows[0]!.kind)).toBe('new');
+	expect(String(r.rows[0]!.type)).toBe('new');
 	c.close();
 });
 
@@ -139,11 +139,11 @@ libsqlOnly('P1 EMPIRICAL: vector index nv_emb_idx is usable via vector_top_k', a
 	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_B] });
 	// two LIVE node versions with embeddings
 	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, emb, valid_from) VALUES (?,?,?,vector(?),?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, emb, valid_from) VALUES (?,?,?,vector(?),?)',
 		args: [1, ULID_A, 'k', '[1,0,0,0]', 1],
 	});
 	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, emb, valid_from) VALUES (?,?,?,vector(?),?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, emb, valid_from) VALUES (?,?,?,vector(?),?)',
 		args: [2, ULID_B, 'k', '[0,1,0,0]', 1],
 	});
 	// query nearest to [1,0,0,0] — must come back via the nv_emb_idx index
@@ -163,18 +163,18 @@ libsqlOnly('P1: ensureColumn adds a generated column once, idempotently', async 
 		c,
 		'node_versions',
 		'entity_type',
-		"ALTER TABLE node_versions ADD COLUMN entity_type TEXT GENERATED ALWAYS AS (props ->> 'entity_type')",
+		"ALTER TABLE node_versions ADD COLUMN entity_type TEXT GENERATED ALWAYS AS (data ->> 'entity_type')",
 	);
 	// second call is a no-op (column already present)
 	await ensureColumn(
 		c,
 		'node_versions',
 		'entity_type',
-		"ALTER TABLE node_versions ADD COLUMN entity_type TEXT GENERATED ALWAYS AS (props ->> 'entity_type')",
+		"ALTER TABLE node_versions ADD COLUMN entity_type TEXT GENERATED ALWAYS AS (data ->> 'entity_type')",
 	);
 	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
 	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, props, valid_from) VALUES (?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, data, valid_from) VALUES (?,?,?,?,?)',
 		args: [1, ULID_A, 'k', JSON.stringify({ entity_type: 'device' }), 1],
 	});
 	const r = await c.execute({ sql: 'SELECT entity_type FROM node_versions WHERE ver = 1' });

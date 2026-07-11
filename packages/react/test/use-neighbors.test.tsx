@@ -28,7 +28,7 @@ test('useNeighbors: infinite query pages neighbors by cursor (no skip/dup)', asy
 	h.cleanup();
 });
 
-test('useNeighbors(id, {rel}): narrows to the rel target kind and filters to it', async () => {
+test('useNeighbors(id, {rel}): narrows to the rel target type and filters to it', async () => {
 	const h = await setup();
 	const ada = await mkNode(h, h.editor, 'person', { name: 'ada' });
 	const router = await mkNode(h, h.editor, 'device', { type: 'router' });
@@ -43,21 +43,21 @@ test('useNeighbors(id, {rel}): narrows to the rel target kind and filters to it'
 	await waitFor(() => expect(r.result.current.isSuccess).toBe(true));
 	const rows = r.result.current.data!.pages.flatMap((p) => p.rows);
 	expect(rows.map((n) => n.id)).toEqual([router]);
-	expect(rows[0]!.props.type).toBe('router'); // typed as NodeOf<S,'device'>
+	expect(rows[0]!.data.type).toBe('router'); // typed as NodeOf<S,'device'>
 	h.cleanup();
 });
 
-test('useListNodes({kind}): narrows to that kind', async () => {
+test('useListNodes({type}): narrows to that type', async () => {
 	const h = await setup();
 	await mkNode(h, h.editor, 'person', { name: 'a' });
 	const d = await mkNode(h, h.editor, 'device', { type: 'router' });
 	const { Wrapper } = makeWrapper(h, h.editor);
 
-	const r = renderHook(() => hooks.useListNodes({ kind: 'device' }), { wrapper: Wrapper });
+	const r = renderHook(() => hooks.useListNodes({ type: 'device' }), { wrapper: Wrapper });
 	await waitFor(() => expect(r.result.current.isSuccess).toBe(true));
 	const nodes = r.result.current.data!.pages.flatMap((p) => p.nodes);
 	expect(nodes.map((n) => n.id)).toEqual([d]);
-	expect(nodes[0]!.props.type).toBe('router'); // typed as NodeOf<S,'device'>
+	expect(nodes[0]!.data.type).toBe('router'); // typed as NodeOf<S,'device'>
 	h.cleanup();
 });
 

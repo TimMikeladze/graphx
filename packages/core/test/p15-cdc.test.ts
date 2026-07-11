@@ -47,7 +47,7 @@ async function fileGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> 
 async function insertNodeVersion(
 	client: DbClient,
 	id: string,
-	props: Record<string, unknown>,
+	data: Record<string, unknown>,
 	validFrom: number,
 ): Promise<void> {
 	await client.execute({
@@ -55,8 +55,8 @@ async function insertNodeVersion(
 		args: [id],
 	});
 	await client.execute({
-		sql: 'INSERT INTO node_versions (id, kind, props, valid_from) VALUES (?,?,?,?)',
-		args: [id, 'person', JSON.stringify(props), validFrom],
+		sql: 'INSERT INTO node_versions (id, type, data, valid_from) VALUES (?,?,?,?)',
+		args: [id, 'person', JSON.stringify(data), validFrom],
 	});
 }
 
@@ -130,8 +130,8 @@ test('P15 CDC: polling with nextCursor across many versions yields no overlap/no
 
 test('P15 CDC: nodes and edges advance on independent cursors', async () => {
 	const { client, g } = await fileGraph();
-	const p = await g.addNode({ kind: 'person', props: { name: 'p' } });
-	const d = await g.addNode({ kind: 'device', props: { type: 'r' } });
+	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'r' } });
 	await g.addEdge({ rel: 'owns', src: p.id, dst: d.id });
 
 	// page size 1: 2 node versions, 1 edge version → each stream keysets its OWN ver
@@ -151,8 +151,8 @@ test('P15 CDC: nodes and edges advance on independent cursors', async () => {
 
 test('P15 CDC: a pure deleteEdge close is NOT surfaced (valid_from-only); diff reconciles it', async () => {
 	const { client, g } = await fileGraph();
-	const p = await g.addNode({ kind: 'person', props: { name: 'p' } });
-	const d = await g.addNode({ kind: 'device', props: { type: 'r' } });
+	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'r' } });
 	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: d.id });
 
 	const before = await changeFeed(client);
@@ -183,9 +183,9 @@ test('P15 CDC: a pure deleteEdge close is NOT surfaced (valid_from-only); diff r
 
 test('P15 CDC: a single-valued addEdge supersession close is NOT surfaced (only the new INSERT)', async () => {
 	const { client, g } = await fileGraph();
-	const p = await g.addNode({ kind: 'person', props: { name: 'p' } });
-	const d1 = await g.addNode({ kind: 'device', props: { type: 'a' } });
-	const d2 = await g.addNode({ kind: 'device', props: { type: 'b' } });
+	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
+	const d1 = await g.addNode({ type: 'device', data: { type: 'a' } });
+	const d2 = await g.addNode({ type: 'device', data: { type: 'b' } });
 	const e1 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d1.id });
 	const e2 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d2.id }); // supersedes e1 (single-valued)
 
@@ -207,7 +207,7 @@ test('P15 CDC: a single-valued addEdge supersession close is NOT surfaced (only 
 	client.close();
 });
 
-test('P15 CDC: emits RAW stored props (no upcast) — reports the actual written bytes', async () => {
+test('P15 CDC: emits RAW stored data (no upcast) — reports the actual written bytes', async () => {
 	const client = await memClient();
 	const id = ulid();
 	// a stored prop bag carrying a schema-version stamp; a read-time upcaster would
@@ -216,12 +216,12 @@ test('P15 CDC: emits RAW stored props (no upcast) — reports the actual written
 	await insertNodeVersion(client, id, stored, 1000);
 
 	const feed = await changeFeed(client);
-	expect(JSON.parse(String(feed.nodes[0]?.props))).toEqual(stored); // _v intact, not upcast
+	expect(JSON.parse(String(feed.nodes[0]?.data))).toEqual(stored); // _v intact, not upcast
 	// airtight: equals the bytes on disk
 	const onDisk = (
-		await client.execute({ sql: 'SELECT props FROM node_versions WHERE id = ?', args: [id] })
-	).rows[0]?.props;
-	expect(String(feed.nodes[0]?.props)).toBe(String(onDisk));
+		await client.execute({ sql: 'SELECT data FROM node_versions WHERE id = ?', args: [id] })
+	).rows[0]?.data;
+	expect(String(feed.nodes[0]?.data)).toBe(String(onDisk));
 	client.close();
 });
 

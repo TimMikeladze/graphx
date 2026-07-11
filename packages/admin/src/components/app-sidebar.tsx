@@ -20,13 +20,13 @@ export function AppSidebar({
   tenant,
   project,
   filters,
-  kinds,
+  types,
   onFilterChange,
 }: {
   tenant: string
   project: string
   filters: ExplorerFilters
-  kinds: string[]
+  types: string[]
   onFilterChange: (patch: Partial<ExplorerFilters>) => void
 }) {
   const navigate = useNavigate()
@@ -88,11 +88,11 @@ export function AppSidebar({
           <SidebarGroupLabel>Filters</SidebarGroupLabel>
           <SidebarGroupContent className="flex flex-col gap-3 px-2">
             <div>
-              <div className="mb-1 text-xs text-muted-foreground">Kind</div>
+              <div className="mb-1 text-xs text-muted-foreground">NodeType</div>
               <KindFilter
-                value={filters.kind}
-                kinds={kinds}
-                onChange={(kind) => onFilterChange({ kind })}
+                value={filters.type}
+                types={types}
+                onChange={(type) => onFilterChange({ type })}
               />
             </div>
             <div>

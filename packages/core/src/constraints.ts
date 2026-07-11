@@ -9,8 +9,8 @@ import { ensureColumn } from './schema.ts';
  * (closed versions) can never collide with itself:
  *
  *  - **Uniqueness** ({@link declareUniqueNodeProp}): a prop is made unique among the
- *    live versions of one kind. Implemented as a VIRTUAL generated column extracting
- *    the prop + a partial UNIQUE index over it (kind-scoped). The §4.1 `ensureColumn`
+ *    live versions of one type. Implemented as a VIRTUAL generated column extracting
+ *    the prop + a partial UNIQUE index over it (type-scoped). The §4.1 `ensureColumn`
  *    guard was built for exactly this (it reads `table_xinfo`, which sees generated
  *    columns) so re-declaring is idempotent.
  *  - **Edge cardinality** ({@link declareSingleValuedRel}): a rel is single-valued —
@@ -39,32 +39,32 @@ function sqlLiteral(s: string): string {
 }
 
 /**
- * Make `prop` unique among the LIVE versions of node `kind` (§19.5). Adds a VIRTUAL
- * generated column `gp_<prop>` extracting `json_extract(props,'$.<prop>')` (shared
- * across kinds that name the same prop) and a partial UNIQUE index
- * `ux_<kind.length>_<kind>_<prop>` over it, scoped to live rows of that kind (the kind
- * length-prefix keeps distinct (kind,prop) pairs from colliding into one index name).
+ * Make `prop` unique among the LIVE versions of node `type` (§19.5). Adds a VIRTUAL
+ * generated column `gp_<prop>` extracting `json_extract(data,'$.<prop>')` (shared
+ * across types that name the same prop) and a partial UNIQUE index
+ * `ux_<type.length>_<type>_<prop>` over it, scoped to live rows of that type (the type
+ * length-prefix keeps distinct (type,prop) pairs from colliding into one index name).
  * NULLs (the prop absent) are distinct, so nodes lacking the prop never collide.
  * Idempotent.
  */
 export async function declareUniqueNodeProp(
 	client: DbClient,
-	opts: { kind: string; prop: string },
+	opts: { type: string; prop: string },
 ): Promise<void> {
-	const kind = safeIdent(opts.kind, 'kind');
+	const type = safeIdent(opts.type, 'type');
 	const prop = safeIdent(opts.prop, 'prop');
-	// Length-prefix the kind so distinct (kind, prop) pairs can't collapse to the same
+	// Length-prefix the type so distinct (type, prop) pairs can't collapse to the same
 	// index name — `_`-joining alone is ambiguous (user_account+id vs user+account_id
 	// both → ux_user_account_id), which would make the 2nd CREATE IF NOT EXISTS a silent
 	// no-op and leave its uniqueness unenforced.
-	const idx = `ux_${kind.length}_${kind}_${prop}`;
-	const pred = `WHERE valid_to = ${FOREVER} AND kind = ${sqlLiteral(kind)}`;
+	const idx = `ux_${type.length}_${type}_${prop}`;
+	const pred = `WHERE valid_to = ${FOREVER} AND type = ${sqlLiteral(type)}`;
 	if (dialectOf(client) === 'postgres') {
 		// Postgres has no VIRTUAL generated columns — use a partial UNIQUE EXPRESSION index
-		// over `props::jsonb ->> 'prop'` directly. NULLs (prop absent) are distinct, so nodes
+		// over `data::jsonb ->> 'prop'` directly. NULLs (prop absent) are distinct, so nodes
 		// lacking the prop never collide, matching the libSQL generated-column behavior.
 		await client.execute(
-			`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions ((props::jsonb ->> '${prop}')) ${pred}`,
+			`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions ((data::jsonb ->> '${prop}')) ${pred}`,
 		);
 		return;
 	}
@@ -74,7 +74,7 @@ export async function declareUniqueNodeProp(
 		client,
 		'node_versions',
 		col,
-		`ALTER TABLE node_versions ADD COLUMN ${col} TEXT GENERATED ALWAYS AS (json_extract(props, '$.${prop}')) VIRTUAL`,
+		`ALTER TABLE node_versions ADD COLUMN ${col} TEXT GENERATED ALWAYS AS (json_extract(data, '$.${prop}')) VIRTUAL`,
 	);
 	await client.execute(`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions(${col}) ${pred}`);
 }
@@ -97,11 +97,11 @@ export async function declareSingleValuedRel(client: DbClient, rel: string): Pro
  * imperatively via {@link declareUniqueNodeProp} (it isn't expressible in the Zod node
  * schema). Idempotent.
  *
- * DEFERRED (§19.5 third bullet): required-relationship validation ("a node of kind K
+ * DEFERRED (§19.5 third bullet): required-relationship validation ("a node of type K
  * must have an outgoing R") is NOT implemented — it's a deferred-cardinality constraint
  * that can't be enforced at `addNode` time (the edges don't exist yet) without a
  * separate validation pass, and it has no P14 acceptance criterion. The endpoint
- * kind + FK checks on `addEdge` are the write-path validation that IS in place.
+ * type + FK checks on `addEdge` are the write-path validation that IS in place.
  */
 export async function materializeConstraints(client: DbClient, schema: GraphSchema): Promise<void> {
 	for (const [rel, def] of Object.entries(schema.edges)) {

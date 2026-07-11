@@ -74,8 +74,8 @@ test('P5: placeholder count === args.length (with where filters)', () => {
 	// Textual order: rel(owns) in the JOIN, b-where(type) in the JOIN, then a0's
 	// where(name) in the trailing WHERE clause (rendered last).
 	expect(args).toEqual(['owns', 'router', 'ada']);
-	expect(sql).toContain("json_extract(a.props, '$.name') = ?");
-	expect(sql).toContain("json_extract(b.props, '$.type') = ?");
+	expect(sql).toContain("json_extract(a.data, '$.name') = ?");
+	expect(sql).toContain("json_extract(b.data, '$.type') = ?");
 });
 
 test('P5: PARAM ORDER — .where + .asOf line up positionally with placeholders (§16)', () => {
@@ -99,16 +99,16 @@ test('P5: PARAM ORDER — .where + .asOf line up positionally with placeholders 
 	//   e1.rel = ?                          -> 'owns'
 	//   e1.valid_from <= ?, ? < e1.valid_to -> T, T
 	//   b.valid_from <= ?, ? < b.valid_to   -> T, T
-	//   json_extract(b.props,'$.type') = ?  -> 'router'
+	//   json_extract(b.data,'$.type') = ?  -> 'router'
 	//   a.valid_from <= ?, ? < a.valid_to   -> T, T   (WHERE)
-	//   json_extract(a.props,'$.name') = ?  -> 'ada'  (WHERE)
+	//   json_extract(a.data,'$.name') = ?  -> 'ada'  (WHERE)
 	expect(args).toEqual(['owns', T, T, T, T, 'router', T, T, 'ada']);
 	expect(placeholderCount(sql)).toBe(args.length);
 
 	// Cross-check textual placeholder order matches the arg order above.
 	const idxRel = sql.indexOf('e1.rel = ?');
-	const idxType = sql.indexOf("json_extract(b.props, '$.type')");
-	const idxName = sql.indexOf("json_extract(a.props, '$.name')");
+	const idxType = sql.indexOf("json_extract(b.data, '$.type')");
+	const idxName = sql.indexOf("json_extract(a.data, '$.name')");
 	expect(idxRel).toBeGreaterThan(-1);
 	expect(idxType).toBeGreaterThan(idxRel); // rel placeholder before b.type placeholder
 	expect(idxName).toBeGreaterThan(idxType); // b.type (a JOIN cond) before a.name (the WHERE)
@@ -192,9 +192,9 @@ test('P5: variable-length with asOf threads temporal params in order', () => {
 
 test('P5: .run() returns rows typed/shaped per alias against a real graph', async () => {
 	const { client, g } = await freshGraph();
-	const ada = await g.addNode({ kind: 'person', props: { name: 'ada' } });
-	const router = await g.addNode({ kind: 'device', props: { type: 'router' } });
-	const cam = await g.addNode({ kind: 'device', props: { type: 'cam' } });
+	const ada = await g.addNode({ type: 'person', data: { name: 'ada' } });
+	const router = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const cam = await g.addNode({ type: 'device', data: { type: 'cam' } });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: router.id });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: cam.id });
 
@@ -208,11 +208,11 @@ test('P5: .run() returns rows typed/shaped per alias against a real graph', asyn
 	expect(rows.length).toBe(2);
 	for (const row of rows) {
 		expect(row.a.id).toBe(ada.id);
-		expect(row.a.kind).toBe('person');
-		expect(row.a.props).toEqual({ name: 'ada' });
-		expect(row.b.kind).toBe('device');
+		expect(row.a.type).toBe('person');
+		expect(row.a.data).toEqual({ name: 'ada' });
+		expect(row.b.type).toBe('device');
 		expect(typeof row.b.id).toBe('string');
-		expect(row.b.props).toHaveProperty('type');
+		expect(row.b.data).toHaveProperty('type');
 	}
 	const devices = new Set(rows.map((r) => r.b.id));
 	expect(devices).toEqual(new Set([router.id, cam.id]));
@@ -221,9 +221,9 @@ test('P5: .run() returns rows typed/shaped per alias against a real graph', asyn
 
 test('P5: .run() applies a .where prop filter', async () => {
 	const { client, g } = await freshGraph();
-	const ada = await g.addNode({ kind: 'person', props: { name: 'ada' } });
-	const router = await g.addNode({ kind: 'device', props: { type: 'router' } });
-	const cam = await g.addNode({ kind: 'device', props: { type: 'cam' } });
+	const ada = await g.addNode({ type: 'person', data: { name: 'ada' } });
+	const router = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const cam = await g.addNode({ type: 'device', data: { type: 'cam' } });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: router.id });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: cam.id });
 
@@ -237,15 +237,15 @@ test('P5: .run() applies a .where prop filter', async () => {
 
 	expect(rows.length).toBe(1);
 	expect(rows[0]!.b.id).toBe(router.id);
-	expect(rows[0]!.b.props).toEqual({ type: 'router' });
+	expect(rows[0]!.b.data).toEqual({ type: 'router' });
 	client.close();
 });
 
 test('P5: .run() variable-length walk returns reachable nodes (cycle-safe)', async () => {
 	const { client, g } = await freshGraph();
-	const a = await g.addNode({ kind: 'person', props: { name: 'a' } });
-	const b = await g.addNode({ kind: 'person', props: { name: 'b' } });
-	const c = await g.addNode({ kind: 'person', props: { name: 'c' } });
+	const a = await g.addNode({ type: 'person', data: { name: 'a' } });
+	const b = await g.addNode({ type: 'person', data: { name: 'b' } });
+	const c = await g.addNode({ type: 'person', data: { name: 'c' } });
 	// a -> b -> c -> a (a cycle); a 1..2 hop walk should still terminate.
 	await g.addEdge({ rel: 'knows', src: a.id, dst: b.id });
 	await g.addEdge({ rel: 'knows', src: b.id, dst: c.id });
@@ -267,10 +267,10 @@ test('P5: .run() variable-length walk returns reachable nodes (cycle-safe)', asy
 
 test('P5: .run() with asOf + where executes correctly (param order proof, §16)', async () => {
 	const { client, g } = await freshGraph();
-	const ada = await g.addNode({ kind: 'person', props: { name: 'ada' } });
-	const bob = await g.addNode({ kind: 'person', props: { name: 'bob' } });
-	const router = await g.addNode({ kind: 'device', props: { type: 'router' } });
-	const cam = await g.addNode({ kind: 'device', props: { type: 'cam' } });
+	const ada = await g.addNode({ type: 'person', data: { name: 'ada' } });
+	const bob = await g.addNode({ type: 'person', data: { name: 'bob' } });
+	const router = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const cam = await g.addNode({ type: 'device', data: { type: 'cam' } });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: router.id });
 	await g.addEdge({ rel: 'owns', src: ada.id, dst: cam.id });
 	await g.addEdge({ rel: 'owns', src: bob.id, dst: router.id });
@@ -289,15 +289,15 @@ test('P5: .run() with asOf + where executes correctly (param order proof, §16)'
 	const rows = await q.run();
 
 	expect(rows.length).toBe(1);
-	expect(rows[0]!.a.props).toEqual({ name: 'ada' });
-	expect(rows[0]!.b.props).toEqual({ type: 'router' });
+	expect(rows[0]!.a.data).toEqual({ name: 'ada' });
+	expect(rows[0]!.b.data).toEqual({ type: 'router' });
 	client.close();
 });
 
 test('P5: .run() asOf reads past shape (live row when t in its interval)', async () => {
 	const { client, g } = await freshGraph();
-	const a = await g.addNode({ kind: 'person', props: { name: 'a' } });
-	const b = await g.addNode({ kind: 'person', props: { name: 'b' } });
+	const a = await g.addNode({ type: 'person', data: { name: 'a' } });
+	const b = await g.addNode({ type: 'person', data: { name: 'b' } });
 	await g.addEdge({ rel: 'knows', src: a.id, dst: b.id });
 
 	// All rows are live (valid_from <= now < FOREVER). asOf=now reads them via *_versions.

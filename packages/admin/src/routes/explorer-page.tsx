@@ -29,8 +29,8 @@ export function ExplorerPage() {
     navigate({ search: (prev) => ({ ...prev, ...patch }) })
 
   const slice = useGraphSlice(tenant, project, filters)
-  const kinds = useMemo(
-    () => [...new Set((slice.data?.nodes ?? []).map((n) => n.kind))].sort(),
+  const types = useMemo(
+    () => [...new Set((slice.data?.nodes ?? []).map((n) => n.type))].sort(),
     [slice.data],
   )
 
@@ -40,7 +40,7 @@ export function ExplorerPage() {
         tenant={tenant}
         project={project}
         filters={filters}
-        kinds={kinds}
+        types={types}
         onFilterChange={(patch) => setSearch(patch)}
       />
       <SidebarInset className="flex h-svh min-w-0 flex-col">

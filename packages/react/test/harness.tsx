@@ -27,7 +27,7 @@ export const SCHEMA = defineGraphSchema({
 		person: z.object({ name: z.string() }),
 	},
 	edges: {
-		owns: { from: 'person', to: 'device', props: z.object({ since: z.number() }) },
+		owns: { from: 'person', to: 'device', data: z.object({ since: z.number() }) },
 		knows: { from: 'person', to: 'person' },
 		linked: {},
 	},
@@ -114,14 +114,14 @@ export function makeWrapper(h: Harness, user: string) {
 export async function mkNode(
 	h: Harness,
 	user: string,
-	kind: string,
-	props: unknown,
+	type: string,
+	data: unknown,
 	extra?: Record<string, unknown>,
 ): Promise<string> {
 	const res = await h.app.request(`/t/${h.tenant}/p/${h.project}/nodes`, {
 		method: 'POST',
 		headers: { 'x-user': user, 'x-tenant': h.tenant, 'content-type': 'application/json' },
-		body: JSON.stringify({ kind, props, ...extra }),
+		body: JSON.stringify({ type, data, ...extra }),
 	});
 	return (await res.json()).id as string;
 }
@@ -133,12 +133,12 @@ export async function mkEdge(
 	rel: string,
 	src: string,
 	dst: string,
-	props?: unknown,
+	data?: unknown,
 ): Promise<string> {
 	const res = await h.app.request(`/t/${h.tenant}/p/${h.project}/edges`, {
 		method: 'POST',
 		headers: { 'x-user': user, 'x-tenant': h.tenant, 'content-type': 'application/json' },
-		body: JSON.stringify({ rel, src, dst, props }),
+		body: JSON.stringify({ rel, src, dst, data }),
 	});
 	return (await res.json()).id as string;
 }

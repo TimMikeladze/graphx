@@ -30,9 +30,9 @@ async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA>
 
 /** A seed doc (embedding [1,0,0,0]) with `fanout` forward `links` to embedding-less leaves. */
 async function supernode(g: Graph<typeof SCHEMA>, fanout: number): Promise<string> {
-	const s = await g.addNode({ kind: 'doc', props: { title: 'seed' }, emb: [1, 0, 0, 0] });
+	const s = await g.addNode({ type: 'doc', data: { title: 'seed' }, emb: [1, 0, 0, 0] });
 	for (let i = 0; i < fanout; i++) {
-		const leaf = await g.addNode({ kind: 'doc', props: { title: `leaf${i}` } });
+		const leaf = await g.addNode({ type: 'doc', data: { title: `leaf${i}` } });
 		await g.addEdge({ rel: 'links', src: s.id, dst: leaf.id });
 	}
 	return s.id;

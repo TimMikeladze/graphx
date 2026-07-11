@@ -2,7 +2,7 @@ import { type DbClient, type Dialect, dialectOf, type SqlRow } from './dialect.t
 import { distinctSelect, jsonEqArg, jsonEqExpr } from './dialect-sql.ts';
 import { FOREVER } from './db.ts';
 import type { GraphSchema } from './graph.ts';
-import type { Kind, NodeOf } from './define-graph-schema.ts';
+import type { NodeType, NodeOf } from './define-graph-schema.ts';
 import {
 	applyLimit,
 	decodeCursor,
@@ -15,8 +15,8 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
  * P5 — PatternBuilder (§8). A fluent, typed builder that compiles to raw SQL — no
- * Cypher, no DSL (§2.2/§17). Each `.node(alias, kind)` extends a type accumulator
- * `Acc` (alias → kind); `.out/.in/.both` add edge steps; `.rel(...)` adds the ONE
+ * Cypher, no DSL (§2.2/§17). Each `.node(alias, type)` extends a type accumulator
+ * `Acc` (alias → type); `.out/.in/.both` add edge steps; `.rel(...)` adds the ONE
  * allowed variable-length segment (§17); `.where` adds prop filters; `.asOf` swaps
  * the now-views (`nodes`/`edges`) for the version tables with the half-open temporal
  * predicate `valid_from <= ? AND ? < valid_to` (D3).
@@ -36,23 +36,23 @@ interface WhereCond {
 	value: unknown;
 }
 
-/** A node step: an aliased node bound to a kind. */
+/** A node step: an aliased node bound to a type. */
 interface NodeStep {
-	type: 'node';
+	kind: 'node';
 	alias: string;
-	kind: string;
+	type: string;
 }
 
 /** A fixed-length edge step: one hop in a direction over a rel. */
 interface EdgeStep {
-	type: 'edge';
+	kind: 'edge';
 	direction: Direction;
 	rel: string;
 }
 
 /** The single variable-length segment (§17): a depth-bounded recursive walk. */
 interface VarStep {
-	type: 'var';
+	kind: 'var';
 	direction: Direction;
 	rel: string;
 	min: number;
@@ -74,10 +74,10 @@ export interface CompiledPattern {
 	args: unknown[];
 }
 
-/** One result row: each selected alias carries its typed `{ id, kind, props }` node. */
+/** One result row: each selected alias carries its typed `{ id, type, data }` node. */
 export type PatternRow<
 	S extends GraphSchema,
-	Acc extends Record<string, Kind<S>>,
+	Acc extends Record<string, NodeType<S>>,
 	Sel extends keyof Acc,
 > = {
 	[A in Sel]: NodeOf<S, Acc[A]>;
@@ -96,7 +96,7 @@ export interface PagePatternOpts {
 /** One page of {@link PatternQuery.page}. */
 export interface PatternPage<
 	S extends GraphSchema,
-	Acc extends Record<string, Kind<S>>,
+	Acc extends Record<string, NodeType<S>>,
 	Sel extends keyof Acc & string,
 > {
 	rows: Array<PatternRow<S, Acc, Sel>>;
@@ -107,7 +107,7 @@ export interface PatternPage<
 /** The runnable handle returned by {@link PatternBuilder.select}. */
 export interface PatternQuery<
 	S extends GraphSchema,
-	Acc extends Record<string, Kind<S>>,
+	Acc extends Record<string, NodeType<S>>,
 	Sel extends keyof Acc & string,
 > {
 	/** Run the pattern, capped at `maxRows` (§19.2). */
@@ -117,10 +117,10 @@ export interface PatternQuery<
 }
 
 /**
- * Fluent builder over a typed schema. `Acc` accumulates alias→kind as `.node` is
+ * Fluent builder over a typed schema. `Acc` accumulates alias→type as `.node` is
  * chained, so `.select(...).run()` returns rows typed per alias.
  */
-export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Kind<S>>> {
+export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, NodeType<S>>> {
 	private readonly steps: Step[] = [];
 	private readonly conds: WhereCond[] = [];
 	private asOfT: number | null = null;
@@ -135,30 +135,30 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 		this.upcaster = new Upcaster(schemaDef, upcasters ?? {});
 	}
 
-	/** Add an aliased node bound to `kind`; extends the type accumulator. */
-	node<A extends string, K extends Kind<S>>(
+	/** Add an aliased node bound to `type`; extends the type accumulator. */
+	node<A extends string, K extends NodeType<S>>(
 		alias: A,
-		kind: K,
+		type: K,
 	): PatternBuilder<S, Acc & Record<A, K>> {
-		this.steps.push({ type: 'node', alias, kind });
+		this.steps.push({ kind: 'node', alias, type });
 		return this as unknown as PatternBuilder<S, Acc & Record<A, K>>;
 	}
 
 	/** Forward hop: prev.id = eK.src, neighbor = eK.dst. */
 	out(rel: string): this {
-		this.steps.push({ type: 'edge', direction: 'out', rel });
+		this.steps.push({ kind: 'edge', direction: 'out', rel });
 		return this;
 	}
 
 	/** Reverse hop: prev.id = eK.dst, neighbor = eK.src. */
 	in(rel: string): this {
-		this.steps.push({ type: 'edge', direction: 'in', rel });
+		this.steps.push({ kind: 'edge', direction: 'in', rel });
 		return this;
 	}
 
 	/** Undirected hop: prev.id on either side, neighbor via CASE. */
 	both(rel: string): this {
-		this.steps.push({ type: 'edge', direction: 'both', rel });
+		this.steps.push({ kind: 'edge', direction: 'both', rel });
 		return this;
 	}
 
@@ -168,16 +168,16 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 	 * per pattern (chain calls or raw SQL otherwise).
 	 */
 	rel(rel: string, opts: RelOpts = {}): this {
-		if (this.steps.some((s) => s.type === 'var')) {
+		if (this.steps.some((s) => s.kind === 'var')) {
 			throw new Error('PatternBuilder: only ONE variable-length segment is allowed (§17)');
 		}
 		const min = opts.min ?? 1;
 		const max = opts.max ?? min;
-		this.steps.push({ type: 'var', direction: opts.direction ?? 'out', rel, min, max });
+		this.steps.push({ kind: 'var', direction: opts.direction ?? 'out', rel, min, max });
 		return this;
 	}
 
-	/** Prop filter `json_extract(alias.props,'$.<key>') = ?`. */
+	/** Prop filter `json_extract(alias.data,'$.<key>') = ?`. */
 	where(alias: keyof Acc & string, key: string, value: unknown): this {
 		this.conds.push({ alias, key, value });
 		return this;
@@ -212,7 +212,7 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 		let sql = '';
 		for (const c of this.conds) {
 			if (c.alias !== alias) continue;
-			sql += ` AND ${jsonEqExpr(d, `${alias}.props`, c.key)}`;
+			sql += ` AND ${jsonEqExpr(d, `${alias}.data`, c.key)}`;
 			args.push(jsonEqArg(d, c.value));
 		}
 		return sql;
@@ -231,9 +231,9 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 	 * push temporal then where conds. Dispatches fixed-length vs the variable segment.
 	 */
 	toSQL(): CompiledPattern {
-		const nodeSteps = this.steps.filter((s): s is NodeStep => s.type === 'node');
+		const nodeSteps = this.steps.filter((s): s is NodeStep => s.kind === 'node');
 		if (nodeSteps.length === 0) throw new Error('PatternBuilder: at least one .node() is required');
-		if (this.steps.some((s) => s.type === 'var')) return this.compileVar();
+		if (this.steps.some((s) => s.kind === 'var')) return this.compileVar();
 		return this.compileFixed();
 	}
 
@@ -293,10 +293,10 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, Ki
 	 */
 	private compileVar(): CompiledPattern {
 		const args: unknown[] = [];
-		const varIdx = this.steps.findIndex((s) => s.type === 'var');
+		const varIdx = this.steps.findIndex((s) => s.kind === 'var');
 		const src = this.steps[varIdx - 1] as NodeStep;
 		const dst = this.steps[varIdx + 1] as NodeStep;
-		if (!src || src.type !== 'node' || !dst || dst.type !== 'node') {
+		if (!src || src.kind !== 'node' || !dst || dst.kind !== 'node') {
 			throw new Error('PatternBuilder: .rel(...) must sit between two .node() steps');
 		}
 		const v = this.steps[varIdx] as VarStep;
@@ -353,14 +353,14 @@ WHERE walk.depth >= ${v.min}`;
 		return { sql, args };
 	}
 
-	/** Per-alias projection `id|kind|props` with column aliases the reshaper reads. */
+	/** Per-alias projection `id|type|data` with column aliases the reshaper reads. */
 	private proj(alias: string, prefix: string = alias): string {
-		return `${alias}.id AS ${prefix}__id, ${alias}.kind AS ${prefix}__kind, ${alias}.props AS ${prefix}__props`;
+		return `${alias}.id AS ${prefix}__id, ${alias}.type AS ${prefix}__type, ${alias}.data AS ${prefix}__data`;
 	}
 
 	/**
-	 * Execute and reshape rows: each selected alias becomes a `{ id, kind, props }`
-	 * node read off the `<alias>__id|kind|props` columns. Requires the raw client.
+	 * Execute and reshape rows: each selected alias becomes a `{ id, type, data }`
+	 * node read off the `<alias>__id|type|data` columns. Requires the raw client.
 	 *
 	 * `.run()` caps at `maxRows` (§19.2); `.page()` keyset-paginates (§19.7) by the
 	 * composite key of the selected alias ids — a row-value cursor `(a__id, b__id, …)`.
@@ -427,23 +427,23 @@ LIMIT ?`;
 }
 
 /**
- * Reshape a flat result row into `{ [alias]: { id, kind, props } }`, applying the P12
- * read-time upcaster (§15) to each alias's props. The upcast runs for every read —
+ * Reshape a flat result row into `{ [alias]: { id, type, data } }`, applying the P12
+ * read-time upcaster (§15) to each alias's data. The upcast runs for every read —
  * including `.asOf` historical rows — so a returned `NodeOf<S,K>` always matches its
  * single (latest) static type. Empty registry ⇒ identity (raw JSON, pre-P12).
  */
 function reshape<
 	S extends GraphSchema,
-	Acc extends Record<string, Kind<S>>,
+	Acc extends Record<string, NodeType<S>>,
 	Sel extends keyof Acc & string,
 >(row: SqlRow, aliases: Sel[], upcaster: Upcaster): PatternRow<S, Acc, Sel> {
 	const out = {} as PatternRow<S, Acc, Sel>;
 	for (const alias of aliases) {
 		const id = String(row[`${alias}__id`]);
-		const kind = String(row[`${alias}__kind`]);
-		const raw = JSON.parse(String(row[`${alias}__props`])) as Record<string, unknown>;
-		const props = upcaster.apply(kind, raw);
-		(out as Record<string, unknown>)[alias] = { id, kind, props } as NodeOf<S, Acc[Sel]>;
+		const type = String(row[`${alias}__type`]);
+		const raw = JSON.parse(String(row[`${alias}__data`])) as Record<string, unknown>;
+		const data = upcaster.apply(type, raw);
+		(out as Record<string, unknown>)[alias] = { id, type, data } as NodeOf<S, Acc[Sel]>;
 	}
 	return out;
 }
@@ -453,8 +453,8 @@ export function match<S extends GraphSchema>(
 	schema: S,
 	raw?: DbClient,
 	upcasters?: UpcasterRegistry,
-): PatternBuilder<S, Record<never, Kind<S>>> {
-	return new PatternBuilder<S, Record<never, Kind<S>>>(schema, raw, upcasters);
+): PatternBuilder<S, Record<never, NodeType<S>>> {
+	return new PatternBuilder<S, Record<never, NodeType<S>>>(schema, raw, upcasters);
 }
 
 export { FOREVER };

@@ -5,12 +5,12 @@ import type { Tuple } from './types.ts';
 import { typeOf } from './types.ts';
 
 /**
- * Ensure an object/subject exists as a bare node (id = ref, kind = type, props `{}`).
+ * Ensure an object/subject exists as a bare node (id = ref, type = type, data `{}`).
  * Idempotent: INSERT-OR-IGNORE the identity row, then insert a live version only if
  * none exists. Existence is binary — no temporal versioning of objects themselves.
  */
 export async function ensureObject(raw: DbClient, ref: string): Promise<void> {
-	const kind = typeOf(ref);
+	const type = typeOf(ref);
 	const d = dialectOf(raw);
 	// Idempotent: the NOT EXISTS guard runs inside the single write batch (Postgres ON
 	// CONFLICT / SQLite OR IGNORE on the identity row; the version insert guards on NOT EXISTS).
@@ -18,10 +18,10 @@ export async function ensureObject(raw: DbClient, ref: string): Promise<void> {
 		[
 			{ sql: insertOrIgnore(d, 'node_identity', 'id', '(?)'), args: [ref] },
 			{
-				sql: `INSERT INTO node_versions (id, kind, props, valid_from)
+				sql: `INSERT INTO node_versions (id, type, data, valid_from)
 					SELECT ?, ?, '{}', ?
 					WHERE NOT EXISTS (SELECT 1 FROM node_versions WHERE id = ? AND valid_to = ?)`,
-				args: [ref, kind, Date.now(), ref, FOREVER],
+				args: [ref, type, Date.now(), ref, FOREVER],
 			},
 		],
 		'write',
@@ -44,7 +44,7 @@ export async function liveTupleExists(
 
 /**
  * Write a tuple as an edge `subject --relation--> object`. A `subjectRelation` (userset
- * subject, e.g. `group:eng#member`) is stored in `props.subjectRelation`. Ensures both
+ * subject, e.g. `group:eng#member`) is stored in `data.subjectRelation`. Ensures both
  * endpoints exist, then inserts atomically + idempotently: the NOT EXISTS guard (matched
  * on subjectRelation too) runs inside the single write batch, so a concurrent identical
  * write (which SQLite serializes) skips.
@@ -55,11 +55,11 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 
 	const id = ulid();
 	const d = dialectOf(g.raw);
-	const propsJson =
+	const dataJson =
 		tuple.subjectRelation !== undefined
 			? JSON.stringify({ subjectRelation: tuple.subjectRelation })
 			: '{}';
-	const srField = jsonField(d, 'props', 'subjectRelation');
+	const srField = jsonField(d, 'data', 'subjectRelation');
 	const srPred =
 		tuple.subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = tuple.subjectRelation === undefined ? [] : [tuple.subjectRelation];
@@ -72,14 +72,14 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 				args: [id, tuple.subject, tuple.relation, tuple.object, ...srArgs],
 			},
 			{
-				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from)
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, valid_from)
 					SELECT ?, ?, ?, ?, 1.0, ?, ? WHERE ${guard}`,
 				args: [
 					id,
 					tuple.subject,
 					tuple.object,
 					tuple.relation,
-					propsJson,
+					dataJson,
 					Date.now(),
 					tuple.subject,
 					tuple.relation,
@@ -105,7 +105,7 @@ export async function deleteTuple(
 	dst: string,
 	subjectRelation?: string,
 ): Promise<void> {
-	const srField = jsonField(dialectOf(raw), 'props', 'subjectRelation');
+	const srField = jsonField(dialectOf(raw), 'data', 'subjectRelation');
 	const srPred = subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = subjectRelation === undefined ? [] : [subjectRelation];
 

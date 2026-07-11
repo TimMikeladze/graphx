@@ -27,9 +27,9 @@ const SCHEMA = defineGraphSchema({
 		person: z.object({ name: z.string() }),
 	},
 	edges: {
-		owns: { from: 'person', to: 'device', props: z.object({ since: z.number() }) },
+		owns: { from: 'person', to: 'device', data: z.object({ since: z.number() }) },
 		knows: { from: 'person', to: 'person' },
-		linked: {}, // unconstrained rel: endpoint-kind check skipped (exercises the FK path)
+		linked: {}, // unconstrained rel: endpoint-type check skipped (exercises the FK path)
 	},
 });
 
@@ -85,11 +85,11 @@ function hdr(userId: string, tenantId: string): Record<string, string> {
 }
 
 /** POST a node as the given principal; returns its minted id. */
-async function mkNode(s: Setup, user: string, kind: string, props: unknown): Promise<string> {
+async function mkNode(s: Setup, user: string, type: string, data: unknown): Promise<string> {
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 		method: 'POST',
 		headers: hdr(user, s.tenantA),
-		body: JSON.stringify({ kind, props }),
+		body: JSON.stringify({ type, data }),
 	});
 	return (await res.json()).id as string;
 }
@@ -101,12 +101,12 @@ async function mkEdge(
 	rel: string,
 	src: string,
 	dst: string,
-	props?: unknown,
+	data?: unknown,
 ): Promise<string> {
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges`, {
 		method: 'POST',
 		headers: hdr(user, s.tenantA),
-		body: JSON.stringify({ rel, src, dst, props }),
+		body: JSON.stringify({ rel, src, dst, data }),
 	});
 	return (await res.json()).id as string;
 }
@@ -192,17 +192,17 @@ test('diff: missing t1/t2 -> 400 validation', async () => {
 
 // --- Group B: PATCH /nodes/:id (updateNode) + DELETE /edges/:id (deleteEdge) ------
 
-test('patch node: shallow-merges props and round-trips via getNode (editor write)', async () => {
+test('patch node: shallow-merges data and round-trips via getNode (editor write)', async () => {
 	const s = await setup();
 	const id = await mkNode(s, s.editor, 'device', { type: 'router' }); // crit defaults to 1
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
 		method: 'PATCH',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ props: { crit: 5 } }),
+		body: JSON.stringify({ data: { crit: 5 } }),
 	});
 	expect(res.status).toBe(200);
 	const body = await res.json();
-	expect(body.props).toEqual({ type: 'router', crit: 5 }); // type carried, crit patched
+	expect(body.data).toEqual({ type: 'router', crit: 5 }); // type carried, crit patched
 	cleanup(s);
 });
 
@@ -212,7 +212,7 @@ test('patch node: viewer cannot write -> 403', async () => {
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
 		method: 'PATCH',
 		headers: hdr(s.viewer, s.tenantA),
-		body: JSON.stringify({ props: { crit: 5 } }),
+		body: JSON.stringify({ data: { crit: 5 } }),
 	});
 	expect(res.status).toBe(403);
 	cleanup(s);
@@ -223,7 +223,7 @@ test('patch node: no live version for the id -> 404', async () => {
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}`, {
 		method: 'PATCH',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ props: { crit: 5 } }),
+		body: JSON.stringify({ data: { crit: 5 } }),
 	});
 	expect(res.status).toBe(404);
 	cleanup(s);
@@ -278,7 +278,7 @@ async function mkDoc(s: Setup, name: string, body: string, emb?: number[]): Prom
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ kind: 'person', props: { name }, body, emb }),
+		body: JSON.stringify({ type: 'person', data: { name }, body, emb }),
 	});
 	return (await res.json()).id as string;
 }
@@ -339,9 +339,9 @@ test('bulk: loads rows -> 201 with minted ids, persisted + readable (editor writ
 		headers: hdr(s.editor, s.tenantA),
 		body: JSON.stringify({
 			rows: [
-				{ kind: 'person', props: { name: 'x' } },
-				{ kind: 'person', props: { name: 'y' } },
-				{ kind: 'device', props: { type: 'router' } },
+				{ type: 'person', data: { name: 'x' } },
+				{ type: 'person', data: { name: 'y' } },
+				{ type: 'device', data: { type: 'router' } },
 			],
 		}),
 	});
@@ -355,7 +355,7 @@ test('bulk: loads rows -> 201 with minted ids, persisted + readable (editor writ
 	const get = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${body.ids[2]}`, {
 		headers: hdr(s.editor, s.tenantA),
 	});
-	expect((await get.json()).props).toEqual({ type: 'router', crit: 1 });
+	expect((await get.json()).data).toEqual({ type: 'router', crit: 1 });
 	cleanup(s);
 });
 
@@ -364,29 +364,29 @@ test('bulk: viewer cannot write -> 403', async () => {
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
 		method: 'POST',
 		headers: hdr(s.viewer, s.tenantA),
-		body: JSON.stringify({ rows: [{ kind: 'person', props: { name: 'x' } }] }),
+		body: JSON.stringify({ rows: [{ type: 'person', data: { name: 'x' } }] }),
 	});
 	expect(res.status).toBe(403);
 	cleanup(s);
 });
 
-test('bulk: unknown kind in a row -> 400', async () => {
+test('bulk: unknown type in a row -> 400', async () => {
 	const s = await setup();
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ rows: [{ kind: 'ghost', props: {} }] }),
+		body: JSON.stringify({ rows: [{ type: 'ghost', data: {} }] }),
 	});
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
 
-test('bulk: bad props (missing required) -> 400', async () => {
+test('bulk: bad data (missing required) -> 400', async () => {
 	const s = await setup();
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/bulk`, {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ rows: [{ kind: 'device', props: {} }] }), // missing `type`
+		body: JSON.stringify({ rows: [{ type: 'device', data: {} }] }), // missing `type`
 	});
 	expect(res.status).toBe(400);
 	cleanup(s);
@@ -413,9 +413,9 @@ test('match: 2-hop pattern returns typed rows per alias (viewer read)', async ()
 
 	const { status, json } = await postMatch(s, s.viewer, {
 		steps: [
-			{ node: { alias: 'a', kind: 'person' } },
+			{ node: { alias: 'a', type: 'person' } },
 			{ edge: { rel: 'owns', direction: 'out' } },
-			{ node: { alias: 'b', kind: 'device' } },
+			{ node: { alias: 'b', type: 'device' } },
 		],
 		select: ['a', 'b'],
 	});
@@ -438,9 +438,9 @@ test('match: .where prop filter narrows the result', async () => {
 
 	const { status, json } = await postMatch(s, s.editor, {
 		steps: [
-			{ node: { alias: 'a', kind: 'person' } },
+			{ node: { alias: 'a', type: 'person' } },
 			{ edge: { rel: 'owns', direction: 'out' } },
-			{ node: { alias: 'b', kind: 'device' } },
+			{ node: { alias: 'b', type: 'device' } },
 		],
 		where: [{ alias: 'b', key: 'type', value: 'router' }],
 		select: ['a', 'b'],
@@ -460,9 +460,9 @@ test('match: page caps + cursor resumes', async () => {
 	await mkEdge(s, s.editor, 'owns', ada, cam, { since: 2 });
 
 	const steps = [
-		{ node: { alias: 'a', kind: 'person' } },
+		{ node: { alias: 'a', type: 'person' } },
 		{ edge: { rel: 'owns', direction: 'out' } },
-		{ node: { alias: 'b', kind: 'device' } },
+		{ node: { alias: 'b', type: 'device' } },
 	];
 	const p1 = await postMatch(s, s.editor, { steps, select: ['b'], page: { limit: 1 } });
 	expect(p1.json.rows.length).toBe(1);
@@ -555,7 +555,7 @@ test('algorithms: community returns a label per node (editor write)', async () =
 test('algorithms: centrality (out) returns out-degree per node (editor write)', async () => {
 	const s = await setup();
 	const { a, c } = await chain(s);
-	const { status, json } = await post(s, s.editor, 'algorithms/centrality', { kind: 'out' });
+	const { status, json } = await post(s, s.editor, 'algorithms/centrality', { type: 'out' });
 	expect(status).toBe(200);
 	expect(json.scores[a]).toBe(1); // a -> b
 	expect(json.scores[c]).toBe(0); // c is a sink
@@ -702,7 +702,7 @@ test('match: select referencing an undeclared alias -> 400', async () => {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
 		body: JSON.stringify({
-			steps: [{ node: { alias: 'a', kind: 'person' } }],
+			steps: [{ node: { alias: 'a', type: 'person' } }],
 			select: ['a', 'zzz'], // zzz is not a declared node alias
 		}),
 	});

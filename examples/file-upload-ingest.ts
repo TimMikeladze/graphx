@@ -40,13 +40,13 @@ type Embed = (text: string) => Promise<number[]>;
 export async function ingestFile<S extends GraphSchema>(opts: {
 	client: Client;
 	schema: S;
-	kind: BulkRow<S>['kind'];
+	type: BulkRow<S>['type'];
 	file: { name: string; type: string; bytes: Uint8Array };
 	put: PutBlob;
 	extract: Extract;
 	embed?: Embed;
 }) {
-	const { client, schema, kind, file, put, extract, embed } = opts;
+	const { client, schema, type, file, put, extract, embed } = opts;
 
 	// 1. bytes → object storage (your backend). Returns the opaque uri.
 	const uri = await put(file.name, file.bytes, file.type);
@@ -57,8 +57,8 @@ export async function ingestFile<S extends GraphSchema>(opts: {
 	// 3. map → BulkRow[]; `uri` back-pointer + `content_hash` for idempotent re-upload.
 	const rows: BulkRow<S>[] = await Promise.all(
 		chunks.map(async (c) => ({
-			kind,
-			props: { source: file.name },
+			type,
+			data: { source: file.name },
 			body: c.text,
 			uri,
 			content_hash: c.hash,
@@ -122,7 +122,7 @@ if (import.meta.main) {
 	const { ids, count } = await ingestFile({
 		client,
 		schema: SCHEMA,
-		kind: 'doc',
+		type: 'doc',
 		file: { name: 'readme.txt', type: 'text/plain', bytes: new TextEncoder().encode(sample) },
 		put,
 		extract,

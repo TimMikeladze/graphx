@@ -24,18 +24,18 @@ test('useChangeFeedSync: an out-of-band node update invalidates useNode', async 
 	const cdc = renderHook(() => hooks.useChangeFeedSync({ intervalMs: 10_000_000 }), {
 		wrapper: Wrapper,
 	});
-	await waitFor(() => expect(node.result.current.data?.props.crit).toBe(1));
+	await waitFor(() => expect(node.result.current.data?.data.crit).toBe(1));
 	await waitFor(() => expect(cdc.result.current.isSuccess).toBe(true)); // initial poll: consume INSERT
 
 	// out-of-band update (NOT via a mutation hook) — only the feed can drive the invalidation
 	await h.app.request(`/t/${h.tenant}/p/${h.project}/nodes/${id}`, {
 		method: 'PATCH',
 		headers: { 'x-user': h.editor, 'x-tenant': h.tenant, 'content-type': 'application/json' },
-		body: JSON.stringify({ props: { crit: 7 } }),
+		body: JSON.stringify({ data: { crit: 7 } }),
 	});
 	await poll(qc, h);
 
-	await waitFor(() => expect(node.result.current.data?.props.crit).toBe(7));
+	await waitFor(() => expect(node.result.current.data?.data.crit).toBe(7));
 	h.cleanup();
 });
 

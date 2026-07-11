@@ -30,13 +30,13 @@ async function fresh(): Promise<DbClient> {
 async function node(
 	client: DbClient,
 	name: string,
-	opts: { kind?: string; validFrom?: number; validTo?: number } = {},
+	opts: { type?: string; validFrom?: number; validTo?: number } = {},
 ): Promise<string> {
 	const id = ulid();
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await client.execute({
-		sql: `INSERT INTO node_versions (id, kind, props, valid_from, valid_to) VALUES (?, ?, ?, ?, ?)`,
-		args: [id, opts.kind ?? 'thing', JSON.stringify({ name }), opts.validFrom ?? 0, opts.validTo ?? FOREVER],
+		sql: `INSERT INTO node_versions (id, type, data, valid_from, valid_to) VALUES (?, ?, ?, ?, ?)`,
+		args: [id, opts.type ?? 'thing', JSON.stringify({ name }), opts.validFrom ?? 0, opts.validTo ?? FOREVER],
 	});
 	return id;
 }
@@ -368,18 +368,18 @@ test('P8: degree centrality persists and topNodes orders by it', async () => {
 	client.close();
 });
 
-test('P8: topNodes filters by node kind', async () => {
+test('P8: topNodes filters by node type', async () => {
 	const client = await fresh();
-	const p1 = await node(client, 'p1', { kind: 'Person' });
-	const p2 = await node(client, 'p2', { kind: 'Person' });
-	const doc = await node(client, 'doc', { kind: 'Doc' });
+	const p1 = await node(client, 'p1', { type: 'Person' });
+	const p2 = await node(client, 'p2', { type: 'Person' });
+	const doc = await node(client, 'doc', { type: 'Doc' });
 	await edge(client, p1, doc);
 	await edge(client, p2, doc);
 	await edge(client, p1, p2);
 	await centrality(client, 'degree');
 
-	const people = await topNodes(client, { by: 'degree', kind: 'Person', limit: 10 });
-	expect(people.every((r) => r.kind === 'Person')).toBe(true);
+	const people = await topNodes(client, { by: 'degree', type: 'Person', limit: 10 });
+	expect(people.every((r) => r.type === 'Person')).toBe(true);
 	expect(people.map((r) => r.id).sort()).toEqual([p1, p2].sort());
 	client.close();
 });

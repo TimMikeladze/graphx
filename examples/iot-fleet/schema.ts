@@ -25,7 +25,7 @@ export const schema = defineGraphSchema({
 		connectedTo: {
 			from: 'device',
 			to: 'gateway',
-			props: z.object({ rssi: z.number() }),
+			data: z.object({ rssi: z.number() }),
 			single: true,
 		},
 		raised: { from: 'alert', to: 'device' },

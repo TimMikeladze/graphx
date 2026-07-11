@@ -50,9 +50,9 @@ test('MatchBuilder.select emits a spec with literal steps/select/where/asOf', ()
 		.select('d', 'a');
 	expect(spec.select).toEqual(['d', 'a']);
 	expect(spec.steps).toEqual([
-		{ node: { alias: 'd', kind: 'device' } },
+		{ node: { alias: 'd', type: 'device' } },
 		{ edge: { rel: 'raised', direction: 'in' } },
-		{ node: { alias: 'a', kind: 'alert' } },
+		{ node: { alias: 'a', type: 'alert' } },
 	]);
 	expect(spec.where).toEqual([{ alias: 'a', key: 'severity', value: 'critical' }]);
 	expect(spec.asOf).toBe(123);

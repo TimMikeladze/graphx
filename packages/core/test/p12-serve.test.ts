@@ -17,7 +17,7 @@ import { defineUpcasters } from '../src/upcast.ts';
 
 // P12 serving wire (§14 / §15). The HTTP read surfaces (getNode/neighbors/journey)
 // must apply the read-time upcaster when the operator configures one on ServeConfig —
-// otherwise the primary multi-tenant consumer returns raw, un-upcast props over the
+// otherwise the primary multi-tenant consumer returns raw, un-upcast data over the
 // wire while the in-process SDK upcasts. This test wires `upcasters` into createApp
 // and asserts a v1 row served over HTTP comes back in the latest (v2) shape.
 
@@ -65,15 +65,15 @@ test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when 
 	const id = ulid();
 	await projectDb.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await projectDb.execute({
-		sql: 'INSERT INTO node_versions (id, kind, props, valid_from, valid_to) VALUES (?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (id, type, data, valid_from, valid_to) VALUES (?,?,?,?,?)',
 		args: [id, 'device', JSON.stringify({ name: 'r1', crit: 5, _v: 1 }), 1, FOREVER],
 	});
 
 	const res = await app.request(`${base}/nodes/${id}`, { headers: hdr });
 	expect(res.status).toBe(200);
-	const node = (await res.json()) as { props: Record<string, unknown> };
+	const node = (await res.json()) as { data: Record<string, unknown> };
 	// upcast to v2 over the wire: crit -> criticality, status default applied, `_v` stripped
-	expect(node.props).toEqual({ name: 'r1', criticality: 5, status: 'online' });
+	expect(node.data).toEqual({ name: 'r1', criticality: 5, status: 'online' });
 
 	evict(ns);
 	for (const sfx of ['', '-wal', '-shm']) rmSync(`${ns}.db${sfx}`, { force: true });

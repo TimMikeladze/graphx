@@ -31,9 +31,9 @@ test('openapi: POST /nodes requestBody schema is derived from the Zod wire schem
 	const doc = buildOpenApiDocument() as any;
 	const op = doc.paths['/t/{tenant}/p/{project}/nodes'].post;
 	const schema = op.requestBody.content['application/json'].schema;
-	expect(schema.properties.kind).toBeDefined();
-	expect(schema.required).toContain('kind');
-	expect(schema.required).toContain('props');
+	expect(schema.properties.type).toBeDefined();
+	expect(schema.required).toContain('type');
+	expect(schema.required).toContain('data');
 });
 
 test('openapi: query params are emitted (GET /changes -> nodes/edges/limit)', () => {

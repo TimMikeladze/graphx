@@ -89,9 +89,9 @@ export {
 	type AnyNode,
 	defineGraphSchema,
 	type EdgeDef,
-	type Kind,
+	type NodeType,
 	type NodeOf,
-	type PropsOf,
+	type DataOf,
 	type Rel,
 	type ZObj,
 } from './define-graph-schema.ts';
@@ -99,7 +99,7 @@ export {
 // P12 — schema evolution / read-time upcasting (§15)
 export {
 	defineUpcasters,
-	type KindUpcaster,
+	type TypeUpcaster,
 	Upcaster,
 	type UpcasterRegistry,
 	type UpcastStep,
@@ -109,7 +109,7 @@ export {
 export {
 	type AddEdgeInput,
 	type AddNodeInput,
-	type EdgePropsInput,
+	type EdgeDataInput,
 	type EdgeRef,
 	Graph,
 	graphFor,
@@ -123,7 +123,7 @@ export {
 	type NeighborPageOpts,
 	type NodeListOpts,
 	type NodeListPage,
-	type PropsInput,
+	type DataInput,
 } from './graph.ts';
 
 // P4 — vectors + GraphRAG retrieve

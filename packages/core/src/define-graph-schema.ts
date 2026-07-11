@@ -8,12 +8,12 @@ import type { z } from 'zod';
  * end to end, so `NodeOf.id` / `AnyNode.id` are `string`.
  */
 
-/** A node-prop schema: any zod type whose output is an object of props. */
+/** A node-prop schema: any zod type whose output is an object of data. */
 export type ZObj = z.ZodType<Record<string, unknown>>;
 
 /**
- * One edge relation's definition. `props` validates edge props; `from`/`to`
- * constrain endpoint kinds (a single kind or a readonly list of them). All
+ * One edge relation's definition. `data` validates edge data; `from`/`to`
+ * constrain endpoint types (a single type or a readonly list of them). All
  * optional — a bare `{}` is a valid, untyped, unconstrained relation.
  *
  * `single: true` marks the rel single-valued (cardinality 1 per source, §19.5): each
@@ -21,7 +21,7 @@ export type ZObj = z.ZodType<Record<string, unknown>>;
  * `materializeConstraints` adds a partial unique index hard-guaranteeing it.
  */
 export interface EdgeDef<K extends string> {
-	props?: ZObj;
+	data?: ZObj;
 	from?: K | readonly K[];
 	to?: K | readonly K[];
 	single?: boolean;
@@ -29,15 +29,15 @@ export interface EdgeDef<K extends string> {
 
 /**
  * Identity at runtime (returns `s` unchanged); its job is to capture `N`/`E` as
- * precise types so the inference helpers below can read kinds, rels and prop
- * shapes back out. `E`'s `EdgeDef` is keyed on the node kinds of `N`, so
- * `from`/`to` only accept declared kinds.
+ * precise types so the inference helpers below can read types, rels and prop
+ * shapes back out. `E`'s `EdgeDef` is keyed on the node types of `N`, so
+ * `from`/`to` only accept declared types.
  *
  * Validation contract used by P3 (§5):
- *   - `schema.nodes[kind].parse(props)` → parsed output (defaults applied);
- *     invalid props throw `ZodError`.
- *   - `schema.edges[rel].props?.parse(props)` → parsed edge props (when defined).
- *   - endpoint kind checks run against `schema.edges[rel].from`/`.to`.
+ *   - `schema.nodes[type].parse(data)` → parsed output (defaults applied);
+ *     invalid data throw `ZodError`.
+ *   - `schema.edges[rel].data?.parse(data)` → parsed edge data (when defined).
+ *   - endpoint type checks run against `schema.edges[rel].from`/`.to`.
  */
 export function defineGraphSchema<
 	N extends Record<string, ZObj>,
@@ -49,23 +49,23 @@ export function defineGraphSchema<
 type Nodes<S> = S extends { nodes: infer N } ? N : never;
 type Edges<S> = S extends { edges: infer E } ? E : never;
 
-/** Union of node-kind string literals declared in the schema. */
-export type Kind<S> = Extract<keyof Nodes<S>, string>;
+/** Union of node-type string literals declared in the schema. */
+export type NodeType<S> = Extract<keyof Nodes<S>, string>;
 
 /** Union of edge-relation string literals declared in the schema. */
 export type Rel<S> = Extract<keyof Edges<S>, string>;
 
-/** Parsed prop shape (zod output, defaults applied) for node kind `K`. */
-export type PropsOf<S, K extends Kind<S>> = Nodes<S>[K] extends z.ZodType
+/** Parsed prop shape (zod output, defaults applied) for node type `K`. */
+export type DataOf<S, K extends NodeType<S>> = Nodes<S>[K] extends z.ZodType
 	? z.infer<Nodes<S>[K]>
 	: never;
 
 /** A typed node. D1: `id` is `string` (ULID text), not a number. */
-export type NodeOf<S, K extends Kind<S>> = {
+export type NodeOf<S, K extends NodeType<S>> = {
 	id: string;
-	kind: K;
-	props: PropsOf<S, K>;
+	type: K;
+	data: DataOf<S, K>;
 };
 
-/** Discriminated union over every node kind in the schema (discriminant: `kind`). */
-export type AnyNode<S> = { [K in Kind<S>]: NodeOf<S, K> }[Kind<S>];
+/** Discriminated union over every node type in the schema (discriminant: `type`). */
+export type AnyNode<S> = { [K in NodeType<S>]: NodeOf<S, K> }[NodeType<S>];

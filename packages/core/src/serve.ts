@@ -26,7 +26,7 @@ import {
 	initControl,
 } from './control-plane.ts';
 import { getDb } from './db.ts';
-import type { Kind, Rel } from './define-graph-schema.ts';
+import type { NodeType, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
 import { init } from './schema.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
@@ -76,8 +76,8 @@ export interface ServeConfig<S extends GraphSchema> {
 	limits?: Partial<QueryLimits>;
 	/**
 	 * P12 (§15) read-time upcaster registry. When set, every per-project `Graph` (and the
-	 * journey route) applies it, so the HTTP read surfaces return props in the latest schema
-	 * shape over the wire. Omit ⇒ raw stored props (pre-P12 behavior).
+	 * journey route) applies it, so the HTTP read surfaces return data in the latest schema
+	 * shape over the wire. Omit ⇒ raw stored data (pre-P12 behavior).
 	 */
 	upcasters?: UpcasterRegistry;
 	/**
@@ -181,10 +181,10 @@ export async function graphForProject<S extends GraphSchema>(
 
 const directionSchema = z.enum(['forward', 'reverse', 'both']);
 
-/** POST /nodes body. `props` is validated per-kind by `Graph.addNode` (ZodError → 400). */
+/** POST /nodes body. `data` is validated per-type by `Graph.addNode` (ZodError → 400). */
 const nodeInputSchema = z.object({
-	kind: z.string(),
-	props: z.record(z.string(), z.unknown()).default({}),
+	type: z.string(),
+	data: z.record(z.string(), z.unknown()).default({}),
 	emb: z.array(z.number()).optional(),
 	body: z.string().optional(),
 	uri: z.string().optional(),
@@ -194,8 +194,8 @@ const nodeInputSchema = z.object({
 
 /** PATCH /nodes/:id body — every field optional; `Graph.updateNode` merges onto the live version. */
 const patchNodeSchema = z.object({
-	kind: z.string().optional(),
-	props: z.record(z.string(), z.unknown()).optional(),
+	type: z.string().optional(),
+	data: z.record(z.string(), z.unknown()).optional(),
 	emb: z.array(z.number()).optional(),
 	body: z.string().optional(),
 	uri: z.string().optional(),
@@ -204,13 +204,13 @@ const patchNodeSchema = z.object({
 	content_type: z.string().optional(),
 });
 
-/** POST /edges body. `src`/`dst` are ULID node ids; props validated per-rel by `addEdge`. */
+/** POST /edges body. `src`/`dst` are ULID node ids; data validated per-rel by `addEdge`. */
 const edgeInputSchema = z.object({
 	rel: z.string(),
 	src: z.string(),
 	dst: z.string(),
 	weight: z.number().nonnegative().optional(), // mirror the DB CHECK(weight >= 0) at the wire layer
-	props: z.record(z.string(), z.unknown()).optional(),
+	data: z.record(z.string(), z.unknown()).optional(),
 });
 
 /** GET /nodes/:id/neighbors query. */
@@ -243,18 +243,18 @@ const journeyInputSchema = z.object({
 	maxDepth: z.number().optional(),
 });
 
-/** GET /nodes query — kind/full-text/as-of filters + keyset pagination. */
+/** GET /nodes query — type/full-text/as-of filters + keyset pagination. */
 const nodeListQuerySchema = z.object({
-	kind: z.string().optional(),
+	type: z.string().optional(),
 	q: z.string().optional(),
 	asOf: z.coerce.number().optional(),
 	limit: z.coerce.number().optional(),
 	cursor: z.string().optional(),
 });
 
-/** GET /graph query — kind/full-text/as-of filters for the canvas slice. */
+/** GET /graph query — type/full-text/as-of filters for the canvas slice. */
 const graphSliceQuerySchema = z.object({
-	kind: z.string().optional(),
+	type: z.string().optional(),
 	q: z.string().optional(),
 	asOf: z.coerce.number().optional(),
 });
@@ -280,12 +280,12 @@ const pageRankSchema = z.object({
 const communitySchema = z.object({ maxIter: z.number().int().positive().optional() });
 
 /** POST /algorithms/centrality body. */
-const centralitySchema = z.object({ kind: z.enum(['degree', 'in', 'out']).optional() });
+const centralitySchema = z.object({ type: z.enum(['degree', 'in', 'out']).optional() });
 
 /** GET /algorithms/top query — `by` is whitelisted to the persisted metric columns. */
 const topNodesQuerySchema = z.object({
 	by: z.enum(['pagerank', 'community', 'degree']),
-	kind: z.string().optional(),
+	type: z.string().optional(),
 	limit: z.coerce.number().int().positive().optional(),
 });
 
@@ -300,7 +300,7 @@ const patternDirectionSchema = z.enum(['out', 'in', 'both']);
 const matchInputSchema = z.object({
 	steps: z.array(
 		z.union([
-			z.object({ node: z.object({ alias: z.string(), kind: z.string() }) }),
+			z.object({ node: z.object({ alias: z.string(), type: z.string() }) }),
 			z.object({ edge: z.object({ rel: z.string(), direction: patternDirectionSchema.optional() }) }),
 			z.object({
 				var: z.object({
@@ -320,10 +320,10 @@ const matchInputSchema = z.object({
 		.optional(),
 });
 
-/** One POST /bulk row. `kind`/`props` validated per-kind by `bulkLoad` (unknown kind / bad props → 400). */
+/** One POST /bulk row. `type`/`data` validated per-type by `bulkLoad` (unknown type / bad data → 400). */
 const bulkRowSchema = z.object({
-	kind: z.string(),
-	props: z.record(z.string(), z.unknown()).default({}),
+	type: z.string(),
+	data: z.record(z.string(), z.unknown()).default({}),
 	emb: z.array(z.number()).optional(),
 	body: z.string().optional(),
 	uri: z.string().optional(),
@@ -451,14 +451,14 @@ function onError(err: Error, c: Context) {
 	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
-	// Graph.addNode/addEdge (unknown kind/rel, endpoint-kind mismatch), bulkLoad (unknown
-	// kind), and a malformed PatternBuilder program throw a prefixed `Error` on bad input —
+	// Graph.addNode/addEdge (unknown type/rel, endpoint-type mismatch), bulkLoad (unknown
+	// type), and a malformed PatternBuilder program throw a prefixed `Error` on bad input —
 	// those are client errors.
 	if (/^(add(Node|Edge)|bulkLoad|PatternBuilder):/.test(err.message)) {
 		return c.json({ error: err.message }, 400);
 	}
 	// Constraint violations that slip past wire validation are bad input, not a server
-	// fault: a FK to a non-existent node (unconstrained rel skips the kind check),
+	// fault: a FK to a non-existent node (unconstrained rel skips the type check),
 	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
 	// `SQLITE_CONSTRAINT*`; Postgres uses SQLSTATE class 23 (integrity_constraint_violation).
 	const dbCode = String((err as { code?: unknown }).code ?? '');
@@ -503,7 +503,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			requireGraph(cfg, 'write'),
 			zValidator('json', nodeInputSchema),
 			async (c) => {
-				const node = await c.get('graph').addNode(c.req.valid('json') as AddNodeInput<S, Kind<S>>);
+				const node = await c.get('graph').addNode(c.req.valid('json') as AddNodeInput<S, NodeType<S>>);
 				return c.json(node, 201);
 			},
 		)
@@ -521,7 +521,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			if (!node) throw new HTTPException(404, { message: 'node not found' });
 			return c.json(node);
 		})
-		// Edit a node's props/metadata in place (conditional-close successor, §19.1). Returns
+		// Edit a node's data/metadata in place (conditional-close successor, §19.1). Returns
 		// the refreshed (upcast) live version; an unknown id throws `no live version` -> 404.
 		.patch(
 			'/t/:tenant/p/:project/nodes/:id',
@@ -582,10 +582,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			requireGraph(cfg, 'read'),
 			zValidator('query', nodeListQuerySchema),
 			async (c) => {
-				const { kind, q, asOf, limit, cursor } = c.req.valid('query');
+				const { type, q, asOf, limit, cursor } = c.req.valid('query');
 				const page = await c
 					.get('graph')
-					.listNodes({ kind, q, asOf, limit, cursor, limits: cfg.limits });
+					.listNodes({ type, q, asOf, limit, cursor, limits: cfg.limits });
 				return c.json(page);
 			},
 		)
@@ -594,8 +594,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			requireGraph(cfg, 'read'),
 			zValidator('query', graphSliceQuerySchema),
 			async (c) => {
-				const { kind, q, asOf } = c.req.valid('query');
-				const slice = await c.get('graph').graphSlice({ kind, q, asOf, limits: cfg.limits });
+				const { type, q, asOf } = c.req.valid('query');
+				const slice = await c.get('graph').graphSlice({ type, q, asOf, limits: cfg.limits });
 				return c.json(slice);
 			},
 		)
@@ -677,7 +677,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				return c.json(rows);
 			},
 		)
-		// Batch node ingestion (§19.8). Validates every row up front (unknown kind / bad props →
+		// Batch node ingestion (§19.8). Validates every row up front (unknown type / bad data →
 		// 400 before any index is dropped), loads in chunks, returns the minted ids + count.
 		.post(
 			'/t/:tenant/p/:project/bulk',
@@ -714,10 +714,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				}
 				const builder = match(cfg.schema, c.get('graph').raw, cfg.upcasters) as PatternBuilder<
 					S,
-					Record<string, Kind<S>>
+					Record<string, NodeType<S>>
 				>;
 				for (const step of steps) {
-					if ('node' in step) builder.node(step.node.alias, step.node.kind as Kind<S>);
+					if ('node' in step) builder.node(step.node.alias, step.node.type as NodeType<S>);
 					else if ('edge' in step) {
 						const dir = step.edge.direction ?? 'out';
 						if (dir === 'in') builder.in(step.edge.rel);
@@ -775,7 +775,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			async (c) => {
 				const scores = await centrality(
 					c.get('graph').raw,
-					c.req.valid('json').kind as CentralityKind | undefined,
+					c.req.valid('json').type as CentralityKind | undefined,
 				);
 				return c.json({ scores: Object.fromEntries(scores) });
 			},

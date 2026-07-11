@@ -45,7 +45,7 @@ async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA>
 
 libsqlOnly('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger', async () => {
 	const { client, g } = await freshGraph();
-	await g.addNode({ kind: 'doc', props: { title: 'x' }, body: 'the quick brown fox' });
+	await g.addNode({ type: 'doc', data: { title: 'x' }, body: 'the quick brown fox' });
 	const r = await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'fox'");
 	expect(r.rows.length).toBe(1);
 	client.close();
@@ -56,7 +56,7 @@ libsqlOnly('P13 schema: init() is idempotent with the FTS table + trigger presen
 	await init(client, 4);
 	await init(client, 4); // must not throw (IF NOT EXISTS on vtable + trigger)
 	const g = new Graph(client, SCHEMA);
-	await g.addNode({ kind: 'doc', props: { title: 'x' }, body: 'hello world' });
+	await g.addNode({ type: 'doc', data: { title: 'x' }, body: 'hello world' });
 	const r = await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'hello'");
 	expect(r.rows.length).toBe(1);
 	client.close();
@@ -77,7 +77,7 @@ test('P13 sanitize: quotes each token, joins with OR, empty → null', () => {
 
 libsqlOnly('P13 sanitize: malicious FTS5 syntax never errors or escapes the query', async () => {
 	const { client, g } = await freshGraph();
-	await g.addNode({ kind: 'doc', props: { title: 'x' }, body: 'red apple', emb: VECTORS.red });
+	await g.addNode({ type: 'doc', data: { title: 'x' }, body: 'red apple', emb: VECTORS.red });
 	const nasty = [
 		'"',
 		'red OR 1',
@@ -110,11 +110,11 @@ libsqlOnly('P13 sanitize: malicious FTS5 syntax never errors or escapes the quer
 test('P13 hybrid: recall beats vector-only (lexical finds an ANN-missed doc)', async () => {
 	const { client, g } = await freshGraph();
 	// A: lexical 'red' AND vector match (emb red).
-	const a = await g.addNode({ kind: 'doc', props: { title: 'a' }, body: 'red', emb: VECTORS.red });
+	const a = await g.addNode({ type: 'doc', data: { title: 'a' }, body: 'red', emb: VECTORS.red });
 	// B: lexical 'red' only — NULL emb so the ANN index can never seed it.
-	const b = await g.addNode({ kind: 'doc', props: { title: 'b' }, body: 'red' });
+	const b = await g.addNode({ type: 'doc', data: { title: 'b' }, body: 'red' });
 	// C: vector only — emb red but body has no 'red' token.
-	const c = await g.addNode({ kind: 'doc', props: { title: 'c' }, body: 'fruit', emb: VECTORS.red });
+	const c = await g.addNode({ type: 'doc', data: { title: 'c' }, body: 'fruit', emb: VECTORS.red });
 	const relevant = new Set([a.id, b.id, c.id]);
 
 	const vec = await retrieve(client, stubEmbed, { query: 'red', k: 10 });
@@ -151,17 +151,17 @@ test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/tempor
 	// only the lexical leg can ever seed X — isolating the ver→id resolution.
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [x] });
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
 		args: [1, x, 'doc', 'phoenix', T1, T2],
 	});
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
 		args: [2, x, 'doc', 'dragon', T2, FOREVER],
 	});
 	// Z: a decoy with a live embedding so the ANN index is non-empty.
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [z] });
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
+		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [3, z, 'doc', 'zzz', '[0,0,0,1]', T1, FOREVER],
 	});
 
@@ -188,11 +188,11 @@ test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/tempor
 test('P13 hybrid: a doc matched by BOTH legs outranks single-leg docs (RRF sums on id)', async () => {
 	const { client, g } = await freshGraph();
 	// M: vector (emb red) AND lexical ('red') — fused score sums both legs.
-	const m = await g.addNode({ kind: 'doc', props: { title: 'm' }, body: 'red', emb: VECTORS.red });
+	const m = await g.addNode({ type: 'doc', data: { title: 'm' }, body: 'red', emb: VECTORS.red });
 	// N: vector only (emb red, body has no 'red').
-	await g.addNode({ kind: 'doc', props: { title: 'n' }, body: 'fruit', emb: VECTORS.red });
+	await g.addNode({ type: 'doc', data: { title: 'n' }, body: 'fruit', emb: VECTORS.red });
 	// O: lexical only (NULL emb, body 'red').
-	await g.addNode({ kind: 'doc', props: { title: 'o' }, body: 'red' });
+	await g.addNode({ type: 'doc', data: { title: 'o' }, body: 'red' });
 
 	// k=1: only the single highest fused-score seed survives truncation. Summing on id
 	// lifts M above the single-leg docs.
@@ -208,9 +208,9 @@ test('P13 hybrid: a doc matched by BOTH legs outranks single-leg docs (RRF sums 
 
 test('P13 rerank: caller-provided reranker reorders and drops unscored candidates', async () => {
 	const { client, g } = await freshGraph();
-	const a = await g.addNode({ kind: 'doc', props: { title: 'a' }, body: 'red', emb: VECTORS.red });
-	const b = await g.addNode({ kind: 'doc', props: { title: 'b' }, body: 'red', emb: VECTORS.red });
-	const c = await g.addNode({ kind: 'doc', props: { title: 'c' }, body: 'red', emb: VECTORS.red });
+	const a = await g.addNode({ type: 'doc', data: { title: 'a' }, body: 'red', emb: VECTORS.red });
+	const b = await g.addNode({ type: 'doc', data: { title: 'b' }, body: 'red', emb: VECTORS.red });
+	const c = await g.addNode({ type: 'doc', data: { title: 'c' }, body: 'red', emb: VECTORS.red });
 
 	// rerank: score b highest, a next, DROP c entirely (no score returned).
 	const res = await hybridRetrieve(client, stubEmbed, {
@@ -228,9 +228,9 @@ test('P13 rerank: caller-provided reranker reorders and drops unscored candidate
 
 test('P13 MMR: diversifies, dropping a near-duplicate for a distinct doc (λ, k configurable)', async () => {
 	const { client, g } = await freshGraph();
-	const d1 = await g.addNode({ kind: 'doc', props: { title: 'd1' }, body: 'red', emb: [1, 0, 0, 0] });
-	const d2 = await g.addNode({ kind: 'doc', props: { title: 'd2' }, body: 'red', emb: [1, 0, 0, 0] }); // dup of d1
-	const d3 = await g.addNode({ kind: 'doc', props: { title: 'd3' }, body: 'red', emb: [0, 1, 0, 0] }); // distinct
+	const d1 = await g.addNode({ type: 'doc', data: { title: 'd1' }, body: 'red', emb: [1, 0, 0, 0] });
+	const d2 = await g.addNode({ type: 'doc', data: { title: 'd2' }, body: 'red', emb: [1, 0, 0, 0] }); // dup of d1
+	const d3 = await g.addNode({ type: 'doc', data: { title: 'd3' }, body: 'red', emb: [0, 1, 0, 0] }); // distinct
 
 	// λ=0.3 favors diversity: after picking d1, the distinct d3 beats the near-dup d2.
 	const res = await hybridRetrieve(client, stubEmbed, {
@@ -250,9 +250,9 @@ test('P13 MMR: diversifies, dropping a near-duplicate for a distinct doc (λ, k 
 
 test('P13 MMR: tolerates a candidate with no stored embedding (rel→0, no NaN/crash)', async () => {
 	const { client, g } = await freshGraph();
-	const e1 = await g.addNode({ kind: 'doc', props: { title: 'e1' }, body: 'red', emb: [1, 0, 0, 0] });
+	const e1 = await g.addNode({ type: 'doc', data: { title: 'e1' }, body: 'red', emb: [1, 0, 0, 0] });
 	// e2 has a matching lexical body but NULL emb — it must not crash MMR (cosine→0).
-	await g.addNode({ kind: 'doc', props: { title: 'e2' }, body: 'red' });
+	await g.addNode({ type: 'doc', data: { title: 'e2' }, body: 'red' });
 
 	const res = await hybridRetrieve(client, stubEmbed, { query: 'red', k: 10, mmr: { k: 2, lambda: 0.5 } });
 	// the embedded doc is selected; the run completes without NaN poisoning selection.
@@ -263,7 +263,7 @@ test('P13 MMR: tolerates a candidate with no stored embedding (rel→0, no NaN/c
 
 test('P13 rerank+MMR: reranker dropping every candidate yields [] without error', async () => {
 	const { client, g } = await freshGraph();
-	await g.addNode({ kind: 'doc', props: { title: 'a' }, body: 'red', emb: [1, 0, 0, 0] });
+	await g.addNode({ type: 'doc', data: { title: 'a' }, body: 'red', emb: [1, 0, 0, 0] });
 	const res = await hybridRetrieve(client, stubEmbed, {
 		query: 'red',
 		k: 10,

@@ -27,8 +27,8 @@ export interface IngestOptions<S extends GraphSchema> {
 	embed: EmbedFn;
 	/** File extensions to include (lowercase, with dot). Default: .md/.markdown/.yml/.yaml */
 	include?: string[];
-	/** Override kind resolution. Default: frontmatter.kind ?? top-level folder name. */
-	kindOf?: (file: ParsedFile) => string | undefined;
+	/** Override type resolution. Default: frontmatter.type ?? top-level folder name. */
+	typeOf?: (file: ParsedFile) => string | undefined;
 	/**
 	 * Logical source id, used to namespace the node `uri` (`ingest:<source>:<key>`) so this
 	 * ingest only ever reconciles — and, with deletion, prunes — its OWN nodes. Two vaults
@@ -52,8 +52,8 @@ export interface IngestOptions<S extends GraphSchema> {
 	prune?: boolean;
 	/**
 	 * Frontmatter field name → edge relation. Each configured field's value(s) become typed
-	 * edges and are excluded from stored node props. Value forms: a wikilink string `"[[t]]"`,
-	 * a bare basename `"t"`, an object `{ target, weight?, props? }`, or an array mixing these.
+	 * edges and are excluded from stored node data. Value forms: a wikilink string `"[[t]]"`,
+	 * a bare basename `"t"`, an object `{ target, weight?, data? }`, or an array mixing these.
 	 */
 	edgeFields?: Record<string, string>;
 	/**
@@ -72,15 +72,15 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * Turn `![[asset]]` / `![alt](asset)` embeds into nodes. Off by default (embeds ignored).
 	 * An embed that resolves to a known ingested file becomes an edge to that node; otherwise a
 	 * metadata-only asset node (`uri = ingest:<source>:asset:<path>`, `content_type` from the
-	 * extension, `props.path`, empty body — no bytes; byte storage is the future blob layer) is
-	 * created and linked. `kind` (asset node kind) and `rel` (default `embeds`) must be declared
+	 * extension, `data.path`, empty body — no bytes; byte storage is the future blob layer) is
+	 * created and linked. `type` (asset node type) and `rel` (default `embeds`) must be declared
 	 * in the graph schema. Asset nodes are never pruned.
 	 */
-	assets?: { kind: string; rel?: string };
+	assets?: { type: string; rel?: string };
 }
 
 /** Pipeline stage at which a file/link/edge was skipped. */
-export type SkipStage = 'kind' | 'node' | 'link' | 'edge';
+export type SkipStage = 'type' | 'node' | 'link' | 'edge';
 
 /** A structured skip/validation entry. `reason` is human-readable; `code` is filterable; */
 /** `detail` carries stage-specific data (e.g. Zod issues, ambiguous-link candidates). */

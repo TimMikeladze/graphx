@@ -43,7 +43,7 @@ export function buildPathIndex(keys: string[]): PathIndex {
  *   otherwise `ambiguous` with the candidates (never a silent guess).
  */
 export function resolveLink(link: Link, fromKey: string, index: PathIndex): Resolution {
-	if (link.kind === 'path') {
+	if (link.type === 'path') {
 		const resolved = join(dirname(fromKey), link.target);
 		return index.byPath.has(resolved) ? { status: 'resolved', key: resolved } : { status: 'missing' };
 	}

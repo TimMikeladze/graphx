@@ -64,7 +64,7 @@ test('P14 race: N concurrent updateNode never create overlapping intervals', asy
 	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
 	await init(setup, 4);
-	const seed = await new Graph(setup, SCHEMA).addNode({ kind: 'person', props: { name: 'race' } });
+	const seed = await new Graph(setup, SCHEMA).addNode({ type: 'person', data: { name: 'race' } });
 
 	// N writers, each on its OWN connection → genuine write-lock contention.
 	const N = 8;
@@ -72,7 +72,7 @@ test('P14 race: N concurrent updateNode never create overlapping intervals', asy
 	const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
 	const results = await Promise.allSettled(
-		graphs.map((g, i) => g.updateNode(seed.id, { props: { v: i } })),
+		graphs.map((g, i) => g.updateNode(seed.id, { data: { v: i } })),
 	);
 	// every writer succeeded (busy_timeout serializes; the close always affects 1 row)
 	for (const r of results) expect(r.status).toBe('fulfilled');
@@ -87,7 +87,7 @@ test('P14 race (F2): updateNode never creates an inverted/zero-width interval wh
 	teardowns.push(teardown);
 	await init(client, 4);
 	const g = new Graph(client, SCHEMA);
-	const n = await g.addNode({ kind: 'person', props: { name: 'x' } });
+	const n = await g.addNode({ type: 'person', data: { name: 'x' } });
 	// Force the live version's valid_from far into the future — simulates a cross-instance
 	// writer whose monotonic clock ran ahead, so this instance's now() is BEHIND the
 	// predecessor's valid_from. M6 must still produce a real interval.
@@ -97,7 +97,7 @@ test('P14 race (F2): updateNode never creates an inverted/zero-width interval wh
 		args: [future, n.id, FOREVER],
 	});
 
-	await g.updateNode(n.id, { props: { name: 'y' } });
+	await g.updateNode(n.id, { data: { name: 'y' } });
 	const rows = await intervals(client, n.id);
 	const closed = rows.filter((r) => r.valid_to !== FOREVER);
 	expect(closed.length).toBe(1);
@@ -122,7 +122,7 @@ test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry
 	const txB = await clientB.transaction('write');
 	await txB.execute({ sql: "INSERT INTO node_identity (id) VALUES ('lock')" });
 
-	const p = gA.addNode({ kind: 'person', props: { name: 'survivor' } });
+	const p = gA.addNode({ type: 'person', data: { name: 'survivor' } });
 	await new Promise((r) => setTimeout(r, 120));
 	await txB.rollback();
 
@@ -139,9 +139,9 @@ test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-wi
 	await init(setup, 4);
 	await materializeConstraints(setup, SCHEMA);
 	const g0 = new Graph(setup, SCHEMA);
-	const src = await g0.addNode({ kind: 'person', props: { name: 'src' } });
+	const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
 	const dsts = await Promise.all(
-		Array.from({ length: 16 }, (_, i) => g0.addNode({ kind: 'person', props: { name: `d${i}` } })),
+		Array.from({ length: 16 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
 	);
 	const N = dsts.length;
 	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
@@ -171,9 +171,9 @@ test('P14 race: N concurrent single-valued addEdge converge to exactly one live 
 	await init(setup, 4);
 	await materializeConstraints(setup, SCHEMA); // partial unique index on (src) for best_friend
 	const g0 = new Graph(setup, SCHEMA);
-	const src = await g0.addNode({ kind: 'person', props: { name: 'src' } });
+	const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
 	const dsts = await Promise.all(
-		Array.from({ length: 8 }, (_, i) => g0.addNode({ kind: 'person', props: { name: `d${i}` } })),
+		Array.from({ length: 8 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
 	);
 
 	const N = dsts.length;

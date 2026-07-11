@@ -26,42 +26,42 @@ const { app } = await createApp({
 	openapi: { title: 'iot-fleet', servers: [{ url: `http://localhost:${PORT}` }] },
 	seed: async (g) => {
 
-		const usEast = await g.addNode({ kind: 'site', props: { name: 'us-east-1', region: 'us' } });
-		const euWest = await g.addNode({ kind: 'site', props: { name: 'eu-west-1', region: 'eu' } });
+		const usEast = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+		const euWest = await g.addNode({ type: 'site', data: { name: 'eu-west-1', region: 'eu' } });
 
-		const gw1 = await g.addNode({ kind: 'gateway', props: { name: 'gw-1', firmware: '2.1.0' } });
-		const gw2 = await g.addNode({ kind: 'gateway', props: { name: 'gw-2', firmware: '2.0.5', online: false } });
+		const gw1 = await g.addNode({ type: 'gateway', data: { name: 'gw-1', firmware: '2.1.0' } });
+		const gw2 = await g.addNode({ type: 'gateway', data: { name: 'gw-2', firmware: '2.0.5', online: false } });
 
 		const temp1 = await g.addNode({
-			kind: 'device',
-			props: { name: 'temp-1', category: 'sensor', model: 'DHT22' },
+			type: 'device',
+			data: { name: 'temp-1', category: 'sensor', model: 'DHT22' },
 			body: 'temperature humidity sensor cold-aisle rack 4',
 		});
 		const valve1 = await g.addNode({
-			kind: 'device',
-			props: { name: 'valve-1', category: 'actuator', model: 'V10' },
+			type: 'device',
+			data: { name: 'valve-1', category: 'actuator', model: 'V10' },
 			body: 'coolant flow valve actuator',
 		});
 		const temp2 = await g.addNode({
-			kind: 'device',
-			props: { name: 'temp-2', category: 'sensor', model: 'DHT22' },
+			type: 'device',
+			data: { name: 'temp-2', category: 'sensor', model: 'DHT22' },
 			body: 'temperature sensor hot-aisle',
 		});
 
 		await g.addEdge({ rel: 'deployedAt', src: gw1.id, dst: usEast.id });
 		await g.addEdge({ rel: 'deployedAt', src: gw2.id, dst: euWest.id });
-		await g.addEdge({ rel: 'connectedTo', src: temp1.id, dst: gw1.id, props: { rssi: -55 } });
-		await g.addEdge({ rel: 'connectedTo', src: valve1.id, dst: gw1.id, props: { rssi: -71 } });
-		await g.addEdge({ rel: 'connectedTo', src: temp2.id, dst: gw2.id, props: { rssi: -60 } });
+		await g.addEdge({ rel: 'connectedTo', src: temp1.id, dst: gw1.id, data: { rssi: -55 } });
+		await g.addEdge({ rel: 'connectedTo', src: valve1.id, dst: gw1.id, data: { rssi: -71 } });
+		await g.addEdge({ rel: 'connectedTo', src: temp2.id, dst: gw2.id, data: { rssi: -60 } });
 
 		const overheat = await g.addNode({
-			kind: 'alert',
-			props: { code: 'OVER_TEMP', severity: 'critical' },
+			type: 'alert',
+			data: { code: 'OVER_TEMP', severity: 'critical' },
 			body: 'temperature threshold exceeded 85C sustained',
 		});
 		const battery = await g.addNode({
-			kind: 'alert',
-			props: { code: 'LOW_BATTERY', severity: 'warning' },
+			type: 'alert',
+			data: { code: 'LOW_BATTERY', severity: 'warning' },
 			body: 'battery below 15 percent replace soon',
 		});
 		await g.addEdge({ rel: 'raised', src: overheat.id, dst: temp1.id });

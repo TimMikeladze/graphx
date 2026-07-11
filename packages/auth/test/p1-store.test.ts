@@ -11,15 +11,15 @@ async function freshDb(): Promise<DbClient> {
 	return client;
 }
 
-test('P1: ensureObject creates one live node with id=ref, kind=type', async () => {
+test('P1: ensureObject creates one live node with id=ref, type=type', async () => {
 	const db = await freshDb();
 	await ensureObject(db, 'doc:42');
 	const r = await db.execute({
-		sql: 'SELECT kind FROM nodes WHERE id = ?',
+		sql: 'SELECT type FROM nodes WHERE id = ?',
 		args: ['doc:42'],
 	});
 	expect(r.rows.length).toBe(1);
-	expect(String(r.rows[0]!.kind)).toBe('doc');
+	expect(String(r.rows[0]!.type)).toBe('doc');
 	db.close();
 });
 

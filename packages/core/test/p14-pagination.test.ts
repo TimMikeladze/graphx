@@ -28,10 +28,10 @@ async function hubWithNeighbors(
 	g: Graph<typeof SCHEMA>,
 	n: number,
 ): Promise<{ hub: string; neighbors: string[] }> {
-	const hub = await g.addNode({ kind: 'person', props: { name: 'hub' } });
+	const hub = await g.addNode({ type: 'person', data: { name: 'hub' } });
 	const neighbors: string[] = [];
 	for (let i = 0; i < n; i++) {
-		const p = await g.addNode({ kind: 'person', props: { name: `n${i}` } });
+		const p = await g.addNode({ type: 'person', data: { name: `n${i}` } });
 		await g.addEdge({ rel: 'knows', src: hub.id, dst: p.id });
 		neighbors.push(p.id);
 	}
@@ -119,9 +119,9 @@ test('P14 page: match.page keysets a flat single-alias result with no overlap/sk
 
 test('P14 page: match.page returns each distinct selected tuple ONCE (no dup) under multi-edge', async () => {
 	const { client, g } = await freshGraph();
-	const hub = await g.addNode({ kind: 'person', props: { name: 'hub' } });
-	const n0 = await g.addNode({ kind: 'person', props: { name: 'n0' } });
-	const n1 = await g.addNode({ kind: 'person', props: { name: 'n1' } });
+	const hub = await g.addNode({ type: 'person', data: { name: 'hub' } });
+	const n0 = await g.addNode({ type: 'person', data: { name: 'n0' } });
+	const n1 = await g.addNode({ type: 'person', data: { name: 'n1' } });
 	// TWO knows edges hub->n0 (multi-edge) + one hub->n1: .run() yields a duplicate
 	// (hub,n0) row; .page() keysets on (a__id,b__id) which is NOT unique, so without
 	// dedup an over-fetched page can hand the caller the same tuple twice.

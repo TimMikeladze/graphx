@@ -27,11 +27,11 @@ export interface User {
   email: string
 }
 
-/** A live node as returned by `getNode`/`listNodes` ({ id, kind, parsed props }). */
+/** A live node as returned by `getNode`/`listNodes` ({ id, type, parsed data }). */
 export interface GraphNode {
   id: string
-  kind: string
-  props: Record<string, unknown>
+  type: string
+  data: Record<string, unknown>
 }
 
 /** One keyset page of `GET /nodes`. */
@@ -43,7 +43,7 @@ export interface NodeListPage {
 /** A canvas node in a graph slice. */
 export interface GraphSliceNode {
   id: string
-  kind: string
+  type: string
 }
 
 /** A canvas link in a graph slice (Cosmograph `source`/`target` naming). */
@@ -63,23 +63,23 @@ export interface GraphSlice {
   truncated: boolean
 }
 
-/** One row of `GET /nodes/:id/history` (raw stored version; `props` is JSON text). */
+/** One row of `GET /nodes/:id/history` (raw stored version; `data` is JSON text). */
 export interface NodeVersion {
   ver: number
   id: string
-  kind: string
+  type: string
   body: string | null
   uri: string | null
   content_hash: string | null
   content_type: string | null
-  props: string
+  data: string
   valid_from: number
   valid_to: number
 }
 
 /** Filters that scope the explorer (also the URL search params). */
 export interface ExplorerFilters {
-  kind?: string
+  type?: string
   q?: string
   /** As-of epoch ms; absent ⇒ current (live). */
   asOf?: number

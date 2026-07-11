@@ -29,7 +29,7 @@ test('watchDir: detects a new file and triggers ingest', async () => {
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-'));
 
 	// Seed one file and run the initial ingest (caller's responsibility)
-	await writeFile(join(dir, 'a.md'), '---\nkind: note\ntitle: A\n---\nalpha');
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\ntitle: A\n---\nalpha');
 	await ingestDir({ dir, graph: g, embed });
 
 	let runCount = 0;
@@ -45,7 +45,7 @@ test('watchDir: detects a new file and triggers ingest', async () => {
 	});
 
 	// Write a new file — should trigger a watcher ingest
-	await writeFile(join(dir, 'b.md'), '---\nkind: note\ntitle: B\n---\nbeta');
+	await writeFile(join(dir, 'b.md'), '---\ntype: note\ntitle: B\n---\nbeta');
 
 	// Poll until the new node appears or ~3 s elapses
 	const deadline = Date.now() + 3000;
@@ -75,7 +75,7 @@ test('watchDir: close() stops further runs', async () => {
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-close-'));
 
-	await writeFile(join(dir, 'a.md'), '---\nkind: note\ntitle: A\n---\nalpha');
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\ntitle: A\n---\nalpha');
 	await ingestDir({ dir, graph: g, embed });
 
 	let runCount = 0;
@@ -94,7 +94,7 @@ test('watchDir: close() stops further runs', async () => {
 	watcher.close();
 
 	// Write a file after close — should NOT trigger anything
-	await writeFile(join(dir, 'b.md'), '---\nkind: note\ntitle: B\n---\nbeta');
+	await writeFile(join(dir, 'b.md'), '---\ntype: note\ntitle: B\n---\nbeta');
 
 	// Wait a bit to confirm no run occurred
 	await new Promise((r) => setTimeout(r, 200));
@@ -112,7 +112,7 @@ test('watchDir: single-flight — rapid writes produce at most two runs (in-flig
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-sf-'));
 
-	await writeFile(join(dir, 'seed.md'), '---\nkind: note\ntitle: Seed\n---\nbody');
+	await writeFile(join(dir, 'seed.md'), '---\ntype: note\ntitle: Seed\n---\nbody');
 	await ingestDir({ dir, graph: g, embed });
 
 	const runTimes: number[] = [];
@@ -135,7 +135,7 @@ test('watchDir: single-flight — rapid writes produce at most two runs (in-flig
 	while (Date.now() < deadline) {
 		if (!burstSent) {
 			for (let i = 0; i < 5; i++) {
-				await writeFile(join(dir, `burst-${i}.md`), `---\nkind: note\ntitle: Burst ${i}\n---\nbody`);
+				await writeFile(join(dir, `burst-${i}.md`), `---\ntype: note\ntitle: Burst ${i}\n---\nbody`);
 			}
 			burstSent = true;
 		}
@@ -179,7 +179,7 @@ test('watchDir: an ingest error is routed to onError; the watcher keeps running'
 	});
 
 	// New file → watcher run → embed throws → onError (NOT an unhandled rejection / crash)
-	await writeFile(join(dir, 'a.md'), '---\nkind: note\n---\nalpha');
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\nalpha');
 	const deadline = Date.now() + 3000;
 	while (Date.now() < deadline && errors.length === 0) {
 		await new Promise((r) => setTimeout(r, 50));

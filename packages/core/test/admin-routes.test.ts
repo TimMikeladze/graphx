@@ -68,11 +68,11 @@ async function addNode(s: Setup, body: unknown): Promise<string> {
 	return (await res.json()).id;
 }
 
-test('GET /nodes lists nodes and filters by kind', async () => {
+test('GET /nodes lists nodes and filters by type', async () => {
 	const s = await setup();
-	await addNode(s, { kind: 'person', props: { name: 'p1' } });
-	const d = await addNode(s, { kind: 'device', props: { type: 'router' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?kind=device`, { headers: hdr(s) });
+	await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const d = await addNode(s, { type: 'device', data: { type: 'router' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?type=device`, { headers: hdr(s) });
 	expect(res.status).toBe(200);
 	const body = await res.json();
 	expect(body.nodes.map((n: { id: string }) => n.id)).toEqual([d]);
@@ -82,8 +82,8 @@ test('GET /nodes lists nodes and filters by kind', async () => {
 
 test('GET /graph returns a {nodes,links,truncated} slice', async () => {
 	const s = await setup();
-	const p1 = await addNode(s, { kind: 'person', props: { name: 'p1' } });
-	const p2 = await addNode(s, { kind: 'person', props: { name: 'p2' } });
+	const p1 = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const p2 = await addNode(s, { type: 'person', data: { name: 'p2' } });
 	await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges`, {
 		method: 'POST',
 		headers: hdr(s),
@@ -100,7 +100,7 @@ test('GET /graph returns a {nodes,links,truncated} slice', async () => {
 
 test('GET /nodes/:id/history returns the version trail', async () => {
 	const s = await setup();
-	const id = await addNode(s, { kind: 'person', props: { name: 'p1' } });
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) });
 	expect(res.status).toBe(200);
 	const body = await res.json();
@@ -118,7 +118,7 @@ test('GET /nodes with a malformed cursor -> 400', async () => {
 
 test('operator token reads a tenant graph with no membership row -> 200', async () => {
 	const s = await setup();
-	await addNode(s, { kind: 'person', props: { name: 'p1' } });
+	await addNode(s, { type: 'person', data: { name: 'p1' } });
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 		headers: { 'x-admin-token': 'secret' },
 	});

@@ -48,19 +48,19 @@ CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
 CREATE TABLE IF NOT EXISTS node_versions (
   ver          INTEGER PRIMARY KEY,
   id           TEXT NOT NULL REFERENCES node_identity(id),
-  kind         TEXT NOT NULL,
+  type         TEXT NOT NULL,
   body         TEXT,
   uri          TEXT,
   content_hash TEXT,
   embed_hash   TEXT,
   content_type TEXT,
-  props        TEXT NOT NULL DEFAULT '{}',
+  data        TEXT NOT NULL DEFAULT '{}',
   emb          ${embColumnType('libsql', dim)},
   valid_from   INTEGER NOT NULL,
   valid_to     INTEGER NOT NULL DEFAULT 8640000000000000
 );
 CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS nv_kind ON node_versions(kind);
+CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 ${NV_EMB_IDX_DDL}
 
 -- P13 (M2/§19.3): external-content FTS5 over node_versions, synced by the trigger below.
@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS edge_versions (
   dst        TEXT NOT NULL REFERENCES node_identity(id),
   rel        TEXT NOT NULL,
   weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
-  props      TEXT NOT NULL DEFAULT '{}',
+  data      TEXT NOT NULL DEFAULT '{}',
   source     TEXT,
   valid_from INTEGER NOT NULL,
   valid_to   INTEGER NOT NULL DEFAULT 8640000000000000
@@ -83,10 +83,10 @@ CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_t
 CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE VIEW IF NOT EXISTS nodes AS
-  SELECT id, kind, body, uri, content_hash, embed_hash, content_type, props, emb
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
   FROM node_versions WHERE valid_to = 8640000000000000;
 CREATE VIEW IF NOT EXISTS edges AS
-  SELECT id, src, dst, rel, weight, props, source
+  SELECT id, src, dst, rel, weight, data, source
   FROM edge_versions WHERE valid_to = 8640000000000000;
 
 CREATE TABLE IF NOT EXISTS archival_state (

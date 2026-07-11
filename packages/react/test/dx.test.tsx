@@ -45,7 +45,7 @@ test('GraphProvider bootstrap: fetches /demo ids and drives hooks through appFet
 		schema: DEV_SCHEMA,
 		db,
 		seed: async (g) => {
-			await g.addNode({ kind: 'person', props: { name: 'ada' } });
+			await g.addNode({ type: 'person', data: { name: 'ada' } });
 		},
 	});
 	const fetch = appFetch(app);
@@ -58,10 +58,10 @@ test('GraphProvider bootstrap: fetches /demo ids and drives hooks through appFet
 		),
 	);
 
-	const { result } = renderHook(() => h.useListNodes({ kind: 'person' }), { wrapper: Wrapper });
+	const { result } = renderHook(() => h.useListNodes({ type: 'person' }), { wrapper: Wrapper });
 	// First renders the fallback (no transport yet), then resolves after the /demo fetch.
 	await waitFor(() => expect(result.current.isSuccess).toBe(true));
-	const names = result.current.data?.pages.flatMap((p) => p.nodes.map((n) => n.props.name));
+	const names = result.current.data?.pages.flatMap((p) => p.nodes.map((n) => n.data.name));
 	expect(names).toEqual(['ada']);
 	cleanupDev(control, db);
 });
@@ -74,7 +74,7 @@ test('GraphProvider bootstrap: /demo is fetched once across re-renders with a ne
 		schema: DEV_SCHEMA,
 		db,
 		seed: async (g) => {
-			await g.addNode({ kind: 'person', props: { name: 'ada' } });
+			await g.addNode({ type: 'person', data: { name: 'ada' } });
 		},
 	});
 	let demoHits = 0;
@@ -87,7 +87,7 @@ test('GraphProvider bootstrap: /demo is fetched once across re-renders with a ne
 	const h = createGraphHooks(DEV_SCHEMA);
 	const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 	function Probe() {
-		const q = h.useListNodes({ kind: 'person' });
+		const q = h.useListNodes({ type: 'person' });
 		return createElement('span', null, q.isSuccess ? 'ok' : '…');
 	}
 	// Each call mints a NEW appFetch identity — the bug re-ran the bootstrap effect on every one.
@@ -118,11 +118,11 @@ test('createGraphHooks(schema, { validate: true }) throws on a node that violate
 		schema: DEV_SCHEMA,
 		db,
 		seed: async (g) => {
-			await g.addNode({ kind: 'person', props: { name: 'ada' } });
+			await g.addNode({ type: 'person', data: { name: 'ada' } });
 		},
 	});
 	// The seeded id (first node) — fetch it via the list route.
-	const listRes = await app.request(`/t/${tenant}/p/${project}/nodes?kind=person`, {
+	const listRes = await app.request(`/t/${tenant}/p/${project}/nodes?type=person`, {
 		headers: { 'x-user': user, 'x-tenant': tenant },
 	});
 	const id = (await listRes.json()).nodes[0].id as string;
@@ -172,9 +172,9 @@ test('useMatch(builder): fluent spec returns the matched, per-alias rows', async
 	await waitFor(() => expect(result.current.isSuccess).toBe(true));
 	const rows = result.current.data?.rows ?? [];
 	expect(rows.length).toBe(1);
-	// Per-alias narrowing: p is NodeOf<S,'person'>, d is NodeOf<S,'device'> — props are typed.
-	expect(rows[0]?.p.props.name).toBe('ada');
-	expect(rows[0]?.d.props.type).toBe('router');
+	// Per-alias narrowing: p is NodeOf<S,'person'>, d is NodeOf<S,'device'> — data are typed.
+	expect(rows[0]?.p.data.name).toBe('ada');
+	expect(rows[0]?.d.data.type).toBe('router');
 	h.cleanup();
 });
 

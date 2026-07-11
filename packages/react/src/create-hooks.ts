@@ -18,7 +18,7 @@ import type {
 	GraphSchema,
 	GraphSlice,
 	JourneyRow,
-	Kind,
+	NodeType,
 	NeighborPage,
 	NodeListPage,
 	NodeOf,
@@ -49,23 +49,23 @@ export interface CreateHooksOptions {
 	validate?: boolean;
 }
 
-// --- rel-aware neighbor-kind inference (uses the schema's edge `from`/`to`) ---
+// --- rel-aware neighbor-type inference (uses the schema's edge `from`/`to`) ---
 type EdgesOf<S> = S extends { edges: infer E } ? E : never;
 type Endpoints<T> = T extends readonly (infer U)[] ? U : T;
-/** The `to`-side node kind(s) of rel `R` (a forward hop lands here); all kinds when unconstrained. */
-type RelToKind<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { to: infer T }
-	? Endpoints<T> & Kind<S>
-	: Kind<S>;
-/** The `from`-side node kind(s) of rel `R` (a reverse hop lands here); all kinds when unconstrained. */
-type RelFromKind<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { from: infer F }
-	? Endpoints<F> & Kind<S>
-	: Kind<S>;
-/** The neighbor kind reached over rel `R` in direction `D` (forward → `to`, reverse → `from`, both → either). */
-type NeighborKind<S extends GraphSchema, R extends Rel<S>, D extends Direction> = D extends 'forward'
-	? RelToKind<S, R>
+/** The `to`-side node type(s) of rel `R` (a forward hop lands here); all types when unconstrained. */
+type RelToType<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { to: infer T }
+	? Endpoints<T> & NodeType<S>
+	: NodeType<S>;
+/** The `from`-side node type(s) of rel `R` (a reverse hop lands here); all types when unconstrained. */
+type RelFromType<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extends { from: infer F }
+	? Endpoints<F> & NodeType<S>
+	: NodeType<S>;
+/** The neighbor type reached over rel `R` in direction `D` (forward → `to`, reverse → `from`, both → either). */
+type NeighborType<S extends GraphSchema, R extends Rel<S>, D extends Direction> = D extends 'forward'
+	? RelToType<S, R>
 	: D extends 'reverse'
-		? RelFromKind<S, R>
-		: RelToKind<S, R> | RelFromKind<S, R>;
+		? RelFromType<S, R>
+		: RelToType<S, R> | RelFromType<S, R>;
 
 /** Client-facing read params — `limits`/`metrics` are deliberately absent (server-set, §19.2). */
 export interface RetrieveParams {
@@ -93,7 +93,7 @@ export interface JourneyParams {
 	maxDepth?: number;
 }
 export interface NodeFilter {
-	kind?: string;
+	type?: string;
 	q?: string;
 	asOf?: number;
 }
@@ -111,14 +111,14 @@ export interface ShortestPathParams {
 }
 export interface TopNodesParams {
 	by: 'pagerank' | 'community' | 'degree';
-	kind?: string;
+	type?: string;
 	limit?: number;
 }
 
 /** PATCH /nodes/:id patch — every field optional (mirrors `Graph.updateNode`). */
 export interface UpdateNodePatch {
-	kind?: string;
-	props?: Record<string, unknown>;
+	type?: string;
+	data?: Record<string, unknown>;
 	emb?: number[];
 	body?: string;
 	uri?: string;
@@ -141,7 +141,7 @@ export interface CommunityParams {
 	maxIter?: number;
 }
 export interface CentralityParams {
-	kind?: 'degree' | 'in' | 'out';
+	type?: 'degree' | 'in' | 'out';
 }
 /** id -> score map from pagerank/community/centrality (the route serializes the Map as an object). */
 export interface ScoresResult {
@@ -150,7 +150,7 @@ export interface ScoresResult {
 
 /** A JSON-serialized PatternBuilder program (mirrors the POST /match wire schema). */
 export type MatchStep =
-	| { node: { alias: string; kind: string } }
+	| { node: { alias: string; type: string } }
 	| { edge: { rel: string; direction?: HopDirection } }
 	| { var: { rel: string; min?: number; max?: number; direction?: HopDirection } };
 export interface MatchSpec {
@@ -160,20 +160,20 @@ export interface MatchSpec {
 	select: string[];
 	page?: { limit?: number; cursor?: string };
 }
-export type MatchNode = { id: string; kind: string; props: Record<string, unknown> };
+export type MatchNode = { id: string; type: string; data: Record<string, unknown> };
 export interface MatchResult {
 	rows: Array<Record<string, MatchNode>>;
 	nextCursor: string | null;
 }
 
 /**
- * Kind/rel-checked, const-friendly input for the typed {@link createGraphHooks} `useMatch`. Pass the
- * spec as an inline literal so TypeScript keeps the alias/kind/select literals and can infer the
- * per-alias row type (a `const` type parameter does the capturing). `node.kind` and `edge`/`var.rel`
+ * NodeType/rel-checked, const-friendly input for the typed {@link createGraphHooks} `useMatch`. Pass the
+ * spec as an inline literal so TypeScript keeps the alias/type/select literals and can infer the
+ * per-alias row type (a `const` type parameter does the capturing). `node.type` and `edge`/`var.rel`
  * are validated against the schema.
  */
 export type MatchStepInput<S extends GraphSchema> =
-	| { node: { alias: string; kind: Kind<S> } }
+	| { node: { alias: string; type: NodeType<S> } }
 	| { edge: { rel: Rel<S>; direction?: HopDirection } }
 	| { var: { rel: Rel<S>; min?: number; max?: number; direction?: HopDirection } };
 export interface MatchSpecInput<S extends GraphSchema> {
@@ -183,19 +183,19 @@ export interface MatchSpecInput<S extends GraphSchema> {
 	select: readonly string[];
 	page?: { limit?: number; cursor?: string };
 }
-/** alias → kind map read out of a spec's `steps` tuple (node steps only). */
+/** alias → type map read out of a spec's `steps` tuple (node steps only). */
 type AliasMap<Steps extends readonly unknown[]> = {
 	[N in Steps[number] as N extends { node: { alias: infer A extends string } } ? A : never]: N extends {
-		node: { kind: infer K };
+		node: { type: infer K };
 	}
 		? K
 		: never;
 };
-/** One typed `useMatch` row: each SELECTED alias → its node, kind-narrowed from the spec. */
+/** One typed `useMatch` row: each SELECTED alias → its node, type-narrowed from the spec. */
 export type MatchRowOf<S extends GraphSchema, Spec extends MatchSpecInput<S>> = {
 	[A in Spec['select'][number] & keyof AliasMap<Spec['steps']>]: NodeOf<
 		S,
-		AliasMap<Spec['steps']>[A] & Kind<S>
+		AliasMap<Spec['steps']>[A] & NodeType<S>
 	>;
 };
 export interface MatchResultOf<S extends GraphSchema, Spec extends MatchSpecInput<S>> {
@@ -218,8 +218,8 @@ export interface BuiltMatchSpec<
 }
 
 /**
- * A fluent, kind/rel-checked builder for a {@link useMatch} spec — reads left-to-right like the SDK's
- * `PatternBuilder` and keeps the full type chain (each `.node(alias, kind)` extends an alias→kind
+ * A fluent, type/rel-checked builder for a {@link useMatch} spec — reads left-to-right like the SDK's
+ * `PatternBuilder` and keeps the full type chain (each `.node(alias, type)` extends an alias→type
  * accumulator, so `.select(...)` only accepts declared aliases and yields per-alias-typed rows):
  *
  * ```ts
@@ -233,22 +233,22 @@ export interface BuiltMatchSpec<
 export class MatchBuilder<
 	S extends GraphSchema,
 	Steps extends readonly MatchStepInput<S>[] = readonly [],
-	Acc extends Record<string, Kind<S>> = Record<never, never>,
+	Acc extends Record<string, NodeType<S>> = Record<never, never>,
 > {
 	private readonly _steps: MatchStepInput<S>[] = [];
 	private readonly _where: Array<{ alias: string; key: string; value: unknown }> = [];
 	private _asOf?: number;
 	private _page?: { limit?: number; cursor?: string };
 
-	/** Add an aliased node bound to `kind`; extends the alias→kind accumulator. */
-	node<A extends string, K extends Kind<S>>(
+	/** Add an aliased node bound to `type`; extends the alias→type accumulator. */
+	node<A extends string, K extends NodeType<S>>(
 		alias: A,
-		kind: K,
-	): MatchBuilder<S, readonly [...Steps, { node: { alias: A; kind: K } }], Acc & Record<A, K>> {
-		this._steps.push({ node: { alias, kind } });
+		type: K,
+	): MatchBuilder<S, readonly [...Steps, { node: { alias: A; type: K } }], Acc & Record<A, K>> {
+		this._steps.push({ node: { alias, type } });
 		return this as unknown as MatchBuilder<
 			S,
-			readonly [...Steps, { node: { alias: A; kind: K } }],
+			readonly [...Steps, { node: { alias: A; type: K } }],
 			Acc & Record<A, K>
 		>;
 	}
@@ -298,7 +298,7 @@ export class MatchBuilder<
 		return this as unknown as MatchBuilder<S, readonly [...Steps, { var: { rel: R } }], Acc>;
 	}
 
-	/** Prop filter `alias.props.key === value`; `alias` must already be declared. */
+	/** Prop filter `alias.data.key === value`; `alias` must already be declared. */
 	where(alias: keyof Acc & string, key: string, value: unknown): this {
 		this._where.push({ alias, key, value });
 		return this;
@@ -359,7 +359,7 @@ function advanceCursor(
  * Build the typed hook set for a user's schema `S` (mirrors `createApp<S>`). Call ONCE at module
  * scope and export the result. Every hook reads its transport from {@link GraphProvider} context,
  * so the hooks carry no config themselves — only `S`-derived types. `schema` is accepted purely to
- * bind `S` for inference (the wire contracts are deliberately loose, so per-kind typing needs it).
+ * bind `S` for inference (the wire contracts are deliberately loose, so per-type typing needs it).
  * The value is used ONLY for inference — you can either `createGraphHooks(schema)` (infer `S` from
  * the arg) or, in a browser bundle that shouldn't ship the SDK/schema runtime, pass the type
  * explicitly and omit the value: `createGraphHooks<typeof schema>()`. This package pulls in NO
@@ -370,21 +370,21 @@ export function createGraphHooks<S extends GraphSchema>(
 	opts?: CreateHooksOptions,
 ) {
 	/**
-	 * When `{ validate: true }` AND the schema VALUE was passed, assert a returned node's `props`
-	 * against its kind's Zod schema — catching a server that drifts from the contract. Throws a
+	 * When `{ validate: true }` AND the schema VALUE was passed, assert a returned node's `data`
+	 * against its type's Zod schema — catching a server that drifts from the contract. Throws a
 	 * `GraphError(422, …, issues)` (`code: 'validation'`) on mismatch, so it surfaces as the hook
 	 * `error` like any other. No-op without the runtime schema (the type-only `createGraphHooks<S>()`
 	 * form) or when disabled — zero overhead.
 	 */
-	function validateNode<N extends { kind: string; props: unknown } | null | undefined>(n: N): N {
+	function validateNode<N extends { type: string; data: unknown } | null | undefined>(n: N): N {
 		if (!opts?.validate || !_schema || n == null) return n;
-		const zt = (_schema.nodes as Record<string, { parse?: (v: unknown) => unknown }>)[n.kind];
+		const zt = (_schema.nodes as Record<string, { parse?: (v: unknown) => unknown }>)[n.type];
 		if (!zt?.parse) return n;
 		try {
-			zt.parse(n.props);
+			zt.parse(n.data);
 		} catch (e) {
 			const issues = (e as { issues?: unknown }).issues;
-			throw new GraphError(422, `response validation failed for kind '${n.kind}'`, issues);
+			throw new GraphError(422, `response validation failed for type '${n.type}'`, issues);
 		}
 		return n;
 	}
@@ -397,15 +397,15 @@ export function createGraphHooks<S extends GraphSchema>(
 	/**
 	 * A single node by id. Resolves to `null` (not an error) when the node doesn't exist.
 	 *
-	 * Pass the expected `kind` to narrow the result to `NodeOf<S, K>` — the server can't infer kind
-	 * from an id alone, so without it you get the `AnyNode<S>` union and must discriminate. The kind
-	 * is also checked at runtime: a node whose stored kind differs resolves to `null` (so the
-	 * narrowed type is honest, not an unchecked cast). Both forms share one cached fetch — the kind
+	 * Pass the expected `type` to narrow the result to `NodeOf<S, K>` — the server can't infer type
+	 * from an id alone, so without it you get the `AnyNode<S>` union and must discriminate. The type
+	 * is also checked at runtime: a node whose stored type differs resolves to `null` (so the
+	 * narrowed type is honest, not an unchecked cast). Both forms share one cached fetch — the type
 	 * filter runs per-observer via `select`.
 	 */
-	function useNode<K extends Kind<S>>(id: string, kind: K): UseQueryResult<NodeOf<S, K> | null>;
+	function useNode<K extends NodeType<S>>(id: string, type: K): UseQueryResult<NodeOf<S, K> | null>;
 	function useNode(id: string): UseQueryResult<AnyNode<S> | null>;
-	function useNode(id: string, kind?: Kind<S>) {
+	function useNode(id: string, type?: NodeType<S>) {
 		const t = useGraphTransport();
 		return useQuery({
 			queryKey: graphKeys(t.project).node(id),
@@ -423,7 +423,7 @@ export function createGraphHooks<S extends GraphSchema>(
 					throw e;
 				}
 			},
-			select: kind ? (n) => (n && n.kind === kind ? n : null) : undefined,
+			select: type ? (n) => (n && n.type === type ? n : null) : undefined,
 		});
 	}
 
@@ -446,17 +446,17 @@ export function createGraphHooks<S extends GraphSchema>(
 	/**
 	 * Keyset-paginated neighbors as an infinite query (`nextCursor` threads the pages).
 	 *
-	 * Pass a `rel` to narrow the neighbor rows to that relation's endpoint kind — the schema's
+	 * Pass a `rel` to narrow the neighbor rows to that relation's endpoint type — the schema's
 	 * `from`/`to` pin it (forward hop → `to`, reverse → `from`), so e.g. `{ rel: 'owns' }` yields
 	 * `NodeOf<S,'device'>[]` instead of the `AnyNode<S>` union. The server enforces the rel filter,
-	 * so the narrowed kind is server-backed, not an unchecked cast. An unconstrained rel (no
+	 * so the narrowed type is server-backed, not an unchecked cast. An unconstrained rel (no
 	 * `from`/`to`) stays the union.
 	 */
 	function useNeighbors<R extends Rel<S>, D extends Direction = 'forward'>(
 		id: string,
 		opts: { rel: R; direction?: D; limit?: number },
 	): UseInfiniteQueryResult<
-		InfiniteData<{ rows: NodeOf<S, NeighborKind<S, R, D>>[]; nextCursor: string | null }>
+		InfiniteData<{ rows: NodeOf<S, NeighborType<S, R, D>>[]; nextCursor: string | null }>
 	>;
 	function useNeighbors(
 		id: string,
@@ -474,7 +474,7 @@ export function createGraphHooks<S extends GraphSchema>(
 					path: `/nodes/${encodeURIComponent(id)}/neighborsPage`,
 					query: { direction: opts.direction, rel: opts.rel, limit: opts.limit, cursor: pageParam },
 				});
-				for (const n of page.rows) validateNode(n as { kind: string; props: unknown });
+				for (const n of page.rows) validateNode(n as { type: string; data: unknown });
 				return page;
 			},
 			getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -482,11 +482,11 @@ export function createGraphHooks<S extends GraphSchema>(
 	}
 
 	/**
-	 * Keyset-paginated node list as an infinite query. Pass `kind` to narrow rows to
-	 * `NodeOf<S, K>[]` (the server filters by kind, so the narrowing is server-backed).
+	 * Keyset-paginated node list as an infinite query. Pass `type` to narrow rows to
+	 * `NodeOf<S, K>[]` (the server filters by type, so the narrowing is server-backed).
 	 */
-	function useListNodes<K extends Kind<S>>(
-		opts: NodeFilter & { kind: K; limit?: number },
+	function useListNodes<K extends NodeType<S>>(
+		opts: NodeFilter & { type: K; limit?: number },
 	): UseInfiniteQueryResult<InfiniteData<{ nodes: NodeOf<S, K>[]; nextCursor: string | null }>>;
 	function useListNodes(
 		opts?: NodeFilter & { limit?: number },
@@ -500,9 +500,9 @@ export function createGraphHooks<S extends GraphSchema>(
 				const page = await request<NodeListPage<S>>(t, {
 					method: 'GET',
 					path: '/nodes',
-					query: { kind: opts.kind, q: opts.q, asOf: opts.asOf, limit: opts.limit, cursor: pageParam },
+					query: { type: opts.type, q: opts.q, asOf: opts.asOf, limit: opts.limit, cursor: pageParam },
 				});
-				for (const n of page.nodes) validateNode(n as { kind: string; props: unknown });
+				for (const n of page.nodes) validateNode(n as { type: string; data: unknown });
 				return page;
 			},
 			getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -518,7 +518,7 @@ export function createGraphHooks<S extends GraphSchema>(
 				request<GraphSlice>(t, {
 					method: 'GET',
 					path: '/graph',
-					query: { kind: opts.kind, q: opts.q, asOf: opts.asOf },
+					query: { type: opts.type, q: opts.q, asOf: opts.asOf },
 				}),
 		});
 	}
@@ -559,7 +559,7 @@ export function createGraphHooks<S extends GraphSchema>(
 	 * {@link MatchBuilder} — both yield per-alias-typed rows:
 	 *
 	 * ```ts
-	 * useMatch({ steps: [{ node: { alias: 'd', kind: 'device' } }, …], select: ['d'] });
+	 * useMatch({ steps: [{ node: { alias: 'd', type: 'device' } }, …], select: ['d'] });
 	 * useMatch((m) => m.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
 	 * ```
 	 */
@@ -577,12 +577,12 @@ export function createGraphHooks<S extends GraphSchema>(
 		return useQuery({
 			queryKey: graphKeys(t.project).match(spec),
 			enabled: spec.select.length > 0,
-			// Server-backed cast: the /match reshape returns `{ [alias]: { id, kind, props } }` with
-			// the kind's (upcast) props, so the per-alias `NodeOf<S, kind>` typing is honest.
+			// Server-backed cast: the /match reshape returns `{ [alias]: { id, type, data } }` with
+			// the type's (upcast) data, so the per-alias `NodeOf<S, type>` typing is honest.
 			queryFn: async () => {
 				const res = await request<MatchResultOf<S, Spec>>(t, { method: 'POST', path: '/match', body: spec });
 				for (const row of res.rows) {
-					for (const node of Object.values(row)) validateNode(node as { kind: string; props: unknown });
+					for (const node of Object.values(row)) validateNode(node as { type: string; data: unknown });
 				}
 				return res;
 			},
@@ -632,8 +632,8 @@ export function createGraphHooks<S extends GraphSchema>(
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		return useMutation({
-			mutationFn: (input: AddNodeInput<S, Kind<S>>) =>
-				request<NodeOf<S, Kind<S>>>(t, { method: 'POST', path: '/nodes', body: input }),
+			mutationFn: (input: AddNodeInput<S, NodeType<S>>) =>
+				request<NodeOf<S, NodeType<S>>>(t, { method: 'POST', path: '/nodes', body: input }),
 			onSettled: () => {
 				const k = graphKeys(t.project);
 				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
@@ -674,7 +674,7 @@ export function createGraphHooks<S extends GraphSchema>(
 				const k = graphKeys(t.project);
 				qc.invalidateQueries({ queryKey: k.node(vars.id) });
 				qc.invalidateQueries({ queryKey: k.history(vars.id) });
-				// changed props/kind also show in list + canvas-slice views
+				// changed data/type also show in list + canvas-slice views
 				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
 				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
 			},

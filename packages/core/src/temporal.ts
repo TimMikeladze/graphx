@@ -25,7 +25,7 @@ export interface TemporalDiff {
  */
 export async function history(raw: DbClient, id: string): Promise<Array<Record<string, unknown>>> {
 	const r = await raw.execute({
-		sql: 'SELECT ver, id, kind, body, uri, content_hash, content_type, props, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT ver, id, type, body, uri, content_hash, content_type, data, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
 		args: [id],
 	});
 	return r.rows as unknown as Array<Record<string, unknown>>;
@@ -41,11 +41,11 @@ export async function diff(raw: DbClient, t1: number, t2: number): Promise<Tempo
 	const where = '(valid_from > ? AND valid_from <= ?) OR (valid_to > ? AND valid_to <= ?)';
 	const args = [t1, t2, t1, t2];
 	const nodes = await raw.execute({
-		sql: `SELECT ver, id, kind, props, valid_from, valid_to FROM node_versions WHERE ${where}`,
+		sql: `SELECT ver, id, type, data, valid_from, valid_to FROM node_versions WHERE ${where}`,
 		args,
 	});
 	const edges = await raw.execute({
-		sql: `SELECT ver, id, src, dst, rel, weight, props, valid_from, valid_to FROM edge_versions WHERE ${where}`,
+		sql: `SELECT ver, id, src, dst, rel, weight, data, valid_from, valid_to FROM edge_versions WHERE ${where}`,
 		args,
 	});
 	return {
@@ -119,7 +119,7 @@ function decodeFeedCursor(cursor: string): { vf: number; ver: number } {
  * `valid_from > ?` cursor SKIPS rows that share the boundary `valid_from` when a page splits
  * them, whereas `ver` (the table's INTEGER PRIMARY KEY) is a unique tie-break, making
  * `(valid_from, ver)` a strict total order with no skip and no overlap. Over-fetches one row
- * to derive `nextCursor` without a second query. Rows are returned VERBATIM (raw stored `props`
+ * to derive `nextCursor` without a second query. Rows are returned VERBATIM (raw stored `data`
  * TEXT) — never `JSON.parse`d/upcast here; the changelog reports the bytes that were written.
  */
 async function feedStream(
@@ -182,8 +182,8 @@ export async function changeFeed(
 	}
 	const maxRows = resolveLimits(opts.limits).maxRows;
 	const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
-	const nodeCols = 'ver, id, kind, props, valid_from, valid_to';
-	const edgeCols = 'ver, id, src, dst, rel, weight, props, valid_from, valid_to';
+	const nodeCols = 'ver, id, type, data, valid_from, valid_to';
+	const edgeCols = 'ver, id, src, dst, rel, weight, data, valid_from, valid_to';
 	const nodes = await feedStream(raw, 'node_versions', nodeCols, cursor.nodes, pageSize);
 	const edges = await feedStream(raw, 'edge_versions', edgeCols, cursor.edges, pageSize);
 	return {

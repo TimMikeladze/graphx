@@ -3,9 +3,9 @@ import { z, ZodError } from 'zod';
 import {
 	type AnyNode,
 	defineGraphSchema,
-	type Kind,
+	type NodeType,
 	type NodeOf,
-	type PropsOf,
+	type DataOf,
 	type Rel,
 } from '../src/define-graph-schema.ts';
 
@@ -35,7 +35,7 @@ test('P2: defineGraphSchema is identity at runtime (carries the same object)', (
 	expect(out.edges).toBe(input.edges);
 });
 
-test('P2: node parse returns parsed output for valid props', () => {
+test('P2: node parse returns parsed output for valid data', () => {
 	const parsed = schema.nodes.device.parse({ type: 'router', crit: 3 });
 	expect(parsed).toEqual({ type: 'router', crit: 3 });
 });
@@ -69,7 +69,7 @@ test('P2: defaults are applied in parsed output', () => {
 	expect(parsed).toEqual({ type: 'router', status: 'online' });
 });
 
-test('P2: edge props parse when defined; endpoint kinds carried on the def', () => {
+test('P2: edge data parse when defined; endpoint types carried on the def', () => {
 	const withEdgeProps = defineGraphSchema({
 		nodes: {
 			device: z.object({ type: z.string() }),
@@ -77,13 +77,13 @@ test('P2: edge props parse when defined; endpoint kinds carried on the def', () 
 		},
 		edges: {
 			attached_to: {
-				props: z.object({ since: z.number() }),
+				data: z.object({ since: z.number() }),
 				from: 'device',
 				to: 'person',
 			},
 		},
 	});
-	const parsed = withEdgeProps.edges.attached_to.props?.parse({ since: 5 });
+	const parsed = withEdgeProps.edges.attached_to.data?.parse({ since: 5 });
 	expect(parsed).toEqual({ since: 5 });
 	expect(withEdgeProps.edges.attached_to.from).toBe('device');
 	expect(withEdgeProps.edges.attached_to.to).toBe('person');
@@ -93,20 +93,20 @@ test('P2: edge props parse when defined; endpoint kinds carried on the def', () 
 
 // D1: NodeOf.id is `string`, not `number`.
 const _idIsString: NodeOf<S, 'device'>['id'] = 'abc';
-// props narrows by kind: device.props.type is `string`.
-const _propType: NodeOf<S, 'device'>['props']['type'] = 'router';
-// kind is the literal.
-const _kind: NodeOf<S, 'device'>['kind'] = 'device';
+// data narrows by type: device.data.type is `string`.
+const _propType: NodeOf<S, 'device'>['data']['type'] = 'router';
+// type is the literal.
+const _kind: NodeOf<S, 'device'>['type'] = 'device';
 
-// Kind<S> / Rel<S> are the string-literal unions of the keys.
-const _k: Kind<S> = 'person';
+// NodeType<S> / Rel<S> are the string-literal unions of the keys.
+const _k: NodeType<S> = 'person';
 const _r: Rel<S> = 'attached_to';
 
-// PropsOf reflects the zod-inferred shape.
-const _props: PropsOf<S, 'person'> = { name: 'ada' };
+// DataOf reflects the zod-inferred shape.
+const _props: DataOf<S, 'person'> = { name: 'ada' };
 
-// AnyNode is a discriminated union over kinds; id is `string`.
-const _any: AnyNode<S> = { id: 'x', kind: 'device', props: { type: 't' } };
+// AnyNode is a discriminated union over types; id is `string`.
+const _any: AnyNode<S> = { id: 'x', type: 'device', data: { type: 't' } };
 const _anyId: AnyNode<S>['id'] = 'y';
 
 test('P2: type-level bindings hold at runtime too', () => {

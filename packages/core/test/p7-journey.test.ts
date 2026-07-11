@@ -14,17 +14,17 @@ import { makeTestDb } from './harness.ts';
 async function node(
 	client: DbClient,
 	name: string,
-	opts: { kind?: string; validFrom?: number; validTo?: number } = {},
+	opts: { type?: string; validFrom?: number; validTo?: number } = {},
 ): Promise<string> {
 	const id = ulid();
-	const kind = opts.kind ?? 'thing';
+	const type = opts.type ?? 'thing';
 	const validFrom = opts.validFrom ?? 0;
 	const validTo = opts.validTo ?? FOREVER;
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await client.execute({
-		sql: `INSERT INTO node_versions (id, kind, props, valid_from, valid_to)
+		sql: `INSERT INTO node_versions (id, type, data, valid_from, valid_to)
 			VALUES (?, ?, ?, ?, ?)`,
-		args: [id, kind, JSON.stringify({ name }), validFrom, validTo],
+		args: [id, type, JSON.stringify({ name }), validFrom, validTo],
 	});
 	return id;
 }
@@ -170,7 +170,7 @@ test('P7: start id is a ULID string and returns rows (proves B2 — no CAST-to-I
 	expect(rows.length).toBe(1);
 	expect(rows[0]!.id).toBe(b);
 	expect(rows[0]!.name).toBe('B');
-	expect(rows[0]!.kind).toBe('thing');
+	expect(rows[0]!.type).toBe('thing');
 	expect(rows[0]!.hops).toBe(1);
 	client.close();
 });

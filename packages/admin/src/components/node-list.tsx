@@ -56,7 +56,7 @@ export function NodeList({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-32">Kind</TableHead>
+                <TableHead className="w-32">NodeType</TableHead>
                 <TableHead>Id</TableHead>
               </TableRow>
             </TableHeader>
@@ -68,7 +68,7 @@ export function NodeList({
                   className={cn("cursor-pointer", n.id === selectedId && "bg-accent")}
                 >
                   <TableCell>
-                    <Badge variant="secondary">{n.kind}</Badge>
+                    <Badge variant="secondary">{n.type}</Badge>
                   </TableCell>
                   <TableCell className="truncate font-mono text-xs">{n.id}</TableCell>
                 </TableRow>

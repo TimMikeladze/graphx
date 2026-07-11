@@ -1,7 +1,7 @@
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embFreshExpr } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
-import type { Kind } from './define-graph-schema.ts';
+import type { NodeType } from './define-graph-schema.ts';
 import type { GraphSchema } from './graph.ts';
 import { NODES_FTS_TRIGGER_DDL, NV_EMB_IDX_DDL } from './schema.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
@@ -19,10 +19,10 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  * (the trigger is absent mid-load; the final FTS `'rebuild'` reindexes everything).
  */
 
-/** One row to bulk-insert as a brand-new node. `props` is validated against the schema. */
+/** One row to bulk-insert as a brand-new node. `data` is validated against the schema. */
 export interface BulkRow<S extends GraphSchema> {
-	kind: Kind<S>;
-	props: Record<string, unknown>;
+	type: NodeType<S>;
+	data: Record<string, unknown>;
 	emb?: number[];
 	body?: string;
 	uri?: string;
@@ -43,8 +43,8 @@ export interface BulkOpts {
 	/** Shared `valid_from` for every row (epoch ms; default `Date.now()`). */
 	loadTs?: number;
 	/**
-	 * P12 (§15) upcaster registry. When set, each bulk row's props are `_v`-stamped exactly
-	 * like {@link Graph.addNode}, so a registered kind's bulk-loaded rows read back correctly
+	 * P12 (§15) upcaster registry. When set, each bulk row's data are `_v`-stamped exactly
+	 * like {@link Graph.addNode}, so a registered type's bulk-loaded rows read back correctly
 	 * (without it they would lack `_v`, be misread as v1, and the read-time chain would run
 	 * over already-current data). Omit ⇒ no `_v` stamp (byte-identical to pre-P12 bulk).
 	 */
@@ -57,12 +57,12 @@ interface RawNodeDef {
 
 interface PreparedRow {
 	id: string;
-	kind: string;
+	type: string;
 	body: SqlValue;
 	uri: SqlValue;
 	content_hash: SqlValue;
 	content_type: SqlValue;
-	props: string;
+	data: string;
 	emb: number[] | null;
 }
 
@@ -73,7 +73,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 /**
- * Bulk-load nodes (§19.8). Validates every row's props against the schema FIRST (so a
+ * Bulk-load nodes (§19.8). Validates every row's data against the schema FIRST (so a
  * bad row fails before any index is dropped), then: drops `nv_emb_idx` + the FTS
  * trigger, inserts identity + version rows chunked in one transaction, recreates the
  * partial-live ANN index and the trigger, rebuilds the FTS index, and `ANALYZE`s.
@@ -92,18 +92,18 @@ export async function bulkLoad<S extends GraphSchema>(
 
 	// 1. Validate + prepare everything up front — fail fast, BEFORE touching indexes.
 	const prepared: PreparedRow[] = rows.map((row) => {
-		const def = (schema.nodes as Record<string, RawNodeDef | undefined>)[row.kind];
-		if (!def) throw new Error(`bulkLoad: unknown kind '${String(row.kind)}'`);
-		const parsed = def.parse(row.props) as Record<string, unknown>;
+		const def = (schema.nodes as Record<string, RawNodeDef | undefined>)[row.type];
+		if (!def) throw new Error(`bulkLoad: unknown type '${String(row.type)}'`);
+		const parsed = def.parse(row.data) as Record<string, unknown>;
 		return {
 			id: ulid(),
-			kind: String(row.kind),
+			type: String(row.type),
 			body: row.body ?? null,
 			uri: row.uri ?? null,
 			content_hash: row.content_hash ?? null,
 			content_type: row.content_type ?? null,
-			// P12: stamp `_v` for registered kinds (no-op for unregistered ⇒ pre-P12 bytes).
-			props: JSON.stringify(upcaster.stamp(String(row.kind), parsed)),
+			// P12: stamp `_v` for registered types (no-op for unregistered ⇒ pre-P12 bytes).
+			data: JSON.stringify(upcaster.stamp(String(row.type), parsed)),
 			emb: row.emb ?? null,
 		};
 	});
@@ -133,12 +133,12 @@ export async function bulkLoad<S extends GraphSchema>(
 				.join(',');
 			const args: SqlValue[] = [];
 			for (const p of part) {
-				args.push(p.id, p.kind, p.body, p.uri, p.content_hash, p.content_type, p.props);
+				args.push(p.id, p.type, p.body, p.uri, p.content_hash, p.content_type, p.data);
 				if (p.emb) args.push(JSON.stringify(p.emb));
 				args.push(loadTs);
 			}
 			stmts.push({
-				sql: `INSERT INTO node_versions (id, kind, body, uri, content_hash, content_type, props, emb, valid_from) VALUES ${valuesSql}`,
+				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, emb, valid_from) VALUES ${valuesSql}`,
 				args,
 			});
 		}

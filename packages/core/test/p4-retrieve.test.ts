@@ -38,13 +38,13 @@ async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA>
 test('P4: ANN seed — retrieve returns the nearest seed first at depth 0', async () => {
 	const { client, g } = await freshGraph();
 	const red = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
-	await g.addNode({ kind: 'doc', props: { title: 'green' }, body: 'green', emb: VECTORS.green });
-	await g.addNode({ kind: 'doc', props: { title: 'blue' }, body: 'blue', emb: VECTORS.blue });
+	await g.addNode({ type: 'doc', data: { title: 'green' }, body: 'green', emb: VECTORS.green });
+	await g.addNode({ type: 'doc', data: { title: 'blue' }, body: 'blue', emb: VECTORS.blue });
 
 	const res = await retrieve(client, stubEmbed, { query: 'red', k: 1 });
 	expect(res.length).toBe(1);
@@ -57,14 +57,14 @@ test('P4: ANN seed — retrieve returns the nearest seed first at depth 0', asyn
 test('P4: walk — a seed neighbor appears at depth 1', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
@@ -80,20 +80,20 @@ test('P4: walk — a seed neighbor appears at depth 1', async () => {
 test('P4: maxDepth bounds the walk', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
 	const c = await g.addNode({
-		kind: 'doc',
-		props: { title: 'blue' },
+		type: 'doc',
+		data: { title: 'blue' },
 		body: 'blue',
 		emb: VECTORS.blue,
 	});
@@ -111,14 +111,14 @@ test('P4: maxDepth bounds the walk', async () => {
 test('P4: cycle safety — A->B->A terminates and dedups (each id once)', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
@@ -140,14 +140,14 @@ test('P4: cycle safety — A->B->A terminates and dedups (each id once)', async 
 test('P4: direction filter — forward vs reverse', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
@@ -175,20 +175,20 @@ test('P4: rels filter restricts walk to matching relations', async () => {
 	await init(client, 4);
 	const g = new Graph(client, SCHEMA2);
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
 	const c = await g.addNode({
-		kind: 'doc',
-		props: { title: 'blue' },
+		type: 'doc',
+		data: { title: 'blue' },
 		body: 'blue',
 		emb: VECTORS.blue,
 	});
@@ -203,20 +203,20 @@ test('P4: rels filter restricts walk to matching relations', async () => {
 test('P4: ordered by depth ascending', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
 	const c = await g.addNode({
-		kind: 'doc',
-		props: { title: 'blue' },
+		type: 'doc',
+		data: { title: 'blue' },
 		body: 'blue',
 		emb: VECTORS.blue,
 	});
@@ -242,12 +242,12 @@ test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal f
 	// v1: body 'red-old', live emb so the partial live index seeds it... but we close
 	// it below. The seed for past asOf must come from the live index over-fetch+filter.
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
+		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [1, id, 'doc', 'red-old', '[1,0,0,0]', T1, T2],
 	});
 	// v2: body 'red-new', live (valid_to = FOREVER), same emb so it's in the live index.
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
+		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [2, id, 'doc', 'red-new', '[1,0,0,0]', T2, FOREVER],
 	});
 
@@ -277,11 +277,11 @@ test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skip
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [b] });
 	// a is live with emb (seed), b is live (no emb needed)
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, kind, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
+		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
 		args: [1, a, 'doc', 'red', '[1,0,0,0]', 100, FOREVER],
 	});
 	await client.execute({
-		sql: 'INSERT INTO node_versions (ver, id, kind, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
 		args: [2, b, 'doc', 'green', 100, FOREVER],
 	});
 	// edge a->b only becomes valid at t=5000
@@ -306,10 +306,10 @@ test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skip
 test('P4: tolerates NULL emb rows (no throw, seed still works)', async () => {
 	const { client, g } = await freshGraph();
 	// a node with no embedding (NULL emb)
-	await g.addNode({ kind: 'doc', props: { title: 'noemb' }, body: 'noemb' });
+	await g.addNode({ type: 'doc', data: { title: 'noemb' }, body: 'noemb' });
 	const red = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
@@ -322,26 +322,26 @@ test('P4: tolerates NULL emb rows (no throw, seed still works)', async () => {
 test('P4: default k and maxDepth applied (k=10, maxDepth=2)', async () => {
 	const { client, g } = await freshGraph();
 	const a = await g.addNode({
-		kind: 'doc',
-		props: { title: 'red' },
+		type: 'doc',
+		data: { title: 'red' },
 		body: 'red',
 		emb: VECTORS.red,
 	});
 	const b = await g.addNode({
-		kind: 'doc',
-		props: { title: 'green' },
+		type: 'doc',
+		data: { title: 'green' },
 		body: 'green',
 		emb: VECTORS.green,
 	});
 	const c = await g.addNode({
-		kind: 'doc',
-		props: { title: 'blue' },
+		type: 'doc',
+		data: { title: 'blue' },
 		body: 'blue',
 		emb: VECTORS.blue,
 	});
 	const d = await g.addNode({
-		kind: 'doc',
-		props: { title: 'yellow' },
+		type: 'doc',
+		data: { title: 'yellow' },
 		body: 'yellow',
 		emb: VECTORS.yellow,
 	});

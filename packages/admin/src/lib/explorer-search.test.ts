@@ -7,15 +7,15 @@ import {
 
 describe("parseExplorerSearch", () => {
   it("extracts string filters and node id", () => {
-    const s = parseExplorerSearch({ kind: "person", q: "ada", node: "n1" })
-    expect(s.kind).toBe("person")
+    const s = parseExplorerSearch({ type: "person", q: "ada", node: "n1" })
+    expect(s.type).toBe("person")
     expect(s.q).toBe("ada")
     expect(s.node).toBe("n1")
   })
 
   it("drops empty strings to undefined", () => {
-    const s = parseExplorerSearch({ kind: "", q: "" })
-    expect(s.kind).toBeUndefined()
+    const s = parseExplorerSearch({ type: "", q: "" })
+    expect(s.type).toBeUndefined()
     expect(s.q).toBeUndefined()
   })
 
@@ -35,8 +35,8 @@ describe("parseExplorerSearch", () => {
 
 describe("filtersOf", () => {
   it("returns only the filter subset", () => {
-    const s = parseExplorerSearch({ kind: "device", q: "router", asOf: 9, node: "n1", expand: "a" })
-    expect(filtersOf(s)).toEqual({ kind: "device", q: "router", asOf: 9 })
+    const s = parseExplorerSearch({ type: "device", q: "router", asOf: 9, node: "n1", expand: "a" })
+    expect(filtersOf(s)).toEqual({ type: "device", q: "router", asOf: 9 })
   })
 })
 

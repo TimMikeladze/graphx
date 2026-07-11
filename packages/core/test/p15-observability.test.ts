@@ -173,7 +173,7 @@ test('P15 obs: a read route increments a per-tenant query counter', async () => 
 	const created = await app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ kind: 'person', props: { name: 'ada' } }),
+		body: JSON.stringify({ type: 'person', data: { name: 'ada' } }),
 	});
 	const id = (await created.json()).id;
 	const before = metrics.count('graphx_queries_total', { tenant: s.tenantA, op: 'read' });
@@ -193,7 +193,7 @@ test('P15 obs: journey route observes a traversal histogram into the sink', asyn
 			await app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 				method: 'POST',
 				headers: me,
-				body: JSON.stringify({ kind: 'person', props: { name: 'p1' } }),
+				body: JSON.stringify({ type: 'person', data: { name: 'p1' } }),
 			})
 		).json()
 	).id;
@@ -202,7 +202,7 @@ test('P15 obs: journey route observes a traversal histogram into the sink', asyn
 			await app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 				method: 'POST',
 				headers: me,
-				body: JSON.stringify({ kind: 'person', props: { name: 'p2' } }),
+				body: JSON.stringify({ type: 'person', data: { name: 'p2' } }),
 			})
 		).json()
 	).id;
@@ -230,7 +230,7 @@ test('P15 obs: with NO metrics sink, routes behave identically (additive)', asyn
 	const created = await app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
 		method: 'POST',
 		headers: hdr(s.editor, s.tenantA),
-		body: JSON.stringify({ kind: 'person', props: { name: 'ada' } }),
+		body: JSON.stringify({ type: 'person', data: { name: 'ada' } }),
 	});
 	expect(created.status).toBe(201);
 	cleanup(s);

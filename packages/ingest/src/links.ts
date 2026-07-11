@@ -1,6 +1,6 @@
 /** A link found in a node body. `wiki` resolves by basename; `path` by relative path. */
 export interface Link {
-	kind: 'wiki' | 'path';
+	type: 'wiki' | 'path';
 	target: string;
 	/** Set when the link is preceded by a Dataview inline field `[key:: link]`. */
 	rel?: string;
@@ -40,7 +40,7 @@ export function extractLinks(body: string): Link[] {
 			// wiki form: [[target]]
 			const target = m[2].trim();
 			if (target) {
-				entries.push({ link: { kind: 'wiki', target, rel }, start });
+				entries.push({ link: { type: 'wiki', target, rel }, start });
 				typedSpans.push([start, end]);
 			}
 		} else if (m[3] !== undefined) {
@@ -48,7 +48,7 @@ export function extractLinks(body: string): Link[] {
 			const target = m[3].trim();
 			if (!target || target.startsWith('http://') || target.startsWith('https://')) continue;
 			if (target.startsWith('#')) continue;
-			entries.push({ link: { kind: 'path', target, rel }, start });
+			entries.push({ link: { type: 'path', target, rel }, start });
 			typedSpans.push([start, end]);
 		}
 	}
@@ -65,7 +65,7 @@ export function extractLinks(body: string): Link[] {
 		if (isEmbed(body, m.index)) continue;
 		if (inTypedSpan(m.index)) continue;
 		const target = m[1]!.split('|')[0]!.trim();
-		if (target) entries.push({ link: { kind: 'wiki', target }, start: m.index });
+		if (target) entries.push({ link: { type: 'wiki', target }, start: m.index });
 	}
 	for (const m of body.matchAll(MDLINK)) {
 		if (isEmbed(body, m.index)) continue;
@@ -73,7 +73,7 @@ export function extractLinks(body: string): Link[] {
 		const target = m[1]!.trim();
 		if (!target || target.startsWith('http://') || target.startsWith('https://')) continue;
 		if (target.startsWith('#')) continue;
-		entries.push({ link: { kind: 'path', target }, start: m.index });
+		entries.push({ link: { type: 'path', target }, start: m.index });
 	}
 
 	entries.sort((a, b) => a.start - b.start);
@@ -90,14 +90,14 @@ export function extractEmbeds(body: string): Link[] {
 	for (const m of body.matchAll(WIKILINK)) {
 		if (!isEmbed(body, m.index)) continue;
 		const target = m[1]!.split('|')[0]!.trim();
-		if (target) out.push({ kind: 'wiki', target });
+		if (target) out.push({ type: 'wiki', target });
 	}
 	for (const m of body.matchAll(MDLINK)) {
 		if (!isEmbed(body, m.index)) continue;
 		const target = m[1]!.trim();
 		if (!target || target.startsWith('http://') || target.startsWith('https://')) continue;
 		if (target.startsWith('#')) continue;
-		out.push({ kind: 'path', target });
+		out.push({ type: 'path', target });
 	}
 	return out;
 }

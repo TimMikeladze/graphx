@@ -29,17 +29,17 @@ test('createApp dev: bootstraps + seeds + serves; /demo returns the ids', async 
 		schema: SCHEMA,
 		db,
 		seed: async (g) => {
-			await g.addNode({ kind: 'person', props: { name: 'ada' } });
+			await g.addNode({ type: 'person', data: { name: 'ada' } });
 		},
 	});
 
 	expect(await (await app.request('/demo')).json()).toEqual({ tenant, project, user });
 
-	const res = await app.request(`/t/${tenant}/p/${project}/nodes?kind=person`, {
+	const res = await app.request(`/t/${tenant}/p/${project}/nodes?type=person`, {
 		headers: { 'x-user': user, 'x-tenant': tenant },
 	});
 	expect(res.status).toBe(200);
-	expect((await res.json()).nodes.map((n: { props: { name: string } }) => n.props.name)).toEqual([
+	expect((await res.json()).nodes.map((n: { data: { name: string } }) => n.data.name)).toEqual([
 		'ada',
 	]);
 	cleanup(control, db);
@@ -65,8 +65,8 @@ test('createApp dev: auto-dim sizes the vector column from the embedder (non-768
 		// embedder's width, not the default.
 		seed: async (g) => {
 			await g.addNode({
-				kind: 'person',
-				props: { name: 'ada' },
+				type: 'person',
+				data: { name: 'ada' },
 				body: 'analytical engine',
 				emb: await embed('analytical engine'),
 			});

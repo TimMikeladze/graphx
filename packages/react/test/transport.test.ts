@@ -24,12 +24,12 @@ test('request: builds the /t/:tenant/p/:project URL with method + JSON body', as
 	const out = await request<{ ok: number }>(t(f), {
 		method: 'POST',
 		path: '/nodes',
-		body: { kind: 'x' },
+		body: { type: 'x' },
 	});
 	expect(out).toEqual({ ok: 1 });
 	expect(cap.url).toBe('http://x/t/tn/p/pr/nodes');
 	expect(cap.init?.method).toBe('POST');
-	expect(JSON.parse(String(cap.init?.body))).toEqual({ kind: 'x' });
+	expect(JSON.parse(String(cap.init?.body))).toEqual({ type: 'x' });
 	expect(new Headers(cap.init?.headers).get('content-type')).toBe('application/json');
 });
 

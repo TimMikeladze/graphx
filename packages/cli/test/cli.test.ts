@@ -20,7 +20,7 @@ test('parseIngestArgs: parses dir and defaults', () => {
 	expect(args.idField).toBeUndefined();
 	expect(args.prune).toBe(false);
 	expect(args.watch).toBe(false);
-	expect(args.assetsKind).toBeUndefined();
+	expect(args.assetsType).toBeUndefined();
 });
 
 test('parseIngestArgs: parses --source', () => {
@@ -48,9 +48,9 @@ test('parseIngestArgs: parses --id-field', () => {
 	expect(args.idField).toBe('slug');
 });
 
-test('parseIngestArgs: parses --assets-kind', () => {
-	const args = parseIngestArgs(['ingest', '/some/dir', '--assets-kind', 'asset']);
-	expect(args.assetsKind).toBe('asset');
+test('parseIngestArgs: parses --assets-type', () => {
+	const args = parseIngestArgs(['ingest', '/some/dir', '--assets-type', 'asset']);
+	expect(args.assetsType).toBe('asset');
 });
 
 test('parseIngestArgs: throws when dir is missing', () => {
@@ -67,7 +67,7 @@ test('parseIngestArgs: parses combined flags', () => {
 		'--watch',
 		'--id-field',
 		'slug',
-		'--assets-kind',
+		'--assets-type',
 		'media',
 	]);
 	expect(args.dir).toBe('/vault');
@@ -75,7 +75,7 @@ test('parseIngestArgs: parses combined flags', () => {
 	expect(args.prune).toBe(true);
 	expect(args.watch).toBe(true);
 	expect(args.idField).toBe('slug');
-	expect(args.assetsKind).toBe('media');
+	expect(args.assetsType).toBe('media');
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -221,7 +221,7 @@ test('run: ingests a vault via a temp config file (libSQL)', async () => {
 	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
 	const configPath = join(import.meta.dir, `${ns}.config.ts`);
 
-	await writeFile(join(vaultDir, 'note.md'), '---\nkind: note\ntitle: Hello\n---\nworld');
+	await writeFile(join(vaultDir, 'note.md'), '---\ntype: note\ntitle: Hello\n---\nworld');
 	await writeFile(
 		configPath,
 		`import { defineGraphSchema } from '../../core/src/define-graph-schema.ts';
@@ -259,7 +259,7 @@ test('run: throws a clear error when the config omits dim', async () => {
 	const ns = `cli-nodim-${Date.now()}`;
 	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
 	const configPath = join(import.meta.dir, `${ns}.config.ts`);
-	await writeFile(join(vaultDir, 'note.md'), '---\nkind: note\n---\nhi');
+	await writeFile(join(vaultDir, 'note.md'), '---\ntype: note\n---\nhi');
 	await writeFile(
 		configPath,
 		`import { defineGraphSchema } from '../../core/src/define-graph-schema.ts';

@@ -38,9 +38,9 @@ export interface JourneyOpts {
 	/**
 	 * P12 (§15) opt-in read-time upcaster. When set, the projected `name` is read from
 	 * the upcast LATEST shape (so a renamed/derived name field still surfaces); when
-	 * omitted, `name` is the raw `props ->> 'name'` (pre-P12 behavior — unchanged).
+	 * omitted, `name` is the raw `data ->> 'name'` (pre-P12 behavior — unchanged).
 	 */
-	upcaster?: { apply: (kind: string, props: Record<string, unknown>) => Record<string, unknown> };
+	upcaster?: { apply: (type: string, data: Record<string, unknown>) => Record<string, unknown> };
 	/**
 	 * P15 (§19.6) observability: when set, feeds the slow-query log (via {@link withTimeout}) and
 	 * observes traversal histograms (`graphx_traversal_rows`/`graphx_traversal_depth`). Omit ⇒ no
@@ -54,7 +54,7 @@ export interface JourneyRow {
 	id: string;
 	arrival_t: number;
 	hops: number;
-	kind: string;
+	type: string;
 	name: unknown;
 }
 
@@ -112,7 +112,7 @@ journey(node, t_arrive, depth, path) AS (
 ),
 reached AS (SELECT node AS id, MIN(t_arrive) AS arrival_t, MIN(depth) AS hops
             FROM journey WHERE node <> ? GROUP BY node)
-SELECT r.id, r.arrival_t, r.hops, n.kind, ${jsonField(d, 'n.props', 'name')} AS name, n.props AS props_json
+SELECT r.id, r.arrival_t, r.hops, n.type, ${jsonField(d, 'n.data', 'name')} AS name, n.data AS data_json
 FROM reached r JOIN node_versions n
   ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to
 ORDER BY r.arrival_t, r.hops`;
@@ -123,18 +123,18 @@ ORDER BY r.arrival_t, r.hops`;
 		o.metrics,
 	);
 	const rows = res.rows.map((row: SqlRow): JourneyRow => {
-		const kind = String(row.kind);
+		const type = String(row.type);
 		// P12: with an upcaster, project `name` from the upcast LATEST shape; without one,
-		// keep the raw SQL `props ->> 'name'` projection byte-for-byte (pre-P12).
+		// keep the raw SQL `data ->> 'name'` projection byte-for-byte (pre-P12).
 		const name = o.upcaster
-			? (o.upcaster.apply(kind, JSON.parse(String(row.props_json)) as Record<string, unknown>)
+			? (o.upcaster.apply(type, JSON.parse(String(row.data_json)) as Record<string, unknown>)
 					.name ?? null)
 			: row.name;
 		return {
 			id: String(row.id),
 			arrival_t: Number(row.arrival_t),
 			hops: Number(row.hops),
-			kind,
+			type,
 			name,
 		};
 	});

@@ -43,7 +43,7 @@ export function GraphCanvas({
           pointIdBy="id"
           pointColorBy="color"
           pointColorByFn={(value: unknown) => String(value)}
-          pointLabelBy="kind"
+          pointLabelBy="type"
           links={data.links}
           linkSourceBy="source"
           linkTargetBy="target"
@@ -56,9 +56,9 @@ export function GraphCanvas({
       </ErrorBoundary>
       <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1 rounded-md bg-background/80 p-2 text-xs">
         {legendOf(slice).map((l) => (
-          <div key={l.kind} className="flex items-center gap-2">
+          <div key={l.type} className="flex items-center gap-2">
             <span className="inline-block size-3 rounded-full" style={{ backgroundColor: l.color }} />
-            {l.kind}
+            {l.type}
           </div>
         ))}
       </div>

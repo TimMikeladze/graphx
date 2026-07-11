@@ -35,18 +35,18 @@ test('iot-fleet UI renders the seeded fleet through an in-process app (appFetch 
 		embed: hashEmbed(),
 		db,
 		seed: async (graph) => {
-			const site = await graph.addNode({ kind: 'site', props: { name: 'us-east-1', region: 'us' } });
-			const gw = await graph.addNode({ kind: 'gateway', props: { name: 'gw-1', firmware: '2.1.0' } });
+			const site = await graph.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+			const gw = await graph.addNode({ type: 'gateway', data: { name: 'gw-1', firmware: '2.1.0' } });
 			await graph.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 		},
 	});
 
 	function Gateways() {
-		const q = g.useListNodes({ kind: 'gateway' });
+		const q = g.useListNodes({ type: 'gateway' });
 		return createElement(
 			'ul',
 			null,
-			q.data?.pages.flatMap((p) => p.nodes).map((gw) => createElement('li', { key: gw.id }, gw.props.name)),
+			q.data?.pages.flatMap((p) => p.nodes).map((gw) => createElement('li', { key: gw.id }, gw.data.name)),
 		);
 	}
 

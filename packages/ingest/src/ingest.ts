@@ -28,10 +28,10 @@ function mimeOf(path: string): string {
 /** The structural, non-generic slice of `Graph` that ingest drives. */
 interface LooseGraph {
 	addNode(n: {
-		kind: string;
+		type: string;
 		body?: string;
 		uri?: string;
-		props: Record<string, unknown>;
+		data: Record<string, unknown>;
 		content_hash?: string;
 		embed_hash?: string;
 		content_type?: string;
@@ -40,9 +40,9 @@ interface LooseGraph {
 	updateNode(
 		id: string,
 		patch: {
-			kind?: string;
+			type?: string;
 			body?: string;
-			props?: Record<string, unknown>;
+			data?: Record<string, unknown>;
 			content_hash?: string;
 			embed_hash?: string;
 			emb?: number[];
@@ -53,7 +53,7 @@ interface LooseGraph {
 		src: string;
 		dst: string;
 		weight?: number;
-		props?: Record<string, unknown>;
+		data?: Record<string, unknown>;
 		source?: string;
 	}): Promise<{ id: string }>;
 	deleteEdge(id: string): Promise<void>;
@@ -87,15 +87,15 @@ interface LiveEntry {
 	embedHash: string;
 }
 
-/** A desired edge entry: rel+dst keyed, with optional weight/props for drift detection. */
+/** A desired edge entry: rel+dst keyed, with optional weight/data for drift detection. */
 interface DesiredEdge {
 	weight?: number;
-	props?: Record<string, unknown>;
+	data?: Record<string, unknown>;
 }
 
 /**
  * Live out-edges of a node that THIS ingest source authored, via the `edges` view — includes
- * weight and props for drift. Scoped by the `source` provenance column so the reconcile only ever
+ * weight and data for drift. Scoped by the `source` provenance column so the reconcile only ever
  * closes edges ingest created; edges added by other writers (admin UI, enrichment) have a different
  * or null `source` and are invisible here, hence never retracted.
  */
@@ -103,9 +103,9 @@ async function liveOutEdges(
 	g: LooseGraph,
 	srcId: string,
 	source: string,
-): Promise<Array<{ id: string; rel: string; dst: string; weight: number; props: Record<string, unknown> }>> {
+): Promise<Array<{ id: string; rel: string; dst: string; weight: number; data: Record<string, unknown> }>> {
 	const r = await g.raw.execute({
-		sql: 'SELECT id, rel, dst, weight, props FROM edges WHERE src = ? AND source = ?',
+		sql: 'SELECT id, rel, dst, weight, data FROM edges WHERE src = ? AND source = ?',
 		args: [srcId, source],
 	});
 	return r.rows.map((row) => ({
@@ -113,7 +113,7 @@ async function liveOutEdges(
 		rel: String(row.rel),
 		dst: String(row.dst),
 		weight: row.weight == null ? 1.0 : Number(row.weight),
-		props: row.props == null ? {} : (typeof row.props === 'string' ? JSON.parse(row.props) : (row.props as Record<string, unknown>)),
+		data: row.data == null ? {} : (typeof row.data === 'string' ? JSON.parse(row.data) : (row.data as Record<string, unknown>)),
 	}));
 }
 
@@ -148,10 +148,10 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 	return map;
 }
 
-function resolveKind(file: ParsedFile, kindOf?: (f: ParsedFile) => string | undefined): string | undefined {
-	const explicit = kindOf?.(file);
+function resolveType(file: ParsedFile, typeOf?: (f: ParsedFile) => string | undefined): string | undefined {
+	const explicit = typeOf?.(file);
 	if (explicit) return explicit;
-	if (typeof file.frontmatter.kind === 'string') return file.frontmatter.kind;
+	if (typeof file.frontmatter.type === 'string') return file.frontmatter.type;
 	const slash = file.key.indexOf('/');
 	return slash > 0 ? file.key.slice(0, slash) : undefined;
 }
@@ -179,20 +179,20 @@ function nodeErrorSkip(key: string, err: unknown): SkipEntry {
 	return { key, stage: 'node', code: 'node-error', reason: (err as Error).message };
 }
 
-/** Skip entry for an edge write that threw (unknown rel / kind mismatch). */
+/** Skip entry for an edge write that threw (unknown rel / type mismatch). */
 function edgeErrorSkip(key: string, err: unknown): SkipEntry {
 	const msg = (err as Error).message;
 	return { key, stage: 'edge', code: /unknown rel/.test(msg) ? 'unknown-rel' : 'edge-error', reason: msg };
 }
 
-/** Frontmatter minus reserved keys: `kind` and any configured `edgeFields` keys. */
-function toProps(
+/** Frontmatter minus reserved keys: `type` and any configured `edgeFields` keys. */
+function toData(
 	frontmatter: Record<string, unknown>,
 	edgeFieldKeys: Set<string>,
 ): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(frontmatter)) {
-		if (k === 'kind') continue;
+		if (k === 'type') continue;
 		if (edgeFieldKeys.has(k)) continue;
 		out[k] = v;
 	}
@@ -205,11 +205,11 @@ function stripWikilink(raw: string): string {
 	return m ? m[1]!.trim() : raw.trim();
 }
 
-/** Normalize a single frontmatter edge value to `{ target, weight?, props? }`. */
+/** Normalize a single frontmatter edge value to `{ target, weight?, data? }`. */
 interface FmEdge {
 	target: string;
 	weight?: number;
-	props?: Record<string, unknown>;
+	data?: Record<string, unknown>;
 }
 
 function normalizeFmValue(v: unknown): FmEdge | null {
@@ -221,15 +221,15 @@ function normalizeFmValue(v: unknown): FmEdge | null {
 		if (typeof obj.target !== 'string') return null;
 		const fe: FmEdge = { target: stripWikilink(obj.target) };
 		if (typeof obj.weight === 'number') fe.weight = obj.weight;
-		if (obj.props && typeof obj.props === 'object' && !Array.isArray(obj.props))
-			fe.props = obj.props as Record<string, unknown>;
+		if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data))
+			fe.data = obj.data as Record<string, unknown>;
 		return fe;
 	}
 	return null;
 }
 
 /**
- * Canonical JSON with recursively sorted object keys, for deep-equality of props. (A plain
+ * Canonical JSON with recursively sorted object keys, for deep-equality of data. (A plain
  * `JSON.stringify(v, Object.keys(v).sort())` is WRONG: the array arg is a replacer applied at
  * EVERY level, so nested keys absent from the top-level list are dropped.)
  */
@@ -245,19 +245,19 @@ function stableJson(v: unknown): string {
 }
 
 /**
- * True if the desired edge has drifted from the live edge. Note: `desired.props` is the RAW
- * frontmatter value, while `live.props` was parsed by the rel's props schema — a schema that
+ * True if the desired edge has drifted from the live edge. Note: `desired.data` is the RAW
+ * frontmatter value, while `live.data` was parsed by the rel's data schema — a schema that
  * applies defaults/transforms can therefore report drift every run (extra edge versions; the
  * live edge stays correct). Acceptable for now.
  */
 function hasDrifted(
 	desired: DesiredEdge,
-	live: { weight: number; props: Record<string, unknown> },
+	live: { weight: number; data: Record<string, unknown> },
 ): boolean {
 	const desiredWeight = desired.weight ?? 1.0;
-	const desiredProps = desired.props ?? {};
+	const desiredData = desired.data ?? {};
 	if (desiredWeight !== live.weight) return true;
-	return stableJson(desiredProps) !== stableJson(live.props);
+	return stableJson(desiredData) !== stableJson(live.data);
 }
 
 export async function ingestDir<S extends GraphSchema>(
@@ -299,7 +299,7 @@ export async function ingestDir<S extends GraphSchema>(
 	// Work items for files that need a node add or update (hash changed or new).
 	interface WorkItem {
 		file: ParsedFile;
-		kind: string;
+		type: string;
 		identityKey: string;
 		prior: LiveEntry | undefined;
 	}
@@ -310,7 +310,7 @@ export async function ingestDir<S extends GraphSchema>(
 	// Embeds buffered only when asset ingestion is enabled.
 	const bufferedEmbeds = new Map<string, ReturnType<typeof extractEmbeds>>();
 
-	// Identity set for prune: built for EVERY parsed file (incl. no-kind ones) so an
+	// Identity set for prune: built for EVERY parsed file (incl. no-type ones) so an
 	// on-disk-but-skipped file isn't pruned.
 	const discoveredIdentity = new Set<string>();
 	const seenIdentity = new Set<string>();
@@ -320,13 +320,13 @@ export async function ingestDir<S extends GraphSchema>(
 	for (const key of keys) {
 		const file = parseFile(key, await fileSource.read(key));
 
-		const kind = resolveKind(file, opts.kindOf);
+		const type = resolveType(file, opts.typeOf);
 		const identityKey = identityKeyOf(file, idField);
-		// Track every discovered identity (including no-kind files) so prune doesn't evict them.
+		// Track every discovered identity (including no-type files) so prune doesn't evict them.
 		discoveredIdentity.add(identityKey);
 
-		if (!kind) {
-			result.skipped.push({ key: file.key, stage: 'kind', code: 'no-kind', reason: 'no kind' });
+		if (!type) {
+			result.skipped.push({ key: file.key, stage: 'type', code: 'no-type', reason: 'no type' });
 			continue;
 		}
 		if (seenIdentity.has(identityKey)) {
@@ -349,7 +349,7 @@ export async function ingestDir<S extends GraphSchema>(
 			// Changed or new: buffer links and queue a work item.
 			bufferedLinks.set(file.key, extractLinks(file.body));
 			if (opts.assets) bufferedEmbeds.set(file.key, extractEmbeds(file.body));
-			workItems.push({ file, kind, identityKey, prior });
+			workItems.push({ file, type, identityKey, prior });
 		}
 	}
 
@@ -377,16 +377,16 @@ export async function ingestDir<S extends GraphSchema>(
 
 	// Step 3: Write nodes sequentially (write txns).
 	for (let i = 0; i < workItems.length; i++) {
-		const { file, kind, identityKey, prior } = workItems[i]!;
+		const { file, type, identityKey, prior } = workItems[i]!;
 		const emb = embeddings[i];
-		const props = toProps(file.frontmatter, edgeFieldKeys);
+		const data = toData(file.frontmatter, edgeFieldKeys);
 		try {
 			if (!prior) {
 				const node = await g.addNode({
-					kind,
+					type,
 					body: file.body,
 					uri: keyPrefix + identityKey,
-					props,
+					data,
 					content_hash: file.hash,
 					embed_hash: effEmbedHash(file),
 					emb,
@@ -397,9 +397,9 @@ export async function ingestDir<S extends GraphSchema>(
 			} else {
 				// emb is only set when body changed; otherwise core carries both emb + embed_hash forward.
 				const patch: Parameters<typeof g.updateNode>[1] = {
-					kind,
+					type,
 					body: file.body,
-					props,
+					data,
 					content_hash: file.hash,
 				};
 				if (emb !== undefined) {
@@ -418,9 +418,9 @@ export async function ingestDir<S extends GraphSchema>(
 
 	// Asset nodes (opt-in): an embed target that isn't a known ingested file becomes a
 	// metadata-only node keyed `asset:<path>`, deduped across docs. Never pruned. Returns the
-	// node id, or null if the asset kind is rejected by the schema (caller records a skip).
+	// node id, or null if the asset type is rejected by the schema (caller records a skip).
 	const assetKeyToId = new Map<string, string>();
-	const assetKind = opts.assets?.kind;
+	const assetType = opts.assets?.type;
 	async function ensureAsset(assetPath: string): Promise<string> {
 		const cached = assetKeyToId.get(assetPath);
 		if (cached) return cached;
@@ -431,10 +431,10 @@ export async function ingestDir<S extends GraphSchema>(
 			return prior.id;
 		}
 		const node = await g.addNode({
-			kind: assetKind!,
+			type: assetType!,
 			uri: keyPrefix + identityKey,
 			content_type: mimeOf(assetPath),
-			props: { path: assetPath },
+			data: { path: assetPath },
 			body: '',
 		});
 		assetKeyToId.set(assetPath, node.id);
@@ -446,7 +446,7 @@ export async function ingestDir<S extends GraphSchema>(
 		const srcId = keyToId.get(file.key);
 		if (!srcId) continue;
 
-		// Build desired edge map: (rel, dst) → { weight?, props? }
+		// Build desired edge map: (rel, dst) → { weight?, data? }
 		const desired = new Map<string, DesiredEdge>();
 
 		// Body links (typed via Dataview inline fields, or plain links_to)
@@ -480,7 +480,7 @@ export async function ingestDir<S extends GraphSchema>(
 					continue;
 				}
 				// Resolve target as a wiki link (bare string treated as wiki target)
-				const r = resolveLink({ kind: 'wiki', target: fe.target }, file.key, index);
+				const r = resolveLink({ type: 'wiki', target: fe.target }, file.key, index);
 				if (r.status !== 'resolved') {
 					result.skipped.push(linkResolutionSkip(file.key, fe.target, r));
 					continue;
@@ -489,7 +489,7 @@ export async function ingestDir<S extends GraphSchema>(
 				if (!dst || dst === srcId) continue;
 				const key = `${rel}\0${dst}`;
 				// Last write wins if same (rel, dst) appears multiple times
-				desired.set(key, { weight: fe.weight, props: fe.props });
+				desired.set(key, { weight: fe.weight, data: fe.data });
 			}
 		}
 
@@ -503,7 +503,7 @@ export async function ingestDir<S extends GraphSchema>(
 				if (r.status === 'resolved' && keyToId.has(r.key)) {
 					dst = keyToId.get(r.key)!;
 				} else {
-					const assetPath = emb.kind === 'path' ? join(dirname(file.key), emb.target) : emb.target;
+					const assetPath = emb.type === 'path' ? join(dirname(file.key), emb.target) : emb.target;
 					try {
 						dst = await ensureAsset(assetPath);
 					} catch (err) {
@@ -527,7 +527,7 @@ export async function ingestDir<S extends GraphSchema>(
 			if (!live2) {
 				// new edge
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props, source: keyPrefix });
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, data: desiredEdge.data, source: keyPrefix });
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));
@@ -537,7 +537,7 @@ export async function ingestDir<S extends GraphSchema>(
 				await g.deleteEdge(live2.id);
 				result.edgesClosed++;
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, props: desiredEdge.props, source: keyPrefix });
+					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, data: desiredEdge.data, source: keyPrefix });
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));

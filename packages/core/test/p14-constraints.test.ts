@@ -52,12 +52,12 @@ async function liveEdgeCount(client: DbClient, src: string, rel: string): Promis
 
 test('P14 unique: a duplicate LIVE unique prop value is rejected', async () => {
 	const { client, g } = await freshGraph();
-	await declareUniqueNodeProp(client, { kind: 'device', prop: 'serial' });
-	await g.addNode({ kind: 'device', props: { serial: 'SN-1' } });
-	await expect(g.addNode({ kind: 'device', props: { serial: 'SN-1' } })).rejects.toThrow();
+	await declareUniqueNodeProp(client, { type: 'device', prop: 'serial' });
+	await g.addNode({ type: 'device', data: { serial: 'SN-1' } });
+	await expect(g.addNode({ type: 'device', data: { serial: 'SN-1' } })).rejects.toThrow();
 	// the first one survives (exactly one live device with that serial)
 	const r = await client.execute({
-		sql: `SELECT COUNT(*) AS c FROM node_versions WHERE kind='device' AND valid_to=? AND ${jsonFieldSql(client, 'props', 'serial')}='SN-1'`,
+		sql: `SELECT COUNT(*) AS c FROM node_versions WHERE type='device' AND valid_to=? AND ${jsonFieldSql(client, 'data', 'serial')}='SN-1'`,
 		args: [FOREVER],
 	});
 	expect(Number(r.rows[0]?.c)).toBe(1);
@@ -66,8 +66,8 @@ test('P14 unique: a duplicate LIVE unique prop value is rejected', async () => {
 
 test('P14 unique: historical versions with the same value do NOT collide', async () => {
 	const { client, g } = await freshGraph();
-	await declareUniqueNodeProp(client, { kind: 'device', prop: 'serial' });
-	const d = await g.addNode({ kind: 'device', props: { serial: 'SN-2' }, body: 'v1' });
+	await declareUniqueNodeProp(client, { type: 'device', prop: 'serial' });
+	const d = await g.addNode({ type: 'device', data: { serial: 'SN-2' }, body: 'v1' });
 	// update keeps the same serial but is a new live version; the old closes. The
 	// partial index is live-only, so the closed v1 (still serial SN-2) does not clash.
 	await g.updateNode(d.id, { body: 'v2' });
@@ -80,28 +80,28 @@ test('P14 unique: historical versions with the same value do NOT collide', async
 	client.close();
 });
 
-test('P14 unique: the same value on a DIFFERENT kind is allowed (kind-scoped index)', async () => {
+test('P14 unique: the same value on a DIFFERENT type is allowed (type-scoped index)', async () => {
 	const { client, g } = await freshGraph();
-	await declareUniqueNodeProp(client, { kind: 'device', prop: 'serial' });
-	await g.addNode({ kind: 'device', props: { serial: 'SHARED' } });
-	// gadget also has serial SHARED — different kind, not covered by ux_device_serial
-	await expect(g.addNode({ kind: 'gadget', props: { serial: 'SHARED' } })).resolves.toBeTruthy();
+	await declareUniqueNodeProp(client, { type: 'device', prop: 'serial' });
+	await g.addNode({ type: 'device', data: { serial: 'SHARED' } });
+	// gadget also has serial SHARED — different type, not covered by ux_device_serial
+	await expect(g.addNode({ type: 'gadget', data: { serial: 'SHARED' } })).resolves.toBeTruthy();
 	client.close();
 });
 
-test('P14 unique: two (kind,prop) pairs that share an underscore-join do NOT collapse to one index', async () => {
+test('P14 unique: two (type,prop) pairs that share an underscore-join do NOT collapse to one index', async () => {
 	const { client } = await freshGraph();
 	// `user_account`+`id` and `user`+`account_id` both naively join to `ux_user_account_id`.
 	// If the index name collides, the 2nd CREATE IF NOT EXISTS silently no-ops and its
 	// uniqueness is never enforced.
-	await declareUniqueNodeProp(client, { kind: 'user_account', prop: 'id' });
-	await declareUniqueNodeProp(client, { kind: 'user', prop: 'account_id' });
+	await declareUniqueNodeProp(client, { type: 'user_account', prop: 'id' });
+	await declareUniqueNodeProp(client, { type: 'user', prop: 'account_id' });
 	// satisfy FK + insert two LIVE `user` rows with the same account_id by raw sql
 	for (const id of ['u1', 'u2']) {
 		await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	}
 	const mkUser = (id: string) => ({
-		sql: 'INSERT INTO node_versions (id, kind, props, valid_from) VALUES (?,?,?,?)',
+		sql: 'INSERT INTO node_versions (id, type, data, valid_from) VALUES (?,?,?,?)',
 		args: [id, 'user', JSON.stringify({ account_id: 'ACC-1' }), 1],
 	});
 	await client.execute(mkUser('u1'));
@@ -114,9 +114,9 @@ test('P14 unique: two (kind,prop) pairs that share an underscore-join do NOT col
 test('P14 cardinality: a second single-valued edge closes the first (exactly one live)', async () => {
 	const { client, g } = await freshGraph();
 	await materializeConstraints(client, SCHEMA);
-	const gad = await g.addNode({ kind: 'gadget', props: { serial: 'G1' } });
-	const d1 = await g.addNode({ kind: 'device', props: { serial: 'D1' } });
-	const d2 = await g.addNode({ kind: 'device', props: { serial: 'D2' } });
+	const gad = await g.addNode({ type: 'gadget', data: { serial: 'G1' } });
+	const d1 = await g.addNode({ type: 'device', data: { serial: 'D1' } });
+	const d2 = await g.addNode({ type: 'device', data: { serial: 'D2' } });
 
 	await g.addEdge({ rel: 'attached_to', src: gad.id, dst: d1.id });
 	await g.addEdge({ rel: 'attached_to', src: gad.id, dst: d2.id });
@@ -134,9 +134,9 @@ test('P14 cardinality: a second single-valued edge closes the first (exactly one
 test('P14 cardinality: a multi-valued rel keeps BOTH live edges (no regression)', async () => {
 	const { client, g } = await freshGraph();
 	await materializeConstraints(client, SCHEMA);
-	const d1 = await g.addNode({ kind: 'device', props: { serial: 'A' } });
-	const d2 = await g.addNode({ kind: 'device', props: { serial: 'B' } });
-	const d3 = await g.addNode({ kind: 'device', props: { serial: 'C' } });
+	const d1 = await g.addNode({ type: 'device', data: { serial: 'A' } });
+	const d2 = await g.addNode({ type: 'device', data: { serial: 'B' } });
+	const d3 = await g.addNode({ type: 'device', data: { serial: 'C' } });
 	await g.addEdge({ rel: 'near', src: d1.id, dst: d2.id });
 	await g.addEdge({ rel: 'near', src: d1.id, dst: d3.id });
 	expect(await liveEdgeCount(client, d1.id, 'near')).toBe(2);
@@ -154,7 +154,7 @@ test('P14 cardinality: the partial unique index hard-rejects a raw duplicate liv
 	await client.execute({ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: ['e1'] });
 	await client.execute({ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: ['e2'] });
 	const mk = (id: string, dst: string) => ({
-		sql: 'INSERT INTO edge_versions (id, src, dst, rel, weight, props, valid_from) VALUES (?,?,?,?,?,?,?)',
+		sql: 'INSERT INTO edge_versions (id, src, dst, rel, weight, data, valid_from) VALUES (?,?,?,?,?,?,?)',
 		args: [id, 'srcX', dst, 'attached_to', 1.0, '{}', 1],
 	});
 	// two live attached_to edges from the same src — the second must be rejected.

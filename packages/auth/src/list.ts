@@ -29,7 +29,7 @@ export interface ListObjectsPage {
 }
 
 /**
- * Forward-reachable nodes of `kind = type` from `subject` (recursive CTE over `src→dst`
+ * Forward-reachable nodes of `type = type` from `subject` (recursive CTE over `src→dst`
  * edges; `UNION` dedups so cycles terminate). Returns ids `> after`, sorted ascending,
  * capped at `SCAN_CAP`. `asOf` undefined ⇒ live views; else the temporal `_versions`
  * tables with the half-open interval.
@@ -49,7 +49,7 @@ async function reachableOfType(
 					SELECT e.dst FROM edges e JOIN reach r ON e.src = r.id
 				)
 				SELECT n.id AS id FROM reach r JOIN nodes n ON n.id = r.id
-				WHERE n.kind = ? AND n.id <> ? AND n.id > ?
+				WHERE n.type = ? AND n.id <> ? AND n.id > ?
 				ORDER BY n.id LIMIT ?`
 			: `WITH RECURSIVE reach(id) AS (
 					SELECT ?
@@ -58,7 +58,7 @@ async function reachableOfType(
 						WHERE e.valid_from <= ? AND e.valid_to > ?
 				)
 				SELECT n.id AS id FROM reach r JOIN node_versions n ON n.id = r.id
-				WHERE n.kind = ? AND n.valid_from <= ? AND n.valid_to > ? AND n.id <> ? AND n.id > ?
+				WHERE n.type = ? AND n.valid_from <= ? AND n.valid_to > ? AND n.id <> ? AND n.id > ?
 				ORDER BY n.id LIMIT ?`;
 	const args =
 		asOf === undefined

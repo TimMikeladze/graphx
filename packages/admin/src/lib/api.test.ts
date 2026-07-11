@@ -3,10 +3,10 @@ import { ApiError, api, qs, setToken } from "./api"
 
 describe("qs", () => {
   it("joins defined params and drops undefined/empty", () => {
-    expect(qs({ kind: "person", q: "", asOf: 5, cursor: undefined })).toBe("?kind=person&asOf=5")
+    expect(qs({ type: "person", q: "", asOf: 5, cursor: undefined })).toBe("?type=person&asOf=5")
   })
   it("returns empty string when nothing is set", () => {
-    expect(qs({ kind: undefined, q: "" })).toBe("")
+    expect(qs({ type: undefined, q: "" })).toBe("")
   })
 })
 
@@ -30,9 +30,9 @@ describe("api transport", () => {
 
   it("builds the nodes URL with filters and unwraps the page", async () => {
     fetchMock.mockResolvedValue(ok({ nodes: [], nextCursor: null }))
-    await api.listNodes("tA", "pA", { kind: "device", limit: 2 })
+    await api.listNodes("tA", "pA", { type: "device", limit: 2 })
     const [url] = fetchMock.mock.calls[0]
-    expect(url).toBe("/t/tA/p/pA/nodes?kind=device&limit=2")
+    expect(url).toBe("/t/tA/p/pA/nodes?type=device&limit=2")
   })
 
   it("attaches a Bearer header when a token is set", async () => {

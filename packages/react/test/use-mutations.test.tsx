@@ -12,10 +12,10 @@ test('useAddNode: creates a node and returns it with server defaults', async () 
 
 	let created: any;
 	await act(async () => {
-		created = await result.current.mutateAsync({ kind: 'device', props: { type: 'router' } });
+		created = await result.current.mutateAsync({ type: 'device', data: { type: 'router' } });
 	});
 	expect(created.id.length).toBe(26);
-	expect(created.props).toEqual({ type: 'router', crit: 1 });
+	expect(created.data).toEqual({ type: 'router', crit: 1 });
 	h.cleanup();
 });
 
@@ -25,7 +25,7 @@ test('useAddNode: viewer write -> mutation error (403)', async () => {
 	const { result } = renderHook(() => hooks.useAddNode(), { wrapper: Wrapper });
 	let err: any;
 	await act(async () => {
-		err = await result.current.mutateAsync({ kind: 'person', props: { name: 'x' } }).catch((e) => e);
+		err = await result.current.mutateAsync({ type: 'person', data: { name: 'x' } }).catch((e) => e);
 	});
 	expect(err.status).toBe(403);
 	h.cleanup();
@@ -60,12 +60,12 @@ test('useUpdateNode: invalidates node(id) so a mounted useNode refetches', async
 	const node = renderHook(() => hooks.useNode(id), { wrapper: Wrapper });
 	const upd = renderHook(() => hooks.useUpdateNode(), { wrapper: Wrapper });
 	await waitFor(() => expect(node.result.current.isSuccess).toBe(true));
-	expect(node.result.current.data!.props).toEqual({ type: 'router', crit: 1 });
+	expect(node.result.current.data!.data).toEqual({ type: 'router', crit: 1 });
 
 	await act(async () => {
-		await upd.result.current.mutateAsync({ id, patch: { props: { crit: 9 } } });
+		await upd.result.current.mutateAsync({ id, patch: { data: { crit: 9 } } });
 	});
-	await waitFor(() => expect(node.result.current.data!.props).toEqual({ type: 'router', crit: 9 }));
+	await waitFor(() => expect(node.result.current.data!.data).toEqual({ type: 'router', crit: 9 }));
 	h.cleanup();
 });
 
@@ -99,8 +99,8 @@ test('useBulkLoad: loads rows and returns the result', async () => {
 	await act(async () => {
 		out = await result.current.mutateAsync({
 			rows: [
-				{ kind: 'person', props: { name: 'a' } },
-				{ kind: 'person', props: { name: 'b' } },
+				{ type: 'person', data: { name: 'a' } },
+				{ type: 'person', data: { name: 'b' } },
 			],
 		});
 	});
@@ -165,7 +165,7 @@ test('useDeleteNode: a retracted node drops from other nodes neighbor lists', as
 	h.cleanup();
 });
 
-test('useUpdateNode: invalidates listNodes so list views show the new props', async () => {
+test('useUpdateNode: invalidates listNodes so list views show the new data', async () => {
 	const h = await setup();
 	const id = await mkNode(h, h.editor, 'device', { type: 'router' });
 	const { Wrapper } = makeWrapper(h, h.editor);
@@ -175,11 +175,11 @@ test('useUpdateNode: invalidates listNodes so list views show the new props', as
 	const crit = () =>
 		list.result.current
 			.data!.pages.flatMap((p) => p.nodes)
-			.find((n) => n.id === id)?.props.crit;
+			.find((n) => n.id === id)?.data.crit;
 	await waitFor(() => expect(crit()).toBe(1));
 
 	await act(async () => {
-		await upd.result.current.mutateAsync({ id, patch: { props: { crit: 9 } } });
+		await upd.result.current.mutateAsync({ id, patch: { data: { crit: 9 } } });
 	});
 	await waitFor(() => expect(crit()).toBe(9));
 	h.cleanup();
@@ -211,7 +211,7 @@ test('useCentrality: returns degree scores', async () => {
 
 	let out: any;
 	await act(async () => {
-		out = await result.current.mutateAsync({ kind: 'out' });
+		out = await result.current.mutateAsync({ type: 'out' });
 	});
 	expect(out.scores[a]).toBe(1);
 	expect(out.scores[b]).toBe(0);

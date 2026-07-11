@@ -34,8 +34,8 @@ function vec(i: number): number[] {
 
 function rows(n: number): BulkRow<typeof SCHEMA>[] {
 	return Array.from({ length: n }, (_, i) => ({
-		kind: 'doc' as const,
-		props: { title: `t${i}` },
+		type: 'doc' as const,
+		data: { title: `t${i}` },
 		body: `body ${i}`,
 		emb: vec(i),
 	}));
@@ -60,7 +60,7 @@ test('P13 bulk: loads N nodes, all queryable through the live view', async () =>
 	const g = new Graph(client, SCHEMA);
 	const node = await g.getNode(res.ids[0]!);
 	expect(node).not.toBeNull();
-	expect(node!.kind).toBe('doc');
+	expect(node!.type).toBe('doc');
 	client.close();
 });
 
@@ -80,7 +80,7 @@ libsqlOnly('P13 bulk: ANN index is rebuilt and queryable after the deferred buil
 libsqlOnly('P13 bulk: FTS index is rebuilt and powers hybrid retrieval', async () => {
 	const client = await mem();
 	const res = await bulkLoad(client, SCHEMA, [
-		{ kind: 'doc', props: { title: 'unique' }, body: 'a uniquetoken lives here', emb: [0, 0, 0, 1] },
+		{ type: 'doc', data: { title: 'unique' }, body: 'a uniquetoken lives here', emb: [0, 0, 0, 1] },
 		...rows(20),
 	]);
 	// direct FTS query works after 'rebuild'
@@ -99,7 +99,7 @@ libsqlOnly('P13 bulk: trigger is restored so subsequent live writes still sync F
 	await bulkLoad(client, SCHEMA, rows(10));
 	// a normal live write AFTER the bulk load must still populate the FTS index
 	const g = new Graph(client, SCHEMA);
-	await g.addNode({ kind: 'doc', props: { title: 'live' }, body: 'postbulk marker' });
+	await g.addNode({ type: 'doc', data: { title: 'live' }, body: 'postbulk marker' });
 	const r = await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'postbulk'");
 	expect(r.rows.length).toBe(1);
 	client.close();
@@ -113,7 +113,7 @@ libsqlOnly('P13 bulk: measurably faster than per-row close-and-insert', async ()
 	const g = new Graph(loopClient, SCHEMA);
 	const t0 = Date.now();
 	for (const r of data) {
-		await g.addNode({ kind: 'doc', props: r.props, body: r.body, emb: r.emb });
+		await g.addNode({ type: 'doc', data: r.data, body: r.body, emb: r.emb });
 	}
 	const tLoop = Date.now() - t0;
 	loopClient.close();
@@ -134,15 +134,15 @@ libsqlOnly('P13 bulk: measurably faster than per-row close-and-insert', async ()
 	console.log(`bulk speedup: ${speedup.toFixed(1)}× (loop ${tLoop}ms → bulk ${tBulk}ms, N=${N})`);
 });
 
-libsqlOnly('P13 bulk: invalid props throw, leaving the ANN index intact (fail-fast before drop)', async () => {
+libsqlOnly('P13 bulk: invalid data throw, leaving the ANN index intact (fail-fast before drop)', async () => {
 	const client = await mem();
 	// seed a valid node first via the normal path so the index has a live row.
 	const g = new Graph(client, SCHEMA);
-	await g.addNode({ kind: 'doc', props: { title: 'ok' }, body: 'fine', emb: [0, 0, 0, 1] });
+	await g.addNode({ type: 'doc', data: { title: 'ok' }, body: 'fine', emb: [0, 0, 0, 1] });
 
 	// a row missing the required `title` must throw (Zod) — validation runs BEFORE any
 	// index is dropped, so it cannot leave the schema in a half-torn state.
-	const bad = [{ kind: 'doc' as const, props: {}, body: 'bad' }] as BulkRow<typeof SCHEMA>[];
+	const bad = [{ type: 'doc' as const, data: {}, body: 'bad' }] as BulkRow<typeof SCHEMA>[];
 	await expect(bulkLoad(client, SCHEMA, bad)).rejects.toThrow();
 
 	// the ANN index is still present and queryable
@@ -155,9 +155,9 @@ libsqlOnly('P13 bulk: invalid props throw, leaving the ANN index intact (fail-fa
 	client.close();
 });
 
-test('P13 bulk: unknown kind throws', async () => {
+test('P13 bulk: unknown type throws', async () => {
 	const client = await mem();
-	const bad = [{ kind: 'ghost', props: {}, body: 'x' }] as unknown as BulkRow<typeof SCHEMA>[];
-	await expect(bulkLoad(client, SCHEMA, bad)).rejects.toThrow(/unknown kind/);
+	const bad = [{ type: 'ghost', data: {}, body: 'x' }] as unknown as BulkRow<typeof SCHEMA>[];
+	await expect(bulkLoad(client, SCHEMA, bad)).rejects.toThrow(/unknown type/);
 	client.close();
 });

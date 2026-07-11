@@ -41,21 +41,21 @@ export function NodeDetailSheet({
         <SheetHeader>
           <SheetTitle className="truncate font-mono text-sm">{nodeId}</SheetTitle>
           <SheetDescription>
-            {node.data ? <Badge variant="secondary">{node.data.kind}</Badge> : "Loading…"}
+            {node.data ? <Badge variant="secondary">{node.data.type}</Badge> : "Loading…"}
           </SheetDescription>
         </SheetHeader>
 
-        <Tabs defaultValue="props" className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+        <Tabs defaultValue="data" className="flex min-h-0 flex-1 flex-col px-4 pb-4">
           <TabsList className="w-full">
-            <TabsTrigger value="props">Properties</TabsTrigger>
+            <TabsTrigger value="data">Properties</TabsTrigger>
             <TabsTrigger value="neighbors">Neighbors</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="props" className="min-h-0 flex-1">
+          <TabsContent value="data" className="min-h-0 flex-1">
             <ScrollArea className="h-full">
               <pre className="rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">
-                {node.data ? JSON.stringify(node.data.props, null, 2) : "…"}
+                {node.data ? JSON.stringify(node.data.data, null, 2) : "…"}
               </pre>
             </ScrollArea>
           </TabsContent>
@@ -74,7 +74,7 @@ export function NodeDetailSheet({
                       onClick={() => onSelect(n.id)}
                       className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent"
                     >
-                      <Badge variant="secondary">{n.kind}</Badge>
+                      <Badge variant="secondary">{n.type}</Badge>
                       <span className="truncate font-mono text-xs">{n.id}</span>
                     </button>
                   </li>
@@ -95,7 +95,7 @@ export function NodeDetailSheet({
                         {fmt(v.valid_from)} → {fmt(v.valid_to)}
                       </span>
                     </div>
-                    <div className="mt-1 font-mono text-muted-foreground">{v.kind}</div>
+                    <div className="mt-1 font-mono text-muted-foreground">{v.type}</div>
                   </li>
                 ))}
               </ol>

@@ -128,7 +128,7 @@ export const api = {
   listNodes: (tenant: string, project: string, opts: ListNodesOpts = {}) =>
     request<NodeListPage>(
       `${tp(tenant, project)}/nodes${qs({
-        kind: opts.kind,
+        type: opts.type,
         q: opts.q,
         asOf: opts.asOf,
         limit: opts.limit,
@@ -137,7 +137,7 @@ export const api = {
     ),
   graphSlice: (tenant: string, project: string, filters: ExplorerFilters = {}) =>
     request<GraphSlice>(
-      `${tp(tenant, project)}/graph${qs({ kind: filters.kind, q: filters.q, asOf: filters.asOf })}`,
+      `${tp(tenant, project)}/graph${qs({ type: filters.type, q: filters.q, asOf: filters.asOf })}`,
     ),
   getNode: (tenant: string, project: string, id: string) =>
     request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`),
