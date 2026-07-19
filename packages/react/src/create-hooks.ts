@@ -15,6 +15,7 @@ import type {
 	BulkRow,
 	ChangeFeedPage,
 	EdgeRef,
+	GraphEvent,
 	GraphSchema,
 	GraphSlice,
 	JourneyRow,
@@ -28,7 +29,7 @@ import type {
 	TemporalDiff,
 	TopNode,
 } from '@graphx/core';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { GraphError } from './errors.ts';
 import { graphKeys } from './keys.ts';
 import { useGraphTransport } from './provider.tsx';
@@ -61,7 +62,11 @@ type RelFromType<S extends GraphSchema, R extends Rel<S>> = EdgesOf<S>[R] extend
 	? Endpoints<F> & NodeType<S>
 	: NodeType<S>;
 /** The neighbor type reached over rel `R` in direction `D` (forward → `to`, reverse → `from`, both → either). */
-type NeighborType<S extends GraphSchema, R extends Rel<S>, D extends Direction> = D extends 'forward'
+type NeighborType<
+	S extends GraphSchema,
+	R extends Rel<S>,
+	D extends Direction,
+> = D extends 'forward'
 	? RelToType<S, R>
 	: D extends 'reverse'
 		? RelFromType<S, R>
@@ -185,7 +190,9 @@ export interface MatchSpecInput<S extends GraphSchema> {
 }
 /** alias → type map read out of a spec's `steps` tuple (node steps only). */
 type AliasMap<Steps extends readonly unknown[]> = {
-	[N in Steps[number] as N extends { node: { alias: infer A extends string } } ? A : never]: N extends {
+	[N in Steps[number] as N extends { node: { alias: infer A extends string } }
+		? A
+		: never]: N extends {
 		node: { type: infer K };
 	}
 		? K
@@ -317,9 +324,7 @@ export class MatchBuilder<
 	}
 
 	/** Project the named (declared) aliases and finalize the spec. */
-	select<Sel extends readonly (keyof Acc & string)[]>(
-		...sel: Sel
-	): BuiltMatchSpec<S, Steps, Sel> {
+	select<Sel extends readonly (keyof Acc & string)[]>(...sel: Sel): BuiltMatchSpec<S, Steps, Sel> {
 		return {
 			steps: this._steps as unknown as Steps,
 			select: sel,
@@ -365,10 +370,7 @@ function advanceCursor(
  * explicitly and omit the value: `createGraphHooks<typeof schema>()`. This package pulls in NO
  * `@graphx/core` runtime, so the client stays SDK-free — it's typed by `S` alone (the "no codegen").
  */
-export function createGraphHooks<S extends GraphSchema>(
-	_schema?: S,
-	opts?: CreateHooksOptions,
-) {
+export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: CreateHooksOptions) {
 	/**
 	 * When `{ validate: true }` AND the schema VALUE was passed, assert a returned node's `data`
 	 * against its type's Zod schema — catching a server that drifts from the contract. Throws a
@@ -500,7 +502,13 @@ export function createGraphHooks<S extends GraphSchema>(
 				const page = await request<NodeListPage<S>>(t, {
 					method: 'GET',
 					path: '/nodes',
-					query: { type: opts.type, q: opts.q, asOf: opts.asOf, limit: opts.limit, cursor: pageParam },
+					query: {
+						type: opts.type,
+						q: opts.q,
+						asOf: opts.asOf,
+						limit: opts.limit,
+						cursor: pageParam,
+					},
 				});
 				for (const n of page.nodes) validateNode(n as { type: string; data: unknown });
 				return page;
@@ -580,9 +588,14 @@ export function createGraphHooks<S extends GraphSchema>(
 			// Server-backed cast: the /match reshape returns `{ [alias]: { id, type, data } }` with
 			// the type's (upcast) data, so the per-alias `NodeOf<S, type>` typing is honest.
 			queryFn: async () => {
-				const res = await request<MatchResultOf<S, Spec>>(t, { method: 'POST', path: '/match', body: spec });
+				const res = await request<MatchResultOf<S, Spec>>(t, {
+					method: 'POST',
+					path: '/match',
+					body: spec,
+				});
 				for (const row of res.rows) {
-					for (const node of Object.values(row)) validateNode(node as { type: string; data: unknown });
+					for (const node of Object.values(row))
+						validateNode(node as { type: string; data: unknown });
 				}
 				return res;
 			},
@@ -594,8 +607,7 @@ export function createGraphHooks<S extends GraphSchema>(
 		const t = useGraphTransport();
 		return useQuery({
 			queryKey: graphKeys(t.project).diff(t1, t2),
-			queryFn: () =>
-				request<TemporalDiff>(t, { method: 'GET', path: '/diff', query: { t1, t2 } }),
+			queryFn: () => request<TemporalDiff>(t, { method: 'GET', path: '/diff', query: { t1, t2 } }),
 		});
 	}
 
@@ -832,6 +844,102 @@ export function createGraphHooks<S extends GraphSchema>(
 		});
 	}
 
+	/**
+	 * Live event stream (eventing Layer 3, the push counterpart of {@link useChangeFeedSync}).
+	 * Opens the SSE `/events` endpoint and invalidates EXACTLY the affected keys per event —
+	 * `node(id)` for node events, `neighbors(src/dst)` for edge events, plus the list/slice views.
+	 *
+	 * Unlike the poll-based `useChangeFeedSync`, this feed is DELETE-INCLUSIVE: `edge.delete` and
+	 * `edge.supersede` arrive as first-class events carrying `src`/`dst`, so edge REMOVALS invalidate
+	 * the right neighbor caches here — no reliance on the mutation hooks' `onSettled` and no 2s poll.
+	 *
+	 * Uses the transport's `fetch` (so it drives an in-process app in tests/SSR and sends the same
+	 * auth headers as every other call) rather than a native `EventSource`. Reconnects from the last
+	 * seq after a drop. Requires the server to run with `events.outbox` (else the route is 501).
+	 */
+	function useGraphEvents(opts: { since?: 'now' | 'beginning'; enabled?: boolean } = {}): void {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		const enabled = opts.enabled ?? true;
+		const since = opts.since ?? 'now';
+		useEffect(() => {
+			if (!enabled) return;
+			const controller = new AbortController();
+			let stopped = false;
+			let cursor: number | undefined;
+			const k = graphKeys(t.project);
+
+			const apply = (ev: GraphEvent): void => {
+				if (ev.entity === 'node') {
+					qc.invalidateQueries({ queryKey: k.node(ev.id) });
+				} else {
+					if (ev.src) qc.invalidateQueries({ queryKey: k.neighbors(ev.src) });
+					if (ev.dst) qc.invalidateQueries({ queryKey: k.neighbors(ev.dst) });
+				}
+				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
+				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+			};
+
+			const run = async (): Promise<void> => {
+				const doFetch = t.fetch ?? globalThis.fetch;
+				while (!stopped) {
+					try {
+						const headers: Record<string, string> = {
+							accept: 'text/event-stream',
+							...(t.headers ? await t.headers() : {}),
+						};
+						const params = new URLSearchParams();
+						// Resume from the last seq after a reconnect; otherwise honor `since`.
+						if (cursor !== undefined) params.set('cursor', String(cursor));
+						else params.set('since', since);
+						const url = `${t.baseUrl}/t/${t.tenant}/p/${t.project}/events?${params.toString()}`;
+						const res = await doFetch(url, { method: 'GET', headers, signal: controller.signal });
+						if (!res.ok || !res.body) throw new GraphError(res.status, 'event stream unavailable');
+						const reader = res.body.getReader();
+						const dec = new TextDecoder();
+						let buf = '';
+						for (;;) {
+							const { value, done } = await reader.read();
+							if (done) break;
+							buf += dec.decode(value, { stream: true });
+							let idx: number;
+							while ((idx = buf.indexOf('\n\n')) !== -1) {
+								const frame = buf.slice(0, idx);
+								buf = buf.slice(idx + 2);
+								let event = '';
+								let data = '';
+								for (const line of frame.split('\n')) {
+									if (line.startsWith('event:')) event = line.slice(6).trim();
+									else if (line.startsWith('data:')) data += line.slice(5).trim();
+								}
+								if (event === 'ping' || !data) continue; // keep-alive
+								let ev: GraphEvent;
+								try {
+									ev = JSON.parse(data) as GraphEvent;
+								} catch {
+									continue;
+								}
+								apply(ev);
+								if (typeof ev.seq === 'number') cursor = ev.seq;
+							}
+						}
+					} catch {
+						if (stopped) return;
+					}
+					// Stream ended or errored → reconnect from `cursor` after a short backoff.
+					if (!stopped) await new Promise((r) => setTimeout(r, 1000));
+				}
+			};
+			void run();
+			return () => {
+				stopped = true;
+				controller.abort();
+			};
+			// t.headers/t.fetch are read fresh on each (re)connect; only identity of the namespace
+			// (and enable/since) should tear down and re-open the stream.
+		}, [t.baseUrl, t.tenant, t.project, enabled, since, qc]);
+	}
+
 	return {
 		useKeys,
 		useNode,
@@ -856,5 +964,6 @@ export function createGraphHooks<S extends GraphSchema>(
 		useCommunity,
 		useCentrality,
 		useChangeFeedSync,
+		useGraphEvents,
 	};
 }

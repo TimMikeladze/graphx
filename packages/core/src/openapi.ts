@@ -55,6 +55,7 @@ function routes(): RouteMeta[] {
 		{ method: 'post', path: '/match', op: 'read', summary: 'Multi-hop pattern query', body: wire.matchInput, success: 200 },
 		{ method: 'post', path: '/bulk', op: 'write', summary: 'Bulk-load nodes', body: wire.bulkInput, success: 201 },
 		{ method: 'get', path: '/changes', op: 'read', summary: 'Change feed / CDC tail', query: wire.changesQuery, success: 200 },
+		{ method: 'get', path: '/events', op: 'read', summary: 'Live event stream (SSE, delete-inclusive)', query: wire.eventsQuery, success: 200 },
 		{ method: 'get', path: '/diff', op: 'read', summary: 'Snapshot delta over (t1, t2]', query: wire.diffQuery, success: 200 },
 		{ method: 'post', path: '/algorithms/shortest-path', op: 'read', summary: 'Shortest path', body: wire.shortestPath, success: 200 },
 		{ method: 'post', path: '/algorithms/pagerank', op: 'write', summary: 'PageRank (persists)', body: wire.pageRank, success: 200 },

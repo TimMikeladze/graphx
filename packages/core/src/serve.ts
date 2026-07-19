@@ -7,6 +7,7 @@ import { cors } from 'hono/cors';
 import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import { logger as honoLogger } from 'hono/logger';
+import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import {
 	centrality,
@@ -36,7 +37,7 @@ import { journey } from './journey.ts';
 import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
-import { changeFeed, diff, history } from './temporal.ts';
+import { changeFeed, diff, history, outboxTail } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -379,6 +380,17 @@ const diffQuerySchema = z.object({
 });
 
 /**
+ * GET /events (SSE) query. `since` picks the start when no cursor is given: `now` (default — only
+ * events after connect) or `beginning` (full replay). `cursor` resumes after a known `seq` (a
+ * `Last-Event-ID` header wins over both). `poll` overrides the caught-up poll interval (ms).
+ */
+const eventsQuerySchema = z.object({
+	since: z.enum(['now', 'beginning']).optional(),
+	cursor: z.coerce.number().int().nonnegative().optional(),
+	poll: z.coerce.number().int().positive().optional(),
+});
+
+/**
  * The route wire schemas, keyed for the OpenAPI generator ({@link buildOpenApiDocument}). Exported as
  * a `Record<string, z.ZodType>` (not the individual consts) so the export stays isolated-declarable
  * while the routes keep using the precise local consts for `zValidator` typing. Single source of
@@ -398,6 +410,7 @@ export const WIRE_SCHEMAS: Record<string, z.ZodType> = {
 	matchInput: matchInputSchema,
 	bulkInput: bulkInputSchema,
 	changesQuery: changesQuerySchema,
+	eventsQuery: eventsQuerySchema,
 	diffQuery: diffQuerySchema,
 	shortestPath: shortestPathSchema,
 	pageRank: pageRankSchema,
@@ -674,6 +687,65 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					{ limit, limits: cfg.limits },
 				);
 				return c.json(page);
+			},
+		)
+		// Live event stream (SSE, eventing Layer 3) — pushes the durable outbox tail, which IS
+		// delete-inclusive (unlike /changes): create/update/delete/supersede all arrive as frames
+		// `event: <op>`, `data: <GraphEvent json>`, `id: <seq>`. Server-side tails outboxTail and
+		// polls when caught up; a browser resumes after a drop via the auto-sent Last-Event-ID.
+		// Requires the outbox (501 otherwise). NOTE: EventSource can't send auth headers — deployments
+		// serving browsers must let `authenticate` read the token from a query param or cookie.
+		.get(
+			'/t/:tenant/p/:project/events',
+			requireGraph(cfg, 'read'),
+			zValidator('query', eventsQuerySchema),
+			async (c) => {
+				if (!cfg.events?.outbox) {
+					throw new HTTPException(501, {
+						message: 'event stream not configured (set events.outbox)',
+					});
+				}
+				const raw = c.get('graph').raw;
+				const q = c.req.valid('query');
+				const pollMs = q.poll ?? 1000;
+				const limit = cfg.limits?.maxRows;
+				// Resume precedence: Last-Event-ID (browser reconnect) > ?cursor > ?since.
+				const lastEventId = c.req.header('Last-Event-ID');
+				let cursor: number | undefined;
+				if (lastEventId !== undefined && /^\d+$/.test(lastEventId)) {
+					cursor = Number(lastEventId);
+				} else if (q.cursor !== undefined) {
+					cursor = q.cursor;
+				} else if ((q.since ?? 'now') === 'now') {
+					// Start past the current tail so a live subscriber sees only NEW events (no backlog).
+					const head = await raw.execute('SELECT COALESCE(MAX(seq), 0) AS head FROM graph_outbox');
+					cursor = Number((head.rows[0] as { head: unknown }).head);
+				}
+				// since=beginning ⇒ cursor stays undefined (replay from the start).
+				return streamSSE(c, async (stream) => {
+					let idle = 0;
+					while (!stream.aborted) {
+						const page = await outboxTail(raw, cursor === undefined ? {} : { seq: cursor }, {
+							limit,
+						});
+						if (page.events.length > 0) {
+							idle = 0;
+							for (const ev of page.events) {
+								await stream.writeSSE({
+									data: JSON.stringify(ev),
+									event: ev.op,
+									id: String(ev.seq),
+								});
+								cursor = ev.seq;
+							}
+							continue; // drain a full backlog fast before sleeping
+						}
+						// Caught up: a keep-alive ping every ~15 idle cycles keeps proxies from dropping the
+						// idle connection; then wait `pollMs` before checking for new events again.
+						if (++idle % 15 === 0) await stream.writeSSE({ data: '', event: 'ping' });
+						await stream.sleep(pollMs);
+					}
+				});
 			},
 		)
 		// Snapshot delta over (t1, t2] — the close-aware companion to /changes (reconciles
