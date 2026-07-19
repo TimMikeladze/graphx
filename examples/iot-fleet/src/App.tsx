@@ -29,6 +29,7 @@ function GatewayList({
 	onSelect: (id: string) => void;
 }) {
 	const gateways = g.useListNodes({ type: 'gateway' }); // rows: NodeOf<Schema,'gateway'>[]
+
 	return (
 		<div>
 			<h3>Gateways</h3>

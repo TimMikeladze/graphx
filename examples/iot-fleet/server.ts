@@ -42,6 +42,7 @@ const { app } = await createApp({
 			data: { name: 'valve-1', category: 'actuator', model: 'V10' },
 			body: 'coolant flow valve actuator',
 		});
+
 		const temp2 = await g.addNode({
 			type: 'device',
 			data: { name: 'temp-2', category: 'sensor', model: 'DHT22' },
