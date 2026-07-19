@@ -37,7 +37,7 @@ import { journey } from './journey.ts';
 import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
-import { changeFeed, diff, history, outboxTail } from './temporal.ts';
+import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -718,11 +718,16 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					cursor = q.cursor;
 				} else if ((q.since ?? 'now') === 'now') {
 					// Start past the current tail so a live subscriber sees only NEW events (no backlog).
-					const head = await raw.execute('SELECT COALESCE(MAX(seq), 0) AS head FROM graph_outbox');
-					cursor = Number((head.rows[0] as { head: unknown }).head);
+					// MUST use the xmin-gated head (not a bare MAX(seq)): on Postgres a bare MAX would
+					// jump the cursor past a still-in-flight lower-seq row and skip it forever.
+					cursor = await outboxHead(raw);
 				}
 				// since=beginning ⇒ cursor stays undefined (replay from the start).
 				return streamSSE(c, async (stream) => {
+					// Emit the resolved start cursor immediately as an SSE `id`, so a client that drops
+					// BEFORE the first data event still resumes by cursor on reconnect (rather than a fresh
+					// `since=now` that would skip everything written during the disconnect window).
+					await stream.writeSSE({ data: '', event: 'ping', id: String(cursor ?? 0) });
 					let idle = 0;
 					while (!stream.aborted) {
 						const page = await outboxTail(raw, cursor === undefined ? {} : { seq: cursor }, {

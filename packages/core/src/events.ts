@@ -11,6 +11,13 @@
  * (in-proc): attach a {@link GraphEventBus}. Layer 2 (durable): set `outbox: true` and every
  * event is co-written into the `graph_outbox` table in the SAME atomic unit as the version rows,
  * tailed by {@link import('./temporal.ts').outboxTail}.
+ *
+ * Delivery caveat: the in-proc {@link GraphEventSink} emit is POST-commit and best-effort. If a DB
+ * commit lands durably but the driver's ack is lost (the mutation call throws AFTER the write
+ * committed), the co-written outbox row is durable yet the in-proc emit is skipped — so Layer 1
+ * (the {@link GraphEventBus}) can miss an event Layer 2 recorded. The durable outbox is the source
+ * of truth; a consumer that must not miss events tails {@link import('./temporal.ts').outboxTail}
+ * rather than relying on the in-proc bus alone.
  */
 
 /** The mutation an event describes. `*.supersede`/`*.delete` are the pure closes the CDC feed misses. */

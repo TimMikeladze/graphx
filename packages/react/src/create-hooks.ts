@@ -872,6 +872,9 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 			const apply = (ev: GraphEvent): void => {
 				if (ev.entity === 'node') {
 					qc.invalidateQueries({ queryKey: k.node(ev.id) });
+					// A retracted node drops from EVERY neighbor result, but node events carry no src/dst,
+					// so (like useDeleteNode) invalidate neighbor caches broadly on a delete.
+					if (ev.op === 'node.delete') qc.invalidateQueries({ queryKey: [...k.all, 'neighbors'] });
 				} else {
 					if (ev.src) qc.invalidateQueries({ queryKey: k.neighbors(ev.src) });
 					if (ev.dst) qc.invalidateQueries({ queryKey: k.neighbors(ev.dst) });
@@ -882,6 +885,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 
 			const run = async (): Promise<void> => {
 				const doFetch = t.fetch ?? globalThis.fetch;
+				let backoffMs = 1000;
 				while (!stopped) {
 					try {
 						const headers: Record<string, string> = {
@@ -895,6 +899,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 						const url = `${t.baseUrl}/t/${t.tenant}/p/${t.project}/events?${params.toString()}`;
 						const res = await doFetch(url, { method: 'GET', headers, signal: controller.signal });
 						if (!res.ok || !res.body) throw new GraphError(res.status, 'event stream unavailable');
+						backoffMs = 1000; // connected -- reset the reconnect backoff
 						const reader = res.body.getReader();
 						const dec = new TextDecoder();
 						let buf = '';
@@ -908,10 +913,16 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 								buf = buf.slice(idx + 2);
 								let event = '';
 								let data = '';
+								let idLine = '';
 								for (const line of frame.split('\n')) {
 									if (line.startsWith('event:')) event = line.slice(6).trim();
 									else if (line.startsWith('data:')) data += line.slice(5).trim();
+									else if (line.startsWith('id:')) idLine = line.slice(3).trim();
 								}
+								// Advance the resume cursor from the SSE `id` on ANY frame carrying one -- including the
+								// initial ping the server sends with the start seq -- so a drop before the first data
+								// event still reconnects by cursor rather than a fresh since=now (no gap).
+								if (/^\d+$/.test(idLine)) cursor = Number(idLine);
 								if (event === 'ping' || !data) continue; // keep-alive
 								let ev: GraphEvent;
 								try {
@@ -920,14 +931,19 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 									continue;
 								}
 								apply(ev);
-								if (typeof ev.seq === 'number') cursor = ev.seq;
 							}
 						}
-					} catch {
+					} catch (err) {
 						if (stopped) return;
+						// A 501 means the route has no outbox -- it will never succeed, so stop retrying.
+						if (err instanceof GraphError && err.status === 501) return;
 					}
-					// Stream ended or errored → reconnect from `cursor` after a short backoff.
-					if (!stopped) await new Promise((r) => setTimeout(r, 1000));
+					// Stream ended or errored -- reconnect from `cursor` after a backoff that grows (capped),
+					// so a persistently failing endpoint can't become a tight reconnect loop.
+					if (!stopped) {
+						await new Promise((r) => setTimeout(r, backoffMs));
+						backoffMs = Math.min(backoffMs * 2, 30_000);
+					}
 				}
 			};
 			void run();

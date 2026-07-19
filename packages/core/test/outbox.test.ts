@@ -4,7 +4,7 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { GraphEventOptions } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { outboxTail, pruneOutbox } from '../src/temporal.ts';
+import { outboxHead, outboxTail, pruneOutbox } from '../src/temporal.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
 
 // Eventing Layer 2 — the durable graph_outbox. Every mutation co-writes an event row in its OWN
@@ -181,5 +181,36 @@ test.skipIf(TEST_DRIVER !== 'postgres')(
 		// Both now surface, in seq order, from the beginning — nothing was skipped.
 		const drained = await outboxTail(reader);
 		expect(drained.events.map((e) => e.id)).toEqual(['a', 'b']);
+	},
+);
+
+// Postgres-only: the SSE since=now START cursor must apply the SAME xmin gate as the tail. A bare
+// MAX(seq) would return a committed higher-seq row while a lower-seq txn is still in flight, strand
+// the start cursor above it, and skip that event forever once it commits. outboxHead gates it.
+test.skipIf(TEST_DRIVER !== 'postgres')(
+	'postgres: outboxHead (since=now start) never strands an in-flight lower-seq event',
+	async () => {
+		const td = makeTestDb();
+		teardowns.push(td.teardown);
+		await init(td.client, 4);
+		const reader = (td.sibling as () => typeof td.client)();
+		const writerB = (td.sibling as () => typeof td.client)();
+
+		// A inserts first (LOWER seq) and stays OPEN; B inserts second (HIGHER seq) and commits.
+		const txA = await td.client.transaction('write');
+		await insertOutbox(txA, 'a');
+		const txB = await writerB.transaction('write');
+		await insertOutbox(txB, 'b');
+		await txB.commit();
+
+		// The gated head withholds 'b' while A is in flight, so the start cursor stays below 'a'
+		// (a bare MAX(seq) would return b's seq here and lose 'a').
+		const cursor = await outboxHead(reader);
+		await txA.commit();
+
+		const page = await outboxTail(reader, { seq: cursor });
+		const ids = page.events.map((e) => e.id);
+		expect(ids).toContain('a');
+		expect(ids).toContain('b');
 	},
 );

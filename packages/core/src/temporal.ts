@@ -244,11 +244,24 @@ function rowToEvent(row: Record<string, unknown>): GraphEvent {
  * the AUTOINCREMENT `seq` equals commit order and the bare keyset is airtight. On Postgres the
  * IDENTITY `seq` is assigned at INSERT, so a transaction with a lower seq can commit AFTER one
  * with a higher seq; a naive `seq > cursor` would skip it once the cursor advanced. The gate
- * `xmin < pg_snapshot_xmin(pg_current_snapshot())` withholds any row until every transaction that
- * could still hold a lower seq has finished — so no row is ever skipped, at the cost of tail
- * latency behind a long-running writer. (Caveat: the raw-xid text compare assumes no xid
- * wraparound between the row and the snapshot horizon — fine below ~2^31 of churn.)
+ * {@link PG_OUTBOX_VISIBLE} withholds any row until every transaction that could still hold a
+ * lower seq has finished, so no row is ever skipped (at the cost of tail latency behind a
+ * long-running writer). It is `age()`-based, not a raw `xid::bigint` compare, so it stays
+ * correct across xid epoch rollover -- a plain integer compare of the 32-bit `xmin` against the
+ * 64-bit snapshot horizon reads as always-true past 2^32 and would silently disable the gate.
  */
+/**
+ * Postgres visibility gate for the outbox tail/head. A row is released only once its inserting txn
+ * is OLDER than the snapshot xmin horizon (every txn that could still hold a lower `seq` has
+ * finished), so out-of-order IDENTITY commits never skip a row. Uses `age()` -- wraparound- and
+ * epoch-safe -- rather than a raw `xid::bigint` compare: the 32-bit `xmin` and the 64-bit `xid8`
+ * horizon aren't comparable as plain integers once the xid epoch advances (the raw compare would
+ * read as always-true and silently disable the gate). `age(xid)` grows with age within the ~2^31
+ * live window, so `age(xmin) > age(horizon)` means the row's txn precedes the horizon. Cast the
+ * `xid8` horizon down to `xid` so `age()` (which takes a 32-bit `xid`) accepts it.
+ */
+const PG_OUTBOX_VISIBLE = 'age(xmin) > age(pg_snapshot_xmin(pg_current_snapshot())::xid)';
+
 export async function outboxTail(
 	raw: DbClient,
 	cursor: OutboxCursor = {},
@@ -278,7 +291,7 @@ export async function outboxTail(
 	}
 	// Postgres visibility watermark (see the doc comment). libSQL needs no gate.
 	if (dialectOf(raw) === 'postgres') {
-		conds.push('xmin::text::bigint < pg_snapshot_xmin(pg_current_snapshot())::text::bigint');
+		conds.push(PG_OUTBOX_VISIBLE);
 	}
 	const where = conds.length > 0 ? ` WHERE ${conds.join(' AND ')}` : '';
 	const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
@@ -291,6 +304,21 @@ export async function outboxTail(
 		return { events: page, nextCursor: last.seq ?? null };
 	}
 	return { events: rows.map(rowToEvent), nextCursor: null };
+}
+
+/**
+ * The horizon-safe "current tail" seq for a live subscriber that wants only NEW events (the SSE
+ * `since=now` start). A bare `MAX(seq)` is WRONG on Postgres: the IDENTITY `seq` commits out of
+ * order, so `MAX(seq)` can see a higher-seq committed row while a lower-seq txn is still in flight
+ * — starting the cursor past it means that lower-seq event is skipped forever once it commits
+ * (`seq > cursor` never matches). The same `xmin` visibility gate {@link outboxTail} applies to the
+ * tail is applied here so the start cursor never advances past a not-yet-visible row. libSQL needs
+ * no gate (serialized writer ⇒ `seq` == commit order).
+ */
+export async function outboxHead(raw: DbClient): Promise<number> {
+	const gate = dialectOf(raw) === 'postgres' ? ` WHERE ${PG_OUTBOX_VISIBLE}` : '';
+	const r = await raw.execute(`SELECT COALESCE(MAX(seq), 0) AS head FROM graph_outbox${gate}`);
+	return Number((r.rows[0] as { head: unknown }).head);
 }
 
 /**

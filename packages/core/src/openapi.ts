@@ -31,6 +31,10 @@ interface RouteMeta {
 	query?: z.ZodType;
 	body?: z.ZodType;
 	success: 200 | 201 | 204;
+	/** Success response media type. Default `application/json`; the SSE route is `text/event-stream`. */
+	contentType?: string;
+	/** Route returns 501 when a required capability is unconfigured (e.g. `/events` without an outbox). */
+	notImplemented?: boolean;
 }
 
 const PREFIX = '/t/{tenant}/p/{project}';
@@ -55,7 +59,7 @@ function routes(): RouteMeta[] {
 		{ method: 'post', path: '/match', op: 'read', summary: 'Multi-hop pattern query', body: wire.matchInput, success: 200 },
 		{ method: 'post', path: '/bulk', op: 'write', summary: 'Bulk-load nodes', body: wire.bulkInput, success: 201 },
 		{ method: 'get', path: '/changes', op: 'read', summary: 'Change feed / CDC tail', query: wire.changesQuery, success: 200 },
-		{ method: 'get', path: '/events', op: 'read', summary: 'Live event stream (SSE, delete-inclusive)', query: wire.eventsQuery, success: 200 },
+		{ method: 'get', path: '/events', op: 'read', summary: 'Live event stream (SSE, delete-inclusive)', query: wire.eventsQuery, success: 200, contentType: 'text/event-stream', notImplemented: true },
 		{ method: 'get', path: '/diff', op: 'read', summary: 'Snapshot delta over (t1, t2]', query: wire.diffQuery, success: 200 },
 		{ method: 'post', path: '/algorithms/shortest-path', op: 'read', summary: 'Shortest path', body: wire.shortestPath, success: 200 },
 		{ method: 'post', path: '/algorithms/pagerank', op: 'write', summary: 'PageRank (persists)', body: wire.pageRank, success: 200 },
@@ -116,11 +120,12 @@ export function buildOpenApiDocument(opts: OpenApiOptions = {}): Record<string, 
 		responses[String(r.success)] =
 			r.success === 204
 				? { description: 'No Content' }
-				: { description: 'OK', content: { 'application/json': { schema: {} } } };
+				: { description: 'OK', content: { [r.contentType ?? 'application/json']: { schema: {} } } };
 		if (r.body || r.query) responses['400'] = errorRef();
 		responses['401'] = { description: 'Unauthenticated' };
 		if (r.op === 'write') responses['403'] = { description: 'Forbidden' };
 		responses['404'] = errorRef();
+		if (r.notImplemented) responses['501'] = errorRef();
 
 		pathItem[r.method] = {
 			summary: r.summary,

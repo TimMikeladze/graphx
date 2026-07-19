@@ -150,3 +150,13 @@ test('multiple frames in one stream chunk are all processed', async () => {
 	expect(hasKey(keys, k.neighbors('B'))).toBe(true);
 	unmount();
 });
+
+test('a node.delete frame invalidates neighbor caches broadly (node events carry no src/dst)', async () => {
+	const k = graphKeys('p');
+	const { keys, unmount } = mountWithEvents([
+		{ seq: 10, op: 'node.delete', entity: 'node', id: 'N9', label: 'person', shape: 'close', ts: 1 },
+	]);
+	await waitFor(() => expect(hasKey(keys, k.node('N9'))).toBe(true));
+	expect(hasKey(keys, [...k.all, 'neighbors'])).toBe(true);
+	unmount();
+});

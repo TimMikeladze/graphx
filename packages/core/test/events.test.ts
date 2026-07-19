@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import {
@@ -191,4 +192,35 @@ test('no events option ⇒ mutations still work (NOOP sink, byte-identical)', as
 	const g = await makeGraph(); // no events arg
 	const n = await g.addNode({ type: 'person', data: { name: 'silent' } });
 	expect(await g.getNode(n.id)).not.toBeNull();
+});
+
+test('single-valued addEdge emits one supersede per closed live edge (missing-index safety)', async () => {
+	const sink = new InMemoryEvents();
+	const g = await makeGraph({ sink });
+	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
+	const d1 = await g.addNode({ type: 'device', data: { kind: 'a' } });
+	const d2 = await g.addNode({ type: 'device', data: { kind: 'b' } });
+	const d3 = await g.addNode({ type: 'device', data: { kind: 'c' } });
+	const e1 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d1.id });
+
+	// Force a SECOND live (p, licensed) edge WITHOUT the ux_single index (constraints not
+	// materialized) -- the unmaterialized-constraint / concurrent-race state. The next addEdge must
+	// close BOTH and report BOTH closes, not just the newest.
+	const e2id = ulid();
+	await g.raw.batch(
+		[
+			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [e2id] },
+			{
+				sql: 'INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from) VALUES (?,?,?,?,?,?,?,?)',
+				args: [e2id, p.id, d2.id, 'licensed', 1.0, '{}', null, Date.now()],
+			},
+		],
+		'write',
+	);
+
+	sink.events.length = 0;
+	await g.addEdge({ rel: 'licensed', src: p.id, dst: d3.id });
+	const supersedes = sink.byOp('edge.supersede');
+	expect(supersedes.map((e) => e.id).sort()).toEqual([e1.id, e2id].sort());
+	expect(sink.byOp('edge.create')).toHaveLength(1);
 });

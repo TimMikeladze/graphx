@@ -414,37 +414,47 @@ export class Graph<S extends GraphSchema> {
 			// :memory: (transaction() detaches the connection).
 			let events: GraphEvent[] = [];
 			await this.runConditionalClose('addEdge', async (tx, rawNow) => {
-				// Widened from MAX(valid_from) to the live row itself (id + dst) so a supersession
-				// close can emit the CLOSED prior edge's id + endpoints — the partial unique index
-				// guarantees at most one live (src, rel) edge, so ORDER BY … LIMIT 1 is exact.
-				const live = (
+				// Read EVERY live (src, rel) edge, not just the newest: the UPDATE below closes ALL of
+				// them, so a supersede must be emitted per closed row. With the ux_single partial unique
+				// index (materializeConstraints) there is <=1 live row and this is identical to before; when
+				// the index was not materialized (or a race left >1 live edge) every close is still reported.
+				const liveRows = (
 					await tx.execute({
-						sql: 'SELECT id, dst, valid_from AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ? ORDER BY valid_from DESC LIMIT 1',
+						sql: 'SELECT id, dst, valid_from AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
 						args: [e.src, e.rel, FOREVER],
 					})
-				).rows[0];
-				const vf = live?.vf;
-				const ts = vf != null ? Math.max(rawNow, Number(vf) + 1) : rawNow;
+				).rows;
+				let maxVf = 0;
+				for (const r of liveRows) {
+					const v = Number(r.vf);
+					if (v > maxVf) maxVf = v;
+				}
+				const ts = liveRows.length > 0 ? Math.max(rawNow, maxVf + 1) : rawNow;
 				const closed = await tx.execute({
 					sql: 'UPDATE edge_versions SET valid_to = ? WHERE src = ? AND rel = ? AND valid_to = ?',
 					args: [ts, e.src, e.rel, FOREVER],
 				});
 				for (const stmt of insertEdge(ts)) await tx.execute(stmt);
 				const evs: GraphEvent[] = [];
-				// A prior live (src, rel) edge was closed ⇒ an explicit supersede/close event the
-				// valid_from CDC feed is structurally blind to. Guarded on rowsAffected so no phantom
-				// close fires when there was no prior live edge.
-				if (closed.rowsAffected >= 1 && live?.id != null) {
-					evs.push({
-						op: 'edge.supersede',
-						entity: 'edge',
-						id: String(live.id),
-						label: e.rel,
-						shape: 'close',
-						ts,
-						src: e.src,
-						dst: live.dst != null ? String(live.dst) : undefined,
-					});
+				// A prior live (src, rel) edge was closed => an explicit supersede/close event the
+				// valid_from CDC feed is structurally blind to. One event per row actually closed.
+				// rowsAffected === liveRows.length always holds here: the read and the close share ONE
+				// SERIALIZABLE / BEGIN IMMEDIATE tx, so the live set can't shift under us (a racing close
+				// aborts this attempt, which retries). The equality guard states that invariant and can
+				// never over-emit; length 0 (no prior live edge) emits nothing.
+				if (closed.rowsAffected === liveRows.length) {
+					for (const r of liveRows) {
+						evs.push({
+							op: 'edge.supersede',
+							entity: 'edge',
+							id: String(r.id),
+							label: e.rel,
+							shape: 'close',
+							ts,
+							src: e.src,
+							dst: r.dst != null ? String(r.dst) : undefined,
+						});
+					}
 				}
 				evs.push({
 					op: 'edge.create',
