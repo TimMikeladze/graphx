@@ -126,6 +126,19 @@ export {
 	type DataInput,
 } from './graph.ts';
 
+// Eventing — in-proc sink + bus (Layer 1); durable outbox tail lives in temporal.ts (Layer 2)
+export {
+	type GraphEvent,
+	GraphEventBus,
+	type GraphEventListener,
+	type GraphEventOp,
+	type GraphEventOptions,
+	type GraphEventSink,
+	InMemoryEvents,
+	NOOP_EVENTS,
+	scopeEvents,
+} from './events.ts';
+
 // P4 — vectors + GraphRAG retrieve
 export {
 	dimOf,
@@ -161,7 +174,7 @@ export {
 	type RelOpts,
 } from './pattern.ts';
 
-// P6 — temporal reads + P15 change feed / CDC (§19.10)
+// P6 — temporal reads + P15 change feed / CDC (§19.10) + eventing outbox tail (Layer 2)
 export {
 	asOfPredicate,
 	changeFeed,
@@ -170,6 +183,11 @@ export {
 	type ChangeFeedPage,
 	diff,
 	history,
+	type OutboxCursor,
+	type OutboxPage,
+	outboxTail,
+	type OutboxTailOpts,
+	pruneOutbox,
 	type TemporalDiff,
 } from './temporal.ts';
 

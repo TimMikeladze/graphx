@@ -11,6 +11,12 @@ import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
+import {
+	type GraphEvent,
+	type GraphEventOptions,
+	type GraphEventSink,
+	NOOP_EVENTS,
+} from './events.ts';
 import type { AnyNode, NodeType, NodeOf, Rel } from './define-graph-schema.ts';
 import {
 	applyLimit,
@@ -36,9 +42,10 @@ export type GraphSchema = { nodes: Record<string, unknown>; edges: Record<string
  * Zod INPUT prop type for node type `K` — the shape a caller passes to `addNode`
  * (defaults optional), as opposed to `DataOf` which is the parsed OUTPUT.
  */
-export type DataInput<S extends GraphSchema, K extends NodeType<S>> = S['nodes'][K] extends z.ZodType
-	? z.input<S['nodes'][K]>
-	: Record<string, unknown>;
+export type DataInput<
+	S extends GraphSchema,
+	K extends NodeType<S>,
+> = S['nodes'][K] extends z.ZodType ? z.input<S['nodes'][K]> : Record<string, unknown>;
 
 /** Zod INPUT edge-prop type for rel `R` (or `undefined` when the rel has no data schema). */
 export type EdgeDataInput<S extends GraphSchema, R extends Rel<S>> = S['edges'][R] extends {
@@ -206,7 +213,9 @@ function isRetryableContention(e: unknown): boolean {
 		return true;
 	}
 	const msg = String((e as { message?: unknown } | null)?.message ?? '');
-	return /database (?:table )?is locked|SQLITE_BUSY|could not serialize|deadlock detected/i.test(msg);
+	return /database (?:table )?is locked|SQLITE_BUSY|could not serialize|deadlock detected/i.test(
+		msg,
+	);
 }
 
 /** Full-jitter exponential backoff (capped) between contended write attempts. */
@@ -222,13 +231,56 @@ export class Graph<S extends GraphSchema> {
 	private typeCache = new Map<string, string>();
 	/** P12 read-time upcaster (§15). Empty registry ⇒ identity (pre-P12 behavior). */
 	private readonly upcaster: Upcaster;
+	/** Eventing sink (Layer 1). {@link NOOP_EVENTS} when unconfigured ⇒ byte-identical to pre-eventing. */
+	private readonly events: GraphEventSink;
+	/** Co-write events into the durable `graph_outbox` in the mutation's own tx (Layer 2). */
+	private readonly outbox: boolean;
 
 	constructor(
 		public raw: DbClient,
 		public schema: S,
 		upcasters?: UpcasterRegistry,
+		events?: GraphEventOptions,
 	) {
 		this.upcaster = new Upcaster(schema, upcasters ?? {});
+		this.events = events?.sink ?? NOOP_EVENTS;
+		this.outbox = events?.outbox ?? false;
+	}
+
+	/**
+	 * Deliver an event to the sink after the mutation has committed. Guarded: a throwing
+	 * sink can never break (or roll back) the write that produced the event.
+	 */
+	private emit(event: GraphEvent): void {
+		try {
+			this.events.emit(event);
+		} catch {
+			/* a sink must never break a committed mutation */
+		}
+	}
+
+	/**
+	 * The durable-outbox INSERT for an event, or `null` when the outbox is disabled (⇒ nothing
+	 * appended, byte-identical to the pre-eventing write). Appended to the mutation's batch (insert
+	 * paths) or `tx.execute`d before commit (conditional-close paths) so it commits atomically with
+	 * the version rows. `seq` is assigned by the table (AUTOINCREMENT / IDENTITY), not bound here.
+	 */
+	private outboxStmt(event: GraphEvent): SqlStatement | null {
+		if (!this.outbox) return null;
+		return {
+			sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts)
+				VALUES (?,?,?,?,?,?,?,?)`,
+			args: [
+				event.op,
+				event.entity,
+				event.id,
+				event.label,
+				event.src ?? null,
+				event.dst ?? null,
+				event.shape,
+				event.ts,
+			],
+		};
 	}
 
 	/**
@@ -288,14 +340,24 @@ export class Graph<S extends GraphSchema> {
 		// interactive transaction() elsewhere on this client drops busy_timeout to 0, so a
 		// later append BEGIN IMMEDIATE can fail fast with SQLITE_BUSY and must be retried,
 		// not lost (§19.1, write-correctness).
-		await this.runWriteBatch('addNode', () =>
-			this.raw.batch(
-				[{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] }, versionStmt],
-				'write',
-			),
-		);
+		const event: GraphEvent = {
+			op: 'node.create',
+			entity: 'node',
+			id,
+			label: n.type,
+			shape: 'insert',
+			ts,
+		};
+		const stmts: SqlStatement[] = [
+			{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] },
+			versionStmt,
+		];
+		const ob = this.outboxStmt(event);
+		if (ob) stmts.push(ob); // co-write the event row in the same atomic batch (Layer 2)
+		await this.runWriteBatch('addNode', () => this.raw.batch(stmts, 'write'));
 
 		this.typeCache.set(id, n.type);
+		this.emit(event); // post-commit
 		return { id, type: n.type, data: parsed };
 	}
 
@@ -350,30 +412,81 @@ export class Graph<S extends GraphSchema> {
 			// serializes writers (last write wins) and a partial unique index hard-guarantees
 			// exactly one live edge. Like updateNode/deleteEdge this needs a `file:` DB on
 			// :memory: (transaction() detaches the connection).
+			let events: GraphEvent[] = [];
 			await this.runConditionalClose('addEdge', async (tx, rawNow) => {
+				// Widened from MAX(valid_from) to the live row itself (id + dst) so a supersession
+				// close can emit the CLOSED prior edge's id + endpoints — the partial unique index
+				// guarantees at most one live (src, rel) edge, so ORDER BY … LIMIT 1 is exact.
 				const live = (
 					await tx.execute({
-						sql: 'SELECT MAX(valid_from) AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+						sql: 'SELECT id, dst, valid_from AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ? ORDER BY valid_from DESC LIMIT 1',
 						args: [e.src, e.rel, FOREVER],
 					})
 				).rows[0];
 				const vf = live?.vf;
 				const ts = vf != null ? Math.max(rawNow, Number(vf) + 1) : rawNow;
-				await tx.execute({
+				const closed = await tx.execute({
 					sql: 'UPDATE edge_versions SET valid_to = ? WHERE src = ? AND rel = ? AND valid_to = ?',
 					args: [ts, e.src, e.rel, FOREVER],
 				});
 				for (const stmt of insertEdge(ts)) await tx.execute(stmt);
+				const evs: GraphEvent[] = [];
+				// A prior live (src, rel) edge was closed ⇒ an explicit supersede/close event the
+				// valid_from CDC feed is structurally blind to. Guarded on rowsAffected so no phantom
+				// close fires when there was no prior live edge.
+				if (closed.rowsAffected >= 1 && live?.id != null) {
+					evs.push({
+						op: 'edge.supersede',
+						entity: 'edge',
+						id: String(live.id),
+						label: e.rel,
+						shape: 'close',
+						ts,
+						src: e.src,
+						dst: live.dst != null ? String(live.dst) : undefined,
+					});
+				}
+				evs.push({
+					op: 'edge.create',
+					entity: 'edge',
+					id,
+					label: e.rel,
+					shape: 'insert',
+					ts,
+					src: e.src,
+					dst: e.dst,
+				});
+				for (const ev of evs) {
+					const stmt = this.outboxStmt(ev);
+					if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
+				}
 				await tx.commit();
+				events = evs;
 				return 'committed';
 			});
+			for (const ev of events) this.emit(ev); // post-commit
 			return { id, rel: e.rel, src: e.src, dst: e.dst };
 		}
 
 		// Normal (multi-valued) rel: a plain atomic append under the §19.1 contention-retry
 		// envelope (an interactive transaction() elsewhere on this client drops busy_timeout
 		// to 0, so a later batch BEGIN IMMEDIATE can fail fast and must be retried, not lost).
-		await this.runWriteBatch('addEdge', () => this.raw.batch(insertEdge(this.now()), 'write'));
+		const ts = this.now();
+		const event: GraphEvent = {
+			op: 'edge.create',
+			entity: 'edge',
+			id,
+			label: e.rel,
+			shape: 'insert',
+			ts,
+			src: e.src,
+			dst: e.dst,
+		};
+		const stmts = insertEdge(ts);
+		const ob = this.outboxStmt(event);
+		if (ob) stmts.push(ob);
+		await this.runWriteBatch('addEdge', () => this.raw.batch(stmts, 'write'));
+		this.emit(event); // post-commit
 		return { id, rel: e.rel, src: e.src, dst: e.dst };
 	}
 
@@ -699,6 +812,7 @@ export class Graph<S extends GraphSchema> {
 			content_type?: string;
 		},
 	): Promise<void> {
+		let event: GraphEvent | undefined;
 		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
 			const cur = (
 				await tx.execute({
@@ -728,13 +842,18 @@ export class Graph<S extends GraphSchema> {
 			const successorType = patch.type ?? String(cur.type);
 			const curRaw = JSON.parse(String(cur.data)) as Record<string, unknown>;
 			let data: Record<string, unknown>;
-			if (successorType !== String(cur.type) && this.upcaster.stampVersion(successorType) !== undefined) {
+			if (
+				successorType !== String(cur.type) &&
+				this.upcaster.stampVersion(successorType) !== undefined
+			) {
 				// NodeType change INTO a registered type: the live data were shaped by the OLD type's
 				// chain, meaningless under the successor. Re-parse the merged result against the
 				// SUCCESSOR's Zod schema (drops foreign fields, applies its defaults, throws if a
 				// required successor field is missing) before stamping, so the stamp matches the shape.
 				const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[successorType];
-				const reshaped = (def ? def.parse({ ...curRaw, ...patch.data }) : { ...curRaw, ...patch.data }) as Record<string, unknown>;
+				const reshaped = (
+					def ? def.parse({ ...curRaw, ...patch.data }) : { ...curRaw, ...patch.data }
+				) as Record<string, unknown>;
 				data = this.upcaster.stamp(successorType, reshaped);
 			} else {
 				// Same-type (or unregistered successor): migrate the live data to the latest shape,
@@ -769,9 +888,21 @@ export class Graph<S extends GraphSchema> {
 						args: [...common, (cur.emb as SqlValue) ?? null, now],
 					};
 			await tx.execute(successor);
+			const ev: GraphEvent = {
+				op: 'node.update',
+				entity: 'node',
+				id,
+				label: successorType,
+				shape: 'insert',
+				ts: now,
+			};
+			const stmt = this.outboxStmt(ev);
+			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
 			await tx.commit();
+			event = ev;
 			return 'committed';
 		});
+		if (event) this.emit(event); // post-commit
 	}
 
 	/**
@@ -789,10 +920,12 @@ export class Graph<S extends GraphSchema> {
 	 * reconciles outbound edges via {@link deleteEdge}).
 	 */
 	async deleteNode(id: string): Promise<void> {
+		let event: GraphEvent | undefined;
 		await this.runConditionalClose('deleteNode', async (tx, rawNow) => {
+			// Widened to also read `type` so the delete event carries the node's label.
 			const cur = (
 				await tx.execute({
-					sql: 'SELECT valid_from FROM node_versions WHERE id = ? AND valid_to = ?',
+					sql: 'SELECT type, valid_from FROM node_versions WHERE id = ? AND valid_to = ?',
 					args: [id, FOREVER],
 				})
 			).rows[0];
@@ -805,12 +938,25 @@ export class Graph<S extends GraphSchema> {
 				args: [now, id, FOREVER],
 			});
 			if (closed.rowsAffected !== 1) return 'superseded';
+			// Pure close (no successor) — the delete the valid_from CDC feed can't see.
+			const ev: GraphEvent = {
+				op: 'node.delete',
+				entity: 'node',
+				id,
+				label: String(cur.type),
+				shape: 'close',
+				ts: now,
+			};
+			const stmt = this.outboxStmt(ev);
+			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
 			await tx.commit();
+			event = ev;
 			return 'committed';
 		});
 		// A retracted id no longer resolves to a live type; drop any cached entry so a later
 		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
 		this.typeCache.delete(id);
+		if (event) this.emit(event); // post-commit
 	}
 
 	/**
@@ -820,10 +966,13 @@ export class Graph<S extends GraphSchema> {
 	 * rather than racing.
 	 */
 	async deleteEdge(id: string): Promise<void> {
+		let event: GraphEvent | undefined;
 		await this.runConditionalClose('deleteEdge', async (tx, rawNow) => {
+			// Widened to read the endpoints/rel so the delete event carries src/dst/label — a
+			// consumer invalidates the neighbor caches exactly as the React useDeleteEdge does.
 			const cur = (
 				await tx.execute({
-					sql: 'SELECT valid_from FROM edge_versions WHERE id = ? AND valid_to = ?',
+					sql: 'SELECT src, dst, rel, valid_from FROM edge_versions WHERE id = ? AND valid_to = ?',
 					args: [id, FOREVER],
 				})
 			).rows[0];
@@ -836,9 +985,24 @@ export class Graph<S extends GraphSchema> {
 				args: [now, id, FOREVER],
 			});
 			if (closed.rowsAffected !== 1) return 'superseded';
+			// Pure close (no successor) — the delete the valid_from CDC feed can't see.
+			const ev: GraphEvent = {
+				op: 'edge.delete',
+				entity: 'edge',
+				id,
+				label: String(cur.rel),
+				shape: 'close',
+				ts: now,
+				src: String(cur.src),
+				dst: String(cur.dst),
+			};
+			const stmt = this.outboxStmt(ev);
+			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
 			await tx.commit();
+			event = ev;
 			return 'committed';
 		});
+		if (event) this.emit(event); // post-commit
 	}
 
 	/** Resolve a node's live type, caching it (used by endpoint-type checks). */
@@ -874,8 +1038,9 @@ export function graphFor<S extends GraphSchema>(
 	raw: DbClient,
 	schema: S,
 	upcasters?: UpcasterRegistry,
+	events?: GraphEventOptions,
 ): Graph<S> {
-	return new Graph(raw, schema, upcasters);
+	return new Graph(raw, schema, upcasters, events);
 }
 
 export { FOREVER };

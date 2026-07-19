@@ -30,6 +30,7 @@ import type { NodeType, Rel } from './define-graph-schema.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
 import { init } from './schema.ts';
 import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
+import { type GraphEventOptions, scopeEvents } from './events.ts';
 import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
 import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
@@ -86,6 +87,14 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * Omit ⇒ no metrics, zero overhead (additive — behavior byte-identical to pre-P15).
 	 */
 	metrics?: MetricsSink;
+	/**
+	 * Eventing. When set, every per-project `Graph` emits typed mutation events (create/update/
+	 * delete/supersede — including the pure closes the CDC feed misses), scoped per request to
+	 * `{tenant, project}`. `sink` is an in-proc consumer (a {@link import('./events.ts').GraphEventBus});
+	 * `outbox: true` also co-writes each event into the durable `graph_outbox` table (tailed by
+	 * {@link import('./temporal.ts').outboxTail}). Omit ⇒ no events, zero overhead (additive).
+	 */
+	events?: GraphEventOptions;
 	/**
 	 * P15 (§19.6) readiness latch gating `/ready` (the load-balancer health gate). Build one with
 	 * {@link createReadiness}, serve immediately (`/ready` → 503), run `syncIfReplica(...)` for the
@@ -172,9 +181,10 @@ export async function graphForProject<S extends GraphSchema>(
 	op: Op,
 	schema: S,
 	upcasters?: UpcasterRegistry,
+	events?: GraphEventOptions,
 ): Promise<Graph<S>> {
 	const { client } = await resolveProjectDb(control, principal, projectId, op);
-	return new Graph(client, schema, upcasters);
+	return new Graph(client, schema, upcasters, events);
 }
 
 // --- wire contracts (the Zod schema is the single source feeding every surface) ---
@@ -301,7 +311,9 @@ const matchInputSchema = z.object({
 	steps: z.array(
 		z.union([
 			z.object({ node: z.object({ alias: z.string(), type: z.string() }) }),
-			z.object({ edge: z.object({ rel: z.string(), direction: patternDirectionSchema.optional() }) }),
+			z.object({
+				edge: z.object({ rel: z.string(), direction: patternDirectionSchema.optional() }),
+			}),
 			z.object({
 				var: z.object({
 					rel: z.string(),
@@ -423,6 +435,16 @@ function requireGraph<S extends GraphSchema>(
 		if (c.req.param('tenant') !== principal.tenantId || !project) {
 			throw new AuthzError(404, 'project not found');
 		}
+		// Scope the app-level sink to this request's namespace so a shared sink attributes each
+		// event to its {tenant, project}. `outbox` rides along unchanged.
+		const events: GraphEventOptions | undefined = cfg.events
+			? {
+					sink: cfg.events.sink
+						? scopeEvents(cfg.events.sink, { tenant: principal.tenantId, project })
+						: undefined,
+					outbox: cfg.events.outbox,
+				}
+			: undefined;
 		const graph = await graphForProject(
 			cfg.control,
 			principal,
@@ -430,6 +452,7 @@ function requireGraph<S extends GraphSchema>(
 			op,
 			cfg.schema,
 			cfg.upcasters,
+			events,
 		);
 		// §19.6 per-tenant query counts: only authorized requests are counted (this runs
 		// after the confused-deputy guard + authz resolve), labelled by tenant and op.
@@ -503,7 +526,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			requireGraph(cfg, 'write'),
 			zValidator('json', nodeInputSchema),
 			async (c) => {
-				const node = await c.get('graph').addNode(c.req.valid('json') as AddNodeInput<S, NodeType<S>>);
+				const node = await c
+					.get('graph')
+					.addNode(c.req.valid('json') as AddNodeInput<S, NodeType<S>>);
 				return c.json(node, 201);
 			},
 		)
@@ -704,12 +729,12 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const { steps, where, asOf, select, page } = c.req.valid('json');
 				// Guard select against undeclared aliases up front — otherwise the compiled SQL
 				// references a non-existent `sub.<alias>__id` column and fails as a 500.
-				const nodeAliases = new Set(
-					steps.flatMap((s) => ('node' in s ? [s.node.alias] : [])),
-				);
+				const nodeAliases = new Set(steps.flatMap((s) => ('node' in s ? [s.node.alias] : [])));
 				for (const a of select) {
 					if (!nodeAliases.has(a)) {
-						throw new HTTPException(400, { message: `match: select references undeclared alias '${a}'` });
+						throw new HTTPException(400, {
+							message: `match: select references undeclared alias '${a}'`,
+						});
 					}
 				}
 				const builder = match(cfg.schema, c.get('graph').raw, cfg.upcasters) as PatternBuilder<
@@ -818,6 +843,8 @@ export interface DevServeConfig<S extends GraphSchema> {
 	limits?: Partial<QueryLimits>;
 	upcasters?: UpcasterRegistry;
 	metrics?: MetricsSink;
+	/** See {@link ServeConfig.events}. Emit typed mutation events (+ optional durable outbox). */
+	events?: GraphEventOptions;
 	readiness?: Readiness;
 	openapi?: OpenApiOptions;
 	/** See {@link ServeConfig.cors}. `true` ⇒ permissive — the common dev case (browser SPA, no proxy). */
@@ -857,7 +884,11 @@ async function bootstrapDevApp<S extends GraphSchema>(
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'dev' });
 	const namespace = cfg.db ?? 'graphx_dev';
-	const project = await createProject(control, { tenantId: tenant, name: 'dev', dbNamespace: namespace });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'dev',
+		dbNamespace: namespace,
+	});
 	// Auto-dim: create the project DB's vector column at the embedder's width (or an explicit `dim`)
 	// BEFORE the lazy `initOnce` in graphForProject bakes the 768 default. `init` is idempotent
 	// (CREATE ... IF NOT EXISTS), so the later re-init is a no-op and the column keeps this width —

@@ -1,4 +1,5 @@
-import type { DbClient } from './dialect.ts';
+import { type DbClient, dialectOf, type SqlValue } from './dialect.ts';
+import type { GraphEvent, GraphEventOp } from './events.ts';
 import { decodeCursor, encodeCursor, type QueryLimits, resolveLimits } from './governance.ts';
 
 /**
@@ -191,4 +192,116 @@ export async function changeFeed(
 		edges: edges.rows,
 		nextCursor: { nodes: nodes.nextCursor, edges: edges.nextCursor },
 	};
+}
+
+/** Cursor for {@link outboxTail}: the `seq` of the last event consumed. Omit for the beginning. */
+export interface OutboxCursor {
+	seq?: number;
+}
+
+/** Options for {@link outboxTail}. */
+export interface OutboxTailOpts {
+	/** Page size; clamped to `maxRows`. Defaults to `maxRows`. */
+	limit?: number;
+	/** Restrict to node or edge events. */
+	entity?: 'node' | 'edge';
+	/** Restrict to specific ops (e.g. only the deletes). */
+	ops?: GraphEventOp[];
+	/** §19.2 governance caps; `maxRows` bounds the page (default 10k). */
+	limits?: Partial<QueryLimits>;
+}
+
+/** One {@link outboxTail} page: the events + the cursor to poll the next. `null` when drained. */
+export interface OutboxPage {
+	events: GraphEvent[];
+	nextCursor: number | null;
+}
+
+/** Reshape a `graph_outbox` row into a {@link GraphEvent} (null src/dst ⇒ omitted, not `"null"`). */
+function rowToEvent(row: Record<string, unknown>): GraphEvent {
+	return {
+		seq: Number(row.seq),
+		op: String(row.op) as GraphEventOp,
+		entity: String(row.entity) as 'node' | 'edge',
+		id: String(row.id),
+		label: row.label == null ? '' : String(row.label),
+		shape: String(row.shape) as 'insert' | 'close',
+		ts: Number(row.ts),
+		src: row.src == null ? undefined : String(row.src),
+		dst: row.dst == null ? undefined : String(row.dst),
+	};
+}
+
+/**
+ * Tailable, delete-inclusive event feed (eventing Layer 2) — the durable sibling of {@link
+ * changeFeed} that DOES surface pure closes (deleteNode/deleteEdge/supersede), because the
+ * `graph_outbox` rows are written from the mutation altitude where the close is known. One
+ * `seq` keyset (`seq > cursor ORDER BY seq`), a single monotonic stream, keyset-paginated so
+ * polling never skips or overlaps; `nextCursor` is `null` once drained. Poll again from the
+ * last non-null cursor to pick up events written after catch-up.
+ *
+ * Backend ordering: on libSQL every writer serializes through one BEGIN IMMEDIATE connection, so
+ * the AUTOINCREMENT `seq` equals commit order and the bare keyset is airtight. On Postgres the
+ * IDENTITY `seq` is assigned at INSERT, so a transaction with a lower seq can commit AFTER one
+ * with a higher seq; a naive `seq > cursor` would skip it once the cursor advanced. The gate
+ * `xmin < pg_snapshot_xmin(pg_current_snapshot())` withholds any row until every transaction that
+ * could still hold a lower seq has finished — so no row is ever skipped, at the cost of tail
+ * latency behind a long-running writer. (Caveat: the raw-xid text compare assumes no xid
+ * wraparound between the row and the snapshot horizon — fine below ~2^31 of churn.)
+ */
+export async function outboxTail(
+	raw: DbClient,
+	cursor: OutboxCursor = {},
+	opts: OutboxTailOpts = {},
+): Promise<OutboxPage> {
+	if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+		throw new Error(`outboxTail: limit must be a positive integer, got ${opts.limit}`);
+	}
+	if (cursor.seq !== undefined && !Number.isInteger(cursor.seq)) {
+		throw new Error('invalid cursor');
+	}
+	const maxRows = resolveLimits(opts.limits).maxRows;
+	const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+	const conds: string[] = [];
+	const args: SqlValue[] = [];
+	if (cursor.seq !== undefined) {
+		conds.push('seq > ?');
+		args.push(cursor.seq);
+	}
+	if (opts.entity) {
+		conds.push('entity = ?');
+		args.push(opts.entity);
+	}
+	if (opts.ops && opts.ops.length > 0) {
+		conds.push(`op IN (${opts.ops.map(() => '?').join(',')})`);
+		args.push(...opts.ops);
+	}
+	// Postgres visibility watermark (see the doc comment). libSQL needs no gate.
+	if (dialectOf(raw) === 'postgres') {
+		conds.push('xmin::text::bigint < pg_snapshot_xmin(pg_current_snapshot())::text::bigint');
+	}
+	const where = conds.length > 0 ? ` WHERE ${conds.join(' AND ')}` : '';
+	const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
+	args.push(pageSize + 1); // over-fetch one to detect a next page
+	const r = await raw.execute({ sql, args });
+	const rows = r.rows as unknown as Array<Record<string, unknown>>;
+	if (rows.length > pageSize) {
+		const page = rows.slice(0, pageSize).map(rowToEvent);
+		const last = page[page.length - 1] as GraphEvent;
+		return { events: page, nextCursor: last.seq ?? null };
+	}
+	return { events: rows.map(rowToEvent), nextCursor: null };
+}
+
+/**
+ * Drop consumed outbox rows: `DELETE WHERE seq < beforeSeq`. Retention/coordination is the
+ * caller's policy (prune below the slowest live consumer's cursor, or by age) — core just
+ * provides the mechanism. Returns the number of rows deleted.
+ */
+export async function pruneOutbox(raw: DbClient, beforeSeq: number): Promise<number> {
+	if (!Number.isInteger(beforeSeq)) {
+		throw new Error(`pruneOutbox: beforeSeq must be an integer, got ${beforeSeq}`);
+	}
+	const r = await raw.execute({ sql: 'DELETE FROM graph_outbox WHERE seq < ?', args: [beforeSeq] });
+	return r.rowsAffected;
 }

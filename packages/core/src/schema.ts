@@ -93,6 +93,21 @@ CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 
+-- Eventing (Layer 2): durable, totally-ordered, delete-inclusive event log co-written into
+-- each mutation's own transaction and tailed by outboxTail. AUTOINCREMENT is load-bearing —
+-- a bare rowid is REUSED after a prune drain, which would strand client cursors on stale seqs.
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  seq    INTEGER PRIMARY KEY AUTOINCREMENT,
+  op     TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  id     TEXT NOT NULL,
+  label  TEXT,
+  src    TEXT,
+  dst    TEXT,
+  shape  TEXT NOT NULL,
+  ts     INTEGER NOT NULL
+);
+
 -- D4/B10: analytics live in a SIDE table, UPSERTed by P8 jobs and JOINed by topNodes.
 -- Version rows stay byte-stable — no analytics columns on node_versions. Per-metric
 -- indexes back the ORDER BY <metric> DESC in topNodes.
