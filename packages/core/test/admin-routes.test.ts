@@ -109,6 +109,82 @@ test('GET /nodes/:id/history returns the version trail', async () => {
 	cleanup(s);
 });
 
+test('GET /nodes/:id/content returns the live body + provenance', async () => {
+	const s = await setup();
+	const id = await addNode(s, {
+		type: 'person',
+		data: { name: 'p1' },
+		body: '# Ada\n\nNotes.',
+		uri: 'vault/ada.md',
+		content_type: 'text/markdown',
+		content_hash: 'abc123',
+	});
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) });
+	expect(res.status).toBe(200);
+	expect(await res.json()).toEqual({
+		body: '# Ada\n\nNotes.',
+		uri: 'vault/ada.md',
+		contentType: 'text/markdown',
+		contentHash: 'abc123',
+	});
+	cleanup(s);
+});
+
+test('GET /nodes/:id/content nulls the content columns when the node has none', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) });
+	expect(res.status).toBe(200);
+	expect(await res.json()).toEqual({ body: null, uri: null, contentType: null, contentHash: null });
+	cleanup(s);
+});
+
+test('GET /nodes/:id/content for an unknown id -> 404', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}/content`, { headers: hdr(s) });
+	expect(res.status).toBe(404);
+	cleanup(s);
+});
+
+test('PATCH /nodes/:id {body} appends a version and leaves type/data intact', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' }, body: 'old' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: hdr(s),
+		body: JSON.stringify({ body: '# new' }),
+	});
+	expect(res.status).toBe(200);
+	expect(await res.json()).toMatchObject({ id, type: 'person', data: { name: 'p1' } });
+
+	const content = await (
+		await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) })
+	).json();
+	expect(content.body).toBe('# new');
+
+	// Bitemporal: the old version is closed, the successor is live — the History tab's trail.
+	const versions = (
+		await (await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) })).json()
+	).versions;
+	expect(versions.length).toBe(2);
+	expect(versions.map((v: { body: string }) => v.body)).toEqual(['old', '# new']);
+	cleanup(s);
+});
+
+test('PATCH /nodes/:id as a viewer -> 403', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const viewer = await createUser(s.control, { email: `v-${ulid()}@a.test` });
+	await addMembership(s.control, { userId: viewer, tenantId: s.tenantA, role: 'viewer' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: { 'x-user': viewer, 'x-tenant': s.tenantA, 'content-type': 'application/json' },
+		body: JSON.stringify({ body: 'nope' }),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
 test('GET /nodes with a malformed cursor -> 400', async () => {
 	const s = await setup();
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, { headers: hdr(s) });

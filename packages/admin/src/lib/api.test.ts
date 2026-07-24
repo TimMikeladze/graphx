@@ -61,6 +61,24 @@ describe("api transport", () => {
     await expect(api.createTenant("")).rejects.toBeInstanceOf(ApiError)
   })
 
+  it("reads a node's content payload from the /content sub-resource", async () => {
+    fetchMock.mockResolvedValue(ok({ body: "# hi", uri: null, contentType: null, contentHash: null }))
+    const content = await api.getNodeContent("tA", "pA", "n1")
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe("/t/tA/p/pA/nodes/n1/content")
+    expect(init?.method).toBeUndefined() // GET
+    expect(content.body).toBe("# hi")
+  })
+
+  it("PATCHes only the body when saving node content", async () => {
+    fetchMock.mockResolvedValue(ok({ id: "n1", type: "person", data: {} }))
+    await api.updateNodeBody("tA", "pA", "n1", "# new")
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe("/t/tA/p/pA/nodes/n1")
+    expect(init.method).toBe("PATCH")
+    expect(init.body).toBe(JSON.stringify({ body: "# new" }))
+  })
+
   it("sets JSON content-type on bodied requests", async () => {
     fetchMock.mockResolvedValue(ok({ id: "x" }))
     await api.createTenant("Acme")

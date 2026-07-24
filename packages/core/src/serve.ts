@@ -637,6 +637,13 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				return c.json(slice);
 			},
 		)
+		// The live version's content payload (body + provenance), fetched on demand — kept off
+		// `GET /nodes/:id` so the typed node projection stays small.
+		.get('/t/:tenant/p/:project/nodes/:id/content', requireGraph(cfg, 'read'), async (c) => {
+			const content = await c.get('graph').getNodeContent(c.req.param('id'));
+			if (!content) throw new HTTPException(404, { message: 'node not found' });
+			return c.json(content);
+		})
 		.get('/t/:tenant/p/:project/nodes/:id/history', requireGraph(cfg, 'read'), async (c) => {
 			const versions = await history(c.get('graph').raw, c.req.param('id'));
 			return c.json({ versions });

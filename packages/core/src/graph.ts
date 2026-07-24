@@ -83,6 +83,16 @@ export interface AddEdgeInput<S extends GraphSchema, R extends Rel<S>> {
 	source?: string;
 }
 
+/** Result of {@link Graph.getNodeContent} — the live version's content payload + provenance. */
+export interface NodeContent {
+	/** The node's text/markdown content (`null` when the node carries none). */
+	body: string | null;
+	/** Where the content came from (an ingest source key), or `null` for UI/SDK-authored nodes. */
+	uri: string | null;
+	contentType: string | null;
+	contentHash: string | null;
+}
+
 /** Result of {@link Graph.addEdge}. */
 export interface EdgeRef {
 	id: string;
@@ -513,6 +523,26 @@ export class Graph<S extends GraphSchema> {
 		const row = r.rows[0];
 		if (!row) return null;
 		return this.rowToNode(row);
+	}
+
+	/**
+	 * The live version's content columns — the markdown/text `body` and its provenance. Separate
+	 * from {@link getNode} because `AnyNode` is the *typed* projection (`id`/`type`/`data`) that
+	 * SDK consumers destructure; content is a bulkier, rarely-needed payload fetched on demand.
+	 */
+	async getNodeContent(id: string): Promise<NodeContent | null> {
+		const r = await this.raw.execute({
+			sql: 'SELECT body, uri, content_type, content_hash FROM nodes WHERE id = ?',
+			args: [id],
+		});
+		const row = r.rows[0];
+		if (!row) return null;
+		return {
+			body: (row.body as string | null) ?? null,
+			uri: (row.uri as string | null) ?? null,
+			contentType: (row.content_type as string | null) ?? null,
+			contentHash: (row.content_hash as string | null) ?? null,
+		};
 	}
 
 	/**

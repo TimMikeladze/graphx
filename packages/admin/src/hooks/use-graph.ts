@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import type { ExplorerFilters } from "@/lib/types"
@@ -55,6 +55,40 @@ export function useNode(tenant?: string, project?: string, id?: string) {
     queryKey: qk.node(tenant ?? "", project ?? "", id ?? ""),
     queryFn: () => api.getNode(tenant as string, project as string, id as string),
     enabled: Boolean(tenant && project && id),
+  })
+}
+
+/**
+ * A node's markdown body + provenance (detail Sheet · Content tab). Lazy — pass `enabled: false`
+ * until the tab is open so selecting a node in the graph doesn't pull every body over the wire.
+ */
+export function useNodeContent(
+  tenant?: string,
+  project?: string,
+  id?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? ""),
+    queryFn: () => api.getNodeContent(tenant as string, project as string, id as string),
+    enabled: Boolean(enabled && tenant && project && id),
+  })
+}
+
+/**
+ * Save a node's markdown body. The write is bitemporal (a successor version), so the version
+ * trail is invalidated alongside the content itself. `data`/`type` are untouched by the PATCH,
+ * and body is in neither the node list nor the graph slice — so neither is invalidated.
+ */
+export function useUpdateNodeBody(tenant?: string, project?: string, id?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: string) =>
+      api.updateNodeBody(tenant as string, project as string, id as string, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
+    },
   })
 }
 

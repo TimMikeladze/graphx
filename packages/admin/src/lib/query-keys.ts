@@ -10,6 +10,8 @@ export const qk = {
   graph: (tenant: string, project: string, filters: ExplorerFilters) =>
     ["graph", tenant, project, filters] as const,
   node: (tenant: string, project: string, id: string) => ["node", tenant, project, id] as const,
+  nodeContent: (tenant: string, project: string, id: string) =>
+    ["node-content", tenant, project, id] as const,
   neighbors: (tenant: string, project: string, id: string) =>
     ["neighbors", tenant, project, id] as const,
   history: (tenant: string, project: string, id: string) =>

@@ -6,6 +6,7 @@ import {
   GitBranchIcon,
   InboxIcon,
 } from "@hugeicons/core-free-icons"
+import { ContentTab } from "@/components/content-tab"
 import { CopyButton } from "@/components/copy-button"
 import { EmptyState } from "@/components/empty-state"
 import { NodeTypeBadge, TypeDot } from "@/components/type-dot"
@@ -234,6 +235,8 @@ export function NodeDetail({
   onSelect: (id: string) => void
   onClose?: () => void
 }) {
+  // Controlled so the Content tab knows when it is on screen (it gates its own fetch on that).
+  const [tab, setTab] = useState("data")
   const node = useNode(tenant, project, nodeId)
   const neighbors = useNeighbors(tenant, project, nodeId)
   const history = useHistory(tenant, project, nodeId)
@@ -278,9 +281,14 @@ export function NodeDetail({
         )}
       </div>
 
-      <Tabs defaultValue="data" className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="flex min-h-0 flex-1 flex-col gap-2 p-3"
+      >
         <TabsList className="w-full">
           <TabsTrigger value="data">Properties</TabsTrigger>
+          <TabsTrigger value="content">Content</TabsTrigger>
           <TabsTrigger value="neighbors">
             Neighbors
             {neighbors.data && neighbors.data.length > 0 && (
@@ -296,6 +304,14 @@ export function NodeDetail({
           <ScrollArea className="h-full pr-2">
             <Properties node={node.data} />
           </ScrollArea>
+        </TabsContent>
+        <TabsContent value="content" className="min-h-0 flex-1">
+          <ContentTab
+            tenant={tenant}
+            project={project}
+            nodeId={nodeId}
+            active={tab === "content"}
+          />
         </TabsContent>
         <TabsContent value="neighbors" className="min-h-0 flex-1">
           <ScrollArea className="h-full pr-2">

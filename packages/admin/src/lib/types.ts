@@ -34,6 +34,17 @@ export interface GraphNode {
   data: Record<string, unknown>
 }
 
+/**
+ * `GET /nodes/:id/content` — the live version's text payload and its provenance. `uri` is set
+ * for ingest-sourced nodes (the source file key) and `null` for nodes authored here.
+ */
+export interface NodeContent {
+  body: string | null
+  uri: string | null
+  contentType: string | null
+  contentHash: string | null
+}
+
 /** One keyset page of `GET /nodes`. */
 export interface NodeListPage {
   nodes: GraphNode[]

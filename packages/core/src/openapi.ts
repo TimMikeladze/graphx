@@ -51,6 +51,7 @@ function routes(): RouteMeta[] {
 		{ method: 'delete', path: '/edges/{id}', op: 'write', summary: 'Delete an edge', success: 204 },
 		{ method: 'get', path: '/nodes/{id}/neighbors', op: 'read', summary: 'Neighbors (unpaginated)', query: wire.neighborQuery, success: 200 },
 		{ method: 'get', path: '/nodes/{id}/neighborsPage', op: 'read', summary: 'Neighbors (keyset paginated)', query: wire.neighborPageQuery, success: 200 },
+		{ method: 'get', path: '/nodes/{id}/content', op: 'read', summary: 'Live content payload (body + provenance)', success: 200 },
 		{ method: 'get', path: '/nodes/{id}/history', op: 'read', summary: 'Version trail for a node', success: 200 },
 		{ method: 'get', path: '/graph', op: 'read', summary: 'Canvas slice (nodes + links)', query: wire.graphSliceQuery, success: 200 },
 		{ method: 'get', path: '/retrieve', op: 'read', summary: 'GraphRAG vector retrieve', query: wire.retrieveQuery, success: 200 },

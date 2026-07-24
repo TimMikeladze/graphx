@@ -153,6 +153,84 @@
     background: radial-gradient(78% 80% at 50% 42%, transparent 54%, rgb(0 0 0 / 0.55) 100%);
   }
 
+  /* Rendered markdown (node Content tab). Hand-rolled against the design tokens rather than
+     pulling in @tailwindcss/typography — the panel is narrow and dense, so `prose` defaults
+     (large headings, generous leading, its own color ramp) would fight the inspector's scale. */
+  .markdown {
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+  }
+  .markdown > :first-child { margin-top: 0; }
+  .markdown > :last-child { margin-bottom: 0; }
+  .markdown h1,
+  .markdown h2,
+  .markdown h3,
+  .markdown h4 {
+    margin: 1.25em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .markdown h1 { font-size: 1.35em; }
+  .markdown h2 { font-size: 1.18em; }
+  .markdown h3 { font-size: 1.05em; }
+  .markdown h4 { font-size: 1em; }
+  .markdown p,
+  .markdown ul,
+  .markdown ol,
+  .markdown blockquote,
+  .markdown pre,
+  .markdown table { margin: 0.75em 0; }
+  .markdown ul { list-style: disc; padding-left: 1.25em; }
+  .markdown ol { list-style: decimal; padding-left: 1.25em; }
+  .markdown li { margin: 0.2em 0; }
+  .markdown li::marker { color: var(--muted-foreground); }
+  .markdown a {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in oklch, var(--foreground) 35%, transparent);
+  }
+  .markdown a:hover { text-decoration-color: currentColor; }
+  .markdown strong { font-weight: 600; }
+  .markdown code {
+    border-radius: var(--radius-sm);
+    background-color: var(--muted);
+    padding: 0.1em 0.35em;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+  .markdown pre {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    background-color: var(--muted);
+    padding: 0.75rem;
+  }
+  .markdown pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.85em;
+  }
+  .markdown blockquote {
+    border-left: 2px solid var(--border);
+    padding-left: 0.75em;
+    color: var(--muted-foreground);
+  }
+  .markdown hr { margin: 1.25em 0; border-top: 1px solid var(--border); }
+  .markdown table { display: block; overflow-x: auto; border-collapse: collapse; }
+  .markdown th,
+  .markdown td {
+    border: 1px solid var(--border);
+    padding: 0.3em 0.55em;
+    text-align: left;
+  }
+  .markdown th { font-weight: 600; }
+  .markdown img { max-width: 100%; border-radius: var(--radius-md); }
+  /* GFM task lists — the checkboxes are informational, not interactive. */
+  .markdown input[type="checkbox"] { margin-right: 0.4em; vertical-align: middle; }
+  .markdown li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.25em; }
+
   /* The deep-space canvas backdrop for empty/loading states: soft central glow + fine dot grid. */
   .canvas-atmos {
     background-color: #0a0a0f;

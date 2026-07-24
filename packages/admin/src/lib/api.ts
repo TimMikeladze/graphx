@@ -2,6 +2,7 @@ import type {
   ExplorerFilters,
   GraphNode,
   GraphSlice,
+  NodeContent,
   NodeListPage,
   NodeVersion,
   Project,
@@ -152,6 +153,14 @@ export const api = {
     ),
   getNode: (tenant: string, project: string, id: string) =>
     request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`),
+  getNodeContent: (tenant: string, project: string, id: string) =>
+    request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content`),
+  /** Replace a node's markdown body. Bitemporal — the server opens a successor version. */
+  updateNodeBody: (tenant: string, project: string, id: string, body: string) =>
+    request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+    }),
   neighbors: (tenant: string, project: string, id: string) =>
     request<GraphNode[]>(`${tp(tenant, project)}/nodes/${id}/neighbors`),
   history: (tenant: string, project: string, id: string) =>
