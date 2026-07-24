@@ -50,7 +50,7 @@ export function GraphToolbar({
   onToggleFullscreen: () => void
 }) {
   return (
-    <div className="absolute top-3 right-3 flex flex-col gap-0.5 rounded-lg border bg-background/80 p-1 shadow-sm backdrop-blur-sm">
+    <div className="hud absolute top-3 right-3 flex flex-col gap-0.5 p-1">
       <ToolButton icon={Target02Icon} label="Fit to view" onClick={onFit} />
       <ToolButton icon={ZoomInAreaIcon} label="Zoom in" onClick={onZoomIn} />
       <ToolButton icon={ZoomOutAreaIcon} label="Zoom out" onClick={onZoomOut} />

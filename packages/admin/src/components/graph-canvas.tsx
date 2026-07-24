@@ -4,7 +4,7 @@ import { AlertCircleIcon, ChartRelationshipIcon } from "@hugeicons/core-free-ico
 import { EmptyState } from "@/components/empty-state"
 import { GraphToolbar } from "@/components/graph-toolbar"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { type CosmoNode, legendOf, toCosmograph } from "@/lib/cosmograph-adapter"
+import { colorForType, type CosmoNode, legendOf, toCosmograph } from "@/lib/cosmograph-adapter"
 import { shortId } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { GraphSlice } from "@/lib/types"
@@ -88,18 +88,18 @@ export function GraphCanvas({
 
   if (isLoading) {
     return (
-      <div className="h-full w-full" style={{ background: CANVAS_BG }}>
+      <div className="dark canvas-atmos h-full w-full text-foreground">
         <EmptyState
           icon={ChartRelationshipIcon}
           title="Loading graph…"
-          className="text-muted-foreground"
+          className="animate-pulse"
         />
       </div>
     )
   }
   if (!slice || slice.nodes.length === 0) {
     return (
-      <div className="h-full w-full" style={{ background: CANVAS_BG }}>
+      <div className="dark canvas-atmos h-full w-full text-foreground">
         <EmptyState
           icon={ChartRelationshipIcon}
           title="No graph for these filters"
@@ -112,7 +112,11 @@ export function GraphCanvas({
   const legend = legendOf(slice)
 
   return (
-    <div ref={containerRef} className="relative h-full w-full" style={{ background: CANVAS_BG }}>
+    <div
+      ref={containerRef}
+      className="dark relative h-full w-full text-foreground"
+      style={{ background: CANVAS_BG }}
+    >
       <ErrorBoundary
         fallback={
           <EmptyState
@@ -130,8 +134,8 @@ export function GraphCanvas({
           pointColorBy="color"
           pointColorByFn={(value: unknown) => String(value)}
           pointSizeStrategy="degree"
-          pointSizeRange={[6, 18]}
-          pointDefaultSize={7}
+          pointSizeRange={[11, 34]}
+          pointDefaultSize={13}
           simulationGravity={0.4}
           simulationCenter={0.5}
           links={data.links}
@@ -150,6 +154,16 @@ export function GraphCanvas({
             cosmoRef.current = g
           }}
           onGraphRebuilt={() => cosmoRef.current?.fitView(300)}
+          // Keep every node in frame while the force layout blooms open (instant fit each tick),
+          // then one smooth fit when it settles. Both are skipped while a node is selected, so the
+          // selection's own zoom-to-node isn't fought. This is what makes even a 5-node slice land
+          // centered instead of zoomed into a single point.
+          onSimulationTick={() => {
+            if (selectedId === undefined && !paused) cosmoRef.current?.fitView(0)
+          }}
+          onSimulationEnd={() => {
+            if (selectedId === undefined) cosmoRef.current?.fitView(400)
+          }}
           onClick={(index) =>
             onSelect(index === undefined ? undefined : pointsRef.current[index]?.id)
           }
@@ -163,9 +177,16 @@ export function GraphCanvas({
         />
       </ErrorBoundary>
 
+      {/* edge falloff that frames the composition (never covers the centered nodes) */}
+      <div className="canvas-vignette pointer-events-none absolute inset-0" />
+
       {/* stats */}
-      <div className="pointer-events-none absolute top-3 left-3 rounded-md border bg-background/80 px-2 py-1 text-xs text-muted-foreground tabular-nums backdrop-blur-sm">
-        {slice.nodes.length} nodes · {slice.links.length} edges
+      <div className="hud pointer-events-none absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1.5 text-xs tabular-nums">
+        <span className="font-semibold text-foreground">{slice.nodes.length}</span>
+        <span className="text-muted-foreground">nodes</span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="font-semibold text-foreground">{slice.links.length}</span>
+        <span className="text-muted-foreground">edges</span>
       </div>
 
       <GraphToolbar
@@ -184,17 +205,26 @@ export function GraphCanvas({
       {/* hover tooltip */}
       {hover && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+10px)] rounded-md border bg-popover px-2 py-1 text-xs shadow-md"
+          className="hud pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+12px)] px-2.5 py-1.5 text-xs"
           style={{ left: hover.x, top: hover.y }}
         >
-          <div className="font-medium">{hover.type}</div>
-          <div className="font-mono text-[0.65rem] text-muted-foreground">{shortId(hover.id, 8, 6)}</div>
+          <div className="flex items-center gap-1.5 font-medium">
+            <span
+              aria-hidden
+              className="size-2 rounded-full"
+              style={{ backgroundColor: colorForType(hover.type) }}
+            />
+            {hover.type}
+          </div>
+          <div className="mt-0.5 font-mono text-[0.65rem] text-muted-foreground">
+            {shortId(hover.id, 8, 6)}
+          </div>
         </div>
       )}
 
       {/* legend / quick type filter */}
       {legend.length > 0 && (
-        <div className="absolute bottom-3 left-3 flex max-w-[60%] flex-wrap gap-1 rounded-lg border bg-background/80 p-1.5 text-xs backdrop-blur-sm">
+        <div className="hud absolute bottom-3 left-3 flex max-w-[60%] flex-wrap items-center gap-0.5 p-1.5 text-xs">
           {legend.map((l) => {
             const active = activeType === l.type
             return (

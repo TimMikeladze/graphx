@@ -1,0 +1,230 @@
+{
+	"shared": {
+		"who designed the analytical engine": {
+			"nearest": "charles-babbage",
+			"dist": {
+				"charles-babbage": 0.641431417,
+				"colossus": 0.692206494,
+				"analytical-engine": 0.731671843,
+				"alan-turing": 0.8,
+				"halting-problem": 0.880477139,
+				"bletchley-park": 0.880477139,
+				"grace-hopper": 0.884529946,
+				"enigma-machine": 0.888196601,
+				"cobol": 0.894590745,
+				"ada-lovelace": 0.906749519,
+				"compiler": 1,
+				"eniac": 1,
+				"turing-machine": 1,
+				"punched-card": 1
+			}
+		},
+		"wartime codebreaking of intercepted signals": {
+			"nearest": "bletchley-park",
+			"dist": {
+				"bletchley-park": 0.521908556,
+				"turing-machine": 0.844300211,
+				"grace-hopper": 0.884529946,
+				"cobol": 0.894590745,
+				"alan-turing": 0.9,
+				"halting-problem": 1,
+				"enigma-machine": 1,
+				"colossus": 1,
+				"compiler": 1,
+				"eniac": 1,
+				"analytical-engine": 1,
+				"punched-card": 1,
+				"charles-babbage": 1,
+				"ada-lovelace": 1
+			}
+		},
+		"the first compiler for readable english programs": {
+			"nearest": "grace-hopper",
+			"dist": {
+				"grace-hopper": 0.414459956,
+				"ada-lovelace": 0.684755838,
+				"bletchley-park": 0.696954237,
+				"colossus": 0.739867009,
+				"alan-turing": 0.746453724,
+				"halting-problem": 0.797969491,
+				"charles-babbage": 0.898984746,
+				"enigma-machine": 0.905508882,
+				"compiler": 0.910912919,
+				"cobol": 0.910912919,
+				"analytical-engine": 0.924407105,
+				"eniac": 1,
+				"turing-machine": 1,
+				"punched-card": 1
+			}
+		},
+		"abstract model of computation with a tape": {
+			"nearest": "turing-machine",
+			"dist": {
+				"turing-machine": 0.303689376,
+				"analytical-engine": 0.733333333,
+				"enigma-machine": 0.833333333,
+				"alan-turing": 0.850928802,
+				"ada-lovelace": 0.860990391,
+				"cobol": 0.92143258,
+				"compiler": 0.92143258,
+				"eniac": 0.92143258,
+				"colossus": 0.923528089,
+				"grace-hopper": 1,
+				"halting-problem": 1,
+				"bletchley-park": 1,
+				"punched-card": 1,
+				"charles-babbage": 1
+			}
+		},
+		"early electronic computer built from valves": {
+			"nearest": "colossus",
+			"dist": {
+				"colossus": 0.625365675,
+				"eniac": 0.80754991,
+				"grace-hopper": 0.894590745,
+				"enigma-machine": 0.897937927,
+				"compiler": 0.903774955,
+				"punched-card": 0.906341419,
+				"analytical-engine": 0.918350342,
+				"halting-problem": 1,
+				"bletchley-park": 1,
+				"cobol": 1,
+				"alan-turing": 1,
+				"turing-machine": 1,
+				"charles-babbage": 1,
+				"ada-lovelace": 1
+			}
+		},
+		"punched card input for mechanical computers": {
+			"nearest": "analytical-engine",
+			"dist": {
+				"analytical-engine": 0.673401368,
+				"punched-card": 0.812682838,
+				"charles-babbage": 0.890891055,
+				"ada-lovelace": 0.914874347,
+				"cobol": 1,
+				"enigma-machine": 1,
+				"grace-hopper": 1,
+				"compiler": 1,
+				"eniac": 1,
+				"halting-problem": 1,
+				"bletchley-park": 1,
+				"colossus": 1,
+				"turing-machine": 1,
+				"alan-turing": 1
+			}
+		}
+	},
+	"byDialect": {
+		"libsql": {
+			"who designed the analytical engine": {
+				"ftsSet": [
+					"alan-turing",
+					"analytical-engine",
+					"charles-babbage",
+					"cobol",
+					"colossus",
+					"halting-problem"
+				]
+			},
+			"wartime codebreaking of intercepted signals": {
+				"ftsSet": [
+					"alan-turing",
+					"bletchley-park",
+					"turing-machine"
+				]
+			},
+			"the first compiler for readable english programs": {
+				"ftsSet": [
+					"ada-lovelace",
+					"alan-turing",
+					"cobol",
+					"colossus",
+					"compiler",
+					"grace-hopper"
+				]
+			},
+			"abstract model of computation with a tape": {
+				"ftsSet": [
+					"ada-lovelace",
+					"alan-turing",
+					"analytical-engine",
+					"colossus",
+					"enigma-machine",
+					"turing-machine"
+				]
+			},
+			"early electronic computer built from valves": {
+				"ftsSet": [
+					"analytical-engine",
+					"colossus",
+					"eniac",
+					"grace-hopper",
+					"punched-card"
+				]
+			},
+			"punched card input for mechanical computers": {
+				"ftsSet": [
+					"ada-lovelace",
+					"analytical-engine",
+					"charles-babbage",
+					"punched-card"
+				]
+			}
+		},
+		"postgres": {
+			"who designed the analytical engine": {
+				"ftsSet": [
+					"analytical-engine",
+					"charles-babbage",
+					"cobol"
+				]
+			},
+			"wartime codebreaking of intercepted signals": {
+				"ftsSet": [
+					"bletchley-park"
+				]
+			},
+			"the first compiler for readable english programs": {
+				"ftsSet": [
+					"ada-lovelace",
+					"cobol",
+					"colossus",
+					"compiler",
+					"grace-hopper",
+					"halting-problem"
+				]
+			},
+			"abstract model of computation with a tape": {
+				"ftsSet": [
+					"ada-lovelace",
+					"alan-turing",
+					"colossus",
+					"eniac",
+					"punched-card",
+					"turing-machine"
+				]
+			},
+			"early electronic computer built from valves": {
+				"ftsSet": [
+					"ada-lovelace",
+					"colossus",
+					"eniac",
+					"grace-hopper",
+					"punched-card",
+					"turing-machine"
+				]
+			},
+			"punched card input for mechanical computers": {
+				"ftsSet": [
+					"alan-turing",
+					"analytical-engine",
+					"colossus",
+					"eniac",
+					"punched-card",
+					"turing-machine"
+				]
+			}
+		}
+	}
+}

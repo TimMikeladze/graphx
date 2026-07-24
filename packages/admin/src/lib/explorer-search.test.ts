@@ -26,6 +26,18 @@ describe("parseExplorerSearch", () => {
     expect(parseExplorerSearch({}).asOf).toBeUndefined()
   })
 
+  it("accepts the known search modes and rejects anything else", () => {
+    expect(parseExplorerSearch({ mode: "semantic" }).mode).toBe("semantic")
+    expect(parseExplorerSearch({ mode: "hybrid" }).mode).toBe("hybrid")
+    expect(parseExplorerSearch({ mode: "sql" }).mode).toBeUndefined()
+    expect(parseExplorerSearch({ mode: 7 }).mode).toBeUndefined()
+  })
+
+  it("normalises the default mode to undefined so it stays out of the URL", () => {
+    expect(parseExplorerSearch({ mode: "text" }).mode).toBeUndefined()
+    expect(parseExplorerSearch({}).mode).toBeUndefined()
+  })
+
   it("parses expand from a comma string and an array, de-duped", () => {
     expect(parseExplorerSearch({ expand: "a,b,a" }).expand).toEqual(["a", "b"])
     expect(parseExplorerSearch({ expand: ["x", "x", "y"] }).expand).toEqual(["x", "y"])
@@ -36,7 +48,12 @@ describe("parseExplorerSearch", () => {
 describe("filtersOf", () => {
   it("returns only the filter subset", () => {
     const s = parseExplorerSearch({ type: "device", q: "router", asOf: 9, node: "n1", expand: "a" })
-    expect(filtersOf(s)).toEqual({ type: "device", q: "router", asOf: 9 })
+    expect(filtersOf(s)).toEqual({ type: "device", q: "router", asOf: 9, mode: undefined })
+  })
+
+  it("carries the search mode, since it changes which endpoint runs the query", () => {
+    const s = parseExplorerSearch({ q: "enigma", mode: "hybrid" })
+    expect(filtersOf(s).mode).toBe("hybrid")
   })
 })
 

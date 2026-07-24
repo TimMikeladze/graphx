@@ -5,6 +5,7 @@ import type {
   NodeListPage,
   NodeVersion,
   Project,
+  RetrievedNode,
   Role,
   Tenant,
   User,
@@ -102,6 +103,16 @@ export interface ListNodesOpts extends ExplorerFilters {
   cursor?: string
 }
 
+/** Arguments shared by `GET /retrieve` and `POST /hybrid`. */
+export interface RetrieveOpts {
+  query: string
+  /** Number of seeds fed into the walk. */
+  k?: number
+  /** Hops expanded from each seed. `0` ⇒ seeds only (a pure ranked list). */
+  maxDepth?: number
+  asOf?: number
+}
+
 const tp = (tenant: string, project: string) => `/t/${tenant}/p/${project}`
 
 export const api = {
@@ -147,4 +158,20 @@ export const api = {
     request<{ versions: NodeVersion[] }>(`${tp(tenant, project)}/nodes/${id}/history`).then(
       (r) => r.versions,
     ),
+
+  // --- retrieval (needs a server-side embedder; both 501 without one) ---
+  retrieve: (tenant: string, project: string, opts: RetrieveOpts) =>
+    request<RetrievedNode[]>(
+      `${tp(tenant, project)}/retrieve${qs({
+        query: opts.query,
+        k: opts.k,
+        maxDepth: opts.maxDepth,
+        asOf: opts.asOf,
+      })}`,
+    ),
+  hybrid: (tenant: string, project: string, opts: RetrieveOpts) =>
+    request<RetrievedNode[]>(`${tp(tenant, project)}/hybrid`, {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }),
 }

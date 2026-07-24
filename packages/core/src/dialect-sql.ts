@@ -191,15 +191,41 @@ export function embFreshExpr(dialect: Dialect): string {
 }
 
 /**
+ * A Postgres `tsquery` that ORs the query's terms. Consumes ONE bound arg: the raw query text.
+ *
+ * `websearch_to_tsquery` — the obvious choice, and what this used to be — ANDs its terms, while
+ * libSQL's {@link sanitizeMatch} joins them with `OR`. Same API, opposite recall: a multi-term
+ * query only matched on Postgres if a SINGLE document contained every stem, so the lexical leg
+ * usually returned nothing and hybrid retrieval silently degraded to vector-only. Measured on the
+ * evaluation corpus before this fix: lexical recall@6 of 0.236 on Postgres against 0.778 on
+ * libSQL. The two backends are documented as interchangeable, so `OR` (the higher-recall reading,
+ * and the one the fusion step is designed around) is now what both do.
+ *
+ * Every fragment is a `tsquery` that Postgres itself produced and rendered back to text, so the
+ * lexemes are already quoted and escaped — no user input ever reaches `tsquery` syntax, which is
+ * what `sanitizeMatch` buys on the libSQL side. Terms the dictionary drops entirely (stopwords)
+ * render as `''` and are filtered out; a query of nothing but stopwords aggregates to NULL, and
+ * `body_tsv @@ NULL` matches no rows.
+ */
+function tsQueryOr(): string {
+	return `(SELECT NULLIF(string_agg(t.pq, ' | '), '')::tsquery
+	FROM (
+		SELECT plainto_tsquery('english', tok)::text AS pq
+		FROM unnest(string_to_array(?, ' ')) AS tok
+	) t
+	WHERE t.pq <> '')`;
+}
+
+/**
  * Full-text WHERE predicate on a `node_versions` alias. libSQL joins the external-content
  * FTS5 table by rowid (`ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`, bound
- * arg = a sanitized FTS5 expression); Postgres matches the generated `body_tsv` column
- * (`@@ websearch_to_tsquery('english', ?)`, bound arg = the RAW query text — websearch
- * parses it safely). Callers gate both on "has usable tokens" before binding.
+ * arg = a sanitized FTS5 expression); Postgres matches the generated `body_tsv` column against
+ * {@link tsQueryOr} (bound arg = the RAW query text). Callers gate both on "has usable tokens"
+ * before binding.
  */
 export function ftsWhere(dialect: Dialect, alias: string): string {
 	return dialect === 'postgres'
-		? `${alias}.body_tsv @@ websearch_to_tsquery('english', ?)`
+		? `${alias}.body_tsv @@ ${tsQueryOr()}`
 		: `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
 }
 
@@ -290,7 +316,7 @@ WHERE n.valid_to = ${FOREVER_LIT}`;
  */
 export function ftsSeedLive(dialect: Dialect): string {
 	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT websearch_to_tsquery('english', ?) AS tq)
+		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
 SELECT n.id AS id
 FROM node_versions n, q
 WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
@@ -308,7 +334,7 @@ LIMIT ?`;
 /** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
 export function ftsSeedAsOf(dialect: Dialect): string {
 	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT websearch_to_tsquery('english', ?) AS tq)
+		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
 SELECT n.id AS id
 FROM node_versions n, q
 WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to

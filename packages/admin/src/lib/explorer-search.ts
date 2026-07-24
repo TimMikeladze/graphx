@@ -1,4 +1,13 @@
-import type { ExplorerFilters } from "./types"
+import type { ExplorerFilters, SearchMode } from "./types"
+
+const MODES: SearchMode[] = ["text", "semantic", "hybrid"]
+
+/** Coerce a raw search param into a {@link SearchMode}; `text` is the default so it stays absent. */
+function parseMode(raw: unknown): SearchMode | undefined {
+  return typeof raw === "string" && MODES.includes(raw as SearchMode) && raw !== "text"
+    ? (raw as SearchMode)
+    : undefined
+}
 
 /**
  * The explorer URL search params — the single source of truth for filter + selection state
@@ -26,6 +35,7 @@ export function parseExplorerSearch(raw: Record<string, unknown>): ExplorerSearc
     type: str(raw.type),
     q: str(raw.q),
     asOf,
+    mode: parseMode(raw.mode),
     node: str(raw.node),
     expand: parseExpand(raw.expand),
   }
@@ -40,7 +50,7 @@ function parseExpand(raw: unknown): string[] {
 
 /** The filter subset of the search (what the data hooks key on). */
 export function filtersOf(search: ExplorerSearch): ExplorerFilters {
-  return { type: search.type, q: search.q, asOf: search.asOf }
+  return { type: search.type, q: search.q, asOf: search.asOf, mode: search.mode }
 }
 
 /** Add an id to the expand set (immutably). */

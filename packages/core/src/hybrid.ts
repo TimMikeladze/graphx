@@ -105,8 +105,12 @@ export function sanitizeMatch(query: string): string | null {
  * Reciprocal Rank Fusion over ranked id lists (M5). Each list is already in rank
  * order; the FIRST occurrence of an id in a list is its best (lowest) rank. Fused
  * score = Σ 1/(rrfK + rank_i). Returns ids ordered by fused score descending.
+ *
+ * Exported for retrieval evaluation, which scores the fused seed order directly:
+ * {@link hybridRetrieve} feeds this ranking into the walk but returns rows ordered by
+ * DEPTH, so the fusion quality is not observable from its output alone.
  */
-function rrf(lists: string[][], rrfK: number): string[] {
+export function rrf(lists: string[][], rrfK: number): string[] {
 	const score = new Map<string, number>();
 	for (const list of lists) {
 		const seen = new Set<string>();

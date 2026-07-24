@@ -1,21 +1,15 @@
 import { getRouteApi } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { ArrowRight01Icon } from "@hugeicons/core-free-icons"
+import { ArrowRight01Icon, Search01Icon } from "@hugeicons/core-free-icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/command-palette"
 import { GraphCanvas } from "@/components/graph-canvas"
 import { NodeDetail } from "@/components/node-detail"
 import { NodeDetailSheet } from "@/components/node-detail-sheet"
-import { NodeList } from "@/components/node-list"
 import { ResultsBanner } from "@/components/results-banner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useGraphSlice, useProjects, useTenants } from "@/hooks/use-graph"
@@ -25,7 +19,7 @@ import type { ExplorerFilters } from "@/lib/types"
 /** Typed access to the explorer route's params + search (registered in router.tsx). */
 export const explorerRoute = getRouteApi("/t/$tenant/p/$project")
 
-/** The master-detail explorer: sidebar filters | node list | Cosmograph canvas | docked detail. */
+/** The master-detail explorer: one sidebar (scope + filters + node list) | canvas | docked detail. */
 export function ExplorerPage() {
   const { tenant, project } = explorerRoute.useParams()
   const search = explorerRoute.useSearch()
@@ -48,7 +42,15 @@ export function ExplorerPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
-  const slice = useGraphSlice(tenant, project, filters)
+  // `GET /graph` only knows the substring filter, so in a retrieval mode `q` would shrink the
+  // canvas by a rule that has nothing to do with what /retrieve returned — the list and the graph
+  // would disagree. Drop `q` there and let the canvas show the whole scope, with the selected
+  // result highlighted.
+  const sliceFilters = useMemo(
+    () => (filters.mode && filters.mode !== "text" ? { ...filters, q: undefined } : filters),
+    [filters],
+  )
+  const slice = useGraphSlice(tenant, project, sliceFilters)
   const types = useMemo(
     () => [...new Set((slice.data?.nodes ?? []).map((n) => n.type))].sort(),
     [slice.data],
@@ -63,13 +65,14 @@ export function ExplorerPage() {
   const detailOpen = Boolean(search.node) && !isMobile
 
   return (
-    <SidebarProvider>
+    <SidebarProvider style={{ "--sidebar-width": "21rem" } as React.CSSProperties}>
       <AppSidebar
         tenant={tenant}
         project={project}
         filters={filters}
         types={types}
-        count={slice.data?.nodes.length}
+        selectedId={search.node}
+        onSelectNode={(id) => setSearch({ node: id })}
         onFilterChange={(patch) => setSearch(patch)}
       />
       <SidebarInset className="flex h-svh min-w-0 flex-col">
@@ -88,11 +91,12 @@ export function ExplorerPage() {
             <Button
               variant="outline"
               size="sm"
-              className="text-muted-foreground"
+              className="w-52 justify-start gap-2 font-normal text-muted-foreground"
               onClick={() => setPaletteOpen(true)}
             >
-              Search
-              <kbd className="ml-1 inline-flex h-4 items-center rounded border bg-muted px-1 font-sans text-[0.65rem] text-muted-foreground">
+              <HugeiconsIcon icon={Search01Icon} strokeWidth={2} className="size-3.5" />
+              Search nodes…
+              <kbd className="ml-auto inline-flex h-4 items-center rounded border bg-muted px-1 font-sans text-[0.65rem] text-muted-foreground">
                 ⌘K
               </kbd>
             </Button>
@@ -103,31 +107,19 @@ export function ExplorerPage() {
         {slice.data?.truncated && <ResultsBanner />}
 
         <div className="flex min-h-0 flex-1">
-          {/* list | graph stay resizable; detail docks as a fixed pane so the graph never remounts */}
-          <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
-            <ResizablePanel id="list" defaultSize={30} minSize={18}>
-              <NodeList
-                tenant={tenant}
-                project={project}
-                filters={filters}
-                selectedId={search.node}
-                onSelect={(id) => setSearch({ node: id })}
-              />
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel id="graph" defaultSize={70} minSize={30}>
-              <GraphCanvas
-                slice={slice.data}
-                isLoading={slice.isLoading}
-                selectedId={search.node}
-                onSelect={(id) => setSearch({ node: id })}
-                activeType={filters.type}
-                onTypeFilter={(type) => setSearch({ type })}
-              />
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          {/* detail docks as a fixed pane beside the canvas so the graph never remounts */}
+          <div className="min-w-0 flex-1">
+            <GraphCanvas
+              slice={slice.data}
+              isLoading={slice.isLoading}
+              selectedId={search.node}
+              onSelect={(id) => setSearch({ node: id })}
+              activeType={filters.type}
+              onTypeFilter={(type) => setSearch({ type })}
+            />
+          </div>
           {detailOpen && search.node && (
-            <aside className="flex w-[400px] shrink-0 flex-col border-l">
+            <aside className="flex w-[400px] shrink-0 animate-in flex-col border-l duration-200 fade-in slide-in-from-right-4">
               <NodeDetail
                 tenant={tenant}
                 project={project}

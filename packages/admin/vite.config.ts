@@ -1,11 +1,20 @@
 import path from "path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type ProxyOptions } from "vite"
 
 // https://vite.dev/config/
 // The graphx Hono process the dev server proxies API calls to (override with VITE_API_TARGET).
 const API_TARGET = process.env.VITE_API_TARGET ?? "http://localhost:8787"
+
+// The `/t` and `/admin` prefixes are both SPA routes AND API realms. Without this bypass a
+// browser navigation to one (reload, deep link, back/forward) is proxied to Hono and renders a
+// raw `{"error":"unauthenticated"}` instead of the app. Document requests fall through to
+// index.html so the router handles them; XHR/fetch still proxies.
+const spaFallback: ProxyOptions["bypass"] = (req) =>
+  req.headers["sec-fetch-dest"] === "document" || req.headers.accept?.includes("text/html")
+    ? "/index.html"
+    : undefined
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -24,8 +33,8 @@ export default defineConfig({
   server: {
     // Proxy both API realms to the Hono server so there is no CORS in dev (spec §3).
     proxy: {
-      "/t": { target: API_TARGET, changeOrigin: true },
-      "/admin": { target: API_TARGET, changeOrigin: true },
+      "/t": { target: API_TARGET, changeOrigin: true, bypass: spaFallback },
+      "/admin": { target: API_TARGET, changeOrigin: true, bypass: spaFallback },
     },
   },
 })
