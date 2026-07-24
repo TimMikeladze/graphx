@@ -67,6 +67,37 @@ export function useNeighbors(tenant?: string, project?: string, id?: string) {
   })
 }
 
+/** Seeds fed into the walk, and hops expanded from each. */
+const RETRIEVE_K = 10
+const RETRIEVE_DEPTH = 1
+
+/**
+ * Semantic / hybrid retrieval for the `q` filter. Idle unless the mode needs it and there is a
+ * query — the endpoints 501 when the server has no embedder, so nothing fires by default.
+ *
+ * Results come back ordered by DEPTH, not relevance: the server walks outward from its seeds and
+ * groups by hop. The list surfaces that ordering instead of pretending it is a relevance rank.
+ */
+export function useRetrieval(
+  tenant?: string,
+  project?: string,
+  filters: ExplorerFilters = {},
+) {
+  const mode = filters.mode ?? "text"
+  const query = filters.q?.trim() ?? ""
+  const enabled = Boolean(tenant && project && query && mode !== "text")
+  return useQuery({
+    queryKey: qk.retrieval(tenant ?? "", project ?? "", mode, filters),
+    enabled,
+    queryFn: () => {
+      const opts = { query, k: RETRIEVE_K, maxDepth: RETRIEVE_DEPTH, asOf: filters.asOf }
+      return mode === "hybrid"
+        ? api.hybrid(tenant as string, project as string, opts)
+        : api.retrieve(tenant as string, project as string, opts)
+    },
+  })
+}
+
 /** A node's version history (detail Sheet · History tab). */
 export function useHistory(tenant?: string, project?: string, id?: string) {
   return useQuery({

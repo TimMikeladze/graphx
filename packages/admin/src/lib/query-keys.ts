@@ -14,4 +14,6 @@ export const qk = {
     ["neighbors", tenant, project, id] as const,
   history: (tenant: string, project: string, id: string) =>
     ["history", tenant, project, id] as const,
+  retrieval: (tenant: string, project: string, mode: string, filters: ExplorerFilters) =>
+    ["retrieval", tenant, project, mode, filters] as const,
 }

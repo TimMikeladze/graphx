@@ -1,0 +1,31 @@
+{
+	"driver": "postgres",
+	"k": 6,
+	"table": {
+		"annSeeds": {
+			"recall": 0.667,
+			"mrr": 1,
+			"ndcg": 0.79
+		},
+		"ftsSeeds": {
+			"recall": 0.736,
+			"mrr": 1,
+			"ndcg": 0.84
+		},
+		"fusedSeeds": {
+			"recall": 0.778,
+			"mrr": 1,
+			"ndcg": 0.845
+		},
+		"annWalk": {
+			"recall": 1,
+			"mrr": 0.311,
+			"ndcg": 0.503
+		},
+		"hybridWalk": {
+			"recall": 1,
+			"mrr": 0.589,
+			"ndcg": 0.656
+		}
+	}
+}

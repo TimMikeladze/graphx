@@ -149,6 +149,13 @@ export {
 	type RetrieveOpts,
 } from './retrieve.ts';
 
+// Record/replay embedder — real model vectors, committed once, replayed offline
+export {
+	fixtureEmbed,
+	type FixtureEmbedder,
+	type FixtureEmbedOpts,
+} from './embed-fixture.ts';
+
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR
 export {
 	type HybridRetrieveOpts,

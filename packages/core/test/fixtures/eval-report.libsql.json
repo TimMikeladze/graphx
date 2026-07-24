@@ -1,0 +1,31 @@
+{
+	"driver": "libsql",
+	"k": 6,
+	"table": {
+		"annSeeds": {
+			"recall": 0.667,
+			"mrr": 1,
+			"ndcg": 0.79
+		},
+		"ftsSeeds": {
+			"recall": 0.778,
+			"mrr": 1,
+			"ndcg": 0.872
+		},
+		"fusedSeeds": {
+			"recall": 0.722,
+			"mrr": 1,
+			"ndcg": 0.846
+		},
+		"annWalk": {
+			"recall": 1,
+			"mrr": 0.528,
+			"ndcg": 0.604
+		},
+		"hybridWalk": {
+			"recall": 1,
+			"mrr": 0.519,
+			"ndcg": 0.596
+		}
+	}
+}

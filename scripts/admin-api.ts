@@ -18,6 +18,7 @@ import {
   createUser,
   defineGraphSchema,
   graphForProject,
+  hashEmbed,
   initControl,
   type Principal,
 } from "../packages/core/src/index.ts"
@@ -68,25 +69,52 @@ const projectId = await createProject(control, { tenantId, name: "Demo", dbNames
 const ada = await createUser(control, { email: "ada@acme.test" })
 await addMembership(control, { userId: ada, tenantId, role: "owner" })
 
+// Dev embedder: deterministic, model-free, no API key or network. Lexical rather than semantic,
+// so /retrieve and /hybrid return sensible neighbors for demo queries without any setup. `dim` is
+// derived from it by createApp, and the demo DB is recreated on every start, so the vector column
+// can never disagree with the embedder.
+const embed = hashEmbed()
+
 // Seed a small graph in the demo project (operator principal bypasses membership).
+// Every node gets a `body` and its embedding — without them the ANN index is empty and the
+// semantic/hybrid search modes have nothing to seed from.
 const seedPrincipal: Principal = { userId: "seed", tenantId, operator: true }
 const g = await graphForProject(control, seedPrincipal, projectId, "write", schema)
-const adaN = await g.addNode({ kind: "person", props: { name: "Ada Lovelace" } })
-const alanN = await g.addNode({ kind: "person", props: { name: "Alan Turing" } })
-const graceN = await g.addNode({ kind: "person", props: { name: "Grace Hopper" } })
-const docN = await g.addNode({
-  kind: "document",
-  props: { title: "On Computable Numbers" },
-  body: "turing machine entscheidungsproblem decidability",
-})
-const orgN = await g.addNode({ kind: "org", props: { name: "Bletchley Park" } })
+const addDoc = async (type: "person" | "document" | "org", data: object, body: string) =>
+  g.addNode({ type, data, body, emb: await embed(body) } as Parameters<typeof g.addNode>[0])
+
+const adaN = await addDoc(
+  "person",
+  { name: "Ada Lovelace" },
+  "Ada Lovelace wrote the first published algorithm intended for a machine, computing Bernoulli numbers on the analytical engine.",
+)
+const alanN = await addDoc(
+  "person",
+  { name: "Alan Turing" },
+  "Alan Turing formalised computation, proved the halting problem undecidable, and led cryptanalysis of naval ciphers.",
+)
+const graceN = await addDoc(
+  "person",
+  { name: "Grace Hopper" },
+  "Grace Hopper built the first compiler and championed writing programs in readable English-like statements.",
+)
+const docN = await addDoc(
+  "document",
+  { title: "On Computable Numbers" },
+  "On Computable Numbers introduces the turing machine and settles the entscheidungsproblem, showing decidability has limits.",
+)
+const orgN = await addDoc(
+  "org",
+  { name: "Bletchley Park" },
+  "Bletchley Park was the wartime codebreaking site where cryptanalysts read intercepted German enigma signals traffic.",
+)
 await g.addEdge({ rel: "knows", src: adaN.id, dst: alanN.id })
 await g.addEdge({ rel: "knows", src: alanN.id, dst: graceN.id })
 await g.addEdge({ rel: "authored", src: alanN.id, dst: docN.id })
 await g.addEdge({ rel: "works_at", src: alanN.id, dst: orgN.id })
 await g.addEdge({ rel: "works_at", src: graceN.id, dst: orgN.id })
 
-const app = createApp({ control, schema, authenticate })
+const app = createApp({ control, schema, authenticate, embed })
 app.route("/admin", createAdminApp({ control, authenticate: adminAuthenticate }))
 
 Bun.serve({ port: PORT, fetch: app.fetch })

@@ -24,9 +24,25 @@ describe("colorForType", () => {
 })
 
 describe("toCosmograph", () => {
-  it("maps links to source/target/rel/weight", () => {
+  it("maps links to source/target/indices/rel/weight", () => {
     const { links } = toCosmograph(slice)
-    expect(links).toEqual([{ source: "n1", target: "n2", rel: "knows", weight: 3 }])
+    expect(links).toEqual([
+      { source: "n1", target: "n2", sourceIndex: 0, targetIndex: 1, rel: "knows", weight: 3 },
+    ])
+  })
+
+  it("assigns each node a sequential 0-based index (Cosmograph pointIndexBy)", () => {
+    const { nodes } = toCosmograph(slice)
+    expect(nodes.map((n) => n.index)).toEqual([0, 1, 2])
+  })
+
+  it("drops links whose endpoints are not in the node set", () => {
+    const dangling: GraphSlice = {
+      nodes: [{ id: "n1", type: "person" }],
+      links: [{ id: "e1", source: "n1", target: "missing", rel: "knows", weight: 1 }],
+      truncated: false,
+    }
+    expect(toCosmograph(dangling).links).toEqual([])
   })
 
   it("colors nodes by type (same type → same color)", () => {

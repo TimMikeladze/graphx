@@ -77,10 +77,28 @@ export interface NodeVersion {
   valid_to: number
 }
 
+/**
+ * How the `q` filter is executed.
+ *  - `text`     — substring filter on `GET /nodes` (the default; no embedder needed).
+ *  - `semantic` — `GET /retrieve`: ANN seeds over the vector index, expanded by a graph walk.
+ *  - `hybrid`   — `POST /hybrid`: ANN + full-text seeds fused by RRF, then the same walk.
+ */
+export type SearchMode = "text" | "semantic" | "hybrid"
+
+/** One row of `GET /retrieve` / `POST /hybrid`. `depth` 0 = seed, ≥1 = reached by the walk. */
+export interface RetrievedNode {
+  id: string
+  body: string | null
+  uri: string | null
+  depth: number
+}
+
 /** Filters that scope the explorer (also the URL search params). */
 export interface ExplorerFilters {
   type?: string
   q?: string
   /** As-of epoch ms; absent ⇒ current (live). */
   asOf?: number
+  /** Absent ⇒ `text`. */
+  mode?: SearchMode
 }

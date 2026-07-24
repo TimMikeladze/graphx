@@ -3,6 +3,8 @@ import type { GraphSlice } from "./types"
 /** A Cosmograph point (node) with a precomputed color + selection flag. */
 export interface CosmoNode {
   id: string
+  /** Sequential 0-based row index — Cosmograph v2 requires `pointIndexBy`. */
+  index: number
   type: string
   color: string
   selected: boolean
@@ -10,10 +12,13 @@ export interface CosmoNode {
   [key: string]: unknown
 }
 
-/** A Cosmograph link. Cosmograph keys edges on `source`/`target` point ids. */
+/** A Cosmograph link. Cosmograph keys edges on `source`/`target` point ids + numeric indices. */
 export interface CosmoLink {
   source: string
   target: string
+  /** Endpoint row indices — Cosmograph v2 requires `linkSourceIndexBy`/`linkTargetIndexBy`. */
+  sourceIndex: number
+  targetIndex: number
   rel: string
   weight: number
   [key: string]: unknown
@@ -58,23 +63,43 @@ export interface ToCosmographOpts {
  * Pure adapter: a server {@link GraphSlice} → the `{nodes, links}` Cosmograph renders. This is
  * the only place the API shape meets the viz library, so it is unit-tested in isolation (the
  * canvas itself is WebGL and not unit-tested — spec §9).
+ *
+ * Cosmograph v2 requires index columns alongside ids: every point carries a sequential `index`,
+ * and every link carries `sourceIndex`/`targetIndex` resolved from the id→index map. Links whose
+ * endpoints are not in the node set are dropped (a governed slice should be consistent, but the
+ * renderer throws on unresolved endpoints, so we stay defensive).
  */
 export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): CosmoData {
   const palette = opts.palette ?? KIND_PALETTE
-  return {
-    nodes: slice.nodes.map((n) => ({
+  const indexById = new Map<string, number>()
+
+  const nodes: CosmoNode[] = slice.nodes.map((n, index) => {
+    indexById.set(n.id, index)
+    return {
       id: n.id,
+      index,
       type: n.type,
       color: colorForType(n.type, palette),
       selected: n.id === opts.selectedId,
-    })),
-    links: slice.links.map((l) => ({
+    }
+  })
+
+  const links: CosmoLink[] = []
+  for (const l of slice.links) {
+    const sourceIndex = indexById.get(l.source)
+    const targetIndex = indexById.get(l.target)
+    if (sourceIndex === undefined || targetIndex === undefined) continue
+    links.push({
       source: l.source,
       target: l.target,
+      sourceIndex,
+      targetIndex,
       rel: l.rel,
       weight: l.weight,
-    })),
+    })
   }
+
+  return { nodes, links }
 }
 
 /** Distinct types present in a slice, for the canvas legend. */
