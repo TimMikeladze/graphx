@@ -19,6 +19,29 @@ export interface ParsedIngestArgs {
 	prune: boolean;
 	watch: boolean;
 	assetsType: string | undefined;
+	edgeFields: Record<string, string> | undefined;
+	danglingType: string | undefined;
+	tagsType: string | undefined;
+}
+
+/**
+ * Parse repeated `--edge-field field=rel` pairs into the `edgeFields` map. A malformed pair
+ * throws rather than being dropped: silently ignoring it would produce a successful run that
+ * quietly built none of the edges the operator asked for.
+ */
+function parseEdgeFields(raw: string[] | undefined): Record<string, string> | undefined {
+	if (!raw || raw.length === 0) return undefined;
+	const out: Record<string, string> = {};
+	for (const pair of raw) {
+		const eq = pair.indexOf('=');
+		const field = eq === -1 ? '' : pair.slice(0, eq).trim();
+		const rel = eq === -1 ? '' : pair.slice(eq + 1).trim();
+		if (!field || !rel) {
+			throw new Error(`ingest: --edge-field expects 'field=rel', got '${pair}'`);
+		}
+		out[field] = rel;
+	}
+	return out;
 }
 
 export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
@@ -32,6 +55,9 @@ export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
 			prune: { type: 'boolean', default: false },
 			watch: { type: 'boolean', short: 'w', default: false },
 			'assets-type': { type: 'string' },
+			'edge-field': { type: 'string', multiple: true },
+			'dangling-type': { type: 'string' },
+			'tags-type': { type: 'string' },
 		},
 	});
 
@@ -47,6 +73,9 @@ export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
 		prune: (values.prune as boolean | undefined) ?? false,
 		watch: (values.watch as boolean | undefined) ?? false,
 		assetsType: values['assets-type'] as string | undefined,
+		edgeFields: parseEdgeFields(values['edge-field'] as string[] | undefined),
+		danglingType: values['dangling-type'] as string | undefined,
+		tagsType: values['tags-type'] as string | undefined,
 	};
 }
 
@@ -143,6 +172,9 @@ ingest options:
   --prune                 Retract nodes for files that vanished
   --watch, -w             Watch dir for changes after initial ingest
   --assets-type <type>    Enable asset nodes with this type
+  --edge-field <f=rel>    Map a frontmatter field to an edge rel (repeatable)
+  --dangling-type <type>  Enable stub nodes for links to notes that don't exist
+  --tags-type <type>      Enable shared tag nodes with this type
 
 serve options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -205,6 +237,9 @@ async function runIngest(argv: string[]): Promise<void> {
 		idField: args.idField,
 		prune: args.prune,
 		assets: args.assetsType ? { type: args.assetsType } : undefined,
+		edgeFields: args.edgeFields,
+		dangling: args.danglingType ? { type: args.danglingType } : undefined,
+		tags: args.tagsType ? { type: args.tagsType } : undefined,
 	};
 
 	// Initial ingest run

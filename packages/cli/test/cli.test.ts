@@ -278,3 +278,44 @@ export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
 		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
 	}
 });
+
+test('parseIngestArgs: --edge-field maps a frontmatter field to a rel', () => {
+	const args = parseIngestArgs(['ingest', '/d', '--edge-field', 'author=authored_by']);
+	expect(args.edgeFields).toEqual({ author: 'authored_by' });
+});
+
+test('parseIngestArgs: --edge-field is repeatable', () => {
+	const args = parseIngestArgs([
+		'ingest',
+		'/d',
+		'--edge-field',
+		'author=authored_by',
+		'--edge-field',
+		'cites=cites',
+	]);
+	expect(args.edgeFields).toEqual({ author: 'authored_by', cites: 'cites' });
+});
+
+test('parseIngestArgs: --edge-field without an = is a clear error, not a silent drop', () => {
+	expect(() => parseIngestArgs(['ingest', '/d', '--edge-field', 'author'])).toThrow(
+		/--edge-field.*field=rel/,
+	);
+});
+
+test('parseIngestArgs: --edge-field with an empty side is rejected', () => {
+	expect(() => parseIngestArgs(['ingest', '/d', '--edge-field', '=rel'])).toThrow(/--edge-field/);
+	expect(() => parseIngestArgs(['ingest', '/d', '--edge-field', 'field='])).toThrow(/--edge-field/);
+});
+
+test('parseIngestArgs: edgeFields is undefined when no --edge-field is given', () => {
+	expect(parseIngestArgs(['ingest', '/d']).edgeFields).toBeUndefined();
+});
+
+test('parseIngestArgs: parses --dangling-type', () => {
+	expect(parseIngestArgs(['ingest', '/d', '--dangling-type', 'stub']).danglingType).toBe('stub');
+});
+
+test('parseIngestArgs: parses --tags-type', () => {
+	expect(parseIngestArgs(['ingest', '/d', '--tags-type', 'tag']).tagsType).toBe('tag');
+	expect(parseIngestArgs(['ingest', '/d']).tagsType).toBeUndefined();
+});
