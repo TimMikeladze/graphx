@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path/posix';
 import type { GraphSchema } from '@graphx/core';
-import { extractEmbeds, extractLinks } from './links.ts';
+import { extractEmbeds, extractLinks, extractTags } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
 import { fsSource } from './source.ts';
@@ -87,6 +87,15 @@ interface LiveEntry {
 	embedHash: string;
 }
 
+/** One live out-edge this source authored, as read back for reconciliation. */
+interface LiveEdge {
+	id: string;
+	rel: string;
+	dst: string;
+	weight: number;
+	data: Record<string, unknown>;
+}
+
 /** A desired edge entry: rel+dst keyed, with optional weight/data for drift detection. */
 interface DesiredEdge {
 	weight?: number;
@@ -101,29 +110,66 @@ interface DesiredEdge {
  */
 async function liveOutEdges(
 	g: LooseGraph,
-	srcId: string,
+	srcIds: string[],
 	source: string,
-): Promise<Array<{ id: string; rel: string; dst: string; weight: number; data: Record<string, unknown> }>> {
-	const r = await g.raw.execute({
-		sql: 'SELECT id, rel, dst, weight, data FROM edges WHERE src = ? AND source = ?',
-		args: [srcId, source],
-	});
-	return r.rows.map((row) => ({
-		id: String(row.id),
-		rel: String(row.rel),
-		dst: String(row.dst),
-		weight: row.weight == null ? 1.0 : Number(row.weight),
-		data: row.data == null ? {} : (typeof row.data === 'string' ? JSON.parse(row.data) : (row.data as Record<string, unknown>)),
-	}));
+): Promise<Map<string, LiveEdge[]>> {
+	const bySrc = new Map<string, LiveEdge[]>();
+	for (const part of chunk(srcIds, BIND_CHUNK)) {
+		const holes = part.map(() => '?').join(',');
+		const r = await g.raw.execute({
+			sql: `SELECT id, src, rel, dst, weight, data FROM edges WHERE src IN (${holes}) AND source = ?`,
+			args: [...part, source],
+		});
+		for (const row of r.rows) {
+			const src = String(row.src);
+			const edge: LiveEdge = {
+				id: String(row.id),
+				rel: String(row.rel),
+				dst: String(row.dst),
+				weight: row.weight == null ? 1.0 : Number(row.weight),
+				data:
+					row.data == null
+						? {}
+						: typeof row.data === 'string'
+							? JSON.parse(row.data)
+							: (row.data as Record<string, unknown>),
+			};
+			const list = bySrc.get(src);
+			if (list) list.push(edge);
+			else bySrc.set(src, [edge]);
+		}
+	}
+	return bySrc;
 }
 
-/** Live edge ids incident to a node (either endpoint), via the `edges` view. */
-async function liveIncidentEdges(g: LooseGraph, nodeId: string): Promise<string[]> {
-	const r = await g.raw.execute({
-		sql: 'SELECT id FROM edges WHERE src = ? OR dst = ?',
-		args: [nodeId, nodeId],
-	});
-	return r.rows.map((row) => String(row.id));
+/**
+ * Max bind parameters per batched `IN (...)` query. SQLite's historical ceiling is 999 and
+ * Postgres allows 65535, so 400 stays clear of both — including the incident-edge query, which
+ * binds each id twice.
+ */
+const BIND_CHUNK = 400;
+
+function chunk<T>(items: T[], size: number): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+	return out;
+}
+
+/**
+ * Live edge ids incident to any of `nodeIds` (either endpoint), de-duplicated. An edge BETWEEN
+ * two of them is incident to both, and the caller retracts each edge exactly once.
+ */
+async function liveIncidentEdges(g: LooseGraph, nodeIds: string[]): Promise<string[]> {
+	const ids = new Set<string>();
+	for (const part of chunk(nodeIds, BIND_CHUNK)) {
+		const holes = part.map(() => '?').join(',');
+		const r = await g.raw.execute({
+			sql: `SELECT id FROM edges WHERE src IN (${holes}) OR dst IN (${holes})`,
+			args: [...part, ...part],
+		});
+		for (const row of r.rows) ids.add(String(row.id));
+	}
+	return [...ids];
 }
 
 /** Read the live identity map (key → node id + hash + embedHash) from the `nodes` view via raw SQL. */
@@ -146,6 +192,38 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 		});
 	}
 	return map;
+}
+
+/**
+ * A file's tags: inline `#tags` from the body followed by the frontmatter `tags` field (array or
+ * scalar), de-duplicated case-insensitively with the first-seen spelling kept.
+ */
+function tagsOf(file: ParsedFile): string[] {
+	const fm = file.frontmatter.tags;
+	const fmTags = (Array.isArray(fm) ? fm : [fm]).filter(
+		(v): v is string => typeof v === 'string' && v.trim() !== '',
+	);
+	const seen = new Set<string>();
+	const out: string[] = [];
+	for (const tag of [...extractTags(file.body), ...fmTags.map((t) => t.trim())]) {
+		const k = tag.toLowerCase();
+		if (seen.has(k)) continue;
+		seen.add(k);
+		out.push(tag);
+	}
+	return out;
+}
+
+/**
+ * Obsidian `aliases` frontmatter — secondary names a wikilink may target. Accepts the array
+ * form (`aliases: [Bee, B-note]`) and the scalar shorthand (`aliases: Bee`); non-string entries
+ * are ignored rather than failing the file.
+ */
+function aliasesOf(frontmatter: Record<string, unknown>): string[] {
+	const raw = frontmatter.aliases;
+	if (typeof raw === 'string') return raw.trim() ? [raw] : [];
+	if (!Array.isArray(raw)) return [];
+	return raw.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
 }
 
 function resolveType(file: ParsedFile, typeOf?: (f: ParsedFile) => string | undefined): string | undefined {
@@ -285,8 +363,11 @@ export async function ingestDir<S extends GraphSchema>(
 		skipped: [],
 	};
 
-	const keys = await fileSource.list();
-	const index = buildPathIndex(keys);
+	// Applied to every Source's key list (not just the filesystem one) so a custom or S3 source
+	// gets the same filtering. Excluded keys are invisible to the rest of the run — including the
+	// prune diff, so newly excluding a file retracts the node a previous run created.
+	const listed = await fileSource.list();
+	const keys = opts.exclude ? listed.filter((k) => !opts.exclude?.(k)) : listed;
 	const live = await loadLiveMap(g, keyPrefix);
 	// Clamp to >= 1 — a literal 0 would make mapWithConcurrency run no workers, silently
 	// leaving new nodes with no embedding.
@@ -309,16 +390,26 @@ export async function ingestDir<S extends GraphSchema>(
 	const bufferedLinks = new Map<string, ReturnType<typeof extractLinks>>();
 	// Embeds buffered only when asset ingestion is enabled.
 	const bufferedEmbeds = new Map<string, ReturnType<typeof extractEmbeds>>();
+	// Tags buffered only when tag nodes are enabled.
+	const bufferedTags = new Map<string, string[]>();
 
 	// Identity set for prune: built for EVERY parsed file (incl. no-type ones) so an
 	// on-disk-but-skipped file isn't pruned.
 	const discoveredIdentity = new Set<string>();
 	const seenIdentity = new Set<string>();
 
+	// Frontmatter `aliases` per key, collected during the step-1 parse so the link index can be
+	// built ONCE afterwards. Collected for every file — including unchanged ones, whose bodies are
+	// dropped — or a new link to an unchanged note's alias would fail to resolve on a later run.
+	const aliasMap = new Map<string, string[]>();
+
 	// Step 1: Stream files one at a time — parse, classify, buffer links for changed files.
 	// Bodies of unchanged files are dropped immediately (not retained).
 	for (const key of keys) {
 		const file = parseFile(key, await fileSource.read(key));
+
+		const aliases = aliasesOf(file.frontmatter);
+		if (aliases.length > 0) aliasMap.set(file.key, aliases);
 
 		const type = resolveType(file, opts.typeOf);
 		const identityKey = identityKeyOf(file, idField);
@@ -349,9 +440,13 @@ export async function ingestDir<S extends GraphSchema>(
 			// Changed or new: buffer links and queue a work item.
 			bufferedLinks.set(file.key, extractLinks(file.body));
 			if (opts.assets) bufferedEmbeds.set(file.key, extractEmbeds(file.body));
+			if (opts.tags) bufferedTags.set(file.key, tagsOf(file));
 			workItems.push({ file, type, identityKey, prior });
 		}
 	}
+
+	// Every file has now been parsed, so aliases are complete — build the link index.
+	const index = buildPathIndex(keys, aliasMap);
 
 	// Step 2: Batch-embed — collect bodies needing an embed (new nodes + body-changed updates).
 	// Index-aligned: workItems[i] corresponds to embedInputs[i] and embeddings[i].
@@ -441,7 +536,57 @@ export async function ingestDir<S extends GraphSchema>(
 		return node.id;
 	}
 
-	// Step 4: Edge pass — use buffered links (no re-parse of bodies).
+	// Stub nodes for links to notes that don't exist yet (opt-in), deduped case-insensitively so
+	// `[[Ghost]]` and `[[ghost]]` share one node. Never pruned. Returns the node id.
+	const danglingKeyToId = new Map<string, string>();
+	async function ensureDangling(name: string): Promise<string> {
+		const identityKey = `dangling:${name.toLowerCase()}`;
+		const cached = danglingKeyToId.get(identityKey);
+		if (cached) return cached;
+		const prior = live.get(identityKey);
+		if (prior) {
+			danglingKeyToId.set(identityKey, prior.id);
+			return prior.id;
+		}
+		const node = await g.addNode({
+			type: opts.dangling!.type,
+			uri: keyPrefix + identityKey,
+			data: { name },
+			body: '',
+		});
+		danglingKeyToId.set(identityKey, node.id);
+		return node.id;
+	}
+
+	// Tag nodes (opt-in), shared across every note that uses the tag. Never pruned.
+	const tagKeyToId = new Map<string, string>();
+	async function ensureTag(name: string): Promise<string> {
+		const identityKey = `tag:${name.toLowerCase()}`;
+		const cached = tagKeyToId.get(identityKey);
+		if (cached) return cached;
+		const prior = live.get(identityKey);
+		if (prior) {
+			tagKeyToId.set(identityKey, prior.id);
+			return prior.id;
+		}
+		const node = await g.addNode({
+			type: opts.tags!.type,
+			uri: keyPrefix + identityKey,
+			data: { name },
+			body: '',
+		});
+		tagKeyToId.set(identityKey, node.id);
+		return node.id;
+	}
+
+	// Step 4: Edge pass — use buffered links (no re-parse of bodies). Every touched node's live
+	// out-edges are read in one batched pass rather than a query per file, which is the difference
+	// between 1 and N round-trips on a vault-wide re-ingest.
+	const liveOutBySrc = await liveOutEdges(
+		g,
+		touched.map((f) => keyToId.get(f.key)).filter((id): id is string => id !== undefined),
+		keyPrefix,
+	);
 	for (const file of touched) {
 		const srcId = keyToId.get(file.key);
 		if (!srcId) continue;
@@ -453,14 +598,37 @@ export async function ingestDir<S extends GraphSchema>(
 		const links = bufferedLinks.get(file.key) ?? [];
 		for (const link of links) {
 			const r = resolveLink(link, file.key, index);
-			if (r.status !== 'resolved') {
+			let dst: string | undefined;
+			if (r.status === 'resolved') {
+				dst = keyToId.get(r.key);
+			} else if (opts.dangling && link.type === 'wiki' && r.status === 'missing') {
+				// An unwritten note is an intentional stub, so it becomes a node rather than a skip.
+				// `ambiguous` is excluded: that is a vault problem a stub would paper over.
+				try {
+					dst = await ensureDangling(link.target);
+				} catch (err) {
+					result.skipped.push({
+						key: file.key,
+						stage: 'node',
+						code: 'dangling-error',
+						reason: (err as Error).message,
+					});
+					continue;
+				}
+			} else {
 				result.skipped.push(linkResolutionSkip(file.key, link.target, r));
 				continue;
 			}
-			const dst = keyToId.get(r.key);
 			if (!dst || dst === srcId) continue;
 			const rel = link.rel ?? 'links_to';
-			desired.set(`${rel}\0${dst}`, {});
+			// An Obsidian `#` suffix targets a heading/block INSIDE the note; the edge still points
+			// at the whole note, so the fragment rides as edge data. Every link to a note collapses
+			// onto one (rel, dst) edge — matching Obsidian's graph, which draws one arrow per pair.
+			// Among several fragments the last wins, but a plain link never CLEARS one: a fragment
+			// is information the plain form merely lacks, so body order can't destroy it.
+			const key = `${rel}\0${dst}`;
+			if (link.fragment) desired.set(key, { data: { fragment: link.fragment } });
+			else if (!desired.has(key)) desired.set(key, {});
 		}
 
 		// Frontmatter edge fields
@@ -488,8 +656,17 @@ export async function ingestDir<S extends GraphSchema>(
 				const dst = keyToId.get(r.key);
 				if (!dst || dst === srcId) continue;
 				const key = `${rel}\0${dst}`;
-				// Last write wins if same (rel, dst) appears multiple times
-				desired.set(key, { weight: fe.weight, data: fe.data });
+				// Last write wins if same (rel, dst) appears multiple times — except for a
+				// `fragment` the body-link pass already contributed. edgeFields is the more explicit
+				// declaration and owns weight/data, but it carries no subdocument target of its own,
+				// so clobbering the fragment would be silent loss rather than an override.
+				const priorFragment = (desired.get(key)?.data as { fragment?: string } | undefined)
+					?.fragment;
+				const data =
+					priorFragment !== undefined && fe.data?.fragment === undefined
+						? { ...fe.data, fragment: priorFragment }
+						: fe.data;
+				desired.set(key, { weight: fe.weight, data });
 			}
 		}
 
@@ -515,10 +692,24 @@ export async function ingestDir<S extends GraphSchema>(
 			}
 		}
 
+		// Tags → shared tag nodes (opt-in).
+		if (opts.tags) {
+			const rel = opts.tags.rel ?? 'tagged_with';
+			for (const tag of bufferedTags.get(file.key) ?? []) {
+				let dst: string;
+				try {
+					dst = await ensureTag(tag);
+				} catch (err) {
+					result.skipped.push({ key: file.key, stage: 'node', code: 'tag-error', reason: (err as Error).message });
+					continue;
+				}
+				if (dst !== srcId) desired.set(`${rel}\0${dst}`, {});
+			}
+		}
+
 		// Reconcile: compare desired vs live out-edges THIS source authored (foreign edges excluded)
-		const existing = await liveOutEdges(g, srcId, keyPrefix);
-		const liveMap = new Map<string, typeof existing[number]>();
-		for (const e of existing) liveMap.set(`${e.rel}\0${e.dst}`, e);
+		const liveMap = new Map<string, LiveEdge>();
+		for (const e of liveOutBySrc.get(srcId) ?? []) liveMap.set(`${e.rel}\0${e.dst}`, e);
 
 		// Add new edges and update drifted ones
 		for (const [key, desiredEdge] of desired) {
@@ -561,14 +752,25 @@ export async function ingestDir<S extends GraphSchema>(
 	if (opts.prune) {
 		// Compare by IDENTITY key, not path — a renamed file keeps its id: identity and so is
 		// NOT in the prune set (it became an update above), preserving its node/history/edges.
+		const doomed: LiveEntry[] = [];
 		for (const [key, entry] of live) {
 			if (discoveredIdentity.has(key)) continue;
 			// Asset nodes (`asset:<path>`) aren't in the file stream; they are pointers, never pruned.
 			if (key.startsWith('asset:')) continue;
-			for (const edgeId of await liveIncidentEdges(g, entry.id)) {
-				await g.deleteEdge(edgeId);
-				result.edgesClosed++;
-			}
+			// Stub nodes likewise: only CHANGED files have their links re-extracted, so this run
+			// cannot tell whether an unchanged note still references the stub.
+			if (key.startsWith('dangling:')) continue;
+			// Tag nodes: shared across notes and only re-scanned for CHANGED files — same reason.
+			if (key.startsWith('tag:')) continue;
+			doomed.push(entry);
+		}
+		// One batched read for every doomed node's incident edges, de-duplicated: an edge joining
+		// two doomed nodes is incident to both and must be retracted (and counted) exactly once.
+		for (const edgeId of await liveIncidentEdges(g, doomed.map((e) => e.id))) {
+			await g.deleteEdge(edgeId);
+			result.edgesClosed++;
+		}
+		for (const entry of doomed) {
 			await g.deleteNode(entry.id);
 			result.deleted++;
 		}

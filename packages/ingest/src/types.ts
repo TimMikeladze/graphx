@@ -30,6 +30,19 @@ export interface IngestOptions<S extends GraphSchema> {
 	/** Override type resolution. Default: frontmatter.type ?? top-level folder name. */
 	typeOf?: (file: ParsedFile) => string | undefined;
 	/**
+	 * Drop source keys before they are read. Applied to every Source's listing, so it filters
+	 * custom and S3 sources too. Hidden paths (any `.`-prefixed segment, e.g. Obsidian's
+	 * `.trash/` and `.obsidian/`) are ALWAYS skipped by the filesystem source and need no
+	 * predicate; use this for content-shaped noise like `*.excalidraw.md`, which is drawing JSON
+	 * wearing a markdown extension.
+	 *
+	 * An excluded key is invisible to the whole run, the prune diff included — so adding an
+	 * `exclude` and running with `prune` retracts nodes a previous run created from those files.
+	 * For a filter that inspects frontmatter rather than the path, return `undefined` from
+	 * {@link IngestOptions.typeOf} instead; those files are skipped but never pruned.
+	 */
+	exclude?: (key: string) => boolean;
+	/**
 	 * Logical source id, used to namespace the node `uri` (`ingest:<source>:<key>`) so this
 	 * ingest only ever reconciles — and, with deletion, prunes — its OWN nodes. Two vaults
 	 * ingested into one graph MUST use distinct sources or they reconcile each other.
@@ -77,6 +90,42 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * in the graph schema. Asset nodes are never pruned.
 	 */
 	assets?: { type: string; rel?: string };
+	/**
+	 * Turn a body `[[wikilink]]` with no matching file into a stub node (`uri =
+	 * ingest:<source>:dangling:<lowercased name>`, `data.name` the name as written) and link to
+	 * it, instead of recording an `unresolved-link` skip. Off by default. `type` must be declared
+	 * in the graph schema, and every rel that can reach a stub must accept it as a `to` type.
+	 *
+	 * This is Obsidian's phantom-node behavior: a link to an unwritten note is an intentional
+	 * stub, not an error. Scope is deliberately narrow —
+	 * - only `[[wikilinks]]`; a broken `[text](./path.md)` is a typo, not a stub;
+	 * - only genuine misses, never {@link Resolution} `ambiguous` (that needs a real fix);
+	 * - only body links, not `edgeFields` (those declare a relation to a specific node type,
+	 *   which a stub would not satisfy).
+	 *
+	 * Stub nodes are never pruned, for the same reason asset nodes aren't: links are re-extracted
+	 * only for CHANGED files, so a run cannot see that an unchanged note still points at a stub.
+	 * Once the note gets written, links re-resolve to the real node on the next run that touches
+	 * the referring file, and the stub is left orphaned — delete it explicitly if that matters.
+	 */
+	dangling?: { type: string };
+	/**
+	 * Turn tags into nodes: inline `#tags` in the body plus the frontmatter `tags` field, sharing
+	 * one node per tag (`uri = ingest:<source>:tag:<lowercased>`, `data.name` the first-seen
+	 * spelling). Off by default. `type` must be declared in the schema, as must `rel` (default
+	 * `tagged_with`) with the tag type as its `to`.
+	 *
+	 * OFF BY DEFAULT ON PURPOSE. A tag shared by hundreds of notes becomes a hub with hundreds of
+	 * edges, and that distorts exactly what this graph is for: it dominates pagerank/centrality
+	 * and makes `retrieve`'s neighbor expansion pull in the whole tag cohort at depth 1. Obsidian
+	 * can afford tag nodes because its graph is a picture; here they change query results. Turn
+	 * this on when you actually want to traverse by tag, and prefer a dedicated `rel` so tag edges
+	 * can be excluded from algorithm runs.
+	 *
+	 * `tags` stays in node `data` as well — it is metadata, not only topology. Tag nodes are never
+	 * pruned, for the same reason asset and stub nodes aren't: only CHANGED files are re-scanned.
+	 */
+	tags?: { type: string; rel?: string };
 }
 
 /** Pipeline stage at which a file/link/edge was skipped. */

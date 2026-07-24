@@ -17,10 +17,12 @@ const SCHEMA = defineGraphSchema({
 		note: z.object({ title: z.string().optional() }).passthrough(),
 		strict: z.object({ n: z.number() }),
 		asset: z.object({ path: z.string() }),
+		stub: z.object({ name: z.string() }),
+		tag: z.object({ name: z.string() }),
 	},
 	edges: {
-		links_to: { from: 'note', to: 'note' },
-		cites: { from: 'note', to: 'note' },
+		links_to: { from: 'note', to: ['note', 'stub'] },
+		cites: { from: 'note', to: ['note', 'stub'] },
 		related: { from: 'note', to: 'note', data: z.object({ note: z.string() }).partial() },
 		tagged: {
 			from: 'note',
@@ -28,6 +30,8 @@ const SCHEMA = defineGraphSchema({
 			data: z.object({ meta: z.object({ score: z.number() }).partial() }).partial(),
 		},
 		embeds: { from: 'note', to: ['note', 'asset'] },
+		tagged_with: { from: 'note', to: 'tag' },
+		topic: { from: 'note', to: 'tag' },
 	},
 });
 
@@ -655,6 +659,481 @@ test('ingestDir: removing an embed closes its edge; asset node survives prune', 
 	expect(res.deleted).toBe(0); // doc still present; asset never pruned
 	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM edges")).rows[0]!.c)).toBe(0);
 	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'asset'")).rows[0]!.c)).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a heading link resolves to the whole note and records the fragment on the edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[b#Intro]]',
+		'b.md': '---\ntype: note\n---\n## Intro\nbeta',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	const rows = await client.execute('SELECT rel, data FROM edges');
+	expect(rows.rows.length).toBe(1);
+	expect(rows.rows[0]!.rel).toBe('links_to');
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: 'Intro' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a block-ref link resolves to the note, carrying the ^id fragment', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[b#^abc123]]',
+		'b.md': '---\ntype: note\n---\nbeta ^abc123',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: '^abc123' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a fragment-less link stores no fragment in edge data', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[b]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(JSON.parse(String(rows.rows[0]!.data ?? '{}'))).toEqual({});
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a wikilink to a frontmatter alias resolves to that note', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[Bee]]',
+		'b.md': '---\ntype: note\naliases: [Bee, B-note]\n---\nbeta',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a scalar `aliases` string is accepted as a single alias', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[Bee]]',
+		'b.md': '---\ntype: note\naliases: Bee\n---\nbeta',
+	});
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: aliases on an UNCHANGED file still resolve on a later run', async () => {
+	// b.md is unchanged on run 2, so its body is never re-read — its aliases must still be
+	// indexed, or a new link to [[Bee]] would fail to resolve.
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nno links yet',
+		'b.md': '---\ntype: note\naliases: [Bee]\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\nsee [[Bee]]');
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: an Obsidian folder-relative wikilink resolves from a nested file', async () => {
+	const { g, client } = await graph();
+	const dir = await mkdtemp(join(tmpdir(), 'gx-ingest-'));
+	await mkdir(join(dir, 'note', 'sub'), { recursive: true });
+	await writeFile(join(dir, 'note', 'alpha.md'), '---\ntype: note\n---\nsee [[sub/dupe]]');
+	await writeFile(join(dir, 'note', 'sub', 'dupe.md'), '---\ntype: note\n---\ndupe');
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a trashed copy sharing an id does NOT displace the live note', async () => {
+	// Obsidian moves deleted notes to `.trash/`, frontmatter intact. `.trash` sorts before most
+	// folders, so before hidden paths were skipped the DELETED copy claimed the id first and the
+	// live file was rejected as a duplicate-identity.
+	const { g, client } = await graph();
+	const dir = await mkdtemp(join(tmpdir(), 'gx-ingest-'));
+	await mkdir(join(dir, '.trash'), { recursive: true });
+	await mkdir(join(dir, 'note'), { recursive: true });
+	await writeFile(join(dir, 'note', 'n.md'), '---\nid: n\ntype: note\n---\nCURRENT');
+	await writeFile(join(dir, '.trash', 'n.md'), '---\nid: n\ntype: note\n---\nDELETED');
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(1);
+	expect(res.skipped).toEqual([]);
+	const rows = await client.execute('SELECT body FROM nodes');
+	expect(rows.rows.length).toBe(1);
+	expect(String(rows.rows[0]!.body)).toBe('CURRENT');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: exclude drops keys before they are read or ingested', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'keep.md': '---\ntype: note\n---\nkeep',
+		'diagram.excalidraw.md': '---\ntype: note\n---\n# Excalidraw Data\n{"elements":[]}',
+	});
+	const res = await ingestDir({
+		dir,
+		graph: g,
+		embed,
+		exclude: (key) => key.endsWith('.excalidraw.md'),
+	});
+	expect(res.added).toBe(1);
+	const rows = await client.execute('SELECT body FROM nodes');
+	expect(String(rows.rows[0]!.body)).toBe('keep');
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: newly excluding an already-ingested file prunes it (exclude cleans up)', async () => {
+	// `prune` reconciles against what the source NOW yields, and an excluded key is no longer
+	// yielded — so adding an `exclude` retracts the junk a previous run ingested. Without prune
+	// the node just lingers, same as for a file deleted off disk.
+	const { g, client } = await graph();
+	const dir = await vault({
+		'keep.md': '---\ntype: note\n---\nkeep',
+		'drawing.excalidraw.md': '---\ntype: note\n---\ndrawing',
+	});
+	const first = await ingestDir({ dir, graph: g, embed });
+	expect(first.added).toBe(2);
+	const res = await ingestDir({
+		dir,
+		graph: g,
+		embed,
+		prune: true,
+		exclude: (key) => key.endsWith('.excalidraw.md'),
+	});
+	expect(res.deleted).toBe(1);
+	const rows = await client.execute('SELECT body FROM nodes');
+	expect(rows.rows.map((r) => String(r.body))).toEqual(['keep']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a later plain link does not erase an earlier link fragment', async () => {
+	// All links to one note collapse to a single (rel, dst) edge. A fragment is information the
+	// plain form simply lacks, so it must not be clobbered by ordering — regardless of which
+	// form appears last in the body.
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\nsee [[b#Intro]] and also [[b]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(rows.rows.length).toBe(1);
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: 'Intro' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: with several fragments to one note, the last fragment wins', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[b#First]] then [[b#Second]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(rows.rows.length).toBe(1);
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: 'Second' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: dangling is off by default — an unresolved wikilink is still a skip', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\nstub [[not-yet-written]]' });
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(1);
+	expect(res.edgesAdded).toBe(0);
+	expect(res.skipped).toHaveLength(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: dangling turns an unresolved wikilink into a stub node + edge, not a skip', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\nstub [[Not Yet Written]]' });
+	const res = await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	expect(res.skipped).toEqual([]);
+	expect(res.edgesAdded).toBe(1);
+	const rows = await client.execute("SELECT uri, data FROM nodes WHERE type = 'stub'");
+	expect(rows.rows.length).toBe(1);
+	expect(String(rows.rows[0]!.uri)).toBe('ingest:default:dangling:not yet written');
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ name: 'Not Yet Written' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: two notes linking the same missing name share ONE stub node', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[Ghost]]',
+		'b.md': '---\ntype: note\n---\n[[ghost]]',
+	});
+	const res = await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	expect(res.edgesAdded).toBe(2);
+	const rows = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'stub'");
+	expect(Number(rows.rows[0]!.c)).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a typed dangling link keeps its own rel', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n[cites:: [[ghost]]]' });
+	await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	const rows = await client.execute('SELECT rel FROM edges');
+	expect(rows.rows.map((r) => String(r.rel))).toEqual(['cites']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: writing the missing note re-points the link at the real node', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n[[ghost]]' });
+	await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	// The stub is now a real note. a.md must be re-read for its link to re-resolve, so touch it.
+	await writeFile(join(dir, 'ghost.md'), '---\ntype: note\n---\nnow real');
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\n[[ghost]] (edited)');
+	await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	const edges = await client.execute(
+		"SELECT n.type AS t FROM edges e JOIN nodes n ON n.id = e.dst",
+	);
+	expect(edges.rows.map((r) => String(r.t))).toEqual(['note']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: an ambiguous wikilink stays a skip — it is not dangling', async () => {
+	const { g, client } = await graph();
+	const dir = await mkdtemp(join(tmpdir(), 'gx-ingest-'));
+	await mkdir(join(dir, 'x'), { recursive: true });
+	await mkdir(join(dir, 'y'), { recursive: true });
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\n[[dup]]');
+	await writeFile(join(dir, 'x', 'dup.md'), '---\ntype: note\n---\nx');
+	await writeFile(join(dir, 'y', 'dup.md'), '---\ntype: note\n---\ny');
+	const res = await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	expect(res.skipped).toHaveLength(1);
+	expect(res.skipped[0]).toMatchObject({ code: 'ambiguous-link' });
+	const rows = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'stub'");
+	expect(Number(rows.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: a broken relative PATH link is a skip, not a dangling stub', async () => {
+	// `[[wikilink]]` to a missing note is an intentional PKM stub. `[x](./typo.md)` is just broken.
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n[x](./typo.md)' });
+	const res = await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	expect(res.skipped).toHaveLength(1);
+	const rows = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'stub'");
+	expect(Number(rows.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: prune never retracts stub nodes', async () => {
+	// Links are only re-extracted for CHANGED files, so a run cannot know that an unchanged note
+	// still references a stub — pruning on that partial view would delete live stubs.
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n[[ghost]]' });
+	await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
+	const res = await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' }, prune: true });
+	expect(res.deleted).toBe(0);
+	const rows = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'stub'");
+	expect(Number(rows.rows[0]!.c)).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: editing a link fragment updates the existing edge (drift)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[b#First]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\n[[b#Second]]');
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.edgesAdded).toBe(1);
+	expect(res.edgesClosed).toBe(1);
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(rows.rows.length).toBe(1);
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: 'Second' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: dropping a fragment from a link clears it off the edge', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[b#First]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\n[[b]] only');
+	await ingestDir({ dir, graph: g, embed });
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(JSON.parse(String(rows.rows[0]!.data ?? '{}'))).toEqual({});
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: an edgeFields edge does not silently drop a body link fragment', async () => {
+	// Both produce (cites, b). edgeFields is the more explicit declaration and wins on weight/data,
+	// but it must not erase a fragment the body link contributed.
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\ncites: b\n---\n[cites:: [[b#Intro]]]',
+		'b.md': '---\ntype: note\n---\nbeta',
+	});
+	const res = await ingestDir({ dir, graph: g, embed, edgeFields: { cites: 'cites' } });
+	expect(res.edgesAdded).toBe(1);
+	const rows = await client.execute('SELECT data FROM edges');
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ fragment: 'Intro' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: touched files reconcile their own edges only (no cross-contamination)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[c]]',
+		'b.md': '---\ntype: note\n---\n[[c]] and [[a]]',
+		'c.md': '---\ntype: note\n---\nleaf',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	// a drops its only link; b keeps both. Batched edge loading must not let one file's
+	// reconciliation see or close another's edges.
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\nno links now');
+	await writeFile(join(dir, 'b.md'), '---\ntype: note\n---\n[[c]] and [[a]] still');
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.edgesClosed).toBe(1);
+	const rows = await client.execute(
+		'SELECT s.uri AS src, t.uri AS dst FROM edges e JOIN nodes s ON s.id = e.src JOIN nodes t ON t.id = e.dst ORDER BY t.uri',
+	);
+	expect(rows.rows.map((r) => `${String(r.src).slice(-4)}->${String(r.dst).slice(-4)}`)).toEqual([
+		'b.md->a.md',
+		'b.md->c.md',
+	]);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: pruning two connected nodes closes the shared edge exactly once', async () => {
+	// The edge is incident to BOTH pruned nodes. Loading incident edges per node lazily hid this;
+	// batching them up front surfaces the same id twice, so it must be de-duplicated.
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\n---\n[[b]]',
+		'b.md': '---\ntype: note\n---\nleaf',
+		'keep.md': '---\ntype: note\n---\nunrelated',
+	});
+	await ingestDir({ dir, graph: g, embed });
+	await rm(join(dir, 'a.md'));
+	await rm(join(dir, 'b.md'));
+	const res = await ingestDir({ dir, graph: g, embed, prune: true });
+	expect(res.deleted).toBe(2);
+	expect(res.edgesClosed).toBe(1);
+	const c = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(c.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: tags are off by default — a #tag body stays plain node data', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\ntags: [theory]\n---\nabout #graphs' });
+	const res = await ingestDir({ dir, graph: g, embed });
+	expect(res.added).toBe(1);
+	expect(res.edgesAdded).toBe(0);
+	const rows = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'tag'");
+	expect(Number(rows.rows[0]!.c)).toBe(0);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: tags option turns inline and frontmatter tags into shared tag nodes', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({
+		'a.md': '---\ntype: note\ntags: [theory]\n---\nabout #graphs',
+		'b.md': '---\ntype: note\n---\nalso #graphs and #Graphs again',
+	});
+	const res = await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' } });
+	expect(res.skipped).toEqual([]);
+	// a: theory + graphs, b: graphs (deduped case-insensitively) = 3 edges, 2 tag nodes
+	expect(res.edgesAdded).toBe(3);
+	const rows = await client.execute("SELECT uri, data FROM nodes WHERE type = 'tag' ORDER BY uri");
+	expect(rows.rows.map((r) => String(r.uri))).toEqual([
+		'ingest:default:tag:graphs',
+		'ingest:default:tag:theory',
+	]);
+	expect(JSON.parse(String(rows.rows[0]!.data))).toEqual({ name: 'graphs' });
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: tags keeps `tags` in node data (it is metadata, not just topology)', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\ntags: [theory]\n---\nbody' });
+	await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' } });
+	const rows = await client.execute("SELECT data FROM nodes WHERE type = 'note'");
+	expect(JSON.parse(String(rows.rows[0]!.data)).tags).toEqual(['theory']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: tags uses a custom rel when given', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n#graphs' });
+	await ingestDir({ dir, graph: g, embed, tags: { type: 'tag', rel: 'topic' } });
+	const rows = await client.execute('SELECT rel FROM edges');
+	expect(rows.rows.map((r) => String(r.rel))).toEqual(['topic']);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: removing a tag from a note closes that edge on re-ingest', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n#graphs and #theory' });
+	await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' } });
+	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\nonly #graphs now');
+	const res = await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' } });
+	expect(res.edgesClosed).toBe(1);
+	const c = await client.execute('SELECT COUNT(*) AS c FROM edges');
+	expect(Number(c.rows[0]!.c)).toBe(1);
+	await rm(dir, { recursive: true, force: true });
+	client.close();
+});
+
+test('ingestDir: prune never retracts tag nodes', async () => {
+	const { g, client } = await graph();
+	const dir = await vault({ 'a.md': '---\ntype: note\n---\n#graphs' });
+	await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' } });
+	const res = await ingestDir({ dir, graph: g, embed, tags: { type: 'tag' }, prune: true });
+	expect(res.deleted).toBe(0);
+	const c = await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'tag'");
+	expect(Number(c.rows[0]!.c)).toBe(1);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
