@@ -28,3 +28,23 @@ test('discover: returns sorted POSIX keys for included extensions only', async (
 		'notes/d.yml',
 	]);
 });
+
+test('discover: dot-directories are skipped (Obsidian .trash / .obsidian)', async () => {
+	const d = await mkdtemp(join(tmpdir(), 'gx-dotdir-'));
+	await mkdir(join(d, '.trash'), { recursive: true });
+	await mkdir(join(d, '.obsidian', 'plugins'), { recursive: true });
+	await mkdir(join(d, 'note'), { recursive: true });
+	await writeFile(join(d, '.trash', 'deleted.md'), 'deleted');
+	await writeFile(join(d, '.obsidian', 'plugins', 'readme.md'), 'plugin');
+	await writeFile(join(d, 'note', 'keep.md'), 'keep');
+	expect(await discover(d, DEFAULT_INCLUDE)).toEqual(['note/keep.md']);
+	await rm(d, { recursive: true, force: true });
+});
+
+test('discover: a dot-FILE is skipped too, but a dotted extension is not', async () => {
+	const d = await mkdtemp(join(tmpdir(), 'gx-dotfile-'));
+	await writeFile(join(d, '.hidden.md'), 'hidden');
+	await writeFile(join(d, 'diagram.excalidraw.md'), 'multi-dot but visible');
+	expect(await discover(d, DEFAULT_INCLUDE)).toEqual(['diagram.excalidraw.md']);
+	await rm(d, { recursive: true, force: true });
+});
