@@ -30,7 +30,7 @@ export function NodeList({
 
   // Roving keyboard focus within the listbox (independent of URL selection).
   const [focus, setFocus] = useState(0)
-  const activeRef = useRef<HTMLButtonElement>(null)
+  const activeRef = useRef<HTMLDivElement>(null)
 
   // Keep focus on the selected row when selection changes externally (canvas/palette click).
   useEffect(() => {
@@ -106,18 +106,17 @@ export function NodeList({
             {nodes.map((n, i) => {
               const selected = n.id === selectedId
               return (
-                <button
+                <div
                   key={n.id}
                   ref={i === focus ? activeRef : undefined}
                   role="option"
                   aria-selected={selected}
-                  type="button"
                   onClick={() => {
                     setFocus(i)
                     onSelect(n.id)
                   }}
                   className={cn(
-                    "group grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                    "group grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
                     "hover:bg-accent/60",
                     selected && "bg-accent",
                     i === focus && !selected && "bg-accent/40",
@@ -132,7 +131,7 @@ export function NodeList({
                     label="Copy id"
                     className="opacity-0 group-hover:opacity-100"
                   />
-                </button>
+                </div>
               )
             })}
           </div>

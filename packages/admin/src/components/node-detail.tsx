@@ -132,10 +132,17 @@ function Neighbors({
           <ul className="flex flex-col">
             {items.map((n) => (
               <li key={n.id} className="group">
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect(n.id)}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-accent"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      onSelect(n.id)
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/30"
                 >
                   <span className="truncate font-mono text-xs" title={n.id}>
                     {shortId(n.id, 10, 6)}
@@ -145,7 +152,7 @@ function Neighbors({
                     label="Copy id"
                     className="ml-auto opacity-0 group-hover:opacity-100"
                   />
-                </button>
+                </div>
               </li>
             ))}
           </ul>

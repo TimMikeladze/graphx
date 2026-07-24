@@ -102,30 +102,32 @@ export function ExplorerPage() {
 
         {slice.data?.truncated && <ResultsBanner />}
 
-        <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
-          <ResizablePanel id="list" defaultSize={26} minSize={16}>
-            <NodeList
-              tenant={tenant}
-              project={project}
-              filters={filters}
-              selectedId={search.node}
-              onSelect={(id) => setSearch({ node: id })}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel id="graph" defaultSize={74} minSize={30}>
-            <GraphCanvas
-              slice={slice.data}
-              isLoading={slice.isLoading}
-              selectedId={search.node}
-              onSelect={(id) => setSearch({ node: id })}
-              activeType={filters.type}
-              onTypeFilter={(type) => setSearch({ type })}
-            />
-          </ResizablePanel>
-          {detailOpen && <ResizableHandle withHandle />}
+        <div className="flex min-h-0 flex-1">
+          {/* list | graph stay resizable; detail docks as a fixed pane so the graph never remounts */}
+          <ResizablePanelGroup orientation="horizontal" className="min-w-0 flex-1">
+            <ResizablePanel id="list" defaultSize={30} minSize={18}>
+              <NodeList
+                tenant={tenant}
+                project={project}
+                filters={filters}
+                selectedId={search.node}
+                onSelect={(id) => setSearch({ node: id })}
+              />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel id="graph" defaultSize={70} minSize={30}>
+              <GraphCanvas
+                slice={slice.data}
+                isLoading={slice.isLoading}
+                selectedId={search.node}
+                onSelect={(id) => setSearch({ node: id })}
+                activeType={filters.type}
+                onTypeFilter={(type) => setSearch({ type })}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
           {detailOpen && search.node && (
-            <ResizablePanel id="detail" defaultSize={28} minSize={20} maxSize={45}>
+            <aside className="flex w-[400px] shrink-0 flex-col border-l">
               <NodeDetail
                 tenant={tenant}
                 project={project}
@@ -133,9 +135,9 @@ export function ExplorerPage() {
                 onSelect={(id) => setSearch({ node: id })}
                 onClose={() => setSearch({ node: undefined })}
               />
-            </ResizablePanel>
+            </aside>
           )}
-        </ResizablePanelGroup>
+        </div>
       </SidebarInset>
 
       {/* Mobile: detail as a slide-over instead of a docked pane. */}

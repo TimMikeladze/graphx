@@ -32,9 +32,11 @@ export function GraphCanvas({
   /** Clicking a legend swatch sets/clears the NodeType filter. */
   onTypeFilter?: (type: string | undefined) => void
 }) {
+  // Selection is applied imperatively (selectPoint below), so it must NOT change the points
+  // identity — otherwise every click rebuilds the graph and re-fits, fighting the zoom-to-node.
   const data = useMemo(
-    () => (slice ? toCosmograph(slice, { selectedId }) : { nodes: [], links: [] }),
-    [slice, selectedId],
+    () => (slice ? toCosmograph(slice) : { nodes: [], links: [] }),
+    [slice],
   )
   // Resolve Cosmograph's click/hover index → our node without re-rendering.
   const pointsRef = useRef<CosmoNode[]>(data.nodes)
@@ -126,9 +128,15 @@ export function GraphCanvas({
           pointIdBy="id"
           pointIndexBy="index"
           pointColorBy="color"
+          pointColorByFn={(value: unknown) => String(value)}
           pointSizeStrategy="degree"
-          pointSizeRange={[3, 11]}
+          pointSizeRange={[6, 18]}
+          pointDefaultSize={7}
+          simulationGravity={0.4}
+          simulationCenter={0.5}
           links={data.links}
+          linkWidthBy="weight"
+          linkWidthRange={[1, 3]}
           linkSourceBy="source"
           linkSourceIndexBy="sourceIndex"
           linkTargetBy="target"
@@ -136,9 +144,12 @@ export function GraphCanvas({
           backgroundColor={CANVAS_BG}
           hoveredPointCursor="pointer"
           selectPointOnClick={false}
+          fitViewOnInit
+          fitViewPadding={0.3}
           onMount={(g) => {
             cosmoRef.current = g
           }}
+          onGraphRebuilt={() => cosmoRef.current?.fitView(300)}
           onClick={(index) =>
             onSelect(index === undefined ? undefined : pointsRef.current[index]?.id)
           }
