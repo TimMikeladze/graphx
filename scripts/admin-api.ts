@@ -1,14 +1,22 @@
 /**
- * Dev API server for @graphx/admin — seeds an in-memory control plane + one demo project,
- * mounts the tenant-scoped graph routes (createApp) and the operator sub-app (createAdminApp),
- * and serves on :8787. Auth is a single dev bearer token (ADMIN_TOKEN, default "dev") that the
- * operator presents; the `authenticate` impl turns it into an operator principal so it can browse
- * any tenant. NOT for production — control plane is :memory:, the demo project DB is a local file.
+ * Dev API server for @graphx/admin — seeds an in-memory control plane + a generated demo graph
+ * across three tenants and five projects, mounts the tenant-scoped graph routes (createApp) and
+ * the operator sub-app (createAdminApp), and serves on :8787. Auth is a single dev bearer token
+ * (ADMIN_TOKEN, default "dev") that the operator presents; the `authenticate` impl turns it into
+ * an operator principal so it can browse any tenant. NOT for production — the control plane is
+ * :memory: and the project DBs are local files.
+ *
+ * The graph itself comes from `scripts/seed/` (deterministic generator + bulk load). Building it
+ * costs seconds, so the databases are kept between runs and rebuilt only when the seed config
+ * changes — see `scripts/seed/cache.ts`.
+ *
+ *   SEED_NODES=50000   size of the big project (default 25000)
+ *   SEED_SEED=7        PRNG seed (default 7)
+ *   SEED_EMBED=5000    cap on embedded nodes per project, 0 for all (default 5000)
+ *   SEED_FRESH=1       force a rebuild
  */
-import { rmSync } from "node:fs"
 import process from "node:process"
 import { createClient } from "@libsql/client"
-import { z } from "zod"
 import {
   addMembership,
   createAdminApp,
@@ -16,32 +24,45 @@ import {
   createProject,
   createTenant,
   createUser,
-  defineGraphSchema,
+  getDb,
   graphForProject,
   hashEmbed,
+  init,
   initControl,
   type Principal,
 } from "../packages/core/src/index.ts"
+import { applyPlan } from "./seed/apply.ts"
+import { fingerprint, isCached, wipe, writeCache } from "./seed/cache.ts"
+import { generate } from "./seed/generate.ts"
+import { DEMO_SCHEMA_VERSION, demoSchema } from "./seed/schema.ts"
+import { withHistory } from "./seed/temporal.ts"
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? "dev"
 const PORT = Number(process.env.PORT ?? 8787)
-const DEMO_NS = "dev_admin"
+const SEED_NODES = Number(process.env.SEED_NODES ?? 25_000)
+const SEED_SEED = Number(process.env.SEED_SEED ?? 7)
+const SEED_EMBED = Number(process.env.SEED_EMBED ?? 5_000)
 
-// Fresh demo data each start: drop the local project DB files (cwd = repo root).
-for (const sfx of ["", "-wal", "-shm"]) rmSync(`${DEMO_NS}.db${sfx}`, { force: true })
+/**
+ * Dev embedder: deterministic, model-free, no API key or network. Lexical rather than semantic,
+ * so /retrieve and /hybrid return sensible neighbors for demo queries without any setup.
+ *
+ * 128 dims rather than the 768 default. Width drives both the seed's slowest step and its disk
+ * footprint, because the vector index stores neighbor lists of full vectors: measured at 5000
+ * vectors, 256 dims costs ~16s and ~315MB against ~4s and ~111MB at 128. The generated corpus
+ * has a vocabulary of a few hundred words, so 128 hash buckets still separate it well.
+ */
+const DIM = 128
+const embed = hashEmbed(DIM)
 
-const schema = defineGraphSchema({
-  nodes: {
-    person: z.object({ name: z.string() }),
-    document: z.object({ title: z.string() }),
-    org: z.object({ name: z.string() }),
-  },
-  edges: {
-    knows: { from: "person", to: "person" },
-    authored: { from: "person", to: "document" },
-    works_at: { from: "person", to: "org" },
-  },
-})
+/** The demo estate. Sizes differ so the explorer sees a truncated slice, small graphs and an empty one. */
+const FIXTURES = [
+  { tenant: "Acme", project: "Platform", namespace: "dev_admin_platform", nodes: SEED_NODES },
+  { tenant: "Acme", project: "Archive", namespace: "dev_admin_archive", nodes: 2_000 },
+  { tenant: "Globex", project: "Research", namespace: "dev_admin_research", nodes: 200 },
+  { tenant: "Globex", project: "Scratch", namespace: "dev_admin_scratch", nodes: 40 },
+  { tenant: "Initech", project: "Empty", namespace: "dev_admin_empty", nodes: 0 },
+]
 
 function bearer(c: { req: { header: (n: string) => string | undefined } }): string | undefined {
   const h = c.req.header("authorization") ?? ""
@@ -61,63 +82,82 @@ function adminAuthenticate(c: { req: { header: (n: string) => string | undefined
   if (bearer(c) !== ADMIN_TOKEN) throw new Error("unauthorized")
 }
 
+// --- decide whether to rebuild -------------------------------------------------------------
+
+const namespaces = FIXTURES.map((f) => f.namespace)
+const fp = fingerprint({
+  schemaVersion: DEMO_SCHEMA_VERSION,
+  seed: SEED_SEED,
+  dim: DIM,
+  embedded: SEED_EMBED,
+  fixtures: FIXTURES.map((f) => ({ namespace: f.namespace, nodes: f.nodes })),
+})
+const rebuild = process.env.SEED_FRESH === "1" || !isCached(fp, namespaces)
+if (rebuild) wipe(namespaces)
+
+// --- control plane (always fresh; it is :memory:) -------------------------------------------
+
 const control = createClient({ url: ":memory:" })
 await initControl(control)
 
-const tenantId = await createTenant(control, { name: "Acme" })
-const projectId = await createProject(control, { tenantId, name: "Demo", dbNamespace: DEMO_NS })
+const tenants = new Map<string, string>()
+for (const { tenant } of FIXTURES) {
+  if (!tenants.has(tenant)) tenants.set(tenant, await createTenant(control, { name: tenant }))
+}
 const ada = await createUser(control, { email: "ada@acme.test" })
-await addMembership(control, { userId: ada, tenantId, role: "owner" })
+for (const tenantId of tenants.values()) {
+  await addMembership(control, { userId: ada, tenantId, role: "owner" })
+}
 
-// Dev embedder: deterministic, model-free, no API key or network. Lexical rather than semantic,
-// so /retrieve and /hybrid return sensible neighbors for demo queries without any setup. `dim` is
-// derived from it by createApp, and the demo DB is recreated on every start, so the vector column
-// can never disagree with the embedder.
-const embed = hashEmbed()
+// --- build (or reuse) each project's graph ---------------------------------------------------
 
-// Seed a small graph in the demo project (operator principal bypasses membership).
-// Every node gets a `body` and its embedding — without them the ANN index is empty and the
-// semantic/hybrid search modes have nothing to seed from.
-const seedPrincipal: Principal = { userId: "seed", tenantId, operator: true }
-const g = await graphForProject(control, seedPrincipal, projectId, "write", schema)
-const addDoc = async (type: "person" | "document" | "org", data: object, body: string) =>
-  g.addNode({ type, data, body, emb: await embed(body) } as Parameters<typeof g.addNode>[0])
+const now = Date.now()
+const started = now
+const summary: string[] = []
 
-const adaN = await addDoc(
-  "person",
-  { name: "Ada Lovelace" },
-  "Ada Lovelace wrote the first published algorithm intended for a machine, computing Bernoulli numbers on the analytical engine.",
-)
-const alanN = await addDoc(
-  "person",
-  { name: "Alan Turing" },
-  "Alan Turing formalised computation, proved the halting problem undecidable, and led cryptanalysis of naval ciphers.",
-)
-const graceN = await addDoc(
-  "person",
-  { name: "Grace Hopper" },
-  "Grace Hopper built the first compiler and championed writing programs in readable English-like statements.",
-)
-const docN = await addDoc(
-  "document",
-  { title: "On Computable Numbers" },
-  "On Computable Numbers introduces the turing machine and settles the entscheidungsproblem, showing decidability has limits.",
-)
-const orgN = await addDoc(
-  "org",
-  { name: "Bletchley Park" },
-  "Bletchley Park was the wartime codebreaking site where cryptanalysts read intercepted German enigma signals traffic.",
-)
-await g.addEdge({ rel: "knows", src: adaN.id, dst: alanN.id })
-await g.addEdge({ rel: "knows", src: alanN.id, dst: graceN.id })
-await g.addEdge({ rel: "authored", src: alanN.id, dst: docN.id })
-await g.addEdge({ rel: "works_at", src: alanN.id, dst: orgN.id })
-await g.addEdge({ rel: "works_at", src: graceN.id, dst: orgN.id })
+for (const [i, fixture] of FIXTURES.entries()) {
+  const tenantId = tenants.get(fixture.tenant) as string
+  const projectId = await createProject(control, {
+    tenantId,
+    name: fixture.project,
+    dbNamespace: fixture.namespace,
+  })
+  // Create the vector column at the embedder's width BEFORE the lazy init inside
+  // graphForProject bakes the 768 default. `init` is idempotent, so the later re-init is a no-op.
+  await init(getDb(fixture.namespace), DIM)
 
-const app = createApp({ control, schema, authenticate, embed })
+  if (!rebuild) {
+    summary.push(`${fixture.tenant}/${fixture.project}: cached`)
+    continue
+  }
+
+  const seedPrincipal: Principal = { userId: "seed", tenantId, operator: true }
+  const g = await graphForProject(control, seedPrincipal, projectId, "write", demoSchema)
+  // Each project gets its own PRNG stream, so they are different graphs rather than prefixes
+  // of one graph.
+  const plan = withHistory(generate({ nodes: fixture.nodes, seed: SEED_SEED + i, now }), {
+    seed: SEED_SEED + 1000 + i,
+    now,
+  })
+  // Building the vector index is the slow part, so say what is happening before starting.
+  console.log(
+    `[admin-api] building ${fixture.tenant}/${fixture.project} — ${plan.nodes.length} node rows, ${plan.edges.length} edges`,
+  )
+  const loaded = await applyPlan(g.raw, plan, embed, { maxEmbedded: SEED_EMBED })
+  summary.push(
+    `${fixture.tenant}/${fixture.project}: ${loaded.nodes} nodes (${loaded.versions} versions), ${loaded.edges} edges, ${loaded.embedded} embedded`,
+  )
+}
+
+if (rebuild) writeCache(fp, namespaces)
+
+const app = createApp({ control, schema: demoSchema, authenticate, embed })
 app.route("/admin", createAdminApp({ control, authenticate: adminAuthenticate }))
 
 Bun.serve({ port: PORT, fetch: app.fetch })
 console.log(
-  `[admin-api] http://localhost:${PORT}  token="${ADMIN_TOKEN}"  seeded tenant=Acme project=Demo (5 nodes, 5 edges)`,
+  `[admin-api] http://localhost:${PORT}  token="${ADMIN_TOKEN}"  ${
+    rebuild ? `built in ${((Date.now() - started) / 1000).toFixed(1)}s` : "reused cached databases"
+  }`,
 )
+for (const line of summary) console.log(`  ${line}`)

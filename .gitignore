@@ -23,3 +23,6 @@ yarn-error.log*
 *.db
 *.db-wal
 *.db-shm
+
+# scripts/seed rebuild fingerprint for the admin dev server's demo databases
+.seed-cache.json

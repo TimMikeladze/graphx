@@ -1,7 +1,8 @@
 # Admin demo graph at scale — design
 
 **Date:** 2026-07-27
-**Status:** approved, ready for implementation planning
+**Status:** implemented. Three decisions changed during the build; each is marked **As built**
+below.
 
 ## Problem
 
@@ -23,10 +24,11 @@ in seconds on a normal dev start.
 | Globex / Scratch  | 40     | Trivially small                                            |
 | Initech / Empty   | 0      | Empty states                                              |
 
-Roughly 80,000 edges across all five, concentrated in Platform.
+Roughly 80,000 edges across all five, concentrated in Platform. Actual: 70,767 edges and 30,688
+node version rows over 27,240 identities, built in 6.5s.
 
 Three tenants, five projects. `SEED_NODES` overrides the Platform size, `SEED_SEED` overrides the
-PRNG seed, `SEED_FRESH=1` forces a rebuild.
+PRNG seed, `SEED_EMBED` the embedding cap, and `SEED_FRESH=1` forces a rebuild.
 
 ## Part 1 — core bulk primitives
 
@@ -58,14 +60,17 @@ Supplying `id` reuses an existing identity row rather than minting one, so a sin
 several version rows and read back as a real timeline.
 
 This loosens the current "distinct ids never overlap" guarantee, so the loaders validate it
-instead. For each supplied id, grouped in input order:
+instead. For each supplied id:
 
-- intervals sorted ascending by `validFrom`,
 - no two intervals overlapping,
-- exactly one open interval (`validTo` absent or `FOREVER`),
+- at most one open interval (`validTo` absent or `FOREVER`),
 - `validFrom < validTo` on every row.
 
 Any violation throws before a single index is dropped or a row written.
+
+**As built:** the rule is *at most* one open version, not exactly one. A fully closed timeline
+means the entity existed and ended — which is precisely how the temporal pass closes an edge, so
+requiring an open version would have made the common case illegal.
 
 Rejected alternative: have the seed script write `node_versions` and `edge_versions` SQL directly.
 It duplicates schema knowledge outside core and rots the moment the DDL changes.
@@ -127,6 +132,18 @@ live writes cannot be backdated.
 Takes a plan and a `Graph`, calls `bulkLoad` then `bulkEdges` in chunks, and returns counts. The
 node load's returned ids feed the `types` map that the edge load validates against.
 
+**As built:** `applyPlan` embeds a capped sample rather than every live node (`maxEmbedded`,
+default 5000). Building libSQL's vector index turned out to dominate the seed by two orders of
+magnitude, and to grow superlinearly in the number of vectors — at 256 dims, 2k vectors cost ~6s,
+5k ~16s, 10k ~36s and 25k ~108s, against about a second for everything else combined. Capping the
+sample took a full build from 133s to 24s. The cost is that `/retrieve` and `/hybrid` see a sample
+of the graph above the cap; the sample is an even stride over the type-interleaved load order, so
+it stays representative.
+
+The generator also gives every node a creation time spread across the temporal window, not just
+the versioned 5%, so scrubbing the as-of picker shows the graph growing (167 nodes at 80 days
+back, 4,879 at 40, the full slice at 10) rather than appearing all at once.
+
 ### Tests
 
 `scripts/seed/generate.test.ts`, no database:
@@ -145,18 +162,26 @@ project gets its own namespace and DB file, created through `createTenant` / `cr
 `graphForProject` as today. The control plane stays `:memory:` and is rebuilt on every start
 regardless of cache state.
 
-The dev embedder drops from `hashEmbed()` (768 dims) to `hashEmbed(256)`. At 27,000 nodes, 768
-dims costs roughly 83MB of vectors against 28MB at 256, and lexical hash embeddings lose nothing
-meaningful at 256 for a demo. `createApp` derives `dim` from the embedder and the DBs are rebuilt
-whenever the fingerprint changes, so the vector column cannot disagree.
+The dev embedder drops from `hashEmbed()` (768 dims) to a narrower width, and the script `init`s
+each namespace at that width before `graphForProject`'s lazy init would bake the 768 default.
+
+**As built:** 128 dims, not 256. Width drives both the vector index build and its disk footprint,
+because the index stores neighbor lists of full vectors: at 5,000 vectors, 256 dims costs ~16s and
+~315MB against ~4s and ~111MB at 128. The generated corpus has a vocabulary of a few hundred
+words, so 128 hash buckets still separate it. Combined with the embedding cap, a full build runs
+in 6.5s and the whole estate occupies ~180MB.
 
 The startup log reports per-project node and edge counts and whether the build was cached.
 
 ## Part 4 — the cache
 
 A sidecar `.seed-cache.json` at the repo root records a fingerprint plus the namespace list. The
-fingerprint hashes the generator version constant, the demo schema, the PRNG seed, and the
-per-project sizes.
+fingerprint hashes the schema version constant, the PRNG seed, the embedding width, the embedding
+cap, and the per-project sizes.
+
+**As built:** the embedding width belongs in the key and was nearly left out. The `emb` column's
+width is baked at first init and immutable, so reusing a database built at another width does not
+degrade — it throws on start. Changing the width surfaced this immediately.
 
 On start: if the file parses, its fingerprint matches, and every listed DB file exists, skip
 generation entirely. Otherwise delete the listed DB files (and their `-wal` / `-shm` siblings),

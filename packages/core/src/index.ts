@@ -167,7 +167,15 @@ export {
 } from './hybrid.ts';
 
 // P13 — bulk ingestion
-export { type BulkOpts, bulkLoad, type BulkResult, type BulkRow } from './bulk.ts';
+export {
+	type BulkEdgeOpts,
+	type BulkEdgeRow,
+	bulkEdges,
+	type BulkOpts,
+	bulkLoad,
+	type BulkResult,
+	type BulkRow,
+} from './bulk.ts';
 
 // P5 — PatternBuilder
 export {
