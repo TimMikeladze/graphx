@@ -24,24 +24,44 @@ Code's `.mcp.json`, or equivalent):
 			"args": ["-y", "@graphx/mcp"],
 			"env": {
 				"GRAPHX_MCP_MODE": "local",
-				"GRAPHX_DB": "mygraph"
+				"GRAPHX_DB": "mygraph",
+				"GRAPHX_SCHEMA": "./schema.json"
 			}
 		}
 	}
 }
 ```
 
+with `./schema.json`:
+
+```json
+{
+	"nodes": {
+		"person": {
+			"type": "object",
+			"properties": { "name": { "type": "string" }, "age": { "type": "number" } },
+			"required": ["name"]
+		}
+	},
+	"edges": {
+		"knows": { "from": "person", "to": "person" }
+	}
+}
+```
+
 This spawns `graphx-mcp` over stdio. `GRAPHX_DB` is a **namespace, not a connection string**:
 `mygraph` opens (and creates) `./mygraph.db` relative to whatever working directory your client
-launches the process in. See [Configuration](#configuration).
+launches the process in. `GRAPHX_SCHEMA` is optional but recommended — see
+[Configuration](#configuration) for the file format.
 
 Local mode mints a fresh tenant and project on every start, so tell the agent to call
 **`graphx_context` first** — it returns the ids that every other tool takes as arguments, and they
 cannot be guessed or carried over from a previous run.
 
-It runs schemaless (see Limitations below) — for schema-aware tool descriptions, a
-`graphx://schema` resource, and the ability to write nodes at all, embed the server as a library
-instead.
+Without `GRAPHX_SCHEMA` it runs schemaless (see Limitations below): reads and the metric tools
+work, but every write tool 400s, `describe_schema` falls back to sampling types off the graph, and
+no `graphx://schema` resource is registered. Pointing `GRAPHX_SCHEMA` at a file fixes all three.
+Tool *descriptions* stay generic either way — for those, embed the server as a library instead.
 
 ## Library usage
 
@@ -138,6 +158,7 @@ their options object instead.
 |---|---|
 | `GRAPHX_MCP_MODE` | `local` or `remote`. If unset, defaults to `remote` when `GRAPHX_URL` is set, otherwise `local`. |
 | `GRAPHX_DB` | Required in local mode. A **namespace**, not a connection string — `mygraph` means the libSQL file `./mygraph.db` in the process's working directory, created if absent. A URL here is taken literally as a namespace: `file:./graph.db` silently opens `./graph.db.db`, and `postgres://…` / `libsql://…` fail at startup. The binary throws if it is missing. |
+| `GRAPHX_SCHEMA` | Optional, local mode only. Path to a JSON schema file (below). When set, `create_node` / `create_edge` / `bulk_load` validate against it, `describe_schema` returns a real contract, and `graphx://schema` registers as a resource. When unset, local mode runs schemaless. A missing file, malformed JSON, or an unsupported construct exits 1 with a clear stderr message. |
 | `GRAPHX_URL` | Required in remote mode: the base URL of a deployed graphx server. The binary throws at startup if missing. |
 | `GRAPHX_API_KEY` | Optional bearer credential sent with every request in remote mode. |
 | `GRAPHX_MCP_READ_ONLY` | Set to `1` to register only `read`-tagged tools. Equivalent to the `--read-only` CLI flag. |
@@ -145,6 +166,40 @@ their options object instead.
 In remote mode, the tool surface itself still comes from a locally built app with an empty schema —
 the set of tools is a property of the installed graphx version, not of the deployment being
 addressed. Only the `Backend` (where calls are actually sent) points at `GRAPHX_URL`.
+
+### `GRAPHX_SCHEMA` file format
+
+Node types use **the JSON Schema shape `z.toJSONSchema` already emits**, so a file can be generated
+straight off an existing `defineGraphSchema` and round-trips. Relations mirror `EdgeDef` — a plain
+table of `from` / `to` / `single`, plus an optional `data` in the same node-property shape. A bare
+`{}` is a valid, unconstrained relation.
+
+```json
+{
+	"nodes": {
+		"person": {
+			"type": "object",
+			"properties": { "name": { "type": "string" }, "age": { "type": "number" } },
+			"required": ["name"]
+		},
+		"note": {
+			"type": "object",
+			"properties": { "title": { "type": "string" }, "body": { "type": "string" } },
+			"required": ["title"]
+		}
+	},
+	"edges": {
+		"knows": { "from": "person", "to": "person" },
+		"wrote": { "from": "person", "to": "note", "single": true }
+	}
+}
+```
+
+`from`/`to` accept a string or an array of strings. Property types `string`, `number`, `integer`,
+`boolean`, `array` (with `items`), and nested `object` are supported; a property absent from
+`required` becomes optional. `$ref`, `anyOf`, `oneOf`, `allOf`, and `enum` are out of scope — using
+one throws at startup naming the node type, the property, and the construct, rather than silently
+dropping it.
 
 ## Tools
 
@@ -205,24 +260,26 @@ for clients that don't implement resources.
   full payload is still there in `content[0].text` — nothing is lost, but a client reading
   `structuredContent` specifically gets nothing for these five.
 - **A schemaless server registers no resources at all.** The standalone binary run without a
-  library-provided schema never calls `registerResource`, so the MCP SDK never declares the
-  `resources` capability. A client that checks `getServerCapabilities()` first sees no `resources`
-  key and knows to skip it; a client that calls `listResources()` unconditionally gets a thrown
-  `-32601 Method not found` rather than an empty list. `describe_schema` still works in this mode
-  (see below) — only the resource form is affected.
-- **The binary runs schemaless.** A `GraphSchema` is a TypeScript value, so `graphx-mcp` can't
-  import yours. `describe_schema` falls back to sampling distinct `type` values off `GET /nodes`
-  and returns them tagged `inferred: true`, with no property schemas and no relations. A failed
-  sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
-  unreachable graph never reads as an empty one. Embed the server as a library (above) to get real
-  schema-aware tool descriptions and the resource.
-- **In LOCAL mode the binary cannot create anything.** `Graph.addNode` rejects a type it has no
-  definition for, so against a schemaless app `create_node`, `create_edge` and `bulk_load` always
-  fail with `HTTP 400: addNode: unknown type '…'`, and `update_node` / `delete_node` have nothing to
-  act on. Reads, and the three metric tools, work normally. This does **not** affect remote mode —
-  there the deployment validates against its own schema, and the local empty one is used for
-  nothing but the route registry. To write to a local graph, embed the server as a library and pass
-  your schema.
+  schema — no library-provided schema, and no `GRAPHX_SCHEMA` — never calls `registerResource`, so
+  the MCP SDK never declares the `resources` capability. A client that checks
+  `getServerCapabilities()` first sees no `resources` key and knows to skip it; a client that calls
+  `listResources()` unconditionally gets a thrown `-32601 Method not found` rather than an empty
+  list. `describe_schema` still works in this mode (see below) — only the resource form is
+  affected.
+- **The binary runs schemaless unless `GRAPHX_SCHEMA` is set.** A `GraphSchema` is a TypeScript
+  value, so `graphx-mcp` can't import yours directly — but `GRAPHX_SCHEMA` (above) points it at a
+  JSON file instead. Without it, `describe_schema` falls back to sampling distinct `type` values off
+  `GET /nodes` and returns them tagged `inferred: true`, with no property schemas and no relations.
+  A failed sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
+  unreachable graph never reads as an empty one. Tool *descriptions* stay generic either way — embed
+  the server as a library (above) for those.
+- **In LOCAL mode, without `GRAPHX_SCHEMA`, the binary cannot create anything.** `Graph.addNode`
+  rejects a type it has no definition for, so against a schemaless app `create_node`, `create_edge`
+  and `bulk_load` always fail with `HTTP 400: addNode: unknown type '…'`, and `update_node` /
+  `delete_node` have nothing to act on. Reads, and the three metric tools, work normally. This does
+  **not** affect remote mode — there the deployment validates against its own schema, and the local
+  empty one is used for nothing but the route registry. Point `GRAPHX_SCHEMA` at a schema file
+  (above) to write to a local graph without embedding the server as a library.
 - **The binary is libSQL only.** `GRAPHX_DB_DRIVER=postgres` selects the Postgres dialect, but
   `graphx-mcp` never imports `@graphx/core/pg`, so it exits at startup with `getDb: postgres driver
   selected but the pg adapter is not registered`.

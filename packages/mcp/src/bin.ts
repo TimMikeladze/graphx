@@ -1,8 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { readFileSync } from 'node:fs';
 import process from 'node:process';
-import { createApp, type DbClient, hashEmbed } from '@graphx/core';
+import { createApp, type DbClient, type GraphSchema, hashEmbed } from '@graphx/core';
 import { localBackend, remoteBackend } from './backend.ts';
+import { parseSchemaFile } from './schema-file.ts';
 import { createGraphxMcp } from './server.ts';
 
 /**
@@ -41,14 +43,23 @@ function registerContext(server: McpServer, context: Record<string, unknown>): v
 }
 
 /**
- * A graph schema is a TypeScript value, so the binary cannot import one. It runs schemaless,
- * and in LOCAL mode that costs more than it sounds: `Graph.addNode` rejects every type it has
- * no definition for, so `create_node`, `create_edge` and `bulk_load` always 400 there, and
- * `update_node`/`delete_node` have nothing to act on. Remote mode is unaffected — the
- * deployment validates against its own schema, and the empty one here only supplies the route
- * registry. `describe_schema` samples types off the graph and flags them `inferred`. Import
- * this package instead of spawning the binary to write to a local graph.
+ * A graph schema is a TypeScript value, so the binary cannot import one directly — but
+ * `GRAPHX_SCHEMA` can point it at a JSON file instead (see `schema-file.ts`). Without it, LOCAL
+ * mode runs schemaless, and that costs more than it sounds: `Graph.addNode` rejects every type
+ * it has no definition for, so `create_node`, `create_edge` and `bulk_load` always 400 there,
+ * and `update_node`/`delete_node` have nothing to act on. `describe_schema` falls back to
+ * sampling types off the graph and flags them `inferred`. Remote mode is unaffected either way
+ * — the deployment validates against its own schema, and the empty one here only supplies the
+ * route registry.
  */
+function loadSchema(path: string | undefined): GraphSchema | undefined {
+	if (!path) return undefined;
+	// Errors here (missing file, bad JSON, an unsupported construct) propagate to `main`'s
+	// top-level `.catch`, which prints a clear stderr message and exits 1 — never a bare stack
+	// trace.
+	return parseSchemaFile(JSON.parse(readFileSync(path, 'utf8')), path);
+}
+
 async function main(): Promise<void> {
 	const readOnly = process.argv.includes('--read-only') || process.env.GRAPHX_MCP_READ_ONLY === '1';
 	const mode = process.env.GRAPHX_MCP_MODE ?? (process.env.GRAPHX_URL ? 'remote' : 'local');
@@ -56,6 +67,7 @@ async function main(): Promise<void> {
 	let app: Parameters<typeof createGraphxMcp>[0]['app'];
 	let backend: ReturnType<typeof localBackend>;
 	let context: Record<string, unknown>;
+	let schema: GraphSchema | undefined;
 
 	if (mode === 'remote') {
 		const url = process.env.GRAPHX_URL;
@@ -86,17 +98,29 @@ async function main(): Promise<void> {
 	} else {
 		const db = process.env.GRAPHX_DB;
 		if (!db) throw new Error('GRAPHX_MCP_MODE=local requires GRAPHX_DB');
-		const dev = await createApp({ schema: { nodes: {}, edges: {} }, db, embed: hashEmbed() });
+		const schemaPath = process.env.GRAPHX_SCHEMA;
+		schema = loadSchema(schemaPath);
+		const dev = await createApp({
+			schema: schema ?? { nodes: {}, edges: {} },
+			db,
+			embed: hashEmbed(),
+		});
 		app = dev.app;
 		backend = localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant });
-		context = { mode: 'local', db: `${db}.db`, tenant: dev.tenant, project: dev.project };
+		context = {
+			mode: 'local',
+			db: `${db}.db`,
+			tenant: dev.tenant,
+			project: dev.project,
+			schema: schemaPath ?? null,
+		};
 		// hashEmbed is lexical, not semantic. Saying so beats letting `retrieve` look broken.
 		process.stderr.write(
 			'graphx-mcp: no embedder configured; retrieve/hybrid use hashEmbed (lexical, not semantic)\n',
 		);
 	}
 
-	const server = createGraphxMcp({ app, backend, readOnly });
+	const server = createGraphxMcp({ app, backend, readOnly, schema });
 	registerContext(server, context);
 	await server.connect(new StdioServerTransport());
 }

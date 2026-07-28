@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -63,6 +63,7 @@ async function spawnBin(env: Record<string, string>, cwd: string) {
 		call: (name: string, args: Record<string, unknown>) =>
 			send('tools/call', { name, arguments: args }).then((m) => m.result),
 		list: () => send('tools/list').then((m) => m.result.tools as Array<{ name: string }>),
+		readResource: (uri: string) => send('resources/read', { uri }).then((m) => m.result),
 		stop: () => child.kill(),
 	};
 }
@@ -118,6 +119,73 @@ test('bin: remote mode touches no database, even from a read-only cwd', async ()
 		bin.stop();
 	} finally {
 		await Bun.$`chmod 755 ${cwd}`.quiet();
+		await rm(cwd, { recursive: true, force: true });
+	}
+}, 30000);
+
+test('bin: GRAPHX_SCHEMA lets local mode actually write — create_node succeeds and reads back', async () => {
+	const cwd = await mkdtemp(join(tmpdir(), 'gx-mcp-schema-'));
+	try {
+		const schemaPath = join(cwd, 'schema.json');
+		await writeFile(
+			schemaPath,
+			JSON.stringify({
+				nodes: {
+					person: {
+						type: 'object',
+						properties: { name: { type: 'string' }, age: { type: 'number' } },
+						required: ['name'],
+					},
+				},
+				edges: { knows: { from: 'person', to: 'person' } },
+			}),
+		);
+
+		const bin = await spawnBin(
+			{ GRAPHX_MCP_MODE: 'local', GRAPHX_DB: 'mygraph', GRAPHX_SCHEMA: schemaPath },
+			cwd,
+		);
+
+		// graphx_context reports which schema file (if any) is validating this run.
+		const ctx = await bin.call('graphx_context', {});
+		expect(ctx.structuredContent.schema).toBe(schemaPath);
+		const { tenant, project } = ctx.structuredContent;
+
+		// graphx://schema is now a real resource, not the schemaless no-op.
+		const resource = await bin.readResource('graphx://schema');
+		const doc = JSON.parse(resource.contents[0].text);
+		expect(doc.inferred).toBeUndefined();
+		expect(doc.nodes.person.properties.name.type).toBe('string');
+		expect(doc.edges).toEqual([{ rel: 'knows', from: 'person', to: 'person' }]);
+
+		// N1: without GRAPHX_SCHEMA this always fails with "HTTP 400: addNode: unknown type 'person'".
+		const created = await bin.call('create_node', {
+			tenant,
+			project,
+			type: 'person',
+			data: { name: 'Ada' },
+		});
+		expect(created.isError).toBeFalsy();
+		const node = created.structuredContent;
+		expect(node.type).toBe('person');
+		expect(node.data).toEqual({ name: 'Ada' });
+
+		const fetched = await bin.call('get_node', { tenant, project, id: node.id });
+		expect(fetched.isError).toBeFalsy();
+		expect(fetched.structuredContent.data).toEqual({ name: 'Ada' });
+
+		// A schema that rejects the type still fails clearly — validation is real, not bypassed.
+		const rejected = await bin.call('create_node', {
+			tenant,
+			project,
+			type: 'ghost',
+			data: {},
+		});
+		expect(rejected.isError).toBe(true);
+		expect(rejected.content[0].text).toContain("unknown type 'ghost'");
+
+		bin.stop();
+	} finally {
 		await rm(cwd, { recursive: true, force: true });
 	}
 }, 30000);
