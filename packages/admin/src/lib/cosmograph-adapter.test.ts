@@ -23,6 +23,20 @@ describe("colorForType", () => {
   })
 })
 
+describe("toCosmograph labels", () => {
+  it("uses the server label when present", () => {
+    const { nodes } = toCosmograph({
+      ...slice,
+      nodes: [{ id: "n1", type: "person", label: "Ada Lovelace" }],
+    })
+    expect(nodes[0]?.label).toBe("Ada Lovelace")
+  })
+  it("falls back to the type when the node has no label", () => {
+    const { nodes } = toCosmograph(slice)
+    expect(nodes.map((n) => n.label)).toEqual(["person", "person", "device"])
+  })
+})
+
 describe("toCosmograph", () => {
   it("maps links to source/target/indices/rel/weight", () => {
     const { links } = toCosmograph(slice)

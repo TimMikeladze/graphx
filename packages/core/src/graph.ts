@@ -159,6 +159,13 @@ export interface GraphSliceOpts {
 export interface GraphSliceNode {
 	id: string;
 	type: string;
+	/**
+	 * A human-readable label for rendering on the canvas — the first {@link LABEL_KEYS} property
+	 * the node's data carries. Absent when it carries none, and callers fall back to the type or
+	 * the id. This is the ONLY part of `data` the slice exposes: the canvas needs a caption, not
+	 * the props (that is what `GET /nodes/:id` is for).
+	 */
+	label?: string;
 }
 
 /** A canvas link in a {@link GraphSlice} (Cosmograph `source`/`target` naming). */
@@ -176,6 +183,33 @@ export interface GraphSlice {
 	links: GraphSliceLink[];
 	/** True when the node set hit the `maxRows` cap (UI shows a "narrow filters" banner). */
 	truncated: boolean;
+}
+
+/**
+ * Property keys, in priority order, that carry a human-readable node label. Kept in sync with
+ * the admin UI's `bestLabel`, so a node reads the same on the canvas as in the node list.
+ */
+const LABEL_KEYS = ['name', 'title', 'label', 'displayName', 'display_name', 'heading', 'slug'];
+
+/** Longest label the slice will carry — a canvas caption, not a body. */
+const LABEL_MAX = 80;
+
+/** Parse a `data` column, tolerating the impossible-but-cheap-to-guard malformed row. */
+function parseData(raw: unknown): Record<string, unknown> {
+	try {
+		return JSON.parse(String(raw)) as Record<string, unknown>;
+	} catch {
+		return {};
+	}
+}
+
+/** The first {@link LABEL_KEYS} property that holds a non-empty string, trimmed and capped. */
+function sliceLabel(data: Record<string, unknown>): string | undefined {
+	for (const k of LABEL_KEYS) {
+		const v = data[k];
+		if (typeof v === 'string' && v.trim()) return v.trim().slice(0, LABEL_MAX);
+	}
+	return undefined;
 }
 
 /** One edge def as carried by P2 (data/from/to/single all optional). */
@@ -732,17 +766,19 @@ export class Graph<S extends GraphSchema> {
 		if (filter === null) return { nodes: [], links: [], truncated: false };
 		const maxRows = resolveLimits(opts.limits).maxRows;
 
-		// 1) The capped node set (id + type). Reused as a subquery for the edge endpoint filter.
-		const nodeSub = `SELECT nv.id AS id, nv.type AS type
+		// 1) The capped node set (id + type + data, the last only to derive a display label).
+		// Reused as a subquery for the edge endpoint filter, which selects `id` back out of it.
+		const nodeSub = `SELECT nv.id AS id, nv.type AS type, nv.data AS data
 			FROM node_versions nv
 			WHERE ${filter.where}
 			ORDER BY nv.id
 			LIMIT ${Math.floor(maxRows)}`;
 		const nodesRes = await this.raw.execute({ sql: nodeSub, args: filter.args });
-		const nodes: GraphSliceNode[] = nodesRes.rows.map((r) => ({
-			id: String(r.id),
-			type: String(r.type),
-		}));
+		const nodes: GraphSliceNode[] = nodesRes.rows.map((r) => {
+			const type = String(r.type);
+			const label = sliceLabel(this.upcaster.apply(type, parseData(r.data)));
+			return label === undefined ? { id: String(r.id), type } : { id: String(r.id), type, label };
+		});
 		const truncated = nodes.length >= maxRows;
 
 		if (nodes.length === 0) return { nodes, links: [], truncated };

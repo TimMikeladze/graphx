@@ -109,6 +109,33 @@ test('graphSlice sets truncated when the node set hits maxRows', async () => {
 	g.raw.close();
 });
 
+test('graphSlice nodes carry a display label drawn from data', async () => {
+	const g = await graph();
+	// `person` has a `name`; `device` has neither name nor title, so it gets no label.
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada Lovelace' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const slice = await g.graphSlice();
+	const byId = new Map(slice.nodes.map((n) => [n.id, n]));
+	expect(byId.get(p.id)?.label).toBe('Ada Lovelace');
+	expect(byId.get(d.id)?.label).toBeUndefined();
+	// The label is the ONLY part of data the slice exposes.
+	expect(byId.get(p.id)).toEqual({ id: p.id, type: 'person', label: 'Ada Lovelace' });
+	g.raw.close();
+});
+
+test('graphSlice labels are trimmed and capped', async () => {
+	const raw = makeTestDb().client;
+	await init(raw);
+	const schema = defineGraphSchema({ nodes: { doc: z.object({ title: z.string() }) }, edges: {} });
+	const g = new Graph(raw, schema);
+	const padded = await g.addNode({ type: 'doc', data: { title: '   spaced   ' } });
+	const long = await g.addNode({ type: 'doc', data: { title: 'x'.repeat(200) } });
+	const byId = new Map((await g.graphSlice()).nodes.map((n) => [n.id, n]));
+	expect(byId.get(padded.id)?.label).toBe('spaced');
+	expect(byId.get(long.id)?.label?.length).toBe(80);
+	raw.close();
+});
+
 test('graphSlice with an unmatched full-text query returns empty', async () => {
 	const g = await graph();
 	await g.addNode({ type: 'person', data: { name: 'p1' }, body: 'hello' });

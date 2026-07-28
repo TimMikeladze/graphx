@@ -55,6 +55,8 @@ export interface NodeListPage {
 export interface GraphSliceNode {
   id: string
   type: string
+  /** Server-derived display label (the node's name/title/…); absent when data carries none. */
+  label?: string
 }
 
 /** A canvas link in a graph slice (Cosmograph `source`/`target` naming). */

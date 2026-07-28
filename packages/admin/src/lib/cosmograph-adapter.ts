@@ -8,6 +8,8 @@ export interface CosmoNode {
   type: string
   color: string
   selected: boolean
+  /** Caption for `pointLabelBy`. Always a string: the server label, else the type. */
+  label: string
   // Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
   [key: string]: unknown
 }
@@ -81,6 +83,9 @@ export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): Co
       type: n.type,
       color: colorForType(n.type, palette),
       selected: n.id === opts.selectedId,
+      // Cosmograph skips points whose label column is empty, so fall back to the type rather
+      // than leave an untyped hole in the canvas.
+      label: n.label ?? n.type,
     }
   })
 
