@@ -1,11 +1,12 @@
 import { afterAll, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import type { DbClient } from '../src/dialect.ts';
 import type { GraphEvent } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { deadLetters, matchesTrigger, pruneDeadLetters } from '../src/triggers.ts';
-import { makeTestDb } from './harness.ts';
+import { deadLetters, matchesTrigger, pruneDeadLetters, TriggerRunner } from '../src/triggers.ts';
+import { makeTestDb, TEST_DRIVER } from './harness.ts';
 
 // Eventing Layer 3 — declarative triggers over the durable graph_outbox. Every test drives the
 // runner through `runOnce()` rather than `start()`, so nothing here depends on wall-clock timing.
@@ -143,3 +144,200 @@ test('pruneDeadLetters drops rows older than the watermark', async () => {
 	expect(await deadLetters(g.raw)).toHaveLength(1);
 	expect(() => pruneDeadLetters(g.raw, 1.5)).toThrow();
 });
+
+test('a matching in-proc action fires and receives a source-tagged graph', async () => {
+	const g = await makeGraph();
+	const seen: GraphEvent[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-basic',
+		start: 'beginning',
+		triggers: [
+			{
+				name: 'record',
+				match: { op: 'node.create', label: 'person' },
+				action: async (event, graph) => {
+					seen.push(event);
+					await graph.addNode({ type: 'person', data: { name: 'derived' } });
+				},
+			},
+		],
+	});
+
+	await g.addNode({ type: 'person', data: { name: 'seed' } });
+	const first = await runner.runOnce();
+
+	expect(first.delivered).toBe(1);
+	expect(first.deadLettered).toBe(0);
+	expect(seen).toHaveLength(1);
+	expect(seen[0]?.label).toBe('person');
+
+	// The action's own write is tagged, so the same trigger does not match it.
+	const second = await runner.runOnce();
+	expect(second.delivered).toBe(0);
+	expect(seen).toHaveLength(1);
+	expect(second.drained).toBe(true);
+});
+
+test('pure closes fire triggers — the reason this rides the outbox', async () => {
+	const g = await makeGraph();
+	const closes: string[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-closes',
+		start: 'beginning',
+		triggers: [
+			{
+				name: 'on-close',
+				match: { shape: 'close' },
+				action: (event) => {
+					closes.push(event.op);
+				},
+			},
+		],
+	});
+
+	const a = await g.addNode({ type: 'person', data: { name: 'a' } });
+	const b = await g.addNode({ type: 'person', data: { name: 'b' } });
+	const e = await g.addEdge({ rel: 'knows', src: a.id, dst: b.id });
+	await g.deleteEdge(e.id);
+	await g.deleteNode(a.id);
+
+	await runner.runOnce();
+	expect(closes).toEqual(['edge.delete', 'node.delete']);
+});
+
+test('start defaults to now, skipping events that predate the subscription', async () => {
+	const g = await makeGraph();
+	await g.addNode({ type: 'person', data: { name: 'before' } });
+
+	const seen: string[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-now',
+		triggers: [
+			{ name: 'record', match: {}, action: (e) => void seen.push(e.id) },
+		],
+	});
+
+	const after = await g.addNode({ type: 'person', data: { name: 'after' } });
+	await runner.runOnce();
+	expect(seen).toEqual([after.id]);
+});
+
+test('a failing action retries, dead-letters, and cannot break its sibling', async () => {
+	const g = await makeGraph();
+	let attempts = 0;
+	const sibling: string[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-fail',
+		start: 'beginning',
+		retries: 3,
+		backoffMs: 1,
+		triggers: [
+			{
+				name: 'boom',
+				match: {},
+				action: () => {
+					attempts++;
+					throw new Error('always fails');
+				},
+			},
+			{ name: 'ok', match: {}, action: (e) => void sibling.push(e.id) },
+		],
+	});
+
+	const node = await g.addNode({ type: 'person', data: { name: 'seed' } });
+	const result = await runner.runOnce();
+
+	expect(attempts).toBe(3);
+	expect(result.deadLettered).toBe(1);
+	expect(result.delivered).toBe(1); // the sibling still ran
+	expect(sibling).toEqual([node.id]);
+
+	const dl = await deadLetters(g.raw, { subscription: 'sub-fail' });
+	expect(dl).toHaveLength(1);
+	expect(dl[0]?.triggerName).toBe('boom');
+	expect(dl[0]?.attempts).toBe(3);
+	expect(dl[0]?.error).toContain('always fails');
+	expect(dl[0]?.event.id).toBe(node.id);
+
+	// The mutation that produced the event is untouched by the failure.
+	expect(await g.getNode(node.id)).not.toBeNull();
+
+	// A poison event does not wedge the subscription.
+	expect((await runner.runOnce()).delivered).toBe(0);
+});
+
+test('a second runner resumes at exactly the undelivered remainder', async () => {
+	const g = await makeGraph();
+	const ids: string[] = [];
+	for (let i = 0; i < 4; i++) {
+		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+	}
+
+	const seenA: string[] = [];
+	const a = new TriggerRunner(g, {
+		name: 'sub-resume',
+		start: 'beginning',
+		batchSize: 2,
+		triggers: [{ name: 'record', match: {}, action: (e) => void seenA.push(e.id) }],
+	});
+	await a.runOnce();
+	expect(seenA).toEqual([ids[0], ids[1]]);
+
+	// A fresh runner over the same subscription name — the restart case.
+	const seenB: string[] = [];
+	const b = new TriggerRunner(g, {
+		name: 'sub-resume',
+		start: 'beginning',
+		triggers: [{ name: 'record', match: {}, action: (e) => void seenB.push(e.id) }],
+	});
+	await b.runOnce();
+	expect(seenB).toEqual([ids[2], ids[3]]); // no replay, no skip
+});
+
+test.skipIf(TEST_DRIVER === 'postgres')(
+	'a process killed mid-batch redelivers only what it had not checkpointed',
+	async () => {
+		const { client, sibling, teardown } = makeTestDb({ file: true });
+		teardowns.push(teardown);
+		await init(client, 4);
+		const g = new Graph(client, SCHEMA, undefined, { outbox: true });
+
+		const ids: string[] = [];
+		for (let i = 0; i < 4; i++) {
+			ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+		}
+
+		const seenA: string[] = [];
+		const a = new TriggerRunner(g, {
+			name: 'sub-crash',
+			start: 'beginning',
+			retries: 1,
+			backoffMs: 1,
+			triggers: [
+				{
+					name: 'record',
+					match: {},
+					action: (e) => {
+						if (e.id === ids[2]) {
+							client.close(); // the process dies before this event is delivered
+							throw new Error('process died');
+						}
+						seenA.push(e.id);
+					},
+				},
+			],
+		});
+		await expect(a.runOnce()).rejects.toThrow();
+		expect(seenA).toEqual([ids[0], ids[1]]);
+
+		const revived = new Graph((sibling as () => DbClient)(), SCHEMA, undefined, { outbox: true });
+		const seenB: string[] = [];
+		const b = new TriggerRunner(revived, {
+			name: 'sub-crash',
+			start: 'beginning',
+			triggers: [{ name: 'record', match: {}, action: (e) => void seenB.push(e.id) }],
+		});
+		await b.runOnce();
+		expect(seenB).toEqual([ids[2], ids[3]]);
+	},
+);

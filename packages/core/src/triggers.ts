@@ -17,8 +17,12 @@
  * spins its own loop and its own cursor and cannot stall another's.
  */
 
+import { setTimeout as sleep } from 'node:timers/promises';
+import { ulid } from 'ulidx';
 import type { DbClient, SqlValue } from './dialect.ts';
 import type { GraphEvent, GraphEventOp } from './events.ts';
+import type { Graph, GraphSchema } from './graph.ts';
+import { outboxHead, outboxTail } from './temporal.ts';
 
 /** One event whose action exhausted its retries, as stored in `trigger_dead_letters`. */
 export interface DeadLetter {
@@ -131,4 +135,229 @@ export async function pruneDeadLetters(raw: DbClient, beforeMs: number): Promise
 		args: [beforeMs],
 	});
 	return r.rowsAffected;
+}
+
+/**
+ * What a trigger does. Receives the event and a `Graph` whose writes are tagged
+ * `trigger:<name>`, so derived writes are attributable and excluded from the trigger's own match.
+ * Throwing signals failure: the runner retries, then dead-letters.
+ */
+export type TriggerAction<S extends GraphSchema> = (
+	event: GraphEvent,
+	graph: Graph<S>,
+) => Promise<void> | void;
+
+/** A rule: match some subset of events, run an action. */
+export interface Trigger<S extends GraphSchema> {
+	/** Stable — it keys the dead-letter rows and the provenance tag on derived writes. */
+	name: string;
+	match: TriggerMatch;
+	action: TriggerAction<S>;
+	/** Attempts before dead-lettering. Overrides the runner default. */
+	retries?: number;
+}
+
+/** Construction options for a {@link TriggerRunner}. */
+export interface TriggerRunnerOptions<S extends GraphSchema> {
+	/** Subscription name — the `trigger_cursors` key. Two runners over one DB need distinct names. */
+	name: string;
+	triggers: Trigger<S>[];
+	/** Events dispatched at once within a page. `1` (the default) means strict `seq` order. */
+	concurrency?: number;
+	/** `outboxTail` page size. Default 100. */
+	batchSize?: number;
+	/** Sleep between polls once drained. Default 1000. */
+	pollIntervalMs?: number;
+	/** Attempts per (event, trigger) before dead-lettering. Default 3. */
+	retries?: number;
+	/** Full-jitter exponential backoff base. Default 100. */
+	backoffMs?: number;
+	/** Cursor seed when none is persisted: `'now'` (the default) skips history. */
+	start?: 'beginning' | 'now';
+}
+
+/** The outcome of one {@link TriggerRunner.runOnce} cycle. */
+export interface TriggerBatchResult {
+	/** (event, trigger) pairs whose action succeeded. */
+	delivered: number;
+	/** (event, trigger) pairs that exhausted their retries. */
+	deadLettered: number;
+	/** The persisted cursor after the cycle. */
+	cursor: number;
+	/** True when the outbox had nothing more to read. */
+	drained: boolean;
+}
+
+/**
+ * Polls the durable outbox and runs matching triggers, resuming from a persisted cursor after a
+ * restart. Delivery is at-least-once; `event.seq` is the dedupe key.
+ *
+ * Drive it with {@link start}/{@link stop} in a worker, or call {@link runOnce} directly for one
+ * deterministic cycle (which is what the tests do — no timers involved).
+ */
+export class TriggerRunner<S extends GraphSchema> {
+	private readonly triggers: Trigger<S>[];
+	private readonly name: string;
+	private readonly concurrency: number;
+	private readonly batchSize: number;
+	private readonly pollIntervalMs: number;
+	private readonly retries: number;
+	private readonly backoffMs: number;
+	private readonly startAt: 'beginning' | 'now';
+	/** Source-tagged sibling graphs, one per trigger, built lazily and reused. */
+	private readonly graphs = new Map<string, Graph<S>>();
+	/**
+	 * Kicked off in the constructor — NOT lazily on first {@link runOnce} — so that a `'now'` seed
+	 * captures the outbox head as of construction. A caller may do real work between constructing
+	 * the runner and its first `runOnce()` call; a seed computed at that later point would read
+	 * `outboxHead` past events written in the interim and silently skip them.
+	 */
+	private readonly cursorReady: Promise<number>;
+	/** Cached once {@link cursorReady} resolves, so later cycles skip the round trip. */
+	private cursor: number | null = null;
+
+	constructor(
+		private readonly graph: Graph<S>,
+		opts: TriggerRunnerOptions<S>,
+	) {
+		if (opts.concurrency !== undefined && (!Number.isInteger(opts.concurrency) || opts.concurrency < 1)) {
+			throw new Error(`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`);
+		}
+		this.name = opts.name;
+		this.triggers = opts.triggers;
+		this.concurrency = opts.concurrency ?? 1;
+		this.batchSize = opts.batchSize ?? 100;
+		this.pollIntervalMs = opts.pollIntervalMs ?? 1000;
+		this.retries = opts.retries ?? 3;
+		this.backoffMs = opts.backoffMs ?? 100;
+		this.startAt = opts.start ?? 'now';
+		// Issued here, synchronously, rather than from inside `seedCursor` after it awaits the
+		// persisted-cursor lookup: an intervening await would let a caller's own next write reach
+		// the connection first, so a fresh 'now' subscription would see it as already-past.
+		const headAtConstruction = this.startAt === 'now' ? outboxHead(this.graph.raw) : Promise.resolve(0);
+		this.cursorReady = this.seedCursor(headAtConstruction);
+	}
+
+	/**
+	 * One poll and dispatch. The cursor advances after each delivered event, so an interrupted
+	 * cycle resumes at exactly the first event it had not finished.
+	 */
+	async runOnce(): Promise<TriggerBatchResult> {
+		if (this.cursor === null) this.cursor = await this.cursorReady;
+		const page = await outboxTail(
+			this.graph.raw,
+			{ seq: this.cursor },
+			{ limit: this.batchSize },
+		);
+		let delivered = 0;
+		let deadLettered = 0;
+		for (const event of page.events) {
+			const outcome = await this.dispatch(event);
+			delivered += outcome.delivered;
+			deadLettered += outcome.deadLettered;
+			this.cursor = event.seq as number;
+			await this.saveCursor(this.cursor);
+		}
+		return {
+			delivered,
+			deadLettered,
+			cursor: this.cursor,
+			drained: page.nextCursor === null,
+		};
+	}
+
+	/**
+	 * The persisted cursor: read if one exists, else seeded (and immediately persisted) from
+	 * {@link opts.start}. `headAtConstruction` is `outboxHead` sampled at construction time (see the
+	 * constructor) rather than `MAX(seq)` re-queried here, which keeps the Postgres visibility gate
+	 * — a bare max can start past a lower-seq row that has not committed yet, which would skip it
+	 * forever. Persisting immediately means a restart before the first delivery does not re-seek to
+	 * a different head.
+	 */
+	private async seedCursor(headAtConstruction: Promise<number>): Promise<number> {
+		const r = await this.graph.raw.execute({
+			sql: 'SELECT seq FROM trigger_cursors WHERE name = ?',
+			args: [this.name],
+		});
+		const row = r.rows[0];
+		if (row !== undefined) return Number(row.seq);
+		const seq = this.startAt === 'beginning' ? 0 : await headAtConstruction;
+		await this.saveCursor(seq);
+		return seq;
+	}
+
+	private async saveCursor(seq: number): Promise<void> {
+		await this.graph.raw.execute({
+			sql: `INSERT INTO trigger_cursors (name, seq, updated_at) VALUES (?,?,?)
+				ON CONFLICT(name) DO UPDATE SET seq = excluded.seq, updated_at = excluded.updated_at`,
+			args: [this.name, seq, Date.now()],
+		});
+	}
+
+	/** Run every trigger that matches `event`. One trigger's failure never reaches another's. */
+	private async dispatch(event: GraphEvent): Promise<{ delivered: number; deadLettered: number }> {
+		let delivered = 0;
+		let deadLettered = 0;
+		for (const trigger of this.triggers) {
+			if (!matchesTrigger(event, trigger.match)) continue;
+			if (await this.deliver(trigger, event)) delivered++;
+			else deadLettered++;
+		}
+		return { delivered, deadLettered };
+	}
+
+	/** Attempt one trigger with backoff. `false` ⇒ attempts exhausted and a dead letter written. */
+	private async deliver(trigger: Trigger<S>, event: GraphEvent): Promise<boolean> {
+		const attempts = trigger.retries ?? this.retries;
+		let lastError = '';
+		for (let attempt = 0; attempt < attempts; attempt++) {
+			try {
+				await trigger.action(event, this.graphFor(trigger.name));
+				return true;
+			} catch (e) {
+				lastError = e instanceof Error ? (e.stack ?? e.message) : String(e);
+				if (attempt < attempts - 1) await this.backoff(attempt);
+			}
+		}
+		await this.recordDeadLetter(trigger, event, lastError, attempts);
+		return false;
+	}
+
+	private graphFor(name: string): Graph<S> {
+		let g = this.graphs.get(name);
+		if (g === undefined) {
+			g = this.graph.withEventSource(`trigger:${name}`);
+			this.graphs.set(name, g);
+		}
+		return g;
+	}
+
+	/** Full-jitter exponential backoff, capped at 64× the base — mirrors graph.ts's write retry. */
+	private backoff(attempt: number): Promise<void> {
+		const base = this.backoffMs * Math.min(2 ** attempt, 64);
+		return sleep(base + Math.random() * base);
+	}
+
+	private async recordDeadLetter(
+		trigger: Trigger<S>,
+		event: GraphEvent,
+		error: string,
+		attempts: number,
+	): Promise<void> {
+		await this.graph.raw.execute({
+			sql: `INSERT INTO trigger_dead_letters
+					(id, subscription, trigger_name, seq, event, error, attempts, created_at)
+				VALUES (?,?,?,?,?,?,?,?)`,
+			args: [
+				ulid(),
+				this.name,
+				trigger.name,
+				event.seq ?? 0,
+				JSON.stringify(event),
+				error,
+				attempts,
+				Date.now(),
+			],
+		});
+	}
 }

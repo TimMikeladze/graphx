@@ -145,7 +145,7 @@ class TriggerRunner<S extends GraphSchema> {
   constructor(graph: Graph<S>, opts: TriggerRunnerOptions<S>);
   start(): void;
   stop(): Promise<void>;              // resolves once the loop has exited and in-flight work drained
-  runOnce(): Promise<{ delivered: number; deadLettered: number; cursor: number | null }>;
+  runOnce(): Promise<{ delivered: number; deadLettered: number; cursor: number; drained: boolean }>;
 }
 
 function webhookAction<S extends GraphSchema>(opts: {
