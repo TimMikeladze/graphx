@@ -30,3 +30,7 @@ yarn-error.log*
 # scripts/bench output — cached corpora and run results. Anchored to the root so it does not also
 # swallow scripts/bench, which is the harness itself.
 /bench/
+
+# Agent scratch: git worktrees and per-plan SDD workspaces (ledgers, briefs, review packages).
+/.claude/worktrees/
+/.superpowers/
