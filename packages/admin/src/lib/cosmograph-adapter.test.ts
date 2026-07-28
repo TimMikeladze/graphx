@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { colorForType, legendOf, toCosmograph } from "./cosmograph-adapter"
+import { colorForType, LABEL_COLUMN, legendOf, toCosmograph } from "./cosmograph-adapter"
 import type { GraphSlice } from "./types"
 
 const slice: GraphSlice = {
@@ -34,6 +34,22 @@ describe("toCosmograph labels", () => {
   it("falls back to the type when the node has no label", () => {
     const { nodes } = toCosmograph(slice)
     expect(nodes.map((n) => n.label)).toEqual(["person", "person", "device"])
+  })
+
+  it("materializes every caption column, so switching source needs no rebuild", () => {
+    const { nodes } = toCosmograph({
+      ...slice,
+      nodes: [{ id: "01HF7YAT0644903PJ2WVXMA9YR", type: "person", label: "Ada Lovelace" }],
+    })
+    const n = nodes[0]
+    expect(n?.label).toBe("Ada Lovelace")
+    expect(n?.type).toBe("person")
+    expect(n?.labelBoth).toBe("Ada Lovelace · person")
+    expect(n?.labelId).toBe("01HF7Y…A9YR")
+    // Every column LABEL_COLUMN can point at must exist on the row.
+    for (const column of Object.values(LABEL_COLUMN)) {
+      expect(typeof (n as Record<string, unknown>)[column]).toBe("string")
+    }
   })
 })
 

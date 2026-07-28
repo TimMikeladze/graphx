@@ -1,3 +1,4 @@
+import { shortId } from "./format"
 import type { GraphSlice } from "./types"
 
 /** A Cosmograph point (node) with a precomputed color + selection flag. */
@@ -8,8 +9,18 @@ export interface CosmoNode {
   type: string
   color: string
   selected: boolean
-  /** Caption for `pointLabelBy`. Always a string: the server label, else the type. */
+  /**
+   * The caption columns `pointLabelBy` can be pointed at. All four are materialized up front
+   * because switching the label source must not rebuild the graph — changing `pointLabelBy` to
+   * another existing column is a cheap label-only update, whereas changing the point rows is a
+   * full duckdb re-upload.
+   */
+  /** The node's name/title, falling back to its type when its data carries neither. */
   label: string
+  /** Abbreviated id, for when the name is ambiguous and the identity is what matters. */
+  labelId: string
+  /** Name and type together. */
+  labelBoth: string
   // Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
   [key: string]: unknown
 }
@@ -77,15 +88,18 @@ export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): Co
 
   const nodes: CosmoNode[] = slice.nodes.map((n, index) => {
     indexById.set(n.id, index)
+    // Cosmograph skips points whose label column is empty, so fall back to the type rather
+    // than leave an untyped hole in the canvas.
+    const label = n.label ?? n.type
     return {
       id: n.id,
       index,
       type: n.type,
       color: colorForType(n.type, palette),
       selected: n.id === opts.selectedId,
-      // Cosmograph skips points whose label column is empty, so fall back to the type rather
-      // than leave an untyped hole in the canvas.
-      label: n.label ?? n.type,
+      label,
+      labelId: shortId(n.id, 6, 4),
+      labelBoth: `${label} · ${n.type}`,
     }
   })
 
@@ -106,6 +120,28 @@ export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): Co
 
   return { nodes, links }
 }
+
+/** What a node's caption shows. `off` hides node captions entirely. */
+export type LabelSource = "off" | "name" | "type" | "id" | "both"
+
+/** The {@link CosmoNode} column each source reads, for Cosmograph's `pointLabelBy`. */
+export const LABEL_COLUMN: Record<Exclude<LabelSource, "off">, string> = {
+  name: "label",
+  type: "type",
+  id: "labelId",
+  both: "labelBoth",
+}
+
+/** The canvas label settings the toolbar edits. */
+export interface LabelSettings {
+  source: LabelSource
+  /** Show the rel name on edges (all of them when the slice is small, else the focused node's). */
+  edges: boolean
+  /** How many captions to show at once — the knob for how crowded the canvas reads. */
+  limit: number
+}
+
+export const DEFAULT_LABEL_SETTINGS: LabelSettings = { source: "name", edges: false, limit: 40 }
 
 /** Distinct types present in a slice, for the canvas legend. */
 export function legendOf(slice: GraphSlice, palette: readonly string[] = KIND_PALETTE): Array<{ type: string; color: string }> {

@@ -4,7 +4,15 @@ import { AlertCircleIcon, ChartRelationshipIcon } from "@hugeicons/core-free-ico
 import { EmptyState } from "@/components/empty-state"
 import { GraphToolbar } from "@/components/graph-toolbar"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { colorForType, type CosmoNode, legendOf, toCosmograph } from "@/lib/cosmograph-adapter"
+import {
+  colorForType,
+  type CosmoNode,
+  DEFAULT_LABEL_SETTINGS,
+  LABEL_COLUMN,
+  type LabelSettings,
+  legendOf,
+  toCosmograph,
+} from "@/lib/cosmograph-adapter"
 import { shortId } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { GraphSlice } from "@/lib/types"
@@ -33,6 +41,12 @@ const EDGE_LABEL_THROTTLE_MS = 200
  * so it is paused on a budget; the toolbar's play button resumes it.
  */
 const SETTLE_MS = 8000
+
+/**
+ * Every caption column, declared so Cosmograph keeps them in the point data. Module-level so its
+ * identity is stable across renders and cannot look like a config change.
+ */
+const CAPTION_COLUMNS = Object.values(LABEL_COLUMN)
 
 type Hover = { id: string; type: string; x: number; y: number }
 
@@ -75,9 +89,10 @@ export function GraphCanvas({
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
   const [hover, setHover] = useState<Hover | null>(null)
-  const [showNodeLabels, setShowNodeLabels] = useState(true)
-  const [showEdgeLabels, setShowEdgeLabels] = useState(false)
+  const [labelSettings, setLabelSettings] = useState<LabelSettings>(DEFAULT_LABEL_SETTINGS)
   const [edgeLabels, setEdgeLabels] = useState<EdgeLabel[]>([])
+  const showNodeLabels = labelSettings.source !== "off"
+  const showEdgeLabels = labelSettings.edges
 
   // Read inside Cosmograph's callbacks, which are invoked at simulation-tick rate: reading refs
   // keeps them correct without re-subscribing (and without a stale closure) on every render.
@@ -302,13 +317,25 @@ export function GraphCanvas({
           selectPointOnClick={false}
           fitViewOnInit
           fitViewPadding={0.3}
-          pointLabelBy="label"
+          // Switching between materialized caption columns is a label-only update; pointing at
+          // a column that does not exist would blank every label, so `off` keeps the last real
+          // column and relies on `showLabels` instead.
+          pointLabelBy={
+            labelSettings.source === "off"
+              ? LABEL_COLUMN.name
+              : LABEL_COLUMN[labelSettings.source]
+          }
+          // Columns Cosmograph does not consume itself are dropped from the point data unless
+          // they are declared here — without this, pointing `pointLabelBy` at one of the other
+          // caption columns finds nothing and the captions never change.
+          pointIncludeColumns={CAPTION_COLUMNS}
           // `showLabels` is the master switch for every non-hovered label, custom ones included,
-          // so it is on whenever either kind is wanted; the two below scope it to point labels.
+          // so it is on whenever either kind is wanted; the rest scope it to point labels.
           showLabels={showNodeLabels || showEdgeLabels}
           showDynamicLabels={showNodeLabels}
           showTopLabels={showNodeLabels}
-          showTopLabelsLimit={40}
+          showTopLabelsLimit={labelSettings.limit}
+          showDynamicLabelsLimit={labelSettings.limit}
           showHoveredPointLabel={showNodeLabels}
           pointLabelFontSize={12}
           customLabels={showEdgeLabels ? edgeLabels : undefined}
@@ -366,8 +393,8 @@ export function GraphCanvas({
 
       <GraphToolbar
         paused={paused}
-        nodeLabels={showNodeLabels}
-        edgeLabels={showEdgeLabels}
+        labels={labelSettings}
+        onLabelsChange={setLabelSettings}
         onFit={() => {
           // An explicit fit is still the user driving — do not resume auto-fitting after it.
           releaseAutoFit()
@@ -381,8 +408,6 @@ export function GraphCanvas({
           releaseAutoFit()
           cosmoRef.current?.setZoomLevel((cosmoRef.current?.getZoomLevel() ?? 1) / 1.4, 300)
         }}
-        onToggleNodeLabels={() => setShowNodeLabels((v) => !v)}
-        onToggleEdgeLabels={() => setShowEdgeLabels((v) => !v)}
         onTogglePause={togglePause}
         onToggleFullscreen={toggleFullscreen}
       />
