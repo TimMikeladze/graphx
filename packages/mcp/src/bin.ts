@@ -41,10 +41,13 @@ function registerContext(server: McpServer, context: Record<string, unknown>): v
 }
 
 /**
- * A graph schema is a TypeScript value, so the binary cannot import one. It runs
- * schemaless: writes still work (the server validates), and `describe_schema` samples types
- * from the graph and flags them `inferred`. Embed a schema by importing this package instead
- * of spawning the binary.
+ * A graph schema is a TypeScript value, so the binary cannot import one. It runs schemaless,
+ * and in LOCAL mode that costs more than it sounds: `Graph.addNode` rejects every type it has
+ * no definition for, so `create_node`, `create_edge` and `bulk_load` always 400 there, and
+ * `update_node`/`delete_node` have nothing to act on. Remote mode is unaffected — the
+ * deployment validates against its own schema, and the empty one here only supplies the route
+ * registry. `describe_schema` samples types off the graph and flags them `inferred`. Import
+ * this package instead of spawning the binary to write to a local graph.
  */
 async function main(): Promise<void> {
 	const readOnly = process.argv.includes('--read-only') || process.env.GRAPHX_MCP_READ_ONLY === '1';

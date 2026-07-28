@@ -24,15 +24,24 @@ Code's `.mcp.json`, or equivalent):
 			"args": ["-y", "@graphx/mcp"],
 			"env": {
 				"GRAPHX_MCP_MODE": "local",
-				"GRAPHX_DB": "file:./graph.db"
+				"GRAPHX_DB": "mygraph"
 			}
 		}
 	}
 }
 ```
 
-This spawns `graphx-mcp` over stdio. It runs schemaless (see Limitations below) — for schema-aware
-tool descriptions and a `graphx://schema` resource, embed the server as a library instead.
+This spawns `graphx-mcp` over stdio. `GRAPHX_DB` is a **namespace, not a connection string**:
+`mygraph` opens (and creates) `./mygraph.db` relative to whatever working directory your client
+launches the process in. See [Configuration](#configuration).
+
+Local mode mints a fresh tenant and project on every start, so tell the agent to call
+**`graphx_context` first** — it returns the ids that every other tool takes as arguments, and they
+cannot be guessed or carried over from a previous run.
+
+It runs schemaless (see Limitations below) — for schema-aware tool descriptions, a
+`graphx://schema` resource, and the ability to write nodes at all, embed the server as a library
+instead.
 
 ## Library usage
 
@@ -50,7 +59,7 @@ const schema = defineGraphSchema({
 	edges: { knows: { from: 'person', to: 'person' } },
 });
 
-const dev = await createApp({ schema, db: 'file:./graph.db', embed: hashEmbed() });
+const dev = await createApp({ schema, db: 'mygraph', embed: hashEmbed() });
 const server = createGraphxMcp({
 	app: dev.app,
 	backend: localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant }),
@@ -128,7 +137,7 @@ their options object instead.
 | Variable | Meaning |
 |---|---|
 | `GRAPHX_MCP_MODE` | `local` or `remote`. If unset, defaults to `remote` when `GRAPHX_URL` is set, otherwise `local`. |
-| `GRAPHX_DB` | Required in local mode: `file:./graph.db`, a `libsql://…` URL, or a `postgres://…` URL. The binary throws at startup if missing. |
+| `GRAPHX_DB` | Required in local mode. A **namespace**, not a connection string — `mygraph` means the libSQL file `./mygraph.db` in the process's working directory, created if absent. A URL here is taken literally as a namespace: `file:./graph.db` silently opens `./graph.db.db`, and `postgres://…` / `libsql://…` fail at startup. The binary throws if it is missing. |
 | `GRAPHX_URL` | Required in remote mode: the base URL of a deployed graphx server. The binary throws at startup if missing. |
 | `GRAPHX_API_KEY` | Optional bearer credential sent with every request in remote mode. |
 | `GRAPHX_MCP_READ_ONLY` | Set to `1` to register only `read`-tagged tools. Equivalent to the `--read-only` CLI flag. |
@@ -140,11 +149,12 @@ addressed. Only the `Backend` (where calls are actually sent) points at `GRAPHX_
 ## Tools
 
 25 mirrored tools (16 read, 9 write), generated from `serve.ts`'s route registry, plus
-`describe_schema` — 26 total. `--read-only` / `GRAPHX_MCP_READ_ONLY=1` leaves the 16 read tools and
-`describe_schema` — 17 total.
+`describe_schema` — 26 as a library. The binary adds `graphx_context`, for 27. `--read-only` /
+`GRAPHX_MCP_READ_ONLY=1` leaves the 16 read tools plus both of those — 18 from the binary.
 
 | Tool | Op | Description |
 |---|---|---|
+| `graphx_context` | read | **Binary only, call it first.** The `tenant` and `project` ids every other tool takes as arguments, plus the mode. Local mode mints them fresh on each start; remote mode has none to give and says so. |
 | `list_projects` | read | List the caller's projects in this tenant |
 | `create_node` | write | Create a node |
 | `create_edge` | write | Create an edge |
@@ -206,6 +216,16 @@ for clients that don't implement resources.
   sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
   unreachable graph never reads as an empty one. Embed the server as a library (above) to get real
   schema-aware tool descriptions and the resource.
+- **In LOCAL mode the binary cannot create anything.** `Graph.addNode` rejects a type it has no
+  definition for, so against a schemaless app `create_node`, `create_edge` and `bulk_load` always
+  fail with `HTTP 400: addNode: unknown type '…'`, and `update_node` / `delete_node` have nothing to
+  act on. Reads, and the three metric tools, work normally. This does **not** affect remote mode —
+  there the deployment validates against its own schema, and the local empty one is used for
+  nothing but the route registry. To write to a local graph, embed the server as a library and pass
+  your schema.
+- **The binary is libSQL only.** `GRAPHX_DB_DRIVER=postgres` selects the Postgres dialect, but
+  `graphx-mcp` never imports `@graphx/core/pg`, so it exits at startup with `getDb: postgres driver
+  selected but the pg adapter is not registered`.
 - **The binary defaults to `hashEmbed`.** `retrieve` and `hybrid_search` need an embedder;
   `hashEmbed()` is lexical and deterministic, not semantic, and the binary logs one line to stderr
   on startup saying so. Pass your own `embed` through the library entry points for real vector
