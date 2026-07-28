@@ -10,23 +10,23 @@ document, and then trusted to compose URLs correctly. Every MCP client on the ma
 protocol instead.
 
 The serving layer is already the right shape for this. `packages/core/src/serve.ts` exposes 25
-routes behind one authn injection point and one authz check, with governance caps enforced
-server-side and non-overridable by the client. `packages/core/src/openapi.ts` holds a route table
-(`routes()`, line 42) whose request bodies and query parameters are the *same* Zod wire schemas the
-routes validate against, and `openapi.test.ts` fails CI if that table drifts from the live Hono
-`app.routes`.
+tenant routes behind one authn injection point and one authz check, with governance caps enforced
+server-side and non-overridable by the client. Since `52bdf5a` each route is declared inline with
+`createRoute()` on an `OpenAPIHono` app, which keeps every declaration in a live registry:
+`app.openAPIRegistry.definitions` yields each route's method, path, summary, and its Zod
+`request.params` / `request.query` / `request.body` — the same Zod objects the route validates
+against.
 
-That table is a tool manifest that nobody has read as one yet.
+That registry is a tool manifest that nobody has read as one yet.
 
 ## Decisions
 
 Six forks, resolved.
 
-1. **Tools mirror the HTTP endpoints one-for-one**, generated from the existing route table rather
-   than hand-curated into agent-shaped verbs. The table is already drift-checked against the live
-   app, so a route added without a tool fails CI. A curated surface would be a second contract to
-   keep in sync by hand, and the endpoints already carry the `op: 'read' | 'write'` tag that
-   read-only mode needs.
+1. **Tools mirror the HTTP endpoints one-for-one**, generated from the app's own OpenAPI registry
+   rather than hand-curated into agent-shaped verbs. A curated surface would be a second contract to
+   keep in sync by hand; reading the registry means the manifest is not checked against the app, it
+   *is* the app. A route added without a tool is not a state the system can reach.
 
 2. **One core, two adapters, behind a one-method seam.** Handlers are never reimplemented. Hono
    dispatches a `Request` to a `Response` without a socket, so the local adapter runs the real
@@ -62,7 +62,7 @@ New workspace package `packages/mcp`, published as `@graphx/mcp`.
 packages/mcp/src/
   index.ts       createGraphxMcp(), createMcpApp()   — library entry points
   backend.ts     the Backend seam: local | remote
-  tools.ts       route table → 24 mirrored tools + 2 discovery tools
+  tools.ts       OpenAPI registry → 25 mirrored tools + describe_schema
   resources.ts   graphx://schema
   bin.ts         stdio entry point (bin: graphx-mcp)
 ```
@@ -119,25 +119,42 @@ passed in instead of a freshly bootstrapped one.
 
 ## Tool generation
 
-### Changes to the route table
+### Reading the registry
 
-`packages/core/src/openapi.ts` holds the table as a module-private `routes()` returning a
-module-private `RouteMeta[]`. Three edits:
+`OpenAPIHono` exposes every declared route on `app.openAPIRegistry.definitions` as
+`{ type: 'route', route }` entries. Verified against `@hono/zod-openapi@1.5.1`:
 
-1. Export both. No behavior change.
-2. Add `mcp?: { name: string }` per row. Method and path do not yield good tool names mechanically
-   (`GET /nodes/{id}/neighborsPage` is not `get_nodes_id_neighborspage`), and a name is worth
-   writing once next to the summary that already exists.
-3. Add `scope?: 'project' | 'tenant'`, defaulting to `'project'`. Every current row sits under
-   `PREFIX = '/t/{tenant}/p/{project}'`; the new `GET /t/{tenant}/projects` route does not. The
-   OpenAPI generator reads the same field, so one addition serves both consumers.
+```
+method get | path /t/{tenant}/p/{project}/nodes | operationId list_nodes | tags [ "read" ]
+  params? true query? true body? false
+  params is zod? true
+doc tags: ["read"]
+```
 
-The `openapi.test.ts` drift check gains one assertion: every row that is not the SSE route has an
-`mcp.name`.
+The Zod objects survive on the entry, and `operationId` / `tags` survive into the generated 3.1
+document. So the MCP package reads the registry off the app it was handed — no exported table, no
+duplicated manifest, nothing to keep in sync.
+
+### Two additions to each `createRoute`
+
+The declarations carry a summary and full request schemas already. They are missing two facts MCP
+needs, and both are first-class OpenAPI fields that improve `/openapi.json` for REST consumers too:
+
+1. **`operationId`** — the tool name. Method and path do not yield good names mechanically
+   (`GET /nodes/{id}/neighborsPage` is not `get_nodes_id_neighborspage`).
+2. **`tags: ['read']` or `['write']`** — the op. This fact currently exists *only* as the
+   `requireGraph(cfg, 'read' | 'write')` middleware argument, which is not machine-readable from the
+   registry. Read-only mode and the destructive-operation annotations both depend on it, so the tag
+   is new information rather than a rename.
+
+25 tenant routes gain both. `/health` and `/ready` need neither — they are skipped.
 
 ### The mapping
 
-| Method | Path | `op` | Tool |
+Paths below are shown relative to `/t/{tenant}/p/{project}`; the declarations spell them out in
+full. Tool name is the route's `operationId`, op is its tag.
+
+| Method | Path | tag | `operationId` |
 |---|---|---|---|
 | POST | `/nodes` | write | `create_node` |
 | GET | `/nodes` | read | `list_nodes` |
@@ -165,25 +182,25 @@ The `openapi.test.ts` drift check gains one assertion: every row that is not the
 | POST | `/algorithms/centrality` | write | `centrality` |
 | GET | `/algorithms/top` | read | `top_nodes` |
 
-`GET /events` is Server-Sent Events (`contentType: 'text/event-stream'`, `notImplemented: true`
-without a configured outbox). MCP tool results are single values; a live stream belongs behind MCP
-notifications, which is a separate design. It is skipped, not faked.
+`GET /events` is Server-Sent Events (`text/event-stream`, and 501 without a configured outbox). MCP
+tool results are single values; a live stream belongs behind MCP notifications, which is a separate
+design. It is skipped by name — it gets no `operationId`, and a route without one is not mirrored.
+That is the general escape hatch: omitting `operationId` opts a route out.
 
-24 mirrored tools from the current table: 15 read, 9 write. The new `GET /t/{tenant}/projects` route
-described under Discovery joins the same table, bringing the mirrored total to 25 — 16 read, 9
-write.
+24 mirrored tools from the current routes: 15 read, 9 write. The new `GET /t/{tenant}/projects`
+route described under Discovery brings the mirrored total to 25 — 16 read, 9 write.
 
 ### Input schemas
 
-One flat Zod object per tool, merged from three sources:
+One flat Zod object per tool, merged from the registry entry's three request schemas:
 
-- **Path params** — `tenant` and `project` on every project-scoped row, plus `id` where the path
-  templates one.
-- **Query** — the row's `query` schema, unwrapped to its fields.
-- **Body** — the row's `body` schema, unwrapped to its fields.
+- **`request.params`** — `tenant` and `project` on every project-scoped route, plus `id` where the
+  path templates one.
+- **`request.query`** — unwrapped to its fields.
+- **`request.body`** — the `application/json` content schema, unwrapped to its fields.
 
-Merging is safe: across all 24 rows no body or query field is named `tenant`, `project`, or `id`.
-If a future row collides, the generator throws at construction rather than shadowing a field
+Merging is safe: across all 25 routes no body or query field is named `tenant`, `project`, or `id`.
+If a future route collides, the generator throws at construction rather than shadowing a field
 silently.
 
 The SDK converts Zod to JSON Schema itself (it depends on `zod-to-json-schema`), so tool schemas are
@@ -192,17 +209,17 @@ OpenAPI document has.
 
 ### Annotations
 
-Read directly off `op`, with three hand-set exceptions:
+Read directly off the route's tag, with three hand-set exceptions keyed by `operationId`:
 
-- `op: 'read'` → `readOnlyHint: true` (15 tools)
+- tag `read` → `readOnlyHint: true` (16 tools)
 - `delete_node`, `delete_edge` → `destructiveHint: true`
 - `update_node` → `idempotentHint: true`
-- `pagerank`, `community`, `centrality` → `op: 'write'` because they persist metrics, but
+- `pagerank`, `community`, `centrality` → tagged `write` because they persist metrics, but
   `destructiveHint: false`. They add, they do not remove.
 
 ### Read-only mode
 
-`GRAPHX_MCP_READ_ONLY=1` or `--read-only` filters registration on `op === 'read'`, leaving 16
+`GRAPHX_MCP_READ_ONLY=1` or `--read-only` filters registration on the `read` tag, leaving 16
 mirrored read tools plus `describe_schema`. A filter over one field, not a second code path.
 
 ### Results
@@ -256,18 +273,20 @@ The existing control-plane listing lives in `createAdminApp` (`admin.ts`), which
 realm gated on "is this caller an operator" — a normal tenant API key gets 401 there. So:
 
 ```
-GET /t/:tenant/projects    scope: 'tenant', op: 'read'
+GET /t/{tenant}/projects    operationId: 'list_projects', tags: ['read']
 ```
 
 The handler authenticates, confirms the principal has a membership row in the route tenant, and
 returns `listProjects(control, principal.tenantId)` with `dbNamespace` stripped. The namespace is
 internal routing detail; §2.9 keeps DB-level identifiers away from end users.
 
-`serve.ts` line 536 currently scopes the authn middleware to `/t/:tenant/p/:project/*`. It widens to
-`/t/:tenant/*` — a superset covering the same paths plus the new one.
+`serve.ts` currently scopes the authn middleware to `/t/:tenant/p/:project/*` (`base.use`, just
+above the route chain). It widens to `/t/:tenant/*` — a superset covering the same paths plus the
+new one.
 
-This route joins the route table with `scope: 'tenant'`, so it is documented in OpenAPI and
-mirrored as a tool like everything else.
+Being an ordinary `createRoute` on the chain, it is documented in OpenAPI and mirrored as a tool
+with no special casing. It is the only route whose `request.params` omits `project`, which the
+input-schema merge handles by construction.
 
 ### Deferred: `graphx://t/{tenant}/p/{project}/stats`
 
@@ -316,7 +335,7 @@ semantic. Defaulting silently would make hash-based search look like broken sema
 Bun tests, no sockets. The SDK ships `InMemoryTransport.createLinkedPair()`, so a real MCP client
 drives a real MCP server in-process, exercising protocol framing rather than mocking it.
 
-1. **Manifest** — `tools/list` returns 26 tools; names and annotations match the route table;
+1. **Manifest** — `tools/list` returns 26 tools; names and annotations match the registry;
    `events` is absent.
 2. **Read-only** — with the flag, `tools/list` returns 17 and every write name is gone.
 3. **Reads** — each of the 16 read tools returns the same payload as the equivalent
@@ -327,8 +346,9 @@ drives a real MCP server in-process, exercising protocol framing rather than moc
    project id, 501 for `retrieve` with no embedder. Each arrives as `isError: true`, not a throw.
 6. **Resource** — `resources/read` on `graphx://schema` returns every node type in the fixture
    schema and every declared relation.
-7. **Drift** — every non-SSE row in `routes()` carries an `mcp.name`. Extends the existing
-   `openapi.test.ts` check.
+7. **Coverage** — in `openapi.test.ts`: every registered tenant route carries exactly one of the
+   `read` / `write` tags, and every one but `/events` carries an `operationId`. This is the only
+   assertion the registry cannot make structurally, since a route can be declared without either.
 8. **Both backends** — the suite runs under `GRAPHX_TEST_DRIVER` for libSQL and Postgres, as the
    rest of core does.
 
@@ -340,9 +360,14 @@ this is the whole difference.
 
 Stated plainly, because it is scope beyond the new package:
 
-1. `openapi.ts` — export `routes()` and `RouteMeta`; add `mcp.name` and `scope` fields.
-2. `serve.ts` — add `GET /t/:tenant/projects` (member-scoped); widen the authn middleware from
+1. `serve.ts` — add `operationId` and a `read` / `write` tag to the 25 tenant `createRoute`
+   declarations.
+2. `serve.ts` — add `GET /t/{tenant}/projects` (member-scoped); widen the authn middleware from
    `/t/:tenant/p/:project/*` to `/t/:tenant/*`.
-3. `openapi.test.ts` — one added drift assertion.
+3. `openapi.test.ts` — one added coverage assertion.
+
+Item 1 changes `/openapi.json`: operations gain ids and tags, and Scalar at `/docs` will group
+routes by the read/write tag. That is a contract improvement, not a break — no existing field
+changes meaning.
 
 Optional, deferred: `GET /stats` for the counts resource.
