@@ -179,3 +179,48 @@ test('openapi: every documented operation is one the app actually serves', async
 	}
 	await teardown();
 });
+
+test('openapi: every tenant operation is tagged read or write', async () => {
+	const d = await doc();
+	const offenders: string[] = [];
+	for (const [path, item] of Object.entries<any>(d.paths)) {
+		if (!path.startsWith('/t/{tenant}')) continue;
+		for (const [method, op] of Object.entries<any>(item)) {
+			// `/events` is SSE — deliberately unmirrored, so it carries no read/write tag.
+			if (path.endsWith('/events')) continue;
+			const tags: string[] = op.tags ?? [];
+			const tagged = tags.filter((t) => t === 'read' || t === 'write');
+			if (tagged.length !== 1) offenders.push(`${method.toUpperCase()} ${path}`);
+		}
+	}
+	expect(offenders).toEqual([]);
+});
+
+test('openapi: every mirrored operation has a unique operationId', async () => {
+	const d = await doc();
+	const ids: string[] = [];
+	const missing: string[] = [];
+	for (const [path, item] of Object.entries<any>(d.paths)) {
+		if (!path.startsWith('/t/{tenant}')) continue;
+		for (const [method, op] of Object.entries<any>(item)) {
+			// `/events` is SSE — deliberately unmirrored, so it carries no operationId.
+			if (path.endsWith('/events')) {
+				expect(op.operationId).toBeUndefined();
+				continue;
+			}
+			if (!op.operationId) missing.push(`${method.toUpperCase()} ${path}`);
+			else ids.push(op.operationId);
+		}
+	}
+	expect(missing).toEqual([]);
+	expect(new Set(ids).size).toBe(ids.length);
+	expect(ids).toContain('create_node');
+	expect(ids).toContain('neighbors_page');
+	expect(ids).toContain('top_nodes');
+});
+
+test('openapi: ops routes are not mirrored', async () => {
+	const d = await doc();
+	expect(d.paths['/health'].get.operationId).toBeUndefined();
+	expect(d.paths['/ready'].get.operationId).toBeUndefined();
+});
