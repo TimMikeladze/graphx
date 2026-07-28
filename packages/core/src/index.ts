@@ -231,7 +231,9 @@ export {
 	type TopNodesOpts,
 } from './algorithms.ts';
 
-// P11 — serving (Hono app + typed client) + P15 readiness latch (§19.6)
+// P11 — serving (Hono app + typed client) + P15 readiness latch (§19.6). The HTTP contract is
+// generated from the route definitions and served at `GET /openapi.json` (`OpenApiOptions` only
+// sets the document's info/servers).
 export {
 	type AppType,
 	createApp,
@@ -239,10 +241,8 @@ export {
 	createReadiness,
 	type DevServeConfig,
 	graphForProject,
+	type OpenApiOptions,
 	type Readiness,
 	type ServeConfig,
 	type ServeEnv,
 } from './serve.ts';
-
-// HTTP contract — OpenAPI 3.1 document generator (served at GET /openapi.json)
-export { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';

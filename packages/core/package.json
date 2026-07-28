@@ -39,7 +39,8 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@hono/zod-validator": "^0.8.0",
+		"@hono/zod-openapi": "^1.5.1",
+		"@hono/zod-validator": "^0.9.0",
 		"@libsql/client": "^0.17.3",
 		"hono": "^4.12.23",
 		"ulidx": "^2.4.1",
@@ -48,8 +49,10 @@
 	"devDependencies": {
 		"@aws-sdk/client-s3": "^3.0.0",
 		"@aws-sdk/s3-request-presigner": "^3.0.0",
+		"@seriousme/openapi-schema-validator": "^2.9.0",
 		"@types/node": "^25.9.1",
 		"@types/pg": "^8.11.10",
+		"ajv": "^8.20.0",
 		"pg": "^8.13.1"
 	},
 	"peerDependencies": {
