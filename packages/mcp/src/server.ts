@@ -1,4 +1,6 @@
+import { StreamableHTTPTransport } from '@hono/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Hono } from 'hono';
 import type { Backend } from './backend.ts';
 import { registerSchema } from './resources.ts';
 import { buildCall, type RegistryHost, type ToolDescriptor, toolsFrom } from './tools.ts';
@@ -114,4 +116,22 @@ export function createGraphxMcp(opts: GraphxMcpOptions): McpServer {
 	// Discovery is read-only, so it survives read-only mode.
 	registerSchema(server, { schema: opts.schema, backend: opts.backend });
 	return server;
+}
+
+/**
+ * The server as a mountable Hono app: `app.route('/mcp', createMcpApp(...))`. One transport
+ * instance is shared across requests, which is what Streamable HTTP's session handling
+ * expects — the transport, not the route, tracks sessions.
+ */
+export function createMcpApp(opts: GraphxMcpOptions): Hono {
+	const server = createGraphxMcp(opts);
+	const transport = new StreamableHTTPTransport();
+	let connected: Promise<void> | undefined;
+	const app = new Hono();
+	app.all('/', async (c) => {
+		connected ??= server.connect(transport);
+		await connected;
+		return (await transport.handleRequest(c)) ?? c.body(null, 202);
+	});
+	return app;
 }

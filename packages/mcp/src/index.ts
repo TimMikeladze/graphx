@@ -18,6 +18,7 @@ export {
 } from './resources.ts';
 export {
 	createGraphxMcp,
+	createMcpApp,
 	type GraphSchemaLike,
 	type GraphxMcpOptions,
 	toToolResult,

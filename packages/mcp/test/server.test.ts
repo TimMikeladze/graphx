@@ -187,3 +187,39 @@ test('server: exposes the schema as a resource and as a tool', async () => {
 
 	await h.teardown();
 });
+
+test('server: mounts on a Hono app and answers an MCP initialize', async () => {
+	const { Hono } = await import('hono');
+	const { createMcpApp } = await import('../src/index.ts');
+
+	const db = `mcp_mount_${crypto.randomUUID().replaceAll('-', '')}`;
+	const dev = await createApp({ schema: SCHEMA, db, embed: hashEmbed() });
+	const host = new Hono();
+	host.route(
+		'/mcp',
+		createMcpApp({
+			app: dev.app,
+			backend: localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant }),
+			schema: SCHEMA,
+		}),
+	);
+
+	const res = await host.request('/mcp', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+		body: JSON.stringify({
+			jsonrpc: '2.0',
+			id: 1,
+			method: 'initialize',
+			params: {
+				protocolVersion: '2025-06-18',
+				capabilities: {},
+				clientInfo: { name: 'test', version: '1.0.0' },
+			},
+		}),
+	});
+	expect(res.status).toBe(200);
+	const text = await res.text();
+	expect(text).toContain('serverInfo');
+	expect(text).toContain('graphx');
+});
