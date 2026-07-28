@@ -402,3 +402,50 @@ test('concurrent batches still checkpoint, so a restart delivers nothing twice',
 	}).runOnce();
 	expect(second).toEqual([]);
 });
+
+test.skipIf(TEST_DRIVER === 'postgres')(
+	'a dead-letter failure drains its in-flight siblings before the cycle rejects, so a retry never overlaps them',
+	async () => {
+		const g = await makeGraph();
+		const ids: string[] = [];
+		for (let i = 0; i < 6; i++) {
+			ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+		}
+
+		// ids[0] is claimed first (pool() hands out indices in seq order) — closing the client in
+		// its action makes the retry-exhausted dead-letter INSERT itself throw, an infra failure
+		// deliver() does not catch. ids[1]/ids[2] are its concurrent siblings under `concurrency: 3`;
+		// they never touch the client, so they only fail if pool() lets the rejection race ahead of
+		// them instead of draining every in-flight worker first.
+		let inFlight = 0;
+		const seen: string[] = [];
+		const runner = new TriggerRunner(g, {
+			name: 'sub-conc-drain',
+			start: 'beginning',
+			concurrency: 3,
+			retries: 1,
+			triggers: [
+				{
+					name: 'record',
+					match: {},
+					action: async (e) => {
+						if (e.id === ids[0]) {
+							g.raw.close();
+							throw new Error('boom');
+						}
+						inFlight++;
+						await new Promise((r) => setTimeout(r, 15));
+						seen.push(e.id);
+						inFlight--;
+					},
+				},
+			],
+		});
+
+		await expect(runner.runOnce()).rejects.toThrow();
+		// By the time the rejection reaches us, every sibling dispatched alongside the failing one
+		// has fully finished — none left running detached to race a caller's redelivery of the page.
+		expect(inFlight).toBe(0);
+		expect(seen.sort()).toEqual([ids[1], ids[2]].sort());
+	},
+);

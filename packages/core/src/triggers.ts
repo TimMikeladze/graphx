@@ -234,7 +234,10 @@ export class TriggerRunner<S extends GraphSchema> {
 	 * One poll and dispatch. `concurrency === 1` checkpoints after each event, so an interrupted
 	 * cycle resumes at exactly the first event it had not finished. Above 1, events dispatch in
 	 * parallel under the bound and the cursor only advances once the whole page has resolved — see
-	 * {@link pool} for why that trade is forced.
+	 * {@link pool} for why that trade is forced. If the page fails (an action's dead-letter write
+	 * itself throws), {@link pool} guarantees every dispatched action has settled before the
+	 * rejection reaches this method's caller — so a caller that reacts by retrying the same page
+	 * never runs a redelivery alongside a still-running attempt from the failed cycle.
 	 */
 	async runOnce(): Promise<TriggerBatchResult> {
 		if (this.cursor === null) this.cursor = await this.seedCursor();
@@ -258,6 +261,8 @@ export class TriggerRunner<S extends GraphSchema> {
 		} else if (page.events.length > 0) {
 			// Parallel: completions are unordered, so the cursor can only move once the whole page
 			// has resolved. An interrupted cycle redelivers the page — at-least-once, `seq` dedupes.
+			// `pool` never lets a rejection surface while siblings are still in flight, so a
+			// redelivery here can never overlap a still-running attempt from the failed cycle.
 			const outcomes = await pool(
 				page.events.map((event) => () => this.dispatch(event)),
 				this.concurrency,
@@ -377,15 +382,33 @@ export class TriggerRunner<S extends GraphSchema> {
 /**
  * Run `tasks` with at most `limit` in flight. Results keep input order; completion order does not,
  * which is exactly the ordering guarantee `concurrency > 1` gives up.
+ *
+ * If a task throws, no new tasks are claimed after it, but every already-in-flight task is still
+ * awaited before `pool` rejects — so by the time the rejection reaches the caller, nothing from
+ * this call is still running. Without that, `Promise.all` would reject as soon as one worker threw
+ * and leave the other workers detached, still executing after the caller has already moved on
+ * (e.g. retried the same page).
  */
 async function pool<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
-	const out: T[] = new Array(tasks.length);
+	const out: T[] = Array.from({ length: tasks.length });
 	let next = 0;
+	let failure: { error: unknown } | undefined;
 	const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
 		for (let i = next++; i < tasks.length; i = next++) {
-			out[i] = await (tasks[i] as () => Promise<T>)();
+			try {
+				out[i] = await (tasks[i] as () => Promise<T>)();
+			} catch (error) {
+				// Claim the rest so siblings stop starting new work, but never reject from a
+				// worker: `Promise.all` would propagate immediately and leave the other workers
+				// running detached, executing trigger actions after runOnce() has already
+				// reported failure to its caller.
+				failure ??= { error };
+				next = tasks.length;
+				return;
+			}
 		}
 	});
 	await Promise.all(workers);
+	if (failure !== undefined) throw failure.error;
 	return out;
 }
