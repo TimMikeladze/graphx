@@ -279,6 +279,12 @@ export class Graph<S extends GraphSchema> {
 	private readonly events: GraphEventSink;
 	/** Co-write events into the durable `graph_outbox` in the mutation's own tx (Layer 2). */
 	private readonly outbox: boolean;
+	/** Retained so {@link withEventSource} can build a sibling without losing read-time upcasting. */
+	private readonly upcasters: UpcasterRegistry;
+	/** Provenance stamped on every emitted event and outbox row; `undefined` ⇒ a user write. */
+	private readonly eventSource: string | undefined;
+	/** Retained verbatim so {@link withEventSource} inherits the sink and outbox setting. */
+	private readonly eventOpts: GraphEventOptions | undefined;
 
 	constructor(
 		public raw: DbClient,
@@ -286,9 +292,21 @@ export class Graph<S extends GraphSchema> {
 		upcasters?: UpcasterRegistry,
 		events?: GraphEventOptions,
 	) {
-		this.upcaster = new Upcaster(schema, upcasters ?? {});
+		this.upcasters = upcasters ?? {};
+		this.upcaster = new Upcaster(schema, this.upcasters);
 		this.events = events?.sink ?? NOOP_EVENTS;
 		this.outbox = events?.outbox ?? false;
+		this.eventSource = events?.source;
+		this.eventOpts = events;
+	}
+
+	/**
+	 * A sibling `Graph` over the same client, schema and upcasters whose events carry `source`.
+	 * The trigger runner hands one of these to every action, so a trigger's derived writes are
+	 * attributable and the matcher's default predicate can exclude them.
+	 */
+	withEventSource(source: string): Graph<S> {
+		return new Graph(this.raw, this.schema, this.upcasters, { ...this.eventOpts, source });
 	}
 
 	/**
@@ -297,7 +315,9 @@ export class Graph<S extends GraphSchema> {
 	 */
 	private emit(event: GraphEvent): void {
 		try {
-			this.events.emit(event);
+			this.events.emit(
+				this.eventSource === undefined ? event : { ...event, source: this.eventSource },
+			);
 		} catch {
 			/* a sink must never break a committed mutation */
 		}
@@ -312,8 +332,8 @@ export class Graph<S extends GraphSchema> {
 	private outboxStmt(event: GraphEvent): SqlStatement | null {
 		if (!this.outbox) return null;
 		return {
-			sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts)
-				VALUES (?,?,?,?,?,?,?,?)`,
+			sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts, source)
+				VALUES (?,?,?,?,?,?,?,?,?)`,
 			args: [
 				event.op,
 				event.entity,
@@ -323,6 +343,7 @@ export class Graph<S extends GraphSchema> {
 				event.dst ?? null,
 				event.shape,
 				event.ts,
+				this.eventSource ?? null,
 			],
 		};
 	}

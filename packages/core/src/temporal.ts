@@ -229,6 +229,7 @@ function rowToEvent(row: Record<string, unknown>): GraphEvent {
 		ts: Number(row.ts),
 		src: row.src == null ? undefined : String(row.src),
 		dst: row.dst == null ? undefined : String(row.dst),
+		source: row.source == null ? undefined : String(row.source),
 	};
 }
 
@@ -294,7 +295,7 @@ export async function outboxTail(
 		conds.push(PG_OUTBOX_VISIBLE);
 	}
 	const where = conds.length > 0 ? ` WHERE ${conds.join(' AND ')}` : '';
-	const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
+	const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts, source FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
 	args.push(pageSize + 1); // over-fetch one to detect a next page
 	const r = await raw.execute({ sql, args });
 	const rows = r.rows as unknown as Array<Record<string, unknown>>;

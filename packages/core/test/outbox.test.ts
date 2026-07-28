@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
-import type { GraphEventOptions } from '../src/events.ts';
+import { InMemoryEvents, type GraphEventOptions } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
 import { outboxHead, outboxTail, pruneOutbox } from '../src/temporal.ts';
@@ -126,6 +126,34 @@ test('outboxTail rejects a bad limit and a non-integer cursor', async () => {
 	const g = await makeGraph({ outbox: true });
 	await expect(outboxTail(g.raw, {}, { limit: 0 })).rejects.toThrow('positive integer');
 	await expect(outboxTail(g.raw, { seq: 1.5 })).rejects.toThrow('invalid cursor');
+});
+
+test('outbox rows carry provenance and default to null for user writes', async () => {
+	const g = await makeGraph({ outbox: true });
+	await g.addNode({ type: 'person', data: { name: 'user write' } });
+	const derived = g.withEventSource('trigger:demo');
+	await derived.addNode({ type: 'person', data: { name: 'derived write' } });
+
+	const page = await outboxTail(g.raw);
+	expect(page.events).toHaveLength(2);
+	expect(page.events[0]?.source).toBeUndefined();
+	expect(page.events[1]?.source).toBe('trigger:demo');
+});
+
+test('withEventSource shares the client and stamps the in-proc sink too', async () => {
+	const sink = new InMemoryEvents();
+	const g = await makeGraph({ outbox: true, sink });
+	const derived = g.withEventSource('trigger:demo');
+
+	expect(derived.raw).toBe(g.raw);
+	expect(derived.schema).toBe(g.schema);
+
+	await g.addNode({ type: 'person', data: { name: 'a' } });
+	await derived.addNode({ type: 'person', data: { name: 'b' } });
+
+	expect(sink.events).toHaveLength(2);
+	expect(sink.events[0]?.source).toBeUndefined();
+	expect(sink.events[1]?.source).toBe('trigger:demo');
 });
 
 // Postgres-only: the xmin-horizon gate must still surface committed rows (it withholds only

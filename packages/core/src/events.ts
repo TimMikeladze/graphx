@@ -47,6 +47,8 @@ export interface GraphEvent {
 	src?: string;
 	/** Edge destination node id (edges only). */
 	dst?: string;
+	/** Provenance: absent on a user write, `trigger:<name>` on a write made by a trigger action. */
+	source?: string;
 	/** Stamped by {@link scopeEvents} at the HTTP edge (serve.ts). */
 	tenant?: string;
 	/** Stamped by {@link scopeEvents} at the HTTP edge (serve.ts). */
@@ -64,6 +66,12 @@ export interface GraphEventOptions {
 	sink?: GraphEventSink;
 	/** Co-write every event into the durable `graph_outbox` table in the mutation's own transaction (Layer 2). */
 	outbox?: boolean;
+	/**
+	 * Stamp every event from this `Graph` with a provenance tag (e.g. `trigger:reembed`). Set via
+	 * {@link import('./graph.ts').Graph.withEventSource}; the trigger matcher excludes tagged
+	 * events by default so a trigger never consumes its own writes.
+	 */
+	source?: string;
 }
 
 /** Zero-overhead default sink: `emit` is a no-op (absent eventing ⇒ this). */

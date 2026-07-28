@@ -154,8 +154,10 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
   src    text,
   dst    text,
   shape  text NOT NULL,
-  ts     bigint NOT NULL
+  ts     bigint NOT NULL,
+  source text
 );
+ALTER TABLE graph_outbox ADD COLUMN IF NOT EXISTS source text;
 
 CREATE TABLE IF NOT EXISTS node_analytics (
   id          text PRIMARY KEY REFERENCES node_identity(id),

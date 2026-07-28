@@ -96,6 +96,9 @@ CREATE TABLE IF NOT EXISTS archival_state (
 -- Eventing (Layer 2): durable, totally-ordered, delete-inclusive event log co-written into
 -- each mutation's own transaction and tailed by outboxTail. AUTOINCREMENT is load-bearing —
 -- a bare rowid is REUSED after a prune drain, which would strand client cursors on stale seqs.
+-- \`source\` is provenance: NULL for a user write, 'trigger:<name>' for one made by a trigger
+-- action. The trigger matcher excludes non-NULL sources by default, which is what stops a
+-- trigger from consuming its own output and cascading without bound.
 CREATE TABLE IF NOT EXISTS graph_outbox (
   seq    INTEGER PRIMARY KEY AUTOINCREMENT,
   op     TEXT NOT NULL,
@@ -105,7 +108,8 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
   src    TEXT,
   dst    TEXT,
   shape  TEXT NOT NULL,
-  ts     INTEGER NOT NULL
+  ts     INTEGER NOT NULL,
+  source TEXT
 );
 
 -- D4/B10: analytics live in a SIDE table, UPSERTed by P8 jobs and JOINed by topNodes.
@@ -178,6 +182,14 @@ export async function init(client: DbClient, dim?: number): Promise<void> {
 	await client.execute('PRAGMA journal_mode = WAL');
 	await applyConnPragmas(client);
 	await client.executeMultiple(schema(dim));
+	// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
+	// add it, and without it every outbox INSERT fails on the unknown column.
+	await ensureColumn(
+		client,
+		'graph_outbox',
+		'source',
+		'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
+	);
 }
 
 /**
