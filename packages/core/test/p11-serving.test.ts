@@ -463,3 +463,56 @@ test('P11: list_projects returns the caller tenant projects, without db namespac
 
 	cleanup(s);
 });
+
+test('P11: get_schema serves the declared node types and rels as JSON Schema', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/schema`, {
+		headers: hdr(s.viewer, s.tenantA), // read scope: a viewer may read the shape
+	});
+	expect(res.status).toBe(200);
+	const doc = (await res.json()) as {
+		nodes: Array<{ type: string; jsonSchema: Record<string, unknown> }>;
+		edges: Array<{
+			rel: string;
+			from: string[] | null;
+			to: string[] | null;
+			single: boolean;
+			jsonSchema: Record<string, unknown> | null;
+		}>;
+	};
+
+	expect(doc.nodes.map((n) => n.type).sort()).toEqual(['device', 'person']);
+	const person = doc.nodes.find((n) => n.type === 'person');
+	expect(person?.jsonSchema.type).toBe('object');
+	expect(Object.keys(person?.jsonSchema.properties as object)).toEqual(['name']);
+	expect(person?.jsonSchema.required).toEqual(['name']);
+	// A field with a default is not required on input — that is the whole reason for `io: input`.
+	const device = doc.nodes.find((n) => n.type === 'device');
+	expect(device?.jsonSchema.required).toEqual(['type']);
+	const deviceProps = device?.jsonSchema.properties as Record<string, { default?: unknown }>;
+	expect(deviceProps.crit.default).toBe(1);
+
+	const owns = doc.edges.find((e) => e.rel === 'owns');
+	expect(owns?.from).toEqual(['person']);
+	expect(owns?.to).toEqual(['device']);
+	expect(owns?.single).toBe(false);
+	expect(Object.keys(owns?.jsonSchema?.properties as object)).toEqual(['since']);
+	// An unconstrained rel carries neither endpoint types nor a data schema.
+	const linked = doc.edges.find((e) => e.rel === 'linked');
+	expect(linked?.from).toBeNull();
+	expect(linked?.to).toBeNull();
+	expect(linked?.jsonSchema).toBeNull();
+
+	cleanup(s);
+});
+
+test('P11: get_schema is tenant-scoped like every other project route', async () => {
+	const s = await setup();
+	const cross = await s.app.request(`/t/${s.tenantA}/p/${s.pB}/schema`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(cross.status).toBe(404);
+	const anon = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/schema`, {});
+	expect(anon.status).toBe(401);
+	cleanup(s);
+});

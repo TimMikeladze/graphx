@@ -4,15 +4,18 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowRight01Icon, Search01Icon } from "@hugeicons/core-free-icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/command-palette"
+import { DeleteNodeDialog } from "@/components/delete-node-dialog"
 import { GraphShell } from "@/components/graph-shell"
 import { NodeDetail } from "@/components/node-detail"
 import { NodeDetailSheet } from "@/components/node-detail-sheet"
+import { NodeEditorDialog } from "@/components/node-editor-dialog"
 import { ResultsBanner } from "@/components/results-banner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useGraphSlice, useProjects, useTenants } from "@/hooks/use-graph"
+import { useGraphSlice, useNode, useProjects, useTenants } from "@/hooks/use-graph"
+import { bestLabel } from "@/lib/format"
 import { filtersOf, flowLayoutOf, rendererOf } from "@/lib/explorer-search"
 import type { ExplorerFilters, FlowLayout, Renderer } from "@/lib/types"
 
@@ -27,6 +30,9 @@ export function ExplorerPage() {
   const filters = filtersOf(search)
   const isMobile = useIsMobile()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /** `null` ⇒ the editor is creating; a string ⇒ editing that node; `undefined` ⇒ closed. */
+  const [editorFor, setEditorFor] = useState<string | null | undefined>(undefined)
+  const [deleteFor, setDeleteFor] = useState<string | undefined>(undefined)
 
   const setSearch = (
     patch: Partial<ExplorerFilters> & {
@@ -60,6 +66,12 @@ export function ExplorerPage() {
     () => [...new Set((slice.data?.nodes ?? []).map((n) => n.type))].sort(),
     [slice.data],
   )
+
+  // The node the editor and the delete confirmation are talking about. Usually already cached —
+  // both are reached from a selection — so this is a read, not a second fetch.
+  const editingId = typeof editorFor === "string" ? editorFor : undefined
+  const editingNode = useNode(tenant, project, editingId)
+  const deletingNode = useNode(tenant, project, deleteFor)
 
   // Breadcrumb names (cached — same query keys the sidebar uses).
   const tenants = useTenants()
@@ -128,6 +140,9 @@ export function ExplorerPage() {
               onFlowLayoutChange={(l) =>
                 setSearch({ flowLayout: l === "organic" ? "organic" : undefined })
               }
+              onCreateNode={() => setEditorFor(null)}
+              onEditNode={(id) => setEditorFor(id)}
+              onDeleteNode={(id) => setDeleteFor(id)}
             />
           </div>
           {detailOpen && search.node && (
@@ -138,6 +153,8 @@ export function ExplorerPage() {
                 nodeId={search.node}
                 onSelect={(id) => setSearch({ node: id })}
                 onClose={() => setSearch({ node: undefined })}
+                onEdit={(id) => setEditorFor(id)}
+                onDelete={(id) => setDeleteFor(id)}
               />
             </aside>
           )}
@@ -152,8 +169,38 @@ export function ExplorerPage() {
           nodeId={search.node}
           onClose={() => setSearch({ node: undefined })}
           onSelect={(id) => setSearch({ node: id })}
+          onEdit={(id) => setEditorFor(id)}
+          onDelete={(id) => setDeleteFor(id)}
         />
       )}
+
+      <NodeEditorDialog
+        tenant={tenant}
+        project={project}
+        open={editorFor !== undefined}
+        onOpenChange={(o) => {
+          if (!o) setEditorFor(undefined)
+        }}
+        nodeId={editingId}
+        node={editingId ? editingNode.data : undefined}
+        // A node you just made is the one you want to look at.
+        onCreated={(id) => setSearch({ node: id })}
+      />
+
+      <DeleteNodeDialog
+        tenant={tenant}
+        project={project}
+        nodeId={deleteFor}
+        label={deletingNode.data ? bestLabel(deletingNode.data.data) : undefined}
+        open={deleteFor !== undefined}
+        onOpenChange={(o) => {
+          if (!o) setDeleteFor(undefined)
+        }}
+        // A retracted node cannot be inspected — clear the selection when it was the one shown.
+        onDeleted={(id) => {
+          if (search.node === id) setSearch({ node: undefined })
+        }}
+      />
 
       <CommandPalette
         open={paletteOpen}

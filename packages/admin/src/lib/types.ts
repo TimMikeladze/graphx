@@ -27,6 +27,44 @@ export interface User {
   email: string
 }
 
+/**
+ * The JSON Schema subset the node editor reads. The server derives it from the project's zod
+ * schema (`GET /schema`), so anything zod can express may appear — the form engine renders what
+ * it recognizes and falls back to a JSON field for the rest.
+ */
+export interface JsonSchema {
+  type?: string
+  properties?: Record<string, JsonSchema>
+  required?: string[]
+  enum?: unknown[]
+  default?: unknown
+  description?: string
+  items?: JsonSchema
+  anyOf?: JsonSchema[]
+  [key: string]: unknown
+}
+
+/** One declared node type and the shape of its `data`. */
+export interface SchemaNodeType {
+  type: string
+  jsonSchema: JsonSchema
+}
+
+/** One declared relation. `from`/`to` are `null` when the rel accepts any endpoint type. */
+export interface SchemaEdgeRel {
+  rel: string
+  from: string[] | null
+  to: string[] | null
+  single: boolean
+  jsonSchema: JsonSchema | null
+}
+
+/** `GET /schema` — the project's declared node types and relations. */
+export interface SchemaDoc {
+  nodes: SchemaNodeType[]
+  edges: SchemaEdgeRel[]
+}
+
 /** A live node as returned by `getNode`/`listNodes` ({ id, type, parsed data }). */
 export interface GraphNode {
   id: string

@@ -3,6 +3,7 @@ import {
   ChartRelationshipIcon,
   Flowchart01Icon,
   MoleculesIcon,
+  NodeAddIcon,
   PauseIcon,
   PlayIcon,
   SquareArrowExpand01Icon,
@@ -53,6 +54,7 @@ export function GraphToolbar({
   onZoomOut,
   onTogglePause,
   onToggleFullscreen,
+  onCreateNode,
 }: {
   renderer: Renderer
   onRendererChange: (renderer: Renderer) => void
@@ -67,11 +69,19 @@ export function GraphToolbar({
   onZoomOut: () => void
   onTogglePause: () => void
   onToggleFullscreen: () => void
+  /** Opens the node editor. Absent when the explorer is read-only. */
+  onCreateNode?: () => void
 }) {
   const isCosmograph = renderer === "cosmograph"
 
   return (
     <div className="hud absolute top-3 right-3 flex flex-col gap-0.5 p-1">
+      {onCreateNode && (
+        <>
+          <ToolButton icon={NodeAddIcon} label="New node" onClick={onCreateNode} />
+          <Separator className="my-0.5" />
+        </>
+      )}
       <ToolButton
         icon={isCosmograph ? Flowchart01Icon : ChartRelationshipIcon}
         label={isCosmograph ? "Switch to flow renderer" : "Switch to force canvas"}

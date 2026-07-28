@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, type NodeInput, type NodePatch } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import type { ExplorerFilters } from "@/lib/types"
 
@@ -49,6 +49,19 @@ export function useGraphSlice(tenant?: string, project?: string, filters: Explor
   })
 }
 
+/**
+ * The project's declared schema. It changes when the server is redeployed, not when the graph is
+ * written to, so it is fetched once and kept — every node editor reads it.
+ */
+export function useSchema(tenant?: string, project?: string) {
+  return useQuery({
+    queryKey: qk.schema(tenant ?? "", project ?? ""),
+    queryFn: () => api.getSchema(tenant as string, project as string),
+    enabled: Boolean(tenant && project),
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+}
+
 /** A single node (detail Sheet). */
 export function useNode(tenant?: string, project?: string, id?: string) {
   return useQuery({
@@ -89,6 +102,63 @@ export function useUpdateNodeBody(tenant?: string, project?: string, id?: string
       qc.invalidateQueries({ queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "") })
       qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
     },
+  })
+}
+
+/**
+ * Every cached view a write can change: the node list and the canvas slice are both filtered, and
+ * a new/edited/retracted node can enter or leave any of those filters — so both are invalidated by
+ * prefix rather than for the filters that happen to be active.
+ */
+function invalidateGraphViews(
+  qc: ReturnType<typeof useQueryClient>,
+  tenant?: string,
+  project?: string,
+): void {
+  qc.invalidateQueries({ queryKey: qk.allNodes(tenant ?? "", project ?? "") })
+  qc.invalidateQueries({ queryKey: qk.allGraph(tenant ?? "", project ?? "") })
+}
+
+/** Create a node. The server applies the type's schema defaults and returns the parsed node. */
+export function useCreateNode(tenant?: string, project?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: NodeInput) => api.createNode(tenant as string, project as string, input),
+    onSuccess: () => invalidateGraphViews(qc, tenant, project),
+  })
+}
+
+/**
+ * Edit a node's data (and optionally its body). Bitemporal: the write opens a successor version,
+ * so the detail, its content and its version trail are all refetched alongside the graph views.
+ */
+export function useUpdateNode(tenant?: string, project?: string, id?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: NodePatch) =>
+      api.updateNode(tenant as string, project as string, id as string, patch),
+    onSuccess: () => {
+      invalidateGraphViews(qc, tenant, project)
+      qc.invalidateQueries({ queryKey: qk.node(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
+    },
+  })
+}
+
+/**
+ * Retract a node: its live version closes, its history survives.
+ *
+ * Only the graph views are touched. The node's own cached detail is deliberately left alone —
+ * evicting a query that a mounted inspector is still observing makes that inspector refetch a
+ * node the server no longer serves, which answers 404. The caller clears its selection instead,
+ * and the unobserved entry is garbage-collected.
+ */
+export function useDeleteNode(tenant?: string, project?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.deleteNode(tenant as string, project as string, id),
+    onSuccess: () => invalidateGraphViews(qc, tenant, project),
   })
 }
 

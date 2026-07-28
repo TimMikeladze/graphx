@@ -8,6 +8,7 @@ import type {
   Project,
   RetrievedNode,
   Role,
+  SchemaDoc,
   Tenant,
   User,
 } from "./types"
@@ -104,6 +105,23 @@ export interface ListNodesOpts extends ExplorerFilters {
   cursor?: string
 }
 
+/** `POST /nodes` body. `data` is validated server-side against the type's schema (400 on ZodError). */
+export interface NodeInput {
+  type: string
+  data: Record<string, unknown>
+  body?: string
+}
+
+/**
+ * `PATCH /nodes/:id` body. Every field is optional and merges onto the live version. `type` is
+ * deliberately absent: changing it re-validates against a different schema and drops foreign
+ * fields, which is a migration rather than an edit.
+ */
+export interface NodePatch {
+  data?: Record<string, unknown>
+  body?: string
+}
+
 /** Arguments shared by `GET /retrieve` and `POST /hybrid`. */
 export interface RetrieveOpts {
   query: string
@@ -151,8 +169,27 @@ export const api = {
     request<GraphSlice>(
       `${tp(tenant, project)}/graph${qs({ type: filters.type, q: filters.q, asOf: filters.asOf })}`,
     ),
+  /** The project's declared node types and rels, as JSON Schema (drives the node editor). */
+  getSchema: (tenant: string, project: string) =>
+    request<SchemaDoc>(`${tp(tenant, project)}/schema`),
   getNode: (tenant: string, project: string, id: string) =>
     request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`),
+
+  // --- writes (editor role or above; a viewer's token gets 403) ---
+  createNode: (tenant: string, project: string, input: NodeInput) =>
+    request<GraphNode>(`${tp(tenant, project)}/nodes`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  /** Merge a patch onto the live version — bitemporal, so the previous version is kept. */
+  updateNode: (tenant: string, project: string, id: string, patch: NodePatch) =>
+    request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  /** Retract a node: its live version is closed, its history stays readable as-of earlier times. */
+  deleteNode: (tenant: string, project: string, id: string) =>
+    request<void>(`${tp(tenant, project)}/nodes/${id}`, { method: "DELETE" }),
   getNodeContent: (tenant: string, project: string, id: string) =>
     request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content`),
   /** Replace a node's markdown body. Bitemporal — the server opens a successor version. */

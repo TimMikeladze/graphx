@@ -9,6 +9,10 @@ export const qk = {
     ["nodes", tenant, project, filters] as const,
   graph: (tenant: string, project: string, filters: ExplorerFilters) =>
     ["graph", tenant, project, filters] as const,
+  /** Filter-agnostic prefixes — what a write invalidates, since it can affect any filtered view. */
+  allNodes: (tenant: string, project: string) => ["nodes", tenant, project] as const,
+  allGraph: (tenant: string, project: string) => ["graph", tenant, project] as const,
+  schema: (tenant: string, project: string) => ["schema", tenant, project] as const,
   node: (tenant: string, project: string, id: string) => ["node", tenant, project, id] as const,
   nodeContent: (tenant: string, project: string, id: string) =>
     ["node-content", tenant, project, id] as const,

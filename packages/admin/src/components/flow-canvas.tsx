@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useMemo } from "react"
+import { useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import {
   Background,
   BackgroundVariant,
@@ -10,7 +10,13 @@ import {
   useNodesState,
   useReactFlow,
 } from "@xyflow/react"
-import { ChartRelationshipIcon } from "@hugeicons/core-free-icons"
+import {
+  ChartRelationshipIcon,
+  Delete02Icon,
+  NodeAddIcon,
+  PencilEdit02Icon,
+} from "@hugeicons/core-free-icons"
+import { CanvasMenu, type CanvasMenuState } from "@/components/canvas-menu"
 import { EmptyState } from "@/components/empty-state"
 import { useTheme } from "@/components/theme-provider"
 import { FlowNode } from "@/components/flow-node"
@@ -48,6 +54,10 @@ export interface FlowCanvasProps {
   /** Offered when the slice is past {@link FLOW_MAX_NODES} — the only renderer that can draw it. */
   onSwitchToCosmograph: () => void
   handleRef: React.RefObject<RendererHandle | null>
+  /** Editing entry points. Absent ⇒ that action is left out of the right-click menu. */
+  onCreateNode?: () => void
+  onEditNode?: (id: string) => void
+  onDeleteNode?: (id: string) => void
 }
 
 /** xyflow renderer: DOM cards on a computed layout. Sibling of the Cosmograph `GraphCanvas`. */
@@ -80,6 +90,9 @@ function FlowCanvasInner({
   labels,
   layout,
   handleRef,
+  onCreateNode,
+  onEditNode,
+  onDeleteNode,
 }: FlowCanvasProps) {
   const flow = useReactFlow<GraphFlowNode>()
   // The app's own provider only reports the *chosen* theme; `system` is xyflow's to resolve.
@@ -119,6 +132,50 @@ function FlowCanvasInner({
     return () => clearTimeout(t)
   }, [selectedId, setNodes, flow])
 
+  // Right-click menu: node actions on a card, create on empty canvas. DOM rendering is what makes
+  // this possible here and not on the WebGL canvas.
+  const [menu, setMenu] = useState<CanvasMenuState | undefined>(undefined)
+  const closeMenu = useCallback(() => setMenu(undefined), [])
+
+  const openNodeMenu = useCallback(
+    (event: React.MouseEvent, id: string) => {
+      const items = [
+        ...(onEditNode
+          ? [{ label: "Edit node", icon: PencilEdit02Icon, onSelect: () => onEditNode(id) }]
+          : []),
+        ...(onDeleteNode
+          ? [
+              {
+                label: "Retract node",
+                icon: Delete02Icon,
+                tone: "destructive" as const,
+                onSelect: () => onDeleteNode(id),
+              },
+            ]
+          : []),
+      ]
+      if (items.length === 0) return
+      event.preventDefault()
+      // Selecting first keeps the menu and the rest of the app talking about the same node.
+      onSelect(id)
+      setMenu({ x: event.clientX, y: event.clientY, items })
+    },
+    [onDeleteNode, onEditNode, onSelect],
+  )
+
+  const openPaneMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      if (!onCreateNode) return
+      event.preventDefault()
+      setMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [{ label: "New node", icon: NodeAddIcon, onSelect: onCreateNode }],
+      })
+    },
+    [onCreateNode],
+  )
+
   useImperativeHandle(
     handleRef,
     () => ({
@@ -145,6 +202,8 @@ function FlowCanvasInner({
         maxZoom={2.5}
         onNodeClick={(_, node) => onSelect(node.id)}
         onPaneClick={() => onSelect(undefined)}
+        onNodeContextMenu={(e, node) => openNodeMenu(e, node.id)}
+        onPaneContextMenu={openPaneMenu}
         proOptions={{ hideAttribution: false }}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
@@ -156,6 +215,7 @@ function FlowCanvasInner({
           className="rounded-lg border"
         />
       </ReactFlow>
+      <CanvasMenu state={menu} onClose={closeMenu} />
     </FlowLabelSourceContext>
   )
 }

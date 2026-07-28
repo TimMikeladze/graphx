@@ -26,6 +26,9 @@ export function GraphShell({
   onRendererChange,
   flowLayout,
   onFlowLayoutChange,
+  onCreateNode,
+  onEditNode,
+  onDeleteNode,
 }: {
   slice?: GraphSlice
   isLoading?: boolean
@@ -39,6 +42,13 @@ export function GraphShell({
   onRendererChange: (renderer: Renderer) => void
   flowLayout: FlowLayout
   onFlowLayoutChange: (layout: FlowLayout) => void
+  /**
+   * Editing entry points. The toolbar's create button and the flow canvas's right-click menu are
+   * only rendered when they are passed, so a read-only explorer is the default.
+   */
+  onCreateNode?: () => void
+  onEditNode?: (id: string) => void
+  onDeleteNode?: (id: string) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
@@ -121,6 +131,9 @@ export function GraphShell({
             layout={flowLayout}
             onSwitchToCosmograph={() => onRendererChange("cosmograph")}
             handleRef={rendererRef}
+            onCreateNode={onCreateNode}
+            onEditNode={onEditNode}
+            onDeleteNode={onDeleteNode}
           />
         )}
       </ErrorBoundary>
@@ -150,6 +163,7 @@ export function GraphShell({
         onZoomOut={() => rendererRef.current?.zoomOut()}
         onTogglePause={() => setPaused((p) => !p)}
         onToggleFullscreen={toggleFullscreen}
+        onCreateNode={onCreateNode}
       />
 
       {/* legend / quick type filter */}

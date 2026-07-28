@@ -11,12 +11,16 @@ export function NodeDetailSheet({
   nodeId,
   onClose,
   onSelect,
+  onEdit,
+  onDelete,
 }: {
   tenant: string
   project: string
   nodeId?: string
   onClose: () => void
   onSelect: (id: string) => void
+  onEdit?: (id: string) => void
+  onDelete?: (id: string) => void
 }) {
   return (
     <Sheet
@@ -30,7 +34,14 @@ export function NodeDetailSheet({
           <SheetTitle>Node detail</SheetTitle>
         </SheetHeader>
         {nodeId && (
-          <NodeDetail tenant={tenant} project={project} nodeId={nodeId} onSelect={onSelect} />
+          <NodeDetail
+            tenant={tenant}
+            project={project}
+            nodeId={nodeId}
+            onSelect={onSelect}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         )}
       </SheetContent>
     </Sheet>

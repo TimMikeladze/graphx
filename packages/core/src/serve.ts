@@ -475,6 +475,31 @@ const nodeContentSchema = z.object({
 	contentHash: z.string().nullable(),
 });
 
+/**
+ * `GET /schema` — the project's declared shape, as JSON Schema.
+ *
+ * The schema is a `defineGraphSchema` value: zod objects per node type and per-rel `EdgeDef`s.
+ * Serving it as JSON Schema is what lets a client (the admin UI's node editor) render a real
+ * form instead of guessing fields, or handing the user a raw JSON textarea.
+ */
+const schemaDocSchema = z.object({
+	nodes: z.array(
+		z.object({ type: z.string(), jsonSchema: z.record(z.string(), z.unknown()) }),
+	),
+	edges: z.array(
+		z.object({
+			rel: z.string(),
+			/** Endpoint type constraints; `null` when the rel accepts any type. */
+			from: z.array(z.string()).nullable(),
+			to: z.array(z.string()).nullable(),
+			/** Cardinality 1 per source (§19.5). */
+			single: z.boolean(),
+			/** `null` when the rel declares no data schema. */
+			jsonSchema: z.record(z.string(), z.unknown()).nullable(),
+		}),
+	),
+});
+
 const graphSliceSchema = z.object({
 	nodes: z.array(z.object({ id: z.string(), type: z.string(), label: z.string().optional() })),
 	links: z.array(
@@ -555,6 +580,28 @@ function jsonError(description: string) {
 /** A JSON success response carrying `schema`. */
 function json<T extends z.ZodType>(description: string, schema: T) {
 	return { description, content: { 'application/json': { schema } } };
+}
+
+/**
+ * A zod definition rendered as JSON Schema for `GET /schema`. A type zod cannot represent
+ * (a transform, a custom refinement) degrades to an open object rather than failing the whole
+ * document — the client falls back to free-form JSON for that one type.
+ */
+function jsonSchemaOf(def: unknown): Record<string, unknown> {
+	try {
+		return z.toJSONSchema(def as z.ZodType, {
+			io: 'input',
+			unrepresentable: 'any',
+		}) as Record<string, unknown>;
+	} catch {
+		return { type: 'object', additionalProperties: true };
+	}
+}
+
+/** Normalize an `EdgeDef` endpoint constraint (absent | one type | many) to a list or `null`. */
+function endpointTypes(v: string | readonly string[] | undefined): string[] | null {
+	if (v === undefined) return null;
+	return Array.isArray(v) ? [...v] : [v as string];
 }
 
 /**
@@ -970,6 +1017,44 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				const { type, q, asOf } = c.req.valid('query');
 				const slice = await c.get('graph').graphSlice({ type, q, asOf, limits: cfg.limits });
 				return c.json(slice, 200);
+			},
+		)
+		// The declared schema, so a client can render typed editors. Read-scoped: it describes the
+		// project's shape, not its contents.
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/schema',
+				operationId: 'get_schema',
+				tags: ['read'],
+				summary: 'Declared node types and relations, as JSON Schema',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams },
+				responses: { 200: json('OK', schemaDocSchema), ...READ_ERRORS },
+			}),
+			async (c) => {
+				const schema = c.get('graph').schema as GraphSchema;
+				const nodes = Object.entries(schema.nodes).map(([type, def]) => ({
+					type,
+					jsonSchema: jsonSchemaOf(def),
+				}));
+				const edges = Object.entries(schema.edges).map(([rel, raw]) => {
+					const def = (raw ?? {}) as {
+						data?: unknown;
+						from?: string | readonly string[];
+						to?: string | readonly string[];
+						single?: boolean;
+					};
+					return {
+						rel,
+						from: endpointTypes(def.from),
+						to: endpointTypes(def.to),
+						single: def.single === true,
+						jsonSchema: def.data === undefined ? null : jsonSchemaOf(def.data),
+					};
+				});
+				return c.json({ nodes, edges }, 200);
 			},
 		)
 		// The live version's content payload (body + provenance), fetched on demand — kept off

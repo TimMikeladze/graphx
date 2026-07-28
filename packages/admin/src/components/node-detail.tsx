@@ -3,8 +3,10 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import {
   AlertCircleIcon,
   Cancel01Icon,
+  Delete02Icon,
   GitBranchIcon,
   InboxIcon,
+  PencilEdit02Icon,
 } from "@hugeicons/core-free-icons"
 import { ContentTab } from "@/components/content-tab"
 import { CopyButton } from "@/components/copy-button"
@@ -228,12 +230,17 @@ export function NodeDetail({
   nodeId,
   onSelect,
   onClose,
+  onEdit,
+  onDelete,
 }: {
   tenant: string
   project: string
   nodeId: string
   onSelect: (id: string) => void
   onClose?: () => void
+  /** Editing entry points; absent ⇒ the inspector is read-only. */
+  onEdit?: (id: string) => void
+  onDelete?: (id: string) => void
 }) {
   // Controlled so the Content tab knows when it is on screen (it gates its own fetch on that).
   const [tab, setTab] = useState("data")
@@ -242,6 +249,27 @@ export function NodeDetail({
   const history = useHistory(tenant, project, nodeId)
 
   const label = node.data ? bestLabel(node.data.data) : undefined
+
+  // A node that was retracted (here or by someone else) 404s; say so rather than showing
+  // skeletons that never resolve.
+  if (node.isError)
+    return (
+      <div className="flex h-full flex-col">
+        {onClose && (
+          <div className="flex justify-end p-2">
+            <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+            </Button>
+          </div>
+        )}
+        <EmptyState
+          icon={AlertCircleIcon}
+          tone="destructive"
+          title="This node is not in the live graph"
+          hint="It may have been retracted. Earlier versions are still reachable with an as-of query."
+        />
+      </div>
+    )
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -274,11 +302,36 @@ export function NodeDetail({
             </>
           )}
         </div>
-        {onClose && (
-          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-          </Button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onEdit(nodeId)}
+              aria-label="Edit node"
+              title="Edit node"
+            >
+              <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={2} />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(nodeId)}
+              aria-label="Retract node"
+              title="Retract node"
+            >
+              <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+            </Button>
+          )}
+          {onClose && (
+            <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs
