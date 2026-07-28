@@ -16,12 +16,13 @@
 - **Every schema change is mirrored in both dialects:** `packages/core/src/schema.ts` (libSQL) and `packages/core/src/dialect-sql.ts` (Postgres). A change to one without the other is a bug.
 - **Tests obtain databases only from `packages/core/test/harness.ts`** via `makeTestDb`. Never call `createClient` directly.
 - **Build before testing.** `packages/cli` imports `@graphx/core` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/core/src` and before `bun test`, or the CLI tests fail with `Cannot find module '@graphx/core'`.
-- **Both drivers must pass.** Default run: `bun test`. Postgres run:
+- **Always run the suite as `bun run test`, never bare `bun test`.** The script is `bun test --timeout 30000`; Bun's bare default is 5s, under which a large part of the suite times out and looks like flakiness. CI runs `bun run test` too. A focused file is `bun run test <path>`.
+- **Both drivers must pass.** Default run: `bun run test`. Postgres run:
 
   ```bash
   GRAPHX_TEST_DRIVER=postgres \
   GRAPHX_TEST_PG_URL=postgresql://postgres:postgres@localhost:5433/graphx_test \
-  bun test
+  bun run test
   ```
 
   A `pgvector/pgvector:pg16` container named `graphx-pg-triggers` is already running on port 5433 with the `vector` extension created. The env var is `GRAPHX_TEST_PG_URL` (the harness's), not `GRAPHX_PG_URL` (the CLI runtime's). Use `test.skipIf(TEST_DRIVER === 'postgres')` only where a probe is genuinely libSQL-specific, and say why in a comment.
