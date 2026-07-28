@@ -21,6 +21,7 @@ export {
 	createMcpApp,
 	type GraphSchemaLike,
 	type GraphxMcpOptions,
+	type McpAppOptions,
 	toToolResult,
 } from './server.ts';
 export {

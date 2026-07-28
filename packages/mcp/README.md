@@ -68,12 +68,18 @@ middleware. `remoteBackend({ url, apiKey })` is the same seam against a deployed
 
 `createMcpApp` is the local adapter with your already-built app passed in, as a mountable Hono app.
 This serves MCP over Streamable HTTP (via `@hono/mcp`) next to the REST routes, in the same
-process — no separate server to run:
+process — no separate server to run.
+
+> **`createMcpApp` authenticates nothing.** Anyone who can reach the mounted route gets every
+> registered tool, with whatever the resolved `Backend` is authorized for. graphx's own authn
+> middleware is scoped to `/t/:tenant/*` and does **not** cover `/mcp`. Put your own middleware in
+> front of the route, and pass `backend` as a **function** so each request runs as its own caller —
+> a fixed `Backend` serves every caller as the one principal baked in at mount time.
 
 ```ts
 import { createApp, defineGraphSchema, hashEmbed } from '@graphx/core';
 import { createMcpApp, localBackend } from '@graphx/mcp';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -81,12 +87,38 @@ const schema = defineGraphSchema({
 	edges: { knows: { from: 'person', to: 'person' } },
 });
 
-const dev = await createApp({ schema, db: 'file:./graph.db', embed: hashEmbed() });
-const backend = localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant });
+const dev = await createApp({ schema, db: 'mygraph', embed: hashEmbed() });
+
+/** YOUR authentication — whatever the rest of your deployment already uses. */
+const principalOf = (c: Context): { user: string; tenant: string } | undefined => {
+	const token = c.req.header('authorization')?.replace(/^Bearer /, '');
+	return token ? { user: dev.user, tenant: dev.tenant } : undefined;
+};
 
 const api = new Hono(); // your existing app, with its own routes already mounted
-api.route('/mcp', createMcpApp({ app: dev.app, backend, schema }));
+api.use('/mcp', async (c, next) => {
+	// Reject before the MCP server ever sees the request.
+	if (!principalOf(c)) return c.json({ error: 'unauthorized' }, 401);
+	await next();
+});
+api.route(
+	'/mcp',
+	createMcpApp({
+		app: dev.app,
+		schema,
+		// Resolved per request, so the identity your middleware established travels with the tool
+		// call and the graph sees the caller rather than the mount.
+		backend: (c) => {
+			const p = principalOf(c)!;
+			return localBackend(dev.app, { 'x-user': p.user, 'x-tenant': p.tenant });
+		},
+	}),
+);
 ```
+
+The server and its transport are built per request. Running stateless, Streamable HTTP keys
+request → response stream on the bare JSON-RPC id, and that id is a per-client counter starting at
+0 — a shared transport would cross-deliver between two clients on their very first message.
 
 ## Configuration
 

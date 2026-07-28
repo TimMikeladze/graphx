@@ -188,7 +188,8 @@ test('server: exposes the schema as a resource and as a tool', async () => {
 	await h.teardown();
 });
 
-test('server: mounts on a Hono app and answers an MCP initialize', async () => {
+/** A dev app with `createMcpApp` mounted at `/mcp`, plus a POST helper. */
+async function mounted(backend?: (dev: any) => any) {
 	const { Hono } = await import('hono');
 	const { createMcpApp } = await import('../src/index.ts');
 
@@ -199,27 +200,93 @@ test('server: mounts on a Hono app and answers an MCP initialize', async () => {
 		'/mcp',
 		createMcpApp({
 			app: dev.app,
-			backend: localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant }),
+			backend:
+				backend?.(dev) ?? localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant }),
 			schema: SCHEMA,
 		}),
 	);
+	return {
+		dev,
+		post: (body: unknown, headers: Record<string, string> = {}) =>
+			host.request('/mcp', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					accept: 'application/json, text/event-stream',
+					...headers,
+				},
+				body: JSON.stringify(body),
+			}),
+	};
+}
 
-	const res = await host.request('/mcp', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-		body: JSON.stringify({
-			jsonrpc: '2.0',
-			id: 1,
-			method: 'initialize',
-			params: {
-				protocolVersion: '2025-06-18',
-				capabilities: {},
-				clientInfo: { name: 'test', version: '1.0.0' },
-			},
-		}),
+/** The JSON-RPC message out of an MCP response body, SSE-framed or plain JSON. */
+async function rpc(res: Response): Promise<any> {
+	const text = await res.text();
+	const line = text.split('\n').find((l) => l.startsWith('data: '));
+	return JSON.parse(line ? line.slice(6) : text);
+}
+
+test('server: mounts on a Hono app and answers an MCP initialize', async () => {
+	const { post } = await mounted();
+	const res = await post({
+		jsonrpc: '2.0',
+		id: 1,
+		method: 'initialize',
+		params: {
+			protocolVersion: '2025-06-18',
+			capabilities: {},
+			clientInfo: { name: 'test', version: '1.0.0' },
+		},
 	});
 	expect(res.status).toBe(200);
 	const text = await res.text();
 	expect(text).toContain('serverInfo');
 	expect(text).toContain('graphx');
+});
+
+test('server: concurrent requests sharing a JSON-RPC id each get their own answer', async () => {
+	const { dev, post } = await mounted();
+	const call = (name: string, args: Record<string, unknown>) =>
+		post({ jsonrpc: '2.0', id: 0, method: 'tools/call', params: { name, arguments: args } });
+
+	// id 0 is what every SDK client sends first — two clients collide there, not at some
+	// exotic id. A shared transport maps request → stream on the bare id, so one of these
+	// would be answered on the other's stream and the loser would never be answered at all.
+	const [projects, nodes] = await Promise.all([
+		call('list_projects', { tenant: dev.tenant }),
+		call('list_nodes', { tenant: dev.tenant, project: dev.project }),
+	]);
+
+	const a = await rpc(projects);
+	const b = await rpc(nodes);
+	expect(a.id).toBe(0);
+	expect(b.id).toBe(0);
+	expect(JSON.parse(a.result.content[0].text).projects.map((p: any) => p.id)).toContain(
+		dev.project,
+	);
+	expect(JSON.parse(b.result.content[0].text).nodes).toBeArray();
+});
+
+test('server: a mounted backend factory resolves per request', async () => {
+	const seen: Array<string | undefined> = [];
+	const { dev, post } = await mounted((d) => (c: any) => {
+		seen.push(c.req.header('x-caller'));
+		return localBackend(d.app, { 'x-user': d.user, 'x-tenant': d.tenant });
+	});
+
+	const call = (caller: string) =>
+		post(
+			{
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'tools/call',
+				params: { name: 'list_projects', arguments: { tenant: dev.tenant } },
+			},
+			{ 'x-caller': caller },
+		);
+
+	expect((await rpc(await call('alice'))).result.isError).toBeFalsy();
+	expect((await rpc(await call('bob'))).result.isError).toBeFalsy();
+	expect(seen).toEqual(['alice', 'bob']);
 });

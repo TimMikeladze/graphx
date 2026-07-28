@@ -1,6 +1,6 @@
 import { StreamableHTTPTransport } from '@hono/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import type { Backend } from './backend.ts';
 import { registerSchema } from './resources.ts';
 import { buildCall, type RegistryHost, type ToolDescriptor, toolsFrom } from './tools.ts';
@@ -118,19 +118,40 @@ export function createGraphxMcp(opts: GraphxMcpOptions): McpServer {
 	return server;
 }
 
+/** Options for {@link createMcpApp}. */
+export interface McpAppOptions extends Omit<GraphxMcpOptions, 'backend'> {
+	/**
+	 * Where tool calls are delivered. A function is resolved per request against that
+	 * request's `Context`, which is the only way a mounted server can carry the caller's own
+	 * identity — a fixed `Backend` serves every caller as the principal baked in at mount time.
+	 */
+	backend: Backend | ((c: Context) => Backend | Promise<Backend>);
+}
+
 /**
- * The server as a mountable Hono app: `app.route('/mcp', createMcpApp(...))`. One transport
- * instance is shared across requests, which is what Streamable HTTP's session handling
- * expects — the transport, not the route, tracks sessions.
+ * The server as a mountable Hono app: `app.route('/mcp', createMcpApp(...))`.
+ *
+ * The server and its transport are built PER REQUEST. Running stateless (no
+ * `sessionIdGenerator`), the transport keys its request→stream mapping on the bare JSON-RPC
+ * id, and that id is a per-client counter starting at 0 — so two clients sharing one transport
+ * collide on their first message, one answered on the other's stream and the other never
+ * answered at all. Registering the tools does no I/O, so a server per request is cheap.
+ *
+ * Neither is closed here: `handleRequest` returns while the SSE stream carrying the response is
+ * still open, so closing would abort the very response being returned. Both become unreachable
+ * once the response completes.
+ *
+ * This route carries NO authentication of its own. Whoever reaches it gets everything the
+ * resolved `Backend` is authorized for — mount it behind your own middleware, and resolve the
+ * backend from the request rather than fixing one principal at mount time.
  */
-export function createMcpApp(opts: GraphxMcpOptions): Hono {
-	const server = createGraphxMcp(opts);
-	const transport = new StreamableHTTPTransport();
-	let connected: Promise<void> | undefined;
+export function createMcpApp(opts: McpAppOptions): Hono {
 	const app = new Hono();
 	app.all('/', async (c) => {
-		connected ??= server.connect(transport);
-		await connected;
+		const backend = typeof opts.backend === 'function' ? await opts.backend(c) : opts.backend;
+		const server = createGraphxMcp({ ...opts, backend });
+		const transport = new StreamableHTTPTransport();
+		await server.connect(transport);
 		return (await transport.handleRequest(c)) ?? c.body(null, 202);
 	});
 	return app;
