@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +29,24 @@ export function CanvasMenu({
   state?: CanvasMenuState
   onClose: () => void
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [placed, setPlaced] = useState({ x: state?.x ?? 0, y: state?.y ?? 0 })
+
+  // Right-clicking near the bottom or right edge would otherwise open a menu that runs off the
+  // viewport — with no scroll to reach it, since it is fixed. Measure once and flip it back
+  // inside, before paint so it never appears to jump.
+  useLayoutEffect(() => {
+    if (!state) return
+    const box = ref.current?.getBoundingClientRect()
+    const width = box?.width ?? 0
+    const height = box?.height ?? 0
+    const margin = 8
+    setPlaced({
+      x: Math.max(margin, Math.min(state.x, window.innerWidth - width - margin)),
+      y: Math.max(margin, Math.min(state.y, window.innerHeight - height - margin)),
+    })
+  }, [state])
+
   useEffect(() => {
     if (!state) return
     const dismiss = () => onClose()
@@ -51,9 +69,10 @@ export function CanvasMenu({
 
   return (
     <div
+      ref={ref}
       role="menu"
       className="hud fixed z-50 min-w-40 p-1"
-      style={{ left: state.x, top: state.y }}
+      style={{ left: placed.x, top: placed.y }}
       // The dismiss listener runs on the window, so keep the menu's own clicks from reaching it
       // before the item's handler does.
       onPointerDown={(e) => e.stopPropagation()}

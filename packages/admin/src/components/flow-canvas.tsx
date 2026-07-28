@@ -28,6 +28,7 @@ import {
   FLOW_MAX_NODES,
   layoutFlow,
   toFlow,
+  withEdgeLabels,
   type FlowNodeData,
   type GraphFlowNode,
 } from "@/lib/flow-adapter"
@@ -105,24 +106,29 @@ function FlowCanvasInner({
   // The app's own provider only reports the *chosen* theme; `system` is xyflow's to resolve.
   const { theme } = useTheme()
 
-  // Structure and placement are memoized apart: toggling edge labels must not re-run the layout,
-  // and switching layouts must not rebuild the cards.
-  const structure = useMemo(() => toFlow(slice, { showEdgeLabels: labels.edges }), [
-    slice,
-    labels.edges,
-  ])
+  // Structure, placement and captions are memoized apart: switching layouts must not rebuild the
+  // cards, and toggling edge labels must not re-run the layout (which would also re-fit the view).
+  const structure = useMemo(() => toFlow(slice), [slice])
   const placed = useMemo(() => layoutFlow(structure, layout), [structure, layout])
+  const labelledEdges = useMemo(
+    () => withEdgeLabels(placed.edges, labels.edges),
+    [placed.edges, labels.edges],
+  )
 
   const [nodes, setNodes, onNodesChange] = useNodesState<GraphFlowNode>(placed.nodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(placed.edges)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(labelledEdges)
 
   // New slice or new layout: adopt the placement and frame it.
   useEffect(() => {
     setNodes(placed.nodes)
-    setEdges(placed.edges)
     const t = setTimeout(() => flow.fitView({ padding: 0.2, duration: 300 }), FIT_AFTER_LAYOUT_MS)
     return () => clearTimeout(t)
-  }, [placed, setNodes, setEdges, flow])
+  }, [placed, setNodes, flow])
+
+  // Captions are a cheap swap on the same edges — no re-fit.
+  useEffect(() => {
+    setEdges(labelledEdges)
+  }, [labelledEdges, setEdges])
 
   // Selection is owned by the URL, so it arrives as a prop from anywhere (list, palette, detail).
   useEffect(() => {

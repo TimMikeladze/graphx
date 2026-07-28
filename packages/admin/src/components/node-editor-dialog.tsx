@@ -66,9 +66,15 @@ export function NodeEditorDialog({
   const create = useCreateNode(tenant, project)
   const update = useUpdateNode(tenant, project, nodeId)
   const editing = nodeId !== undefined
-  // Edit opened from the canvas menu can beat the node fetch; the form waits rather than
-  // rendering itself as a create form for a frame.
-  const loading = editing && node === undefined
+  /**
+   * The form waits for what it is generated from.
+   *
+   * Two races, both real on a cold open: an edit reached from the canvas menu can beat the node
+   * fetch, and the schema query starts when the first dialog mounts. Rendering anyway would show
+   * an edit as a create form for a frame, and — worse — let the user start typing into a
+   * schema-less fallback that is then reset the moment the schema lands.
+   */
+  const loading = (editing && node === undefined) || schema.isPending
   const pending = create.isPending || update.isPending
 
   const declaredTypes = schema.data?.nodes ?? []
@@ -88,7 +94,7 @@ export function NodeEditorDialog({
   const [loadedFor, setLoadedFor] = useState(subject)
   if (loadedFor !== subject) {
     setLoadedFor(subject)
-    if (open) {
+    if (open && !loading) {
       const nextType = node?.type ?? declaredTypes[0]?.type ?? ""
       setType(nextType)
       setValues(initialValues(fieldsOf(schemaOf(nextType)), node?.data))

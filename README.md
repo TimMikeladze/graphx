@@ -15,7 +15,7 @@ no codegen anywhere.
 | `@graphx/react` | Inference-only React Query hooks + CDC live-sync |
 | `@graphx/mcp` | `graphx-mcp` — every serving route exposed as an MCP tool |
 | `@graphx/auth` | Relationship-based access control (ReBAC) on graphx |
-| `@graphx/admin` | Admin SPA (Vite + shadcn + Cosmograph) |
+| `@graphx/admin` | Admin SPA (Vite + shadcn; Cosmograph / xyflow canvas, node + edge authoring) |
 
 The packages are not published yet. Develop inside this repo: `bun install` from the root, and add
 your app's path to the root `package.json` `workspaces` array so the `workspace:` deps resolve.

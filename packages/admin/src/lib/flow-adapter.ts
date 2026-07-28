@@ -63,8 +63,6 @@ export interface FlowData {
 }
 
 export interface ToFlowOpts {
-  /** Put the rel name on each edge (ignored above {@link FLOW_EDGE_LABEL_MAX} edges). */
-  showEdgeLabels?: boolean
   palette?: readonly string[]
 }
 
@@ -106,16 +104,31 @@ export function toFlow(slice: GraphSlice, opts: ToFlowOpts = {}): FlowData {
     }
   })
 
-  const labelled = Boolean(opts.showEdgeLabels) && kept.length <= FLOW_EDGE_LABEL_MAX
   const edges: Edge[] = kept.map((l) => ({
     id: l.id,
     source: l.source,
     target: l.target,
-    label: labelled ? l.rel : undefined,
     data: { rel: l.rel, weight: l.weight },
   }))
 
   return { nodes, edges }
+}
+
+/**
+ * Put the rel name on each edge, or take it off. Separate from {@link toFlow} on purpose: a
+ * caption is a property of the edge, not of the graph's structure, so toggling it must not
+ * invalidate the layout — recomputing dagre and re-fitting the viewport to turn labels on would
+ * throw away where the user was looking.
+ *
+ * Above {@link FLOW_EDGE_LABEL_MAX} edges the labels are dropped: a dense graph renders them as an
+ * unreadable smear over the canvas.
+ */
+export function withEdgeLabels(edges: Edge[], show: boolean): Edge[] {
+  const labelled = show && edges.length <= FLOW_EDGE_LABEL_MAX
+  return edges.map((e) => {
+    const rel = labelled ? String((e.data as { rel?: string } | undefined)?.rel ?? "") : undefined
+    return e.label === rel ? e : { ...e, label: rel }
+  })
 }
 
 /** Place the nodes. Pure: same input, same coordinates — nothing here reads the clock or random. */

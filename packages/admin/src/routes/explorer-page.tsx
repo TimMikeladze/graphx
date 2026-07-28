@@ -16,7 +16,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useGraphSlice, useNode, useProjects, useTenants } from "@/hooks/use-graph"
+import { useGraphSlice, useNode, useProjects, useSchema, useTenants } from "@/hooks/use-graph"
 import { bestLabel } from "@/lib/format"
 import { filtersOf, flowLayoutOf, rendererOf } from "@/lib/explorer-search"
 import type { ExplorerFilters, FlowLayout, Renderer } from "@/lib/types"
@@ -70,6 +70,10 @@ export function ExplorerPage() {
     () => [...new Set((slice.data?.nodes ?? []).map((n) => n.type))].sort(),
     [slice.data],
   )
+
+  // Warm the schema here rather than on the first dialog mount: it is what the editors generate
+  // their forms from, and fetching it on open makes the first "New node" open onto a skeleton.
+  useSchema(tenant, project)
 
   // The node the editor and the delete confirmation are talking about. Usually already cached —
   // both are reached from a selection — so this is a read, not a second fetch.

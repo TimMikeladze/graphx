@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -81,7 +82,12 @@ export function EdgeEditorDialog({
     () => relsFor(schema.data?.edges ?? [], pending?.sourceType, pending?.targetType),
     [schema.data, pending?.sourceType, pending?.targetType],
   )
-  const blocked = noRelReason(schema.data?.edges ?? [], pending?.sourceType, pending?.targetType)
+  // Until the schema is here there are no candidates yet — which must not be reported as "this
+  // project declares no relations".
+  const loading = schema.isPending
+  const blocked = loading
+    ? undefined
+    : noRelReason(schema.data?.edges ?? [], pending?.sourceType, pending?.targetType)
 
   const [rel, setRel] = useState("")
   const [weight, setWeight] = useState("")
@@ -96,10 +102,12 @@ export function EdgeEditorDialog({
   const [loadedFor, setLoadedFor] = useState(subject)
   if (loadedFor !== subject) {
     setLoadedFor(subject)
-    if (pending) {
-      const first = candidates[0]?.rel ?? ""
-      setRel(first)
-      setValues(initialValues(fieldsOf(candidates[0]?.jsonSchema ?? undefined)))
+    if (pending && !loading) {
+      // Preselect only when the choice is forced. With several relations open to this pair,
+      // picking one for the user invites a wrong edge from a fast click on Create.
+      const only = candidates.length === 1 ? candidates[0] : undefined
+      setRel(only?.rel ?? "")
+      setValues(initialValues(fieldsOf(only?.jsonSchema ?? undefined)))
       setWeight("")
       setRaw("{}")
       setErrors({})
@@ -173,7 +181,14 @@ export function EdgeEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {pending && (
+        {pending && loading && (
+          <div className="grid gap-2 py-4">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-2/3" />
+          </div>
+        )}
+
+        {pending && !loading && (
           <ScrollArea className="max-h-[60vh] pr-3">
             <div className="grid gap-3">
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -264,7 +279,7 @@ export function EdgeEditorDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={create.isPending || Boolean(blocked)}>
+          <Button onClick={submit} disabled={create.isPending || loading || Boolean(blocked)}>
             Create
           </Button>
         </DialogFooter>

@@ -120,8 +120,10 @@ export default { fetch: app.fetch }; // Bun.serve / Cloudflare / Node
 ```
 
 Routes mount under `/t/:tenant/p/:project/...`: nodes/edges CRUD (`POST`/`GET`/`PATCH`/`DELETE`),
-`neighbors`(+`neighborsPage`), `nodes` list, `graph` slice, `history`, `retrieve`, `hybrid`,
-`journey`, `match`, `bulk`, `changes` (CDC), `diff`, and `algorithms/*`. Errors map to `{ error,
+`neighbors`(+`neighborsPage`), `nodes` list, `graph` slice, `schema`, `history`, `retrieve`,
+`hybrid`, `journey`, `match`, `bulk`, `changes` (CDC), `diff`, and `algorithms/*`. `GET /schema`
+returns the project's declared node types and rels as JSON Schema (derived from your zod schema) —
+what a client needs to render typed editors without hard-coding your shapes. Errors map to `{ error,
 issues? }` JSON (400 validation/constraint, 401 authn, 403 authz, 404 not-found/cross-tenant). Pair
 it with [`@graphx/react`](../react) for typed hooks.
 

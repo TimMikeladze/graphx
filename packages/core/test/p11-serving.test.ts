@@ -516,3 +516,31 @@ test('P11: get_schema is tenant-scoped like every other project route', async ()
 	expect(anon.status).toBe(401);
 	cleanup(s);
 });
+
+test('P11: get_schema degrades a type zod cannot describe instead of failing the document', async () => {
+	const s = await setup();
+	// `z.custom` has no JSON Schema representation. The document must still serve — the client
+	// falls back to free-form JSON for that one type — and the types around it stay intact.
+	const opaque = defineGraphSchema({
+		nodes: {
+			person: z.object({ name: z.string() }),
+			blob: z.custom<Record<string, unknown>>(() => true) as unknown as ReturnType<
+				typeof z.object<{ [k: string]: never }>
+			>,
+		},
+		edges: {},
+	});
+	const app = createApp({ control: s.control, schema: opaque, authenticate });
+	const res = await app.request(`/t/${s.tenantA}/p/${s.pA}/schema`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(200);
+	const doc = (await res.json()) as {
+		nodes: Array<{ type: string; jsonSchema: Record<string, unknown> }>;
+	};
+	expect(doc.nodes.map((n) => n.type).sort()).toEqual(['blob', 'person']);
+	// No declared properties -> the admin editor drops to a raw JSON field for this type.
+	expect(doc.nodes.find((n) => n.type === 'blob')?.jsonSchema.properties).toBeUndefined();
+	expect(doc.nodes.find((n) => n.type === 'person')?.jsonSchema.properties).toBeDefined();
+	cleanup(s);
+});

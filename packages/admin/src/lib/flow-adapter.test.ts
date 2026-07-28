@@ -7,6 +7,7 @@ import {
   NODE_HEIGHT,
   NODE_WIDTH,
   toFlow,
+  withEdgeLabels,
 } from "./flow-adapter"
 import type { GraphSlice } from "./types"
 
@@ -86,19 +87,42 @@ describe("toFlow", () => {
     expect(nodes[0]?.data.degree).toBe(0)
   })
 
-  it("labels edges only when asked", () => {
+  it("builds edges unlabelled — captions are applied separately", () => {
     expect(toFlow(slice).edges.map((e) => e.label)).toEqual([undefined, undefined])
-    expect(toFlow(slice, { showEdgeLabels: true }).edges.map((e) => e.label)).toEqual([
-      "knows",
-      "uses",
+    expect(toFlow(slice).edges.map((e) => e.data)).toEqual([
+      { rel: "knows", weight: 3 },
+      { rel: "uses", weight: 1 },
     ])
   })
+})
 
-  it("drops edge labels once the slice is too dense to read them", () => {
-    const dense = chain(FLOW_EDGE_LABEL_MAX + 3)
-    expect(dense.links.length).toBeGreaterThan(FLOW_EDGE_LABEL_MAX)
-    const { edges } = toFlow(dense, { showEdgeLabels: true })
-    expect(edges.every((e) => e.label === undefined)).toBe(true)
+describe("withEdgeLabels", () => {
+  it("puts the rel name on each edge, and takes it off again", () => {
+    const { edges } = toFlow(slice)
+    expect(withEdgeLabels(edges, true).map((e) => e.label)).toEqual(["knows", "uses"])
+    expect(withEdgeLabels(edges, false).map((e) => e.label)).toEqual([undefined, undefined])
+  })
+
+  it("drops the labels once the graph is too dense to read them", () => {
+    const dense = toFlow(chain(FLOW_EDGE_LABEL_MAX + 3))
+    expect(dense.edges.length).toBeGreaterThan(FLOW_EDGE_LABEL_MAX)
+    expect(withEdgeLabels(dense.edges, true).every((e) => e.label === undefined)).toBe(true)
+  })
+
+  it("returns the same edge objects when nothing changes, so React skips the work", () => {
+    const { edges } = toFlow(slice)
+    expect(withEdgeLabels(edges, false)[0]).toBe(edges[0])
+  })
+
+  it("leaves placement alone — a caption toggle must not move a single node", () => {
+    // The regression this guards: captions used to be baked in by toFlow, so toggling them
+    // rebuilt the structure, re-ran dagre, and re-fitted the viewport.
+    const placed = layoutFlow(toFlow(chain(15)), "layered")
+    const relabelled = withEdgeLabels(placed.edges, true)
+    expect(relabelled.map((e) => e.id)).toEqual(placed.edges.map((e) => e.id))
+    expect(layoutFlow(toFlow(chain(15)), "layered").nodes.map((n) => n.position)).toEqual(
+      placed.nodes.map((n) => n.position),
+    )
   })
 })
 
