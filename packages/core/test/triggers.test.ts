@@ -449,3 +449,41 @@ test.skipIf(TEST_DRIVER === 'postgres')(
 		expect(seen.sort()).toEqual([ids[1], ids[2]].sort());
 	},
 );
+
+test('start polls until stopped, and stop actually stops', async () => {
+	const g = await makeGraph();
+	const seen: string[] = [];
+	let resolveSeen: (id: string) => void = () => {};
+	const firstSeen = new Promise<string>((r) => {
+		resolveSeen = r;
+	});
+	const runner = new TriggerRunner(g, {
+		name: 'sub-loop',
+		start: 'beginning',
+		pollIntervalMs: 5,
+		triggers: [
+			{
+				name: 'record',
+				match: {},
+				action: (e) => {
+					seen.push(e.id);
+					resolveSeen(e.id);
+				},
+			},
+		],
+	});
+
+	runner.start();
+	runner.start(); // idempotent — a second call must not spawn a second loop
+	const node = await g.addNode({ type: 'person', data: { name: 'live' } });
+	expect(await firstSeen).toBe(node.id);
+	await runner.stop();
+
+	// One delivery, not two: the second start() did not spawn a competing loop.
+	expect(seen).toEqual([node.id]);
+
+	// Stopped means stopped — a later write is never picked up.
+	await g.addNode({ type: 'person', data: { name: 'ignored' } });
+	await new Promise((r) => setTimeout(r, 50));
+	expect(seen).toEqual([node.id]);
+});

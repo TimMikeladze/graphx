@@ -212,6 +212,10 @@ export class TriggerRunner<S extends GraphSchema> {
 	private readonly graphs = new Map<string, Graph<S>>();
 	/** `null` until the first cycle reads (or seeds) the persisted cursor. */
 	private cursor: number | null = null;
+	/** Set by {@link start}, cleared by {@link stop}. */
+	private running = false;
+	/** The in-flight poll loop, awaited by {@link stop}. */
+	private loop: Promise<void> | undefined;
 
 	constructor(
 		private readonly graph: Graph<S>,
@@ -280,6 +284,48 @@ export class TriggerRunner<S extends GraphSchema> {
 			cursor: this.cursor,
 			drained: page.nextCursor === null,
 		};
+	}
+
+	/**
+	 * Begin polling in the background. Idempotent — a second call is a no-op.
+	 *
+	 * Don't also call {@link runOnce} by hand while the loop is running: both read and advance the
+	 * same cursor, so a manual call racing the loop's own cycle can page from a stale cursor and
+	 * double-deliver. Drive a given runner through the loop or through manual calls, not both.
+	 */
+	start(): void {
+		if (this.running) return;
+		this.running = true;
+		this.loop = this.pump();
+	}
+
+	/**
+	 * Stop polling and wait for the current cycle to finish.
+	 *
+	 * "Finish" is bounded by whatever `pump()` is doing when `stop()` is called — ordinarily one
+	 * `runOnce()`, but {@link deliver}'s retry backoff is a plain, uncancellable `sleep`, so if a
+	 * trigger action is mid-retry, `stop()` can block for up to that backoff's duration before it
+	 * resolves.
+	 */
+	async stop(): Promise<void> {
+		this.running = false;
+		await this.loop;
+		this.loop = undefined;
+	}
+
+	/**
+	 * The poll loop. A thrown cycle (a DB blip, a closed client) backs off and retries rather than
+	 * killing the loop — the cursor is durable, so nothing is lost by trying again.
+	 */
+	private async pump(): Promise<void> {
+		while (this.running) {
+			try {
+				const result = await this.runOnce();
+				if (result.drained) await sleep(this.pollIntervalMs);
+			} catch {
+				await sleep(this.pollIntervalMs);
+			}
+		}
 	}
 
 	/**
