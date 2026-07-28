@@ -26,6 +26,7 @@ import {
 	createTenant,
 	createUser,
 	initControl,
+	listProjects,
 } from './control-plane.ts';
 import { getDb } from './db.ts';
 import type { NodeType, Rel } from './define-graph-schema.ts';
@@ -683,7 +684,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	if (cfg.cors) base.use('*', cors(cfg.cors === true ? { origin: '*' } : cfg.cors));
 	// Authn for the whole tenant group. Registered off the chain: `Hono.use` returns a plain
 	// `Hono`, which would drop `.openapi()` from the chain's type for every route after it.
-	base.use('/t/:tenant/p/:project/*', authn(cfg));
+	base.use('/t/:tenant/*', authn(cfg));
 	// Interactive API reference (Scalar, loaded from CDN) at /docs — points at /openapi.json.
 	// On by default (unauthenticated, tenant-agnostic like /openapi.json); `docs: false` disables it.
 	// Left off the contract itself (it serves HTML for humans, not an API surface) and off the
@@ -722,6 +723,45 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				return ready
 					? c.json({ status: 'ready' } as const, 200)
 					: c.json({ status: 'not-ready' } as const, 503);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/projects',
+				operationId: 'list_projects',
+				tags: ['read'],
+				summary: "List the caller's projects in this tenant",
+				security: SECURITY,
+				request: { params: z.object({ tenant: z.string() }) },
+				responses: {
+					200: json(
+						'Projects',
+						z.object({
+							projects: z.array(z.object({ id: z.string(), name: z.string() })),
+						}),
+					),
+					...READ_ERRORS,
+				},
+			}),
+			async (c) => {
+				const principal = c.get('principal');
+				// Same confused-deputy guard requireGraph applies: a route tenant that isn't the
+				// principal's is 404, so cross-tenant existence never leaks.
+				if (c.req.param('tenant') !== principal.tenantId) {
+					throw new AuthzError(404, 'tenant not found');
+				}
+				// Operators have no memberships row (see authorize's operator bypass).
+				if (!principal.operator) {
+					const mem = await cfg.control.execute({
+						sql: 'SELECT 1 FROM memberships WHERE user_id = ? AND tenant_id = ?',
+						args: [principal.userId, principal.tenantId],
+					});
+					if (!mem.rows[0]) throw new AuthzError(403, 'no membership in tenant');
+				}
+				const rows = await listProjects(cfg.control, principal.tenantId);
+				// §2.9: strip db_namespace — end users never receive a DB-level identifier.
+				return c.json({ projects: rows.map(({ id, name }) => ({ id, name })) }, 200);
 			},
 		)
 		.openapi(
