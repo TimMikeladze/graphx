@@ -18,7 +18,7 @@
  */
 
 import type { DbClient, SqlValue } from './dialect.ts';
-import type { GraphEvent } from './events.ts';
+import type { GraphEvent, GraphEventOp } from './events.ts';
 
 /** One event whose action exhausted its retries, as stored in `trigger_dead_letters`. */
 export interface DeadLetter {
@@ -44,6 +44,44 @@ export interface DeadLetterOpts {
 	limit?: number;
 	/** Only rows with `created_at >= since` (epoch ms). */
 	since?: number;
+}
+
+/**
+ * A predicate over {@link GraphEvent}. Plain serializable data on purpose: triggers are declared in
+ * code today, and keeping the predicate free of functions is what lets schema- or database-declared
+ * triggers land later as a pure addition. An absent field matches anything — except `source`, whose
+ * default is the cascade guard.
+ */
+export interface TriggerMatch {
+	op?: GraphEventOp | GraphEventOp[];
+	entity?: 'node' | 'edge';
+	/** Node type or edge rel. */
+	label?: string | string[];
+	/** `'close'` selects the pure closes the CDC feed is blind to (deletes and supersedes). */
+	shape?: 'insert' | 'close';
+	/**
+	 * `'user'` (the default) matches only untagged writes; `'any'` matches everything and opts into
+	 * cascades; any other string matches that provenance tag exactly.
+	 */
+	source?: 'user' | 'any' | (string & {});
+}
+
+/** Does `event` satisfy every clause of `match`? */
+export function matchesTrigger(event: GraphEvent, match: TriggerMatch): boolean {
+	if (match.op !== undefined) {
+		const ops = Array.isArray(match.op) ? match.op : [match.op];
+		if (!ops.includes(event.op)) return false;
+	}
+	if (match.entity !== undefined && match.entity !== event.entity) return false;
+	if (match.label !== undefined) {
+		const labels = Array.isArray(match.label) ? match.label : [match.label];
+		if (!labels.includes(event.label)) return false;
+	}
+	if (match.shape !== undefined && match.shape !== event.shape) return false;
+	const source = match.source ?? 'user';
+	if (source === 'any') return true;
+	if (source === 'user') return event.source === undefined;
+	return event.source === source;
 }
 
 /** Read dead letters newest-first — the operator's window into what failed and why. */

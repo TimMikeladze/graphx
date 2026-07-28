@@ -4,7 +4,7 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { GraphEvent } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { deadLetters, pruneDeadLetters } from '../src/triggers.ts';
+import { deadLetters, matchesTrigger, pruneDeadLetters } from '../src/triggers.ts';
 import { makeTestDb } from './harness.ts';
 
 // Eventing Layer 3 — declarative triggers over the durable graph_outbox. Every test drives the
@@ -33,6 +33,57 @@ const SAMPLE: GraphEvent = {
 	shape: 'insert',
 	ts: 1_700_000_000_000,
 };
+
+const EDGE_CLOSE: GraphEvent = {
+	seq: 8,
+	op: 'edge.delete',
+	entity: 'edge',
+	id: '01J000000000000000000000BB',
+	label: 'knows',
+	shape: 'close',
+	ts: 1_700_000_000_001,
+	src: 'a',
+	dst: 'b',
+};
+
+test('an empty match accepts any user write and rejects a trigger write', () => {
+	expect(matchesTrigger(SAMPLE, {})).toBe(true);
+	expect(matchesTrigger({ ...SAMPLE, source: 'trigger:x' }, {})).toBe(false);
+});
+
+test('op, entity, label and shape narrow the match', () => {
+	expect(matchesTrigger(SAMPLE, { op: 'node.create' })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { op: 'node.delete' })).toBe(false);
+	expect(matchesTrigger(SAMPLE, { op: ['node.delete', 'node.create'] })).toBe(true);
+
+	expect(matchesTrigger(SAMPLE, { entity: 'node' })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { entity: 'edge' })).toBe(false);
+
+	expect(matchesTrigger(SAMPLE, { label: 'person' })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { label: ['device', 'person'] })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { label: 'device' })).toBe(false);
+
+	expect(matchesTrigger(SAMPLE, { shape: 'insert' })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { shape: 'close' })).toBe(false);
+	expect(matchesTrigger(EDGE_CLOSE, { entity: 'edge', shape: 'close', label: 'knows' })).toBe(true);
+});
+
+test('source selects between user writes, a specific tag, and everything', () => {
+	const tagged = { ...SAMPLE, source: 'trigger:reembed' };
+	expect(matchesTrigger(tagged, { source: 'any' })).toBe(true);
+	expect(matchesTrigger(SAMPLE, { source: 'any' })).toBe(true);
+
+	expect(matchesTrigger(tagged, { source: 'trigger:reembed' })).toBe(true);
+	expect(matchesTrigger(tagged, { source: 'trigger:other' })).toBe(false);
+	expect(matchesTrigger(SAMPLE, { source: 'trigger:reembed' })).toBe(false);
+
+	expect(matchesTrigger(SAMPLE, { source: 'user' })).toBe(true);
+	expect(matchesTrigger(tagged, { source: 'user' })).toBe(false);
+});
+
+test('every clause must hold, not just one', () => {
+	expect(matchesTrigger(SAMPLE, { op: 'node.create', label: 'device' })).toBe(false);
+});
 
 afterAll(async () => {
 	for (const t of teardowns) await t();
