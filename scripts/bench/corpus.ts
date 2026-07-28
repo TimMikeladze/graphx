@@ -79,7 +79,14 @@ export const DRIVER = process.env.GRAPHX_BENCH_DRIVER ?? 'libsql';
 const PG_URL =
 	process.env.GRAPHX_BENCH_PG_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5455/graphx_test';
 
-const CORPUS_DIR = resolve(import.meta.dirname, '../../bench/.corpus');
+/**
+ * Overridable so two checkouts of the repo — a PR head and its base, say — can share one corpus
+ * cache. Sharing is safe by construction: the fingerprint covers everything that shapes the data,
+ * so two checkouts whose generators differ simply get two files.
+ */
+const CORPUS_DIR = process.env.GRAPHX_BENCH_CORPUS_DIR
+	? resolve(process.env.GRAPHX_BENCH_CORPUS_DIR)
+	: resolve(import.meta.dirname, '../../bench/.corpus');
 
 /** Everything that changes the generated data. Any difference is a different corpus. */
 export interface CorpusKey {

@@ -8,10 +8,17 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import process from 'node:process';
 import type { CorpusStats } from './corpus.ts';
 import type { Result } from './types.ts';
 
-const RESULTS_DIR = resolve(import.meta.dirname, '../../bench/results');
+/**
+ * Overridable so CI can point two checkouts of the repo at one output directory and then compare
+ * their result files without knowing where either one landed.
+ */
+const RESULTS_DIR = process.env.GRAPHX_BENCH_RESULTS_DIR
+	? resolve(process.env.GRAPHX_BENCH_RESULTS_DIR)
+	: resolve(import.meta.dirname, '../../bench/results');
 
 /** Adaptive precision: sub-millisecond calls need decimals, multi-second ones do not. */
 export function ms(value: number): string {

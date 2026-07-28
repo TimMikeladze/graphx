@@ -1,0 +1,169 @@
+name: Benchmark
+
+# Manual only. Benchmarks on a shared CI runner are a reading, not a gate: identical code
+# routinely varies by tens of percent between runs on the same virtualized box. Running this on
+# every push would spend minutes to produce a number nobody should act on without reproducing it.
+# So it runs when someone asks, against a base they choose, and it never fails the build.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Ref to compare against
+        default: main
+      scales:
+        description: Scale ladder (1k, 10k, 100k — comma-separated)
+        default: 1k,10k
+      suites:
+        description: Suites to run, space-separated (blank = all)
+        default: ''
+      iters:
+        description: Cap on samples per case (blank = the harness default)
+        default: ''
+      band:
+        description: Percent change treated as runner noise
+        default: '30'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bench:
+    name: Compare against ${{ inputs.base }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      # Dispatch inputs reach the shell as environment variables, never as `${{ }}` inside a `run:`
+      # block. Interpolation happens before the shell sees the script, so an input containing shell
+      # syntax would execute rather than be read as an argument — even from a trusted dispatcher,
+      # that is a footgun with no upside.
+      BASE_REF: ${{ inputs.base }}
+      HEAD_REF: ${{ github.ref_name }}
+      SCALES: ${{ inputs.scales }}
+      SUITES: ${{ inputs.suites }}
+      ITERS: ${{ inputs.iters }}
+      BAND: ${{ inputs.band }}
+      REPO: ${{ github.repository }}
+      # One corpus cache for both checkouts. Safe by construction: the cache key fingerprints
+      # everything that shapes the generated data, so two checkouts whose generators differ get
+      # two corpora rather than one wrong one. When they match — the usual case — the base run
+      # reuses what the head run seeded, which is most of the wall clock saved here.
+      GRAPHX_BENCH_CORPUS_DIR: ${{ runner.temp }}/corpus
+      RESULTS_BASE: ${{ runner.temp }}/results-base
+      RESULTS_HEAD: ${{ runner.temp }}/results-head
+      SUMMARY: ${{ runner.temp }}/summary.md
+
+    steps:
+      # Reject anything that is not a plain scale/suite/number list before it becomes a command
+      # argument. The allowlists are narrow on purpose: every legitimate value is covered by them.
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [[ "$SCALES" =~ ^[0-9a-z]+(,[0-9a-z]+)*$ ]] || { echo "bad --scale: $SCALES"; exit 1; }
+          [[ -z "$SUITES" || "$SUITES" =~ ^[a-z]+( [a-z]+)*$ ]] || { echo "bad suites: $SUITES"; exit 1; }
+          [[ -z "$ITERS" || "$ITERS" =~ ^[0-9]+$ ]] || { echo "bad --iters: $ITERS"; exit 1; }
+          [[ "$BAND" =~ ^[0-9]+$ ]] || { echo "bad --band: $BAND"; exit 1; }
+
+      - name: Checkout head
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base }}
+          path: base
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # No build step: the harness imports core through relative `src/` paths, not through the
+      # `@graphx/*` exports map, so nothing here needs `dist`.
+      - name: Install dependencies (head)
+        working-directory: head
+        run: bun install --frozen-lockfile
+
+      # Seed every corpus and warm the OS page cache before anything is measured. Without this the
+      # first measured run pays for both, and the comparison reports a systematic slowdown on
+      # whichever side happened to go first: measured locally, cold-vs-warm moved a case by 73% at
+      # p50 on identical code. One cheap pass removes that bias from both sides.
+      - name: Seed and warm corpora
+        working-directory: head
+        env:
+          GRAPHX_BENCH_RESULTS_DIR: ${{ runner.temp }}/results-discard
+        run: |
+          set -euo pipefail
+          bun run bench $SUITES --scale "$SCALES" --iters 1
+
+      - name: Benchmark head
+        working-directory: head
+        env:
+          GRAPHX_BENCH_RESULTS_DIR: ${{ runner.temp }}/results-head
+        run: |
+          set -euo pipefail
+          # $SUITES is deliberately unquoted — it is a list of suite names, validated above.
+          bun run bench $SUITES --scale "$SCALES" ${ITERS:+--iters "$ITERS"}
+
+      # A base predating the harness has nothing to run. That is a normal state for the first PR
+      # that adds a case, so it produces an empty run rather than a failed job — the comparison
+      # then renders every case as `new`, which is the honest reading.
+      - name: Benchmark base
+        working-directory: base
+        env:
+          GRAPHX_BENCH_RESULTS_DIR: ${{ runner.temp }}/results-base
+        run: |
+          set -euo pipefail
+          mkdir -p "$GRAPHX_BENCH_RESULTS_DIR"
+          if [ ! -f scripts/bench/index.ts ]; then
+            echo "base ref has no benchmark harness — recording an empty run"
+            printf '%s\n' '{"meta":{"driver":"none","startedAt":"","durationMs":0,"scales":[]},"results":[]}' \
+              > "$GRAPHX_BENCH_RESULTS_DIR/empty.json"
+            exit 0
+          fi
+          bun install --frozen-lockfile
+          bun run bench $SUITES --scale "$SCALES" ${ITERS:+--iters "$ITERS"}
+
+      - name: Compare
+        working-directory: head
+        run: |
+          set -euo pipefail
+          # Each run wrote exactly one timestamped file into its own directory.
+          # `-print -quit` rather than a `| head -1` pipe: under `pipefail`, head closing the pipe
+          # early can surface find's SIGPIPE as a step failure.
+          BASE_JSON=$(find "$RESULTS_BASE" -name '*.json' -print -quit)
+          HEAD_JSON=$(find "$RESULTS_HEAD" -name '*.json' -print -quit)
+          bun scripts/bench/compare.ts "$BASE_JSON" "$HEAD_JSON" \
+            --band "$BAND" --base-label "$BASE_REF" --head-label "$HEAD_REF" --out "$SUMMARY"
+          cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          cp "$BASE_JSON" "$RUNNER_TEMP/base.json"
+          cp "$HEAD_JSON" "$RUNNER_TEMP/head.json"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: |
+            ${{ runner.temp }}/base.json
+            ${{ runner.temp }}/head.json
+            ${{ runner.temp }}/summary.md
+
+      # Best-effort: post the same table on the branch's open PR, if it has one. A dispatch from a
+      # branch with no PR still gets the job summary and the artifact, so this failing is not a
+      # reason to fail the run.
+      - name: Comment on the PR, if there is one
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --repo "$REPO" --head "$HEAD_REF" --state open \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            echo "no open PR for $HEAD_REF — summary and artifact only"
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body-file "$SUMMARY"
