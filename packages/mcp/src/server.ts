@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Backend } from './backend.ts';
+import { registerSchema } from './resources.ts';
 import { buildCall, type RegistryHost, type ToolDescriptor, toolsFrom } from './tools.ts';
 
 /**
@@ -110,5 +111,7 @@ export function createGraphxMcp(opts: GraphxMcpOptions): McpServer {
 		if (opts.readOnly && !desc.readOnly) continue;
 		registerTool(server, desc, opts.backend);
 	}
+	// Discovery is read-only, so it survives read-only mode.
+	registerSchema(server, { schema: opts.schema, backend: opts.backend });
 	return server;
 }

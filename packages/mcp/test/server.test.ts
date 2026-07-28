@@ -165,3 +165,25 @@ test('server: list_projects reaches the tenant-scoped route', async () => {
 	expect(body.projects.map((p: any) => p.id)).toContain(h.project);
 	await h.teardown();
 });
+
+test('server: exposes the schema as a resource and as a tool', async () => {
+	const h = await harness();
+
+	const listed = await h.client.listResources();
+	expect(listed.resources.map((r) => r.uri)).toContain('graphx://schema');
+
+	const read = await h.client.readResource({ uri: 'graphx://schema' });
+	const doc = JSON.parse(read.contents[0].text as string);
+	expect(Object.keys(doc.nodes).sort()).toEqual(['device', 'person']);
+	expect(doc.edges.map((e: any) => e.rel)).toContain('owns');
+
+	const viaTool = payload(
+		await h.client.callTool({
+			name: 'describe_schema',
+			arguments: { tenant: h.tenant, project: h.project },
+		}),
+	);
+	expect(viaTool).toEqual(doc);
+
+	await h.teardown();
+});

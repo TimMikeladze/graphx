@@ -9,6 +9,14 @@ export {
 	remoteBackend,
 } from './backend.ts';
 export {
+	inferSchemaDoc,
+	registerSchema,
+	SCHEMA_URI,
+	type SchemaDoc,
+	type SchemaEdge,
+	schemaDoc,
+} from './resources.ts';
+export {
 	createGraphxMcp,
 	type GraphSchemaLike,
 	type GraphxMcpOptions,
