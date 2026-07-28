@@ -1,7 +1,7 @@
 {
 	"name": "@graphx/core",
 	"version": "0.1.0",
-	"description": "Elegant and performant component library",
+	"description": "Temporal GraphRAG SDK on libSQL or Postgres — typed schema, bitemporal graph, vector + FTS retrieval, and a served HTTP API",
 	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/core#readme",
 	"license": "MIT",
 	"repository": {

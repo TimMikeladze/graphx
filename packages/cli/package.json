@@ -1,7 +1,7 @@
 {
 	"name": "@graphx/cli",
 	"version": "0.1.0",
-	"description": "graphx CLI — ingest a vault into a graphx graph",
+	"description": "graphx CLI — scaffold, ingest, serve, and run triggers over a graphx graph",
 	"license": "MIT",
 	"type": "module",
 	"module": "./dist/cli.js",

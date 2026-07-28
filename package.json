@@ -18,6 +18,7 @@
 	"scripts": {
 		"bench": "bun scripts/bench/index.ts",
 		"build": "bunup",
+		"clean:db": "bun scripts/clean-db.ts",
 		"dev": "bunup --watch",
 		"dev:admin": "bun scripts/dev-admin.ts",
 		"dev:admin:api": "bun scripts/admin-api.ts",
@@ -40,6 +41,6 @@
 		"typescript": "^6.0.3"
 	},
 	"simple-git-hooks": {
-		"pre-commit": "bun run lint && bun run type-check"
+		"pre-commit": "bun run lint && bun run type-check && bun run clean:db"
 	}
 }
