@@ -205,17 +205,19 @@ test('pure closes fire triggers — the reason this rides the outbox', async () 
 	expect(closes).toEqual(['edge.delete', 'node.delete']);
 });
 
-test('start defaults to now, skipping events that predate the subscription', async () => {
+test('start defaults to now, skipping events that predate the first poll', async () => {
 	const g = await makeGraph();
 	await g.addNode({ type: 'person', data: { name: 'before' } });
 
 	const seen: string[] = [];
 	const runner = new TriggerRunner(g, {
 		name: 'sub-now',
-		triggers: [
-			{ name: 'record', match: {}, action: (e) => void seen.push(e.id) },
-		],
+		triggers: [{ name: 'record', match: {}, action: (e) => void seen.push(e.id) }],
 	});
+
+	// The first cycle seeds the cursor at the current head and delivers nothing.
+	expect((await runner.runOnce()).delivered).toBe(0);
+	expect(seen).toEqual([]);
 
 	const after = await g.addNode({ type: 'person', data: { name: 'after' } });
 	await runner.runOnce();

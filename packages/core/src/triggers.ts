@@ -172,7 +172,11 @@ export interface TriggerRunnerOptions<S extends GraphSchema> {
 	retries?: number;
 	/** Full-jitter exponential backoff base. Default 100. */
 	backoffMs?: number;
-	/** Cursor seed when none is persisted: `'now'` (the default) skips history. */
+	/**
+	 * Cursor seed when none is persisted: `'now'` (the default) seeds from the outbox head as of
+	 * the FIRST POLL (the first `runOnce()` call), not as of construction — events written between
+	 * constructing the runner and first polling it are not delivered. `'beginning'` replays all history.
+	 */
 	start?: 'beginning' | 'now';
 }
 
@@ -206,14 +210,7 @@ export class TriggerRunner<S extends GraphSchema> {
 	private readonly startAt: 'beginning' | 'now';
 	/** Source-tagged sibling graphs, one per trigger, built lazily and reused. */
 	private readonly graphs = new Map<string, Graph<S>>();
-	/**
-	 * Kicked off in the constructor — NOT lazily on first {@link runOnce} — so that a `'now'` seed
-	 * captures the outbox head as of construction. A caller may do real work between constructing
-	 * the runner and its first `runOnce()` call; a seed computed at that later point would read
-	 * `outboxHead` past events written in the interim and silently skip them.
-	 */
-	private readonly cursorReady: Promise<number>;
-	/** Cached once {@link cursorReady} resolves, so later cycles skip the round trip. */
+	/** `null` until the first cycle reads (or seeds) the persisted cursor. */
 	private cursor: number | null = null;
 
 	constructor(
@@ -231,11 +228,6 @@ export class TriggerRunner<S extends GraphSchema> {
 		this.retries = opts.retries ?? 3;
 		this.backoffMs = opts.backoffMs ?? 100;
 		this.startAt = opts.start ?? 'now';
-		// Issued here, synchronously, rather than from inside `seedCursor` after it awaits the
-		// persisted-cursor lookup: an intervening await would let a caller's own next write reach
-		// the connection first, so a fresh 'now' subscription would see it as already-past.
-		const headAtConstruction = this.startAt === 'now' ? outboxHead(this.graph.raw) : Promise.resolve(0);
-		this.cursorReady = this.seedCursor(headAtConstruction);
 	}
 
 	/**
@@ -243,7 +235,7 @@ export class TriggerRunner<S extends GraphSchema> {
 	 * cycle resumes at exactly the first event it had not finished.
 	 */
 	async runOnce(): Promise<TriggerBatchResult> {
-		if (this.cursor === null) this.cursor = await this.cursorReady;
+		if (this.cursor === null) this.cursor = await this.seedCursor();
 		const page = await outboxTail(
 			this.graph.raw,
 			{ seq: this.cursor },
@@ -267,21 +259,22 @@ export class TriggerRunner<S extends GraphSchema> {
 	}
 
 	/**
-	 * The persisted cursor: read if one exists, else seeded (and immediately persisted) from
-	 * {@link opts.start}. `headAtConstruction` is `outboxHead` sampled at construction time (see the
-	 * constructor) rather than `MAX(seq)` re-queried here, which keeps the Postgres visibility gate
-	 * — a bare max can start past a lower-seq row that has not committed yet, which would skip it
-	 * forever. Persisting immediately means a restart before the first delivery does not re-seek to
-	 * a different head.
+	 * The persisted cursor, seeded and written on first use — i.e. at the first `runOnce()` call, not
+	 * at construction. A `'now'` seed therefore reflects the outbox head as of the first poll: history
+	 * written before construction is skipped, but so is anything written between construction and
+	 * that first call. Seeding through {@link import('./temporal.ts').outboxHead} rather than
+	 * `MAX(seq)` keeps the Postgres visibility gate — a bare max can start past a lower-seq row that
+	 * has not committed yet, which would skip it forever. Persisting immediately means a restart
+	 * before the first delivery does not re-seek to a different head.
 	 */
-	private async seedCursor(headAtConstruction: Promise<number>): Promise<number> {
+	private async seedCursor(): Promise<number> {
 		const r = await this.graph.raw.execute({
 			sql: 'SELECT seq FROM trigger_cursors WHERE name = ?',
 			args: [this.name],
 		});
 		const row = r.rows[0];
 		if (row !== undefined) return Number(row.seq);
-		const seq = this.startAt === 'beginning' ? 0 : await headAtConstruction;
+		const seq = this.startAt === 'beginning' ? 0 : await outboxHead(this.graph.raw);
 		await this.saveCursor(seq);
 		return seq;
 	}
