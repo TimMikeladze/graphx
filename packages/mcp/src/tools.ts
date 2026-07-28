@@ -119,7 +119,16 @@ export function buildCall(
 	for (const field of desc.pathFields) {
 		const value = args[field];
 		if (value === undefined) throw new Error(`${desc.name}: missing path parameter '${field}'`);
-		path = path.replace(`{${field}}`, encodeURIComponent(String(value)));
+		// `encodeURIComponent` does not encode `.`, and the URL parser resolves dot segments, so a
+		// value of `.` or `..` collapses its own slot: `tenant: '..'` turns
+		// /t/{tenant}/p/{project}/nodes/{id} into /p/P/nodes/ID, outside the `/t/:tenant/*` authn
+		// middleware's match. `''` is the same class of mistake — it can only ever produce a path
+		// the tool does not name, and today it reads back as an opaque 404.
+		const s = String(value);
+		if (s === '' || s === '.' || s === '..') {
+			throw new Error(`${desc.name}: invalid path parameter '${field}'`);
+		}
+		path = path.replace(`{${field}}`, encodeURIComponent(s));
 	}
 
 	const query: Record<string, string> = {};

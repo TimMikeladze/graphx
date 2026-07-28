@@ -153,3 +153,25 @@ test('buildCall: omits undefined query fields and url-encodes path values', () =
 	expect(call.path).toBe('/t/t%2F1/p/p1/nodes');
 	expect(call.init.query).toEqual({});
 });
+
+test('buildCall: a path parameter cannot escape its own slot', () => {
+	const tools = toolsFrom(fixtureApp());
+	const del = tools.find((t) => t.name === 'delete_node')!;
+
+	// Without the guard these normalize to /p/p1/nodes/n1 (outside /t/:tenant/*) and
+	// /t/t1/p/p1/ respectively — a different route than the tool declares.
+	for (const bad of ['..', '.', '']) {
+		expect(() => buildCall(del, { tenant: bad, project: 'p1', id: 'n1' })).toThrow(
+			/invalid path parameter 'tenant'/,
+		);
+		expect(() => buildCall(del, { tenant: 't1', project: 'p1', id: bad })).toThrow(
+			/invalid path parameter 'id'/,
+		);
+	}
+
+	// Only a whole segment is a dot segment; the encoded forms stay inside their slot.
+	const encoded = buildCall(del, { tenant: 't1', project: 'p1', id: '%2e%2e' });
+	expect(new URL(`http://x${encoded.path}`).pathname).toBe('/t/t1/p/p1/nodes/%252e%252e');
+	const dotted = buildCall(del, { tenant: 't1', project: 'p1', id: 'a..b' });
+	expect(new URL(`http://x${dotted.path}`).pathname).toBe('/t/t1/p/p1/nodes/a..b');
+});
