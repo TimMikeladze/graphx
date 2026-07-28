@@ -458,3 +458,61 @@ async function pool<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T
 	if (failure !== undefined) throw failure.error;
 	return out;
 }
+
+/** Configuration for {@link webhookAction}. */
+export interface WebhookOptions {
+	url: string;
+	/** Extra request headers. Cannot override `x-graphx-signature`, which is set last. */
+	headers?: Record<string, string>;
+	/** HMAC-SHA256 key. Omit to send an unsigned payload. */
+	secret?: string;
+	/** Request timeout. Default 10s — a hung endpoint must not hold its subscription open. */
+	timeoutMs?: number;
+}
+
+/** Lowercase-hex HMAC-SHA256 of `body` under `secret`, via WebCrypto (no dependency). */
+async function sign(secret: string, body: string): Promise<string> {
+	const enc = new TextEncoder();
+	const key = await crypto.subtle.importKey(
+		'raw',
+		enc.encode(secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['sign'],
+	);
+	const mac = await crypto.subtle.sign('HMAC', key, enc.encode(body));
+	return [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * POST the event as JSON to `url`. A non-2xx response or a timeout throws, which hands retry,
+ * backoff and dead-lettering to the {@link TriggerRunner} rather than reimplementing them here.
+ *
+ * Receivers verify `x-graphx-signature` against the RAW request body — recomputing it from a
+ * re-serialized object can differ by key order or whitespace — and dedupe on `x-graphx-seq`,
+ * because delivery is at-least-once.
+ */
+export function webhookAction<S extends GraphSchema>(opts: WebhookOptions): TriggerAction<S> {
+	return async (event) => {
+		const body = JSON.stringify(event);
+		const headers: Record<string, string> = {
+			'content-type': 'application/json',
+			'x-graphx-event': event.op,
+			'x-graphx-seq': String(event.seq ?? ''),
+			...opts.headers,
+		};
+		// Signed last so a caller-supplied header can never displace the signature.
+		if (opts.secret !== undefined) {
+			headers['x-graphx-signature'] = `sha256=${await sign(opts.secret, body)}`;
+		}
+		const res = await fetch(opts.url, {
+			method: 'POST',
+			headers,
+			body,
+			signal: AbortSignal.timeout(opts.timeoutMs ?? 10_000),
+		});
+		if (!res.ok) {
+			throw new Error(`webhookAction: ${opts.url} responded ${res.status}`);
+		}
+	};
+}

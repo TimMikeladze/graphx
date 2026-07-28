@@ -7,7 +7,13 @@ import type { GraphEvent } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
 import { outboxHead } from '../src/temporal.ts';
-import { deadLetters, matchesTrigger, pruneDeadLetters, TriggerRunner } from '../src/triggers.ts';
+import {
+	deadLetters,
+	matchesTrigger,
+	pruneDeadLetters,
+	TriggerRunner,
+	webhookAction,
+} from '../src/triggers.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
 
 // Eventing Layer 3 — declarative triggers over the durable graph_outbox. Every test drives the
@@ -532,4 +538,128 @@ test('start polls until stopped, and stop actually stops', async () => {
 	await g.addNode({ type: 'person', data: { name: 'ignored' } });
 	await new Promise((r) => setTimeout(r, 50));
 	expect(seen).toEqual([node.id]);
+});
+
+interface Captured {
+	body: string;
+	headers: Record<string, string>;
+}
+
+/** A throwaway HTTP server that records requests and replies with `status()`. */
+function captureServer(status: () => number): {
+	url: string;
+	requests: Captured[];
+	close: () => void;
+} {
+	const requests: Captured[] = [];
+	const server = Bun.serve({
+		port: 0,
+		fetch: async (req) => {
+			requests.push({
+				body: await req.text(),
+				headers: Object.fromEntries(req.headers.entries()),
+			});
+			return new Response('', { status: status() });
+		},
+	});
+	return {
+		url: `http://localhost:${server.port}/hook`,
+		requests,
+		close: () => server.stop(true),
+	};
+}
+
+test('webhook delivers a signed payload on a 2xx', async () => {
+	const g = await makeGraph();
+	const hook = captureServer(() => 200);
+	try {
+		const runner = new TriggerRunner(g, {
+			name: 'sub-hook',
+			start: 'beginning',
+			triggers: [
+				{
+					name: 'notify',
+					match: { op: 'node.create' },
+					action: webhookAction({
+						url: hook.url,
+						secret: 'shh',
+						headers: { 'x-custom': 'yes' },
+					}),
+				},
+			],
+		});
+		const node = await g.addNode({ type: 'person', data: { name: 'seed' } });
+		await settle(g);
+		expect((await runner.runOnce()).delivered).toBe(1);
+
+		expect(hook.requests).toHaveLength(1);
+		const req = hook.requests[0] as Captured;
+		expect(JSON.parse(req.body).id).toBe(node.id);
+		expect(req.headers['x-graphx-event']).toBe('node.create');
+		expect(req.headers['x-custom']).toBe('yes');
+		expect(Number(req.headers['x-graphx-seq'])).toBeGreaterThan(0);
+
+		// The signature is an HMAC-SHA256 over the exact body.
+		const key = await crypto.subtle.importKey(
+			'raw',
+			new TextEncoder().encode('shh'),
+			{ name: 'HMAC', hash: 'SHA-256' },
+			false,
+			['sign'],
+		);
+		const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(req.body));
+		const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
+		expect(req.headers['x-graphx-signature']).toBe(`sha256=${hex}`);
+	} finally {
+		hook.close();
+	}
+});
+
+test('webhook retries a non-2xx and dead-letters when the attempts run out', async () => {
+	const g = await makeGraph();
+	const hook = captureServer(() => 500);
+	try {
+		const runner = new TriggerRunner(g, {
+			name: 'sub-hook-fail',
+			start: 'beginning',
+			retries: 2,
+			backoffMs: 1,
+			triggers: [
+				{ name: 'notify', match: { op: 'node.create' }, action: webhookAction({ url: hook.url }) },
+			],
+		});
+		await g.addNode({ type: 'person', data: { name: 'seed' } });
+		await settle(g);
+		const result = await runner.runOnce();
+
+		expect(result.deadLettered).toBe(1);
+		expect(hook.requests).toHaveLength(2); // retried once
+		const dl = await deadLetters(g.raw, { subscription: 'sub-hook-fail' });
+		expect(dl[0]?.error).toContain('500');
+	} finally {
+		hook.close();
+	}
+});
+
+test('webhook sends no signature header when no secret is configured', async () => {
+	const g = await makeGraph();
+	const hook = captureServer(() => 204);
+	try {
+		const runner = new TriggerRunner(g, {
+			name: 'sub-hook-unsigned',
+			start: 'beginning',
+			triggers: [
+				{ name: 'notify', match: { op: 'node.create' }, action: webhookAction({ url: hook.url }) },
+			],
+		});
+		await g.addNode({ type: 'person', data: { name: 'seed' } });
+		await settle(g);
+		expect((await runner.runOnce()).delivered).toBe(1);
+
+		const req = hook.requests[0] as Captured;
+		expect(req.headers['x-graphx-signature']).toBeUndefined();
+		expect(req.headers['content-type']).toBe('application/json');
+	} finally {
+		hook.close();
+	}
 });
