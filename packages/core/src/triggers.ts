@@ -231,8 +231,10 @@ export class TriggerRunner<S extends GraphSchema> {
 	}
 
 	/**
-	 * One poll and dispatch. The cursor advances after each delivered event, so an interrupted
-	 * cycle resumes at exactly the first event it had not finished.
+	 * One poll and dispatch. `concurrency === 1` checkpoints after each event, so an interrupted
+	 * cycle resumes at exactly the first event it had not finished. Above 1, events dispatch in
+	 * parallel under the bound and the cursor only advances once the whole page has resolved — see
+	 * {@link pool} for why that trade is forced.
 	 */
 	async runOnce(): Promise<TriggerBatchResult> {
 		if (this.cursor === null) this.cursor = await this.seedCursor();
@@ -243,11 +245,28 @@ export class TriggerRunner<S extends GraphSchema> {
 		);
 		let delivered = 0;
 		let deadLettered = 0;
-		for (const event of page.events) {
-			const outcome = await this.dispatch(event);
-			delivered += outcome.delivered;
-			deadLettered += outcome.deadLettered;
-			this.cursor = event.seq as number;
+		if (this.concurrency === 1) {
+			// Serial: completions are already in `seq` order, so checkpointing per event is free
+			// correctness — an interrupted cycle resumes at the first event it had not finished.
+			for (const event of page.events) {
+				const outcome = await this.dispatch(event);
+				delivered += outcome.delivered;
+				deadLettered += outcome.deadLettered;
+				this.cursor = event.seq as number;
+				await this.saveCursor(this.cursor);
+			}
+		} else if (page.events.length > 0) {
+			// Parallel: completions are unordered, so the cursor can only move once the whole page
+			// has resolved. An interrupted cycle redelivers the page — at-least-once, `seq` dedupes.
+			const outcomes = await pool(
+				page.events.map((event) => () => this.dispatch(event)),
+				this.concurrency,
+			);
+			for (const outcome of outcomes) {
+				delivered += outcome.delivered;
+				deadLettered += outcome.deadLettered;
+			}
+			this.cursor = page.events[page.events.length - 1]?.seq as number;
 			await this.saveCursor(this.cursor);
 		}
 		return {
@@ -353,4 +372,20 @@ export class TriggerRunner<S extends GraphSchema> {
 			],
 		});
 	}
+}
+
+/**
+ * Run `tasks` with at most `limit` in flight. Results keep input order; completion order does not,
+ * which is exactly the ordering guarantee `concurrency > 1` gives up.
+ */
+async function pool<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
+	const out: T[] = new Array(tasks.length);
+	let next = 0;
+	const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+		for (let i = next++; i < tasks.length; i = next++) {
+			out[i] = await (tasks[i] as () => Promise<T>)();
+		}
+	});
+	await Promise.all(workers);
+	return out;
 }

@@ -343,3 +343,62 @@ test.skipIf(TEST_DRIVER === 'postgres')(
 		expect(seenB).toEqual([ids[2], ids[3]]);
 	},
 );
+
+test('concurrency dispatches in parallel up to the bound and still drains the page', async () => {
+	const g = await makeGraph();
+	const ids: string[] = [];
+	for (let i = 0; i < 6; i++) {
+		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+	}
+
+	let inFlight = 0;
+	let peak = 0;
+	const seen: string[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-conc',
+		start: 'beginning',
+		concurrency: 3,
+		triggers: [
+			{
+				name: 'record',
+				match: {},
+				action: async (e) => {
+					inFlight++;
+					peak = Math.max(peak, inFlight);
+					await new Promise((r) => setTimeout(r, 5));
+					seen.push(e.id);
+					inFlight--;
+				},
+			},
+		],
+	});
+
+	const result = await runner.runOnce();
+	expect(result.delivered).toBe(6);
+	expect(seen.sort()).toEqual([...ids].sort());
+	expect(peak).toBeGreaterThan(1);
+	expect(peak).toBeLessThanOrEqual(3);
+});
+
+test('concurrent batches still checkpoint, so a restart delivers nothing twice', async () => {
+	const g = await makeGraph();
+	for (let i = 0; i < 4; i++) await g.addNode({ type: 'person', data: { name: `p${i}` } });
+
+	const first: string[] = [];
+	await new TriggerRunner(g, {
+		name: 'sub-conc-cursor',
+		start: 'beginning',
+		concurrency: 2,
+		triggers: [{ name: 'record', match: {}, action: (e) => void first.push(e.id) }],
+	}).runOnce();
+	expect(first).toHaveLength(4);
+
+	const second: string[] = [];
+	await new TriggerRunner(g, {
+		name: 'sub-conc-cursor',
+		start: 'beginning',
+		concurrency: 2,
+		triggers: [{ name: 'record', match: {}, action: (e) => void second.push(e.id) }],
+	}).runOnce();
+	expect(second).toEqual([]);
+});
