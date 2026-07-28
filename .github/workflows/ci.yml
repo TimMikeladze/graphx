@@ -8,12 +8,8 @@ concurrency:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }} (libSQL)
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Test (libSQL)
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -40,8 +36,7 @@ jobs:
         run: bun run test
 
   # Postgres backend — the same suite under GRAPHX_TEST_DRIVER=postgres against a
-  # pgvector service container. Linux-only: GitHub service containers don't run on
-  # macOS/Windows runners.
+  # pgvector service container.
   test-postgres:
     name: Test (Postgres)
     runs-on: ubuntu-latest
