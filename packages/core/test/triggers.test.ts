@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
@@ -5,6 +6,7 @@ import type { DbClient } from '../src/dialect.ts';
 import type { GraphEvent } from '../src/events.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
+import { outboxHead } from '../src/temporal.ts';
 import { deadLetters, matchesTrigger, pruneDeadLetters, TriggerRunner } from '../src/triggers.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
 
@@ -23,6 +25,35 @@ async function makeGraph(): Promise<Graph<typeof SCHEMA>> {
 	teardowns.push(teardown);
 	await init(client, 4);
 	return new Graph(client, SCHEMA, undefined, { outbox: true });
+}
+
+/**
+ * Block until every outbox row written so far is visible to {@link outboxTail}.
+ *
+ * On libSQL this returns on the first check: one serialized writer means `seq` equals commit order,
+ * so a committed event is visible to the very next read. Postgres withholds a row until its
+ * inserting transaction precedes the snapshot xmin horizon (`PG_OUTBOX_VISIBLE` in temporal.ts) —
+ * the gate that stops an out-of-order IDENTITY `seq` from being skipped forever — so a write is NOT
+ * visible immediately, and a cycle run straight after one can legitimately deliver nothing.
+ *
+ * Calling this between the writes and the `runOnce()` that should see them is what makes these
+ * tests driver-neutral WITHOUT weakening a single assertion: each test still drives the runner
+ * exactly as many cycles as it means to, and still asserts on exact delivered/skipped counts. A
+ * fixed sleep would only trade a deterministic failure for a slower flaky one.
+ */
+async function settle(graph: Graph<typeof SCHEMA>): Promise<void> {
+	// MAX(seq) ungated — every row on disk, visible to the tail yet or not.
+	const r = await graph.raw.execute('SELECT COALESCE(MAX(seq), 0) AS m FROM graph_outbox');
+	const target = Number((r.rows[0] as { m: unknown }).m);
+	const deadline = Date.now() + 10_000;
+	while ((await outboxHead(graph.raw)) < target) {
+		if (Date.now() >= deadline) {
+			throw new Error(
+				`settle: outbox rows through seq ${target} never became visible to the tail within 10s`,
+			);
+		}
+		await sleep(5);
+	}
 }
 
 const SAMPLE: GraphEvent = {
@@ -164,6 +195,7 @@ test('a matching in-proc action fires and receives a source-tagged graph', async
 	});
 
 	await g.addNode({ type: 'person', data: { name: 'seed' } });
+	await settle(g);
 	const first = await runner.runOnce();
 
 	expect(first.delivered).toBe(1);
@@ -171,7 +203,9 @@ test('a matching in-proc action fires and receives a source-tagged graph', async
 	expect(seen).toHaveLength(1);
 	expect(seen[0]?.label).toBe('person');
 
-	// The action's own write is tagged, so the same trigger does not match it.
+	// The action's own write is tagged, so the same trigger does not match it. Settle first, or
+	// this would pass vacuously on Postgres by the derived event simply not being visible yet.
+	await settle(g);
 	const second = await runner.runOnce();
 	expect(second.delivered).toBe(0);
 	expect(seen).toHaveLength(1);
@@ -201,6 +235,7 @@ test('pure closes fire triggers — the reason this rides the outbox', async () 
 	await g.deleteEdge(e.id);
 	await g.deleteNode(a.id);
 
+	await settle(g);
 	await runner.runOnce();
 	expect(closes).toEqual(['edge.delete', 'node.delete']);
 });
@@ -208,6 +243,9 @@ test('pure closes fire triggers — the reason this rides the outbox', async () 
 test('start defaults to now, skipping events that predate the first poll', async () => {
 	const g = await makeGraph();
 	await g.addNode({ type: 'person', data: { name: 'before' } });
+	// The 'before' event must be VISIBLE when the cursor seeds, or `'now'` would seed behind it and
+	// the test would prove nothing about skipping history.
+	await settle(g);
 
 	const seen: string[] = [];
 	const runner = new TriggerRunner(g, {
@@ -220,6 +258,7 @@ test('start defaults to now, skipping events that predate the first poll', async
 	expect(seen).toEqual([]);
 
 	const after = await g.addNode({ type: 'person', data: { name: 'after' } });
+	await settle(g);
 	await runner.runOnce();
 	expect(seen).toEqual([after.id]);
 });
@@ -247,6 +286,7 @@ test('a failing action retries, dead-letters, and cannot break its sibling', asy
 	});
 
 	const node = await g.addNode({ type: 'person', data: { name: 'seed' } });
+	await settle(g);
 	const result = await runner.runOnce();
 
 	expect(attempts).toBe(3);
@@ -274,6 +314,9 @@ test('a second runner resumes at exactly the undelivered remainder', async () =>
 	for (let i = 0; i < 4; i++) {
 		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
 	}
+	// All four must be visible before the first cycle, or `batchSize: 2` would page a shorter
+	// prefix than the test asserts on.
+	await settle(g);
 
 	const seenA: string[] = [];
 	const a = new TriggerRunner(g, {
@@ -350,6 +393,8 @@ test('concurrency dispatches in parallel up to the bound and still drains the pa
 	for (let i = 0; i < 6; i++) {
 		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
 	}
+	// All six in one page, or the peak-concurrency assertion measures a shorter page.
+	await settle(g);
 
 	let inFlight = 0;
 	let peak = 0;
@@ -383,6 +428,7 @@ test('concurrency dispatches in parallel up to the bound and still drains the pa
 test('concurrent batches still checkpoint, so a restart delivers nothing twice', async () => {
 	const g = await makeGraph();
 	for (let i = 0; i < 4; i++) await g.addNode({ type: 'person', data: { name: `p${i}` } });
+	await settle(g);
 
 	const first: string[] = [];
 	await new TriggerRunner(g, {
