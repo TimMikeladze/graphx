@@ -15,7 +15,16 @@
 - **No new dependencies.** WebCrypto (`crypto.subtle`), `fetch`, and `AbortSignal.timeout` are runtime built-ins. `ulidx` is already a `@graphx/core` dependency.
 - **Every schema change is mirrored in both dialects:** `packages/core/src/schema.ts` (libSQL) and `packages/core/src/dialect-sql.ts` (Postgres). A change to one without the other is a bug.
 - **Tests obtain databases only from `packages/core/test/harness.ts`** via `makeTestDb`. Never call `createClient` directly.
-- **Both drivers must pass.** Default run: `bun test`. Postgres run: `GRAPHX_TEST_DRIVER=postgres bun test`, which needs a reachable server via `GRAPHX_PG_URL` (see `.github/workflows/ci.yml`). Use `test.skipIf(TEST_DRIVER === 'postgres')` only where a probe is genuinely libSQL-specific, and say why in a comment.
+- **Build before testing.** `packages/cli` imports `@graphx/core` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/core/src` and before `bun test`, or the CLI tests fail with `Cannot find module '@graphx/core'`.
+- **Both drivers must pass.** Default run: `bun test`. Postgres run:
+
+  ```bash
+  GRAPHX_TEST_DRIVER=postgres \
+  GRAPHX_TEST_PG_URL=postgresql://postgres:postgres@localhost:5433/graphx_test \
+  bun test
+  ```
+
+  A `pgvector/pgvector:pg16` container named `graphx-pg-triggers` is already running on port 5433 with the `vector` extension created. The env var is `GRAPHX_TEST_PG_URL` (the harness's), not `GRAPHX_PG_URL` (the CLI runtime's). Use `test.skipIf(TEST_DRIVER === 'postgres')` only where a probe is genuinely libSQL-specific, and say why in a comment.
 - **Formatting:** tabs for indentation, single quotes, semicolons. Run `bun run lint` (oxlint) and `bun run type-check` before every commit; a pre-commit hook runs both and will reject a failing commit.
 - **Doc comments:** this codebase documents *why*, not *what*, and every exported symbol carries a TSDoc comment. New modules open with a header comment explaining the module's role. Match that density.
 - **Commit convention:** `feat(triggers): …`, `test(triggers): …`, `docs(triggers): …`.
