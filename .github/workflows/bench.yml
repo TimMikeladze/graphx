@@ -45,14 +45,10 @@ jobs:
       ITERS: ${{ inputs.iters }}
       BAND: ${{ inputs.band }}
       REPO: ${{ github.repository }}
-      # One corpus cache for both checkouts. Safe by construction: the cache key fingerprints
-      # everything that shapes the generated data, so two checkouts whose generators differ get
-      # two corpora rather than one wrong one. When they match — the usual case — the base run
-      # reuses what the head run seeded, which is most of the wall clock saved here.
-      GRAPHX_BENCH_CORPUS_DIR: ${{ runner.temp }}/corpus
-      RESULTS_BASE: ${{ runner.temp }}/results-base
-      RESULTS_HEAD: ${{ runner.temp }}/results-head
-      SUMMARY: ${{ runner.temp }}/summary.md
+      # The corpus and results paths are NOT here — see the "Resolve paths" step. They are derived
+      # from the runner's temp directory, and the `runner` context is unavailable in a job-level
+      # `env:` block; using it there makes the file unparseable to GitHub, which reports "a
+      # workflow file issue" with no line number and lists the workflow by path instead of name.
 
     steps:
       # Reject anything that is not a plain scale/suite/number list before it becomes a command
@@ -65,13 +61,31 @@ jobs:
           [[ -z "$ITERS" || "$ITERS" =~ ^[0-9]+$ ]] || { echo "bad --iters: $ITERS"; exit 1; }
           [[ "$BAND" =~ ^[0-9]+$ ]] || { echo "bad --band: $BAND"; exit 1; }
 
+      # Paths under the runner's temp directory, published to every later step. `$RUNNER_TEMP` is
+      # the shell variable the runner always exports; the `${{ runner.* }}` context that would
+      # otherwise express this is step-scoped and cannot appear in the job's `env:` block.
+      #
+      # One corpus directory serves both checkouts. Safe by construction: the cache key
+      # fingerprints everything that shapes the generated data, so two checkouts whose generators
+      # differ get two corpora rather than one wrong one. When they match — the usual case — the
+      # base run reuses what the head run seeded, which is most of the wall clock saved here.
+      - name: Resolve paths
+        run: |
+          set -euo pipefail
+          {
+            echo "GRAPHX_BENCH_CORPUS_DIR=$RUNNER_TEMP/corpus"
+            echo "RESULTS_BASE=$RUNNER_TEMP/results-base"
+            echo "RESULTS_HEAD=$RUNNER_TEMP/results-head"
+            echo "SUMMARY=$RUNNER_TEMP/summary.md"
+          } >> "$GITHUB_ENV"
+
       - name: Checkout head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: head
 
       - name: Checkout base
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.base }}
           path: base
