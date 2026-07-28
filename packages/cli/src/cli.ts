@@ -2,8 +2,15 @@ import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import type { CreateAppResult, GraphSchema, EmbedFn, DbConfig } from '@graphx/core';
-import { getDb, init, Graph, createApp } from '@graphx/core';
+import type {
+	CreateAppResult,
+	GraphSchema,
+	EmbedFn,
+	DbConfig,
+	Trigger,
+	TriggerRunnerOptions,
+} from '@graphx/core';
+import { getDb, init, Graph, createApp, TriggerRunner } from '@graphx/core';
 import { ingestDir, watchDir } from '@graphx/ingest';
 import type { IngestResult } from '@graphx/ingest';
 
@@ -99,6 +106,21 @@ export function parseServeArgs(argv: string[]): ParsedServeArgs {
 	};
 }
 
+export interface ParsedTriggersArgs {
+	config: string;
+}
+
+export function parseTriggersArgs(argv: string[]): ParsedTriggersArgs {
+	const { values } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+		},
+	});
+	return { config: (values.config as string | undefined) ?? './graphx.config.ts' };
+}
+
 export interface ParsedNewArgs {
 	dir: string;
 }
@@ -120,6 +142,13 @@ interface GraphxConfig {
 	db?: DbConfig;
 	dim?: number;
 	namespace?: string;
+	/**
+	 * Rules run by `graphx triggers`. Actions are functions, so they live in this config module
+	 * rather than the database — which is also why the runner is a process you host, not a row.
+	 */
+	triggers?: Trigger<GraphSchema>[];
+	/** Runner tuning. `name` keys the `trigger_cursors` row and defaults to 'graphx'. */
+	triggerRunner?: Partial<Omit<TriggerRunnerOptions<GraphSchema>, 'triggers'>>;
 }
 
 /** Import + return a user's `graphx.config.ts` default export (registers the pg driver if selected). */
@@ -163,6 +192,7 @@ graphx CLI
 Usage:
   graphx ingest <dir> [options]   Ingest a vault into the graph
   graphx serve [options]          Serve the graph over HTTP (typed routes + /openapi.json)
+  graphx triggers [options]       Run declarative triggers over the event outbox
   graphx new <dir>                Scaffold a starter graphx project
 
 ingest options:
@@ -179,6 +209,9 @@ ingest options:
 serve options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
   --port, -p <port>       Port to listen on (default: 8899)
+
+triggers options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
 
   --help                  Show this help
 `;
@@ -205,6 +238,8 @@ export async function run(argv: string[]): Promise<void> {
 			return runIngest(argv);
 		case 'serve':
 			return runServe(argv);
+		case 'triggers':
+			return runTriggers(argv);
 		case 'new':
 			return runNew(argv);
 		default:
@@ -326,6 +361,34 @@ async function runServe(argv: string[]): Promise<void> {
 	);
 	// Keep the process alive until interrupted.
 	await new Promise<void>((resolve) => process.once('SIGINT', resolve));
+}
+
+/**
+ * `graphx triggers` — host the durable trigger runner. Triggers are functions, so they come from
+ * the config module rather than the database; the runner keeps its cursor in `trigger_cursors`, so
+ * restarting this process resumes where it left off instead of replaying or skipping.
+ */
+async function runTriggers(argv: string[]): Promise<void> {
+	const args = parseTriggersArgs(argv);
+	const cfg = await loadConfig(args.config);
+	if (!cfg.triggers || cfg.triggers.length === 0) {
+		throw new Error(`triggers: ${args.config} exports no \`triggers\` — nothing to run`);
+	}
+	const client = getDb(cfg.namespace ?? 'graphx', cfg.db ?? {});
+	await init(client, cfg.dim);
+	// The outbox is the substrate triggers read; without it there is nothing to tail.
+	const graph = new Graph(client, cfg.schema, undefined, { outbox: true });
+	const name = cfg.triggerRunner?.name ?? 'graphx';
+	const runner = new TriggerRunner(graph, { ...cfg.triggerRunner, name, triggers: cfg.triggers });
+
+	runner.start();
+	console.log(
+		`graphx triggers running — subscription '${name}', ${cfg.triggers.length} trigger(s)\n` +
+			`  ${cfg.triggers.map((t) => t.name).join(', ')}`,
+	);
+	// Keep the process alive until interrupted, then drain the in-flight cycle.
+	await new Promise<void>((resolve) => process.once('SIGINT', resolve));
+	await runner.stop();
 }
 
 /** True if `path` exists (file or dir). */

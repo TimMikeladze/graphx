@@ -139,6 +139,23 @@ export {
 	scopeEvents,
 } from './events.ts';
 
+// Eventing Layer 3 — declarative triggers over the durable outbox (triggers.ts)
+export {
+	type DeadLetter,
+	deadLetters,
+	type DeadLetterOpts,
+	matchesTrigger,
+	pruneDeadLetters,
+	type Trigger,
+	type TriggerAction,
+	type TriggerBatchResult,
+	type TriggerMatch,
+	TriggerRunner,
+	type TriggerRunnerOptions,
+	webhookAction,
+	type WebhookOptions,
+} from './triggers.ts';
+
 // P4 — vectors + GraphRAG retrieve
 export {
 	dimOf,

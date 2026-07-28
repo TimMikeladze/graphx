@@ -2,7 +2,14 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
-import { buildServeApp, parseIngestArgs, parseNewArgs, parseServeArgs, skipBreakdown } from '../src/cli.ts';
+import {
+	buildServeApp,
+	parseIngestArgs,
+	parseNewArgs,
+	parseServeArgs,
+	parseTriggersArgs,
+	skipBreakdown,
+} from '../src/cli.ts';
 
 // The PG test leg sets GRAPHX_DB_DRIVER=postgres process-wide, which the dev `createApp` (via
 // getDb with no DbConfig) would inherit — so the libSQL-file serve test is pinned to that leg.
@@ -318,4 +325,12 @@ test('parseIngestArgs: parses --dangling-type', () => {
 test('parseIngestArgs: parses --tags-type', () => {
 	expect(parseIngestArgs(['ingest', '/d', '--tags-type', 'tag']).tagsType).toBe('tag');
 	expect(parseIngestArgs(['ingest', '/d']).tagsType).toBeUndefined();
+});
+
+test('parseTriggersArgs: defaults the config path and honours -c', () => {
+	expect(parseTriggersArgs(['triggers'])).toEqual({ config: './graphx.config.ts' });
+	expect(parseTriggersArgs(['triggers', '-c', './other.config.ts'])).toEqual({
+		config: './other.config.ts',
+	});
+	expect(parseTriggersArgs(['triggers', '--config', './x.ts'])).toEqual({ config: './x.ts' });
 });
