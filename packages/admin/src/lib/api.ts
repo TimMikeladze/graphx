@@ -122,6 +122,19 @@ export interface NodePatch {
   body?: string
 }
 
+/**
+ * `POST /edges` body. `src`/`dst` are node ids; `rel` must be a declared relation, and the server
+ * checks both endpoint types against it. There is no PATCH for edges — an edit is a delete
+ * followed by a create.
+ */
+export interface EdgeInput {
+  rel: string
+  src: string
+  dst: string
+  weight?: number
+  data?: Record<string, unknown>
+}
+
 /** Arguments shared by `GET /retrieve` and `POST /hybrid`. */
 export interface RetrieveOpts {
   query: string
@@ -190,6 +203,14 @@ export const api = {
   /** Retract a node: its live version is closed, its history stays readable as-of earlier times. */
   deleteNode: (tenant: string, project: string, id: string) =>
     request<void>(`${tp(tenant, project)}/nodes/${id}`, { method: "DELETE" }),
+  createEdge: (tenant: string, project: string, input: EdgeInput) =>
+    request<{ id: string }>(`${tp(tenant, project)}/edges`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  /** Close an edge's live version. Like a node retraction, earlier times still see it. */
+  deleteEdge: (tenant: string, project: string, id: string) =>
+    request<void>(`${tp(tenant, project)}/edges/${id}`, { method: "DELETE" }),
   getNodeContent: (tenant: string, project: string, id: string) =>
     request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content`),
   /** Replace a node's markdown body. Bitemporal — the server opens a successor version. */

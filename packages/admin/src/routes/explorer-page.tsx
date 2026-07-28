@@ -4,7 +4,9 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowRight01Icon, Search01Icon } from "@hugeicons/core-free-icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/command-palette"
+import { DeleteEdgeDialog, type PendingEdgeDeletion } from "@/components/delete-edge-dialog"
 import { DeleteNodeDialog } from "@/components/delete-node-dialog"
+import { EdgeEditorDialog, type PendingEdge } from "@/components/edge-editor-dialog"
 import { GraphShell } from "@/components/graph-shell"
 import { NodeDetail } from "@/components/node-detail"
 import { NodeDetailSheet } from "@/components/node-detail-sheet"
@@ -33,6 +35,8 @@ export function ExplorerPage() {
   /** `null` ⇒ the editor is creating; a string ⇒ editing that node; `undefined` ⇒ closed. */
   const [editorFor, setEditorFor] = useState<string | null | undefined>(undefined)
   const [deleteFor, setDeleteFor] = useState<string | undefined>(undefined)
+  const [drawnEdge, setDrawnEdge] = useState<PendingEdge | undefined>(undefined)
+  const [edgeToRemove, setEdgeToRemove] = useState<PendingEdgeDeletion | undefined>(undefined)
 
   const setSearch = (
     patch: Partial<ExplorerFilters> & {
@@ -143,6 +147,8 @@ export function ExplorerPage() {
               onCreateNode={() => setEditorFor(null)}
               onEditNode={(id) => setEditorFor(id)}
               onDeleteNode={(id) => setDeleteFor(id)}
+              onDrawEdge={(edge) => setDrawnEdge(edge)}
+              onDeleteEdge={(edge) => setEdgeToRemove(edge)}
             />
           </div>
           {detailOpen && search.node && (
@@ -199,6 +205,24 @@ export function ExplorerPage() {
         // A retracted node cannot be inspected — clear the selection when it was the one shown.
         onDeleted={(id) => {
           if (search.node === id) setSearch({ node: undefined })
+        }}
+      />
+
+      <EdgeEditorDialog
+        tenant={tenant}
+        project={project}
+        pending={drawnEdge}
+        onOpenChange={(o) => {
+          if (!o) setDrawnEdge(undefined)
+        }}
+      />
+
+      <DeleteEdgeDialog
+        tenant={tenant}
+        project={project}
+        edge={edgeToRemove}
+        onOpenChange={(o) => {
+          if (!o) setEdgeToRemove(undefined)
         }}
       />
 

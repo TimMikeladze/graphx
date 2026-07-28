@@ -17,6 +17,8 @@ import {
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons"
 import { CanvasMenu, type CanvasMenuState } from "@/components/canvas-menu"
+import type { PendingEdgeDeletion } from "@/components/delete-edge-dialog"
+import type { PendingEdge } from "@/components/edge-editor-dialog"
 import { EmptyState } from "@/components/empty-state"
 import { useTheme } from "@/components/theme-provider"
 import { FlowNode } from "@/components/flow-node"
@@ -58,6 +60,9 @@ export interface FlowCanvasProps {
   onCreateNode?: () => void
   onEditNode?: (id: string) => void
   onDeleteNode?: (id: string) => void
+  /** Dragging one card's handle onto another's proposes an edge; absent ⇒ handles are inert. */
+  onDrawEdge?: (edge: PendingEdge) => void
+  onDeleteEdge?: (edge: PendingEdgeDeletion) => void
 }
 
 /** xyflow renderer: DOM cards on a computed layout. Sibling of the Cosmograph `GraphCanvas`. */
@@ -93,6 +98,8 @@ function FlowCanvasInner({
   onCreateNode,
   onEditNode,
   onDeleteNode,
+  onDrawEdge,
+  onDeleteEdge,
 }: FlowCanvasProps) {
   const flow = useReactFlow<GraphFlowNode>()
   // The app's own provider only reports the *chosen* theme; `system` is xyflow's to resolve.
@@ -163,6 +170,28 @@ function FlowCanvasInner({
     [onDeleteNode, onEditNode, onSelect],
   )
 
+  const openEdgeMenu = useCallback(
+    (event: React.MouseEvent, edge: { id: string; source: string; target: string; data?: unknown }) => {
+      if (!onDeleteEdge) return
+      event.preventDefault()
+      const rel = String((edge.data as { rel?: string } | undefined)?.rel ?? "edge")
+      setMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: `Remove ${rel}`,
+            icon: Delete02Icon,
+            tone: "destructive" as const,
+            onSelect: () =>
+              onDeleteEdge({ id: edge.id, source: edge.source, target: edge.target, rel }),
+          },
+        ],
+      })
+    },
+    [onDeleteEdge],
+  )
+
   const openPaneMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
       if (!onCreateNode) return
@@ -196,13 +225,30 @@ function FlowCanvasInner({
         nodeTypes={NODE_TYPES}
         defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         colorMode={theme}
-        // Dragging a card is local-only scratch work; connecting is the editing story, not this one.
-        nodesConnectable={false}
+        // Dragging a card only moves it here; dragging from its handle proposes an edge.
+        nodesConnectable={Boolean(onDrawEdge)}
+        onConnect={(connection) => {
+          if (!onDrawEdge || !connection.source || !connection.target) return
+          // Self-edges are almost always a slip of the pointer, and no seeded rel allows one.
+          if (connection.source === connection.target) return
+          const byId = new Map(slice.nodes.map((n) => [n.id, n]))
+          const src = byId.get(connection.source)
+          const dst = byId.get(connection.target)
+          onDrawEdge({
+            source: connection.source,
+            target: connection.target,
+            sourceType: src?.type,
+            targetType: dst?.type,
+            sourceLabel: src?.label,
+            targetLabel: dst?.label,
+          })
+        }}
         minZoom={0.05}
         maxZoom={2.5}
         onNodeClick={(_, node) => onSelect(node.id)}
         onPaneClick={() => onSelect(undefined)}
         onNodeContextMenu={(e, node) => openNodeMenu(e, node.id)}
+        onEdgeContextMenu={(e, edge) => openEdgeMenu(e, edge)}
         onPaneContextMenu={openPaneMenu}
         proOptions={{ hideAttribution: false }}
       >

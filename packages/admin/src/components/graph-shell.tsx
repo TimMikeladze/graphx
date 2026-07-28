@@ -3,6 +3,8 @@ import { AlertCircleIcon, ChartRelationshipIcon } from "@hugeicons/core-free-ico
 import { EmptyState } from "@/components/empty-state"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { FlowCanvas } from "@/components/flow-canvas"
+import type { PendingEdgeDeletion } from "@/components/delete-edge-dialog"
+import type { PendingEdge } from "@/components/edge-editor-dialog"
 import { CANVAS_BG, GraphCanvas } from "@/components/graph-canvas"
 import { GraphToolbar } from "@/components/graph-toolbar"
 import { DEFAULT_LABEL_SETTINGS, type LabelSettings, legendOf } from "@/lib/graph-style"
@@ -29,6 +31,8 @@ export function GraphShell({
   onCreateNode,
   onEditNode,
   onDeleteNode,
+  onDrawEdge,
+  onDeleteEdge,
 }: {
   slice?: GraphSlice
   isLoading?: boolean
@@ -49,6 +53,9 @@ export function GraphShell({
   onCreateNode?: () => void
   onEditNode?: (id: string) => void
   onDeleteNode?: (id: string) => void
+  /** Edge gestures — flow only; the WebGL canvas has no handles to drag from. */
+  onDrawEdge?: (edge: PendingEdge) => void
+  onDeleteEdge?: (edge: PendingEdgeDeletion) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
@@ -134,6 +141,8 @@ export function GraphShell({
             onCreateNode={onCreateNode}
             onEditNode={onEditNode}
             onDeleteNode={onDeleteNode}
+            onDrawEdge={onDrawEdge}
+            onDeleteEdge={onDeleteEdge}
           />
         )}
       </ErrorBoundary>

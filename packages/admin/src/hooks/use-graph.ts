@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api, type NodeInput, type NodePatch } from "@/lib/api"
+import { api, type EdgeInput, type NodeInput, type NodePatch } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import type { ExplorerFilters } from "@/lib/types"
 
@@ -159,6 +159,38 @@ export function useDeleteNode(tenant?: string, project?: string) {
   return useMutation({
     mutationFn: (id: string) => api.deleteNode(tenant as string, project as string, id),
     onSuccess: () => invalidateGraphViews(qc, tenant, project),
+  })
+}
+
+/**
+ * Draw an edge. Both endpoints' neighbor lists change, so they are dropped alongside the graph
+ * views — the neighbor query is keyed per node and neither endpoint's is still correct.
+ */
+export function useCreateEdge(tenant?: string, project?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: EdgeInput) => api.createEdge(tenant as string, project as string, input),
+    onSuccess: (_result, input) => {
+      invalidateGraphViews(qc, tenant, project)
+      for (const id of [input.src, input.dst]) {
+        qc.invalidateQueries({ queryKey: qk.neighbors(tenant ?? "", project ?? "", id) })
+      }
+    },
+  })
+}
+
+/** Close an edge's live version. Its endpoints survive; only the relation between them ends. */
+export function useDeleteEdge(tenant?: string, project?: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (edge: { id: string; source: string; target: string }) =>
+      api.deleteEdge(tenant as string, project as string, edge.id),
+    onSuccess: (_result, edge) => {
+      invalidateGraphViews(qc, tenant, project)
+      for (const id of [edge.source, edge.target]) {
+        qc.invalidateQueries({ queryKey: qk.neighbors(tenant ?? "", project ?? "", id) })
+      }
+    },
   })
 }
 

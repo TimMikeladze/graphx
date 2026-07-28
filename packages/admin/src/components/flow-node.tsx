@@ -5,8 +5,11 @@ import { FlowLabelSourceContext } from "@/lib/flow-label-source"
 import type { LabelSource } from "@/lib/graph-style"
 import { cn } from "@/lib/utils"
 
-/** Handles are needed for edges to attach, but the dots themselves are visual noise. */
-const HANDLE_STYLE = { width: 6, height: 6, border: "none", background: "currentColor", opacity: 0.35 }
+/**
+ * Handles anchor the edges, and are also what an edge is drawn from — big enough to grab, faint
+ * enough not to read as content.
+ */
+const HANDLE_STYLE = { width: 8, height: 8, border: "none", background: "currentColor", opacity: 0.5 }
 
 function captionOf(data: FlowNodeData, source: LabelSource): string {
   switch (source) {
