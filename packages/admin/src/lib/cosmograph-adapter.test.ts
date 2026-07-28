@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { colorForType, LABEL_COLUMN, legendOf, toCosmograph } from "./cosmograph-adapter"
+import { LABEL_COLUMN, toCosmograph } from "./cosmograph-adapter"
+import { colorForType, legendOf } from "./graph-style"
 import type { GraphSlice } from "./types"
 
 const slice: GraphSlice = {

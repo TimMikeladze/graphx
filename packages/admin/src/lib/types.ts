@@ -106,6 +106,23 @@ export interface RetrievedNode {
   depth: number
 }
 
+/**
+ * Which canvas draws the slice.
+ *  - `cosmograph` — WebGL force canvas; the default, and the only one that survives a big slice.
+ *  - `flow`       — xyflow: DOM cards, deterministic layout, readable at a few hundred nodes.
+ */
+export type Renderer = "cosmograph" | "flow"
+
+/** How the xyflow renderer places its nodes: dagre ranks, or a d3-force settle. */
+export type FlowLayout = "layered" | "organic"
+
+/** The viewport commands the shared toolbar issues, whichever renderer is mounted. */
+export interface RendererHandle {
+  fit: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+}
+
 /** Filters that scope the explorer (also the URL search params). */
 export interface ExplorerFilters {
   type?: string

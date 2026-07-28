@@ -1,24 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { Cosmograph, type CosmographRef } from "@cosmograph/react"
-import { AlertCircleIcon, ChartRelationshipIcon } from "@hugeicons/core-free-icons"
-import { EmptyState } from "@/components/empty-state"
-import { GraphToolbar } from "@/components/graph-toolbar"
-import { ErrorBoundary } from "@/components/error-boundary"
-import {
-  colorForType,
-  type CosmoNode,
-  DEFAULT_LABEL_SETTINGS,
-  LABEL_COLUMN,
-  type LabelSettings,
-  legendOf,
-  toCosmograph,
-} from "@/lib/cosmograph-adapter"
+import { type CosmoNode, LABEL_COLUMN, toCosmograph } from "@/lib/cosmograph-adapter"
+import { colorForType, type LabelSettings } from "@/lib/graph-style"
 import { shortId } from "@/lib/format"
-import { cn } from "@/lib/utils"
-import type { GraphSlice } from "@/lib/types"
+import type { GraphSlice, RendererHandle } from "@/lib/types"
 
 /** Deep neutral canvas — a concrete color (WebGL can't read CSS vars), darker than the card. */
-const CANVAS_BG = "#0a0a0f"
+export const CANVAS_BG = "#0a0a0f"
 
 /**
  * Below this many links, edge labels are drawn for every edge. Above it they are drawn only for
@@ -53,30 +41,31 @@ type Hover = { id: string; type: string; x: number; y: number }
 /** One edge caption: the rel name, placed at the midpoint of its two endpoints (space coords). */
 type EdgeLabel = { text: string; position: [number, number]; weight: number; style: string }
 
-/** Cosmograph canvas fed by the governed graph slice (via the pure adapter). */
+/**
+ * Cosmograph renderer: a WebGL force canvas fed by the governed graph slice (via the pure
+ * adapter). Mounted by `GraphShell`, which owns the chrome around it (toolbar, legend, stats).
+ */
 export function GraphCanvas({
   slice,
-  isLoading,
   selectedId,
   onSelect,
-  activeType,
-  onTypeFilter,
+  labels,
+  paused,
+  onPausedChange,
+  handleRef,
 }: {
-  slice?: GraphSlice
-  isLoading?: boolean
+  slice: GraphSlice
   selectedId?: string
   onSelect: (id: string | undefined) => void
-  /** The active NodeType filter (for legend highlighting). */
-  activeType?: string
-  /** Clicking a legend swatch sets/clears the NodeType filter. */
-  onTypeFilter?: (type: string | undefined) => void
+  labels: LabelSettings
+  /** The simulation's run state, lifted so the shared toolbar can show and toggle it. */
+  paused: boolean
+  onPausedChange: (paused: boolean) => void
+  handleRef: React.RefObject<RendererHandle | null>
 }) {
   // Selection is applied imperatively (selectPoint below), so it must NOT change the points
   // identity — otherwise every click rebuilds the graph and re-fits, fighting the zoom-to-node.
-  const data = useMemo(
-    () => (slice ? toCosmograph(slice) : { nodes: [], links: [] }),
-    [slice],
-  )
+  const data = useMemo(() => toCosmograph(slice), [slice])
   // Resolve Cosmograph's click/hover index → our node without re-rendering.
   const pointsRef = useRef<CosmoNode[]>(data.nodes)
   pointsRef.current = data.nodes
@@ -86,13 +75,10 @@ export function GraphCanvas({
   )
 
   const cosmoRef = useRef<CosmographRef>(undefined)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [paused, setPaused] = useState(false)
   const [hover, setHover] = useState<Hover | null>(null)
-  const [labelSettings, setLabelSettings] = useState<LabelSettings>(DEFAULT_LABEL_SETTINGS)
   const [edgeLabels, setEdgeLabels] = useState<EdgeLabel[]>([])
-  const showNodeLabels = labelSettings.source !== "off"
-  const showEdgeLabels = labelSettings.edges
+  const showNodeLabels = labels.source !== "off"
+  const showEdgeLabels = labels.edges
 
   // Read inside Cosmograph's callbacks, which are invoked at simulation-tick rate: reading refs
   // keeps them correct without re-subscribing (and without a stale closure) on every render.
@@ -203,26 +189,16 @@ export function GraphCanvas({
     return () => clearTimeout(settled)
   }, [rebuildEdgeLabels, selectedId, hover?.id])
 
-  const togglePause = useCallback(() => {
-    setPaused((p) => {
-      const g = cosmoRef.current
-      if (g) {
-        if (p) g.start()
-        else g.pause()
-      }
-      return !p
-    })
-  }, [])
-
   /** Stop the layout where it stands (one last fit + edge-label pass, then freeze). */
   const freeze = useCallback(() => {
     const g = cosmoRef.current
     if (!g || pausedRef.current) return
     if (autoFitRef.current && selectedRef.current === undefined) g.fitView(400)
     g.pause()
-    setPaused(true)
+    pausedRef.current = true
+    onPausedChange(true)
     rebuildEdgeLabels()
-  }, [rebuildEdgeLabels])
+  }, [onPausedChange, rebuildEdgeLabels])
 
   /**
    * Arm the freeze budget. Anchored to `onGraphRebuilt`, NOT to the data arriving: Cosmograph
@@ -237,182 +213,129 @@ export function GraphCanvas({
   }, [freeze])
   useEffect(() => () => clearTimeout(settleTimer.current), [])
 
-  const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current
-    if (!el) return
-    if (document.fullscreenElement) void document.exitFullscreen()
-    else void el.requestFullscreen?.()
-  }, [])
+  // The shared toolbar drives the viewport through this handle; an explicit fit or zoom is the
+  // user taking over the view, so it also disarms auto-fitting.
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      fit: () => {
+        releaseAutoFit()
+        cosmoRef.current?.fitView(400)
+      },
+      zoomIn: () => {
+        releaseAutoFit()
+        cosmoRef.current?.setZoomLevel((cosmoRef.current?.getZoomLevel() ?? 1) * 1.4, 300)
+      },
+      zoomOut: () => {
+        releaseAutoFit()
+        cosmoRef.current?.setZoomLevel((cosmoRef.current?.getZoomLevel() ?? 1) / 1.4, 300)
+      },
+    }),
+    [releaseAutoFit],
+  )
 
-  if (isLoading) {
-    return (
-      <div className="dark canvas-atmos h-full w-full text-foreground">
-        <EmptyState
-          icon={ChartRelationshipIcon}
-          title="Loading graph…"
-          className="animate-pulse"
-        />
-      </div>
-    )
-  }
-  if (!slice || slice.nodes.length === 0) {
-    return (
-      <div className="dark canvas-atmos h-full w-full text-foreground">
-        <EmptyState
-          icon={ChartRelationshipIcon}
-          title="No graph for these filters"
-          hint="Broaden the NodeType or search filters to see connected nodes."
-        />
-      </div>
-    )
-  }
-
-  const legend = legendOf(slice)
+  // Toolbar pause/resume: the prop is the source of truth, the simulation follows it.
+  useEffect(() => {
+    const g = cosmoRef.current
+    if (!g) return
+    if (paused) g.pause()
+    else g.start()
+  }, [paused])
 
   return (
     <div
-      ref={containerRef}
-      className="dark relative h-full w-full text-foreground"
+      className="relative h-full w-full"
       style={{ background: CANVAS_BG }}
       // Any zoom or drag on the canvas hands the view to the user; capture so it registers even
       // though the WebGL canvas handles the event itself.
       onWheelCapture={releaseAutoFit}
       onPointerDownCapture={releaseAutoFit}
     >
-      <ErrorBoundary
-        fallback={
-          <EmptyState
-            icon={AlertCircleIcon}
-            tone="destructive"
-            title="Graph canvas unavailable"
-            hint="This view needs a WebGL-capable browser/GPU."
-          />
+      <Cosmograph
+        points={data.nodes}
+        pointIdBy="id"
+        pointIndexBy="index"
+        pointColorBy="color"
+        pointColorByFn={(value: unknown) => String(value)}
+        pointSizeStrategy="degree"
+        pointSizeRange={[11, 34]}
+        pointDefaultSize={13}
+        simulationGravity={0.4}
+        simulationCenter={0.5}
+        // Cool down fast and damp hard (defaults: 5000 decay, 0.85 friction). A slice this size
+        // is readable long before a leisurely simulation would settle, and the slow default
+        // reads as nodes jittering in place.
+        simulationDecay={1000}
+        simulationFriction={0.72}
+        links={data.links}
+        linkWidthBy="weight"
+        linkWidthRange={[1, 3]}
+        linkSourceBy="source"
+        linkSourceIndexBy="sourceIndex"
+        linkTargetBy="target"
+        linkTargetIndexBy="targetIndex"
+        backgroundColor={CANVAS_BG}
+        hoveredPointCursor="pointer"
+        selectPointOnClick={false}
+        fitViewOnInit
+        fitViewPadding={0.3}
+        // Switching between materialized caption columns is a label-only update; pointing at
+        // a column that does not exist would blank every label, so `off` keeps the last real
+        // column and relies on `showLabels` instead.
+        pointLabelBy={labels.source === "off" ? LABEL_COLUMN.name : LABEL_COLUMN[labels.source]}
+        // Columns Cosmograph does not consume itself are dropped from the point data unless
+        // they are declared here — without this, pointing `pointLabelBy` at one of the other
+        // caption columns finds nothing and the captions never change.
+        pointIncludeColumns={CAPTION_COLUMNS}
+        // `showLabels` is the master switch for every non-hovered label, custom ones included,
+        // so it is on whenever either kind is wanted; the rest scope it to point labels.
+        showLabels={showNodeLabels || showEdgeLabels}
+        showDynamicLabels={showNodeLabels}
+        showTopLabels={showNodeLabels}
+        showTopLabelsLimit={labels.limit}
+        showDynamicLabelsLimit={labels.limit}
+        showHoveredPointLabel={showNodeLabels}
+        pointLabelFontSize={12}
+        customLabels={showEdgeLabels ? edgeLabels : undefined}
+        onMount={(g) => {
+          cosmoRef.current = g
+        }}
+        onGraphRebuilt={() => {
+          // A rebuilt graph starts its own simulation, so clear a freeze left over from the
+          // previous slice — otherwise the toolbar says paused and the new layout never fits.
+          pausedRef.current = false
+          onPausedChange(false)
+          cosmoRef.current?.fitView(300)
+          armSettle()
+        }}
+        // Frame the layout as it blooms open (instant fit each tick), then one smooth fit when
+        // it settles. Skipped once the user has taken over the view (see `autoFitRef`) or while
+        // a node is selected, so neither a manual zoom nor the selection's zoom-to-node is
+        // fought. This is also what makes a 5-node slice land centered rather than zoomed into
+        // a single point.
+        onSimulationTick={() => {
+          if (autoFitRef.current && selectedRef.current === undefined && !pausedRef.current) {
+            cosmoRef.current?.fitView(0)
+          }
+          // Edge captions follow the moving points, but at a fraction of the tick rate.
+          if (showEdgeLabels && Date.now() - lastEdgeLabelAt.current > EDGE_LABEL_THROTTLE_MS) {
+            rebuildEdgeLabels()
+          }
+        }}
+        // Cosmograph reached its own end before the budget did — freeze there instead.
+        onSimulationEnd={freeze}
+        onClick={(index) =>
+          onSelect(index === undefined ? undefined : pointsRef.current[index]?.id)
         }
-      >
-        <Cosmograph
-          points={data.nodes}
-          pointIdBy="id"
-          pointIndexBy="index"
-          pointColorBy="color"
-          pointColorByFn={(value: unknown) => String(value)}
-          pointSizeStrategy="degree"
-          pointSizeRange={[11, 34]}
-          pointDefaultSize={13}
-          simulationGravity={0.4}
-          simulationCenter={0.5}
-          // Cool down fast and damp hard (defaults: 5000 decay, 0.85 friction). A slice this size
-          // is readable long before a leisurely simulation would settle, and the slow default
-          // reads as nodes jittering in place.
-          simulationDecay={1000}
-          simulationFriction={0.72}
-          links={data.links}
-          linkWidthBy="weight"
-          linkWidthRange={[1, 3]}
-          linkSourceBy="source"
-          linkSourceIndexBy="sourceIndex"
-          linkTargetBy="target"
-          linkTargetIndexBy="targetIndex"
-          backgroundColor={CANVAS_BG}
-          hoveredPointCursor="pointer"
-          selectPointOnClick={false}
-          fitViewOnInit
-          fitViewPadding={0.3}
-          // Switching between materialized caption columns is a label-only update; pointing at
-          // a column that does not exist would blank every label, so `off` keeps the last real
-          // column and relies on `showLabels` instead.
-          pointLabelBy={
-            labelSettings.source === "off"
-              ? LABEL_COLUMN.name
-              : LABEL_COLUMN[labelSettings.source]
-          }
-          // Columns Cosmograph does not consume itself are dropped from the point data unless
-          // they are declared here — without this, pointing `pointLabelBy` at one of the other
-          // caption columns finds nothing and the captions never change.
-          pointIncludeColumns={CAPTION_COLUMNS}
-          // `showLabels` is the master switch for every non-hovered label, custom ones included,
-          // so it is on whenever either kind is wanted; the rest scope it to point labels.
-          showLabels={showNodeLabels || showEdgeLabels}
-          showDynamicLabels={showNodeLabels}
-          showTopLabels={showNodeLabels}
-          showTopLabelsLimit={labelSettings.limit}
-          showDynamicLabelsLimit={labelSettings.limit}
-          showHoveredPointLabel={showNodeLabels}
-          pointLabelFontSize={12}
-          customLabels={showEdgeLabels ? edgeLabels : undefined}
-          onMount={(g) => {
-            cosmoRef.current = g
-          }}
-          onGraphRebuilt={() => {
-            // A rebuilt graph starts its own simulation, so clear a freeze left over from the
-            // previous slice — otherwise the toolbar says paused and the new layout never fits.
-            pausedRef.current = false
-            setPaused(false)
-            cosmoRef.current?.fitView(300)
-            armSettle()
-          }}
-          // Frame the layout as it blooms open (instant fit each tick), then one smooth fit when
-          // it settles. Skipped once the user has taken over the view (see `autoFitRef`) or while
-          // a node is selected, so neither a manual zoom nor the selection's zoom-to-node is
-          // fought. This is also what makes a 5-node slice land centered rather than zoomed into
-          // a single point.
-          onSimulationTick={() => {
-            if (autoFitRef.current && selectedRef.current === undefined && !pausedRef.current) {
-              cosmoRef.current?.fitView(0)
-            }
-            // Edge captions follow the moving points, but at a fraction of the tick rate.
-            if (showEdgeLabels && Date.now() - lastEdgeLabelAt.current > EDGE_LABEL_THROTTLE_MS) {
-              rebuildEdgeLabels()
-            }
-          }}
-          // Cosmograph reached its own end before the budget did — freeze there instead.
-          onSimulationEnd={freeze}
-          onClick={(index) =>
-            onSelect(index === undefined ? undefined : pointsRef.current[index]?.id)
-          }
-          onPointMouseOver={(index, pointPosition) => {
-            const n = pointsRef.current[index]
-            if (n && pointPosition)
-              setHover({ id: n.id, type: n.type, x: pointPosition[0], y: pointPosition[1] })
-          }}
-          onPointMouseOut={() => setHover(null)}
-          style={{ width: "100%", height: "100%" }}
-        />
-      </ErrorBoundary>
-
-      {/* edge falloff that frames the composition (never covers the centered nodes) */}
-      <div className="canvas-vignette pointer-events-none absolute inset-0" />
-
-      {/* stats */}
-      <div className="hud pointer-events-none absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1.5 text-xs tabular-nums">
-        <span className="font-semibold text-foreground">{slice.nodes.length}</span>
-        <span className="text-muted-foreground">nodes</span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="font-semibold text-foreground">{slice.links.length}</span>
-        <span className="text-muted-foreground">edges</span>
-      </div>
-
-      <GraphToolbar
-        paused={paused}
-        labels={labelSettings}
-        onLabelsChange={setLabelSettings}
-        onFit={() => {
-          // An explicit fit is still the user driving — do not resume auto-fitting after it.
-          releaseAutoFit()
-          cosmoRef.current?.fitView(400)
+        onPointMouseOver={(index, pointPosition) => {
+          const n = pointsRef.current[index]
+          if (n && pointPosition)
+            setHover({ id: n.id, type: n.type, x: pointPosition[0], y: pointPosition[1] })
         }}
-        onZoomIn={() => {
-          releaseAutoFit()
-          cosmoRef.current?.setZoomLevel((cosmoRef.current?.getZoomLevel() ?? 1) * 1.4, 300)
-        }}
-        onZoomOut={() => {
-          releaseAutoFit()
-          cosmoRef.current?.setZoomLevel((cosmoRef.current?.getZoomLevel() ?? 1) / 1.4, 300)
-        }}
-        onTogglePause={togglePause}
-        onToggleFullscreen={toggleFullscreen}
+        onPointMouseOut={() => setHover(null)}
+        style={{ width: "100%", height: "100%" }}
       />
 
-      {/* hover tooltip */}
       {hover && (
         <div
           className="hud pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-[calc(100%+12px)] px-2.5 py-1.5 text-xs"
@@ -429,36 +352,6 @@ export function GraphCanvas({
           <div className="mt-0.5 font-mono text-[0.65rem] text-muted-foreground">
             {shortId(hover.id, 8, 6)}
           </div>
-        </div>
-      )}
-
-      {/* legend / quick type filter */}
-      {legend.length > 0 && (
-        <div className="hud absolute bottom-3 left-3 flex max-w-[60%] flex-wrap items-center gap-0.5 p-1.5 text-xs">
-          {legend.map((l) => {
-            const active = activeType === l.type
-            return (
-              <button
-                key={l.type}
-                type="button"
-                disabled={!onTypeFilter}
-                onClick={() => onTypeFilter?.(active ? undefined : l.type)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors",
-                  onTypeFilter && "hover:bg-accent",
-                  active && "bg-accent font-medium",
-                  activeType && !active && "opacity-40",
-                )}
-                title={onTypeFilter ? `Filter to ${l.type}` : l.type}
-              >
-                <span
-                  className="inline-block size-2.5 rounded-full"
-                  style={{ backgroundColor: l.color }}
-                />
-                {l.type}
-              </button>
-            )
-          })}
         </div>
       )}
     </div>

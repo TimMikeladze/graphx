@@ -1,4 +1,5 @@
 import { shortId } from "./format"
+import { colorForType, KIND_PALETTE, type LabelSource } from "./graph-style"
 import type { GraphSlice } from "./types"
 
 /** A Cosmograph point (node) with a precomputed color + selection flag. */
@@ -41,28 +42,6 @@ export interface CosmoLink {
 export interface CosmoData {
   nodes: CosmoNode[]
   links: CosmoLink[]
-}
-
-/** Categorical palette for color-by-type (kept small + legible on a dark canvas). */
-export const KIND_PALETTE = [
-  "#60a5fa", // blue
-  "#f472b6", // pink
-  "#34d399", // green
-  "#fbbf24", // amber
-  "#a78bfa", // violet
-  "#22d3ee", // cyan
-  "#fb7185", // rose
-  "#a3e635", // lime
-] as const
-
-/**
- * Deterministic type→color: a stable string hash into {@link KIND_PALETTE}, so the same type
- * always gets the same color across renders and slices (the legend stays consistent).
- */
-export function colorForType(type: string, palette: readonly string[] = KIND_PALETTE): string {
-  let h = 0
-  for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) | 0
-  return palette[Math.abs(h) % palette.length]
 }
 
 /** Options for {@link toCosmograph}. */
@@ -121,30 +100,10 @@ export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): Co
   return { nodes, links }
 }
 
-/** What a node's caption shows. `off` hides node captions entirely. */
-export type LabelSource = "off" | "name" | "type" | "id" | "both"
-
 /** The {@link CosmoNode} column each source reads, for Cosmograph's `pointLabelBy`. */
 export const LABEL_COLUMN: Record<Exclude<LabelSource, "off">, string> = {
   name: "label",
   type: "type",
   id: "labelId",
   both: "labelBoth",
-}
-
-/** The canvas label settings the toolbar edits. */
-export interface LabelSettings {
-  source: LabelSource
-  /** Show the rel name on edges (all of them when the slice is small, else the focused node's). */
-  edges: boolean
-  /** How many captions to show at once — the knob for how crowded the canvas reads. */
-  limit: number
-}
-
-export const DEFAULT_LABEL_SETTINGS: LabelSettings = { source: "name", edges: false, limit: 40 }
-
-/** Distinct types present in a slice, for the canvas legend. */
-export function legendOf(slice: GraphSlice, palette: readonly string[] = KIND_PALETTE): Array<{ type: string; color: string }> {
-  const types = [...new Set(slice.nodes.map((n) => n.type))].sort()
-  return types.map((type) => ({ type, color: colorForType(type, palette) }))
 }

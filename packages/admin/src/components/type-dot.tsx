@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge"
-import { colorForType } from "@/lib/cosmograph-adapter"
+import { colorForType } from "@/lib/graph-style"
 import { cn } from "@/lib/utils"
 
 /**

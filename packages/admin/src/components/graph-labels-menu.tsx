@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { LabelSettings, LabelSource } from "@/lib/cosmograph-adapter"
+import type { LabelSettings, LabelSource } from "@/lib/graph-style"
 
 const SOURCES: Array<{ value: LabelSource; label: string; hint: string }> = [
   { value: "name", label: "Name", hint: "the node's name or title" },
@@ -34,9 +34,12 @@ const LIMITS = [20, 40, 80, 150, 300]
 export function GraphLabelsMenu({
   settings,
   onChange,
+  showLimit = true,
 }: {
   settings: LabelSettings
   onChange: (next: LabelSettings) => void
+  /** The caption budget only exists on the force canvas — flow cards always show their caption. */
+  showLimit?: boolean
 }) {
   return (
     <Popover>
@@ -80,6 +83,7 @@ export function GraphLabelsMenu({
             </p>
           </div>
 
+          {showLimit && (
           <div className="grid gap-1.5">
             <Label htmlFor="label-limit">Labels shown</Label>
             <Select
@@ -101,6 +105,7 @@ export function GraphLabelsMenu({
               Highest-degree nodes first; more labels means a denser canvas.
             </p>
           </div>
+          )}
 
           <div className="grid gap-1.5">
             <Label htmlFor="label-edges">Edge labels</Label>
@@ -117,7 +122,7 @@ export function GraphLabelsMenu({
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              Every edge on a small graph; on a large one, the selected node's edges.
+              Every edge on a small graph; on a dense one they are dropped rather than smeared.
             </p>
           </div>
         </div>

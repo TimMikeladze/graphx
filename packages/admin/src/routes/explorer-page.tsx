@@ -4,7 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react"
 import { ArrowRight01Icon, Search01Icon } from "@hugeicons/core-free-icons"
 import { AppSidebar } from "@/components/app-sidebar"
 import { CommandPalette } from "@/components/command-palette"
-import { GraphCanvas } from "@/components/graph-canvas"
+import { GraphShell } from "@/components/graph-shell"
 import { NodeDetail } from "@/components/node-detail"
 import { NodeDetailSheet } from "@/components/node-detail-sheet"
 import { ResultsBanner } from "@/components/results-banner"
@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useGraphSlice, useProjects, useTenants } from "@/hooks/use-graph"
-import { filtersOf } from "@/lib/explorer-search"
-import type { ExplorerFilters } from "@/lib/types"
+import { filtersOf, flowLayoutOf, rendererOf } from "@/lib/explorer-search"
+import type { ExplorerFilters, FlowLayout, Renderer } from "@/lib/types"
 
 /** Typed access to the explorer route's params + search (registered in router.tsx). */
 export const explorerRoute = getRouteApi("/t/$tenant/p/$project")
@@ -28,8 +28,13 @@ export function ExplorerPage() {
   const isMobile = useIsMobile()
   const [paletteOpen, setPaletteOpen] = useState(false)
 
-  const setSearch = (patch: Partial<ExplorerFilters> & { node?: string }) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch }) })
+  const setSearch = (
+    patch: Partial<ExplorerFilters> & {
+      node?: string
+      renderer?: Renderer
+      flowLayout?: FlowLayout
+    },
+  ) => navigate({ search: (prev) => ({ ...prev, ...patch }) })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,13 +114,20 @@ export function ExplorerPage() {
         <div className="flex min-h-0 flex-1">
           {/* detail docks as a fixed pane beside the canvas so the graph never remounts */}
           <div className="min-w-0 flex-1">
-            <GraphCanvas
+            <GraphShell
               slice={slice.data}
               isLoading={slice.isLoading}
               selectedId={search.node}
               onSelect={(id) => setSearch({ node: id })}
               activeType={filters.type}
               onTypeFilter={(type) => setSearch({ type })}
+              renderer={rendererOf(search)}
+              // Defaults stay out of the URL, so a shared link only carries what was chosen.
+              onRendererChange={(r) => setSearch({ renderer: r === "flow" ? "flow" : undefined })}
+              flowLayout={flowLayoutOf(search)}
+              onFlowLayoutChange={(l) =>
+                setSearch({ flowLayout: l === "organic" ? "organic" : undefined })
+              }
             />
           </div>
           {detailOpen && search.node && (

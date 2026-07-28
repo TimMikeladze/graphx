@@ -1,4 +1,4 @@
-import type { ExplorerFilters, SearchMode } from "./types"
+import type { ExplorerFilters, FlowLayout, Renderer, SearchMode } from "./types"
 
 const MODES: SearchMode[] = ["text", "semantic", "hybrid"]
 
@@ -18,6 +18,10 @@ export interface ExplorerSearch extends ExplorerFilters {
   node?: string
   /** Node ids the user has lazily expanded into the canvas. */
   expand: string[]
+  /** Which canvas draws the slice. Absent ⇒ `cosmograph`, so the default URL stays clean. */
+  renderer?: Renderer
+  /** How the flow renderer places nodes. Absent ⇒ `layered`. */
+  flowLayout?: FlowLayout
 }
 
 /** Coerce an unknown router search object into a validated {@link ExplorerSearch}. */
@@ -38,7 +42,19 @@ export function parseExplorerSearch(raw: Record<string, unknown>): ExplorerSearc
     mode: parseMode(raw.mode),
     node: str(raw.node),
     expand: parseExpand(raw.expand),
+    renderer: raw.renderer === "flow" ? "flow" : undefined,
+    flowLayout: raw.flowLayout === "organic" ? "organic" : undefined,
   }
+}
+
+/** The renderer the URL asks for; the force canvas is the default (and the only one that scales). */
+export function rendererOf(search: ExplorerSearch): Renderer {
+  return search.renderer ?? "cosmograph"
+}
+
+/** The flow layout the URL asks for; dagre ranks are the default (the readable structured view). */
+export function flowLayoutOf(search: ExplorerSearch): FlowLayout {
+  return search.flowLayout ?? "layered"
 }
 
 /** `expand` is carried as a comma-joined id list; parse to a de-duped array. */
