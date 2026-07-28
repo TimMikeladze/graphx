@@ -115,7 +115,10 @@ const backend: Backend = {
 ```
 
 `createMcpApp()` — the mounted case — is the local adapter with the caller's already-built app
-passed in instead of a freshly bootstrapped one.
+passed in instead of a freshly bootstrapped one. Its `backend` may be a function of the request
+`Context`, resolved per request: a mounted server serves many callers, and a `Backend` fixed at
+mount time would serve every one of them as the same principal. The route authenticates nothing
+itself — that belongs to the middleware the host mounts in front of it.
 
 ## Tool generation
 

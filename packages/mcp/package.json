@@ -1,0 +1,48 @@
+{
+	"name": "@graphx/mcp",
+	"version": "0.1.0",
+	"description": "graphx MCP server — every serving route as an MCP tool",
+	"license": "MIT",
+	"bin": {
+		"graphx-mcp": "./dist/bin.js"
+	},
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@hono/mcp": "^0.3.1",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@graphx/core": "workspace:*",
+		"@hono/zod-openapi": "^1.5.1",
+		"@types/node": "^25.9.1",
+		"hono": "^4.12.23"
+	},
+	"peerDependencies": {
+		"@graphx/core": "workspace:*",
+		"hono": "^4.12.23",
+		"typescript": ">=4.5.0"
+	},
+	"peerDependenciesMeta": {
+		"typescript": {
+			"optional": true
+		}
+	}
+}

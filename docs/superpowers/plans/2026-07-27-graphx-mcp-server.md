@@ -1709,23 +1709,37 @@ Expected: FAIL — `createMcpApp` is not exported.
 
 Append to `packages/mcp/src/server.ts`:
 
+> **Corrected after the whole-branch review.** This step originally shared one `McpServer` and
+> one `StreamableHTTPTransport` across every request, on the claim that this "is what Streamable
+> HTTP's session handling expects — the transport, not the route, tracks sessions." That is
+> wrong. With no `sessionIdGenerator` the transport runs stateless and keys its request→stream
+> mapping on the bare JSON-RPC id, which is a per-client counter starting at 0: two clients
+> collide on their first message, one is answered on the other's stream and the other is never
+> answered at all (reproduced, and now covered by a test). Both objects are built per request
+> instead — which also lets `backend` be resolved per request, so a mounted server can carry the
+> caller's identity rather than one baked in at mount time. The shipped code is below.
+
 ```ts
 import { StreamableHTTPTransport } from '@hono/mcp';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
+
+/** Options for {@link createMcpApp}. */
+export interface McpAppOptions extends Omit<GraphxMcpOptions, 'backend'> {
+	backend: Backend | ((c: Context) => Backend | Promise<Backend>);
+}
 
 /**
- * The server as a mountable Hono app: `app.route('/mcp', createMcpApp(...))`. One transport
- * instance is shared across requests, which is what Streamable HTTP's session handling
- * expects — the transport, not the route, tracks sessions.
+ * The server as a mountable Hono app: `app.route('/mcp', createMcpApp(...))`. Built per
+ * request; neither is closed, because `handleRequest` returns while the SSE stream carrying
+ * the response is still open. The route authenticates nothing of its own.
  */
-export function createMcpApp(opts: GraphxMcpOptions): Hono {
-	const server = createGraphxMcp(opts);
-	const transport = new StreamableHTTPTransport();
-	let connected: Promise<void> | undefined;
+export function createMcpApp(opts: McpAppOptions): Hono {
 	const app = new Hono();
 	app.all('/', async (c) => {
-		connected ??= server.connect(transport);
-		await connected;
+		const backend = typeof opts.backend === 'function' ? await opts.backend(c) : opts.backend;
+		const server = createGraphxMcp({ ...opts, backend });
+		const transport = new StreamableHTTPTransport();
+		await server.connect(transport);
 		return (await transport.handleRequest(c)) ?? c.body(null, 202);
 	});
 	return app;

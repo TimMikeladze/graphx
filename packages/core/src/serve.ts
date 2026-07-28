@@ -26,6 +26,7 @@ import {
 	createTenant,
 	createUser,
 	initControl,
+	listProjects,
 } from './control-plane.ts';
 import { getDb } from './db.ts';
 import type { NodeType, Rel } from './define-graph-schema.ts';
@@ -683,7 +684,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	if (cfg.cors) base.use('*', cors(cfg.cors === true ? { origin: '*' } : cfg.cors));
 	// Authn for the whole tenant group. Registered off the chain: `Hono.use` returns a plain
 	// `Hono`, which would drop `.openapi()` from the chain's type for every route after it.
-	base.use('/t/:tenant/p/:project/*', authn(cfg));
+	base.use('/t/:tenant/*', authn(cfg));
 	// Interactive API reference (Scalar, loaded from CDN) at /docs — points at /openapi.json.
 	// On by default (unauthenticated, tenant-agnostic like /openapi.json); `docs: false` disables it.
 	// Left off the contract itself (it serves HTML for humans, not an API surface) and off the
@@ -726,8 +727,49 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		)
 		.openapi(
 			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/projects',
+				operationId: 'list_projects',
+				tags: ['read'],
+				summary: "List the caller's projects in this tenant",
+				security: SECURITY,
+				request: { params: z.object({ tenant: z.string() }) },
+				responses: {
+					200: json(
+						'Projects',
+						z.object({
+							projects: z.array(z.object({ id: z.string(), name: z.string() })),
+						}),
+					),
+					...READ_ERRORS,
+				},
+			}),
+			async (c) => {
+				const principal = c.get('principal');
+				// Same confused-deputy guard requireGraph applies: a route tenant that isn't the
+				// principal's is 404, so cross-tenant existence never leaks.
+				if (c.req.param('tenant') !== principal.tenantId) {
+					throw new AuthzError(404, 'tenant not found');
+				}
+				// Operators have no memberships row (see authorize's operator bypass).
+				if (!principal.operator) {
+					const mem = await cfg.control.execute({
+						sql: 'SELECT 1 FROM memberships WHERE user_id = ? AND tenant_id = ?',
+						args: [principal.userId, principal.tenantId],
+					});
+					if (!mem.rows[0]) throw new AuthzError(403, 'no membership in tenant');
+				}
+				const rows = await listProjects(cfg.control, principal.tenantId);
+				// §2.9: strip db_namespace — end users never receive a DB-level identifier.
+				return c.json({ projects: rows.map(({ id, name }) => ({ id, name })) }, 200);
+			},
+		)
+		.openapi(
+			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/nodes',
+				operationId: 'create_node',
+				tags: ['write'],
 				summary: 'Create a node',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -748,6 +790,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/edges',
+				operationId: 'create_edge',
+				tags: ['write'],
 				summary: 'Create an edge',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -766,6 +810,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				operationId: 'get_node',
+				tags: ['read'],
 				summary: 'Get a node by id',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -784,6 +830,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'patch',
 				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				operationId: 'update_node',
+				tags: ['write'],
 				summary: 'Update a node',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -806,6 +854,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'delete',
 				path: '/t/{tenant}/p/{project}/edges/{id}',
+				operationId: 'delete_edge',
+				tags: ['write'],
 				summary: 'Delete an edge',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -823,6 +873,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'delete',
 				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				operationId: 'delete_node',
+				tags: ['write'],
 				summary: 'Retract a node',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -838,6 +890,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes/{id}/neighbors',
+				operationId: 'neighbors',
+				tags: ['read'],
 				summary: 'Neighbors (unpaginated)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -860,6 +914,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes/{id}/neighborsPage',
+				operationId: 'neighbors_page',
+				tags: ['read'],
 				summary: 'Neighbors (keyset paginated)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -882,6 +938,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes',
+				operationId: 'list_nodes',
+				tags: ['read'],
 				summary: 'List nodes (keyset paginated)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -900,6 +958,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/graph',
+				operationId: 'graph_slice',
+				tags: ['read'],
 				summary: 'Canvas slice (nodes + links)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -918,6 +978,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes/{id}/content',
+				operationId: 'get_node_content',
+				tags: ['read'],
 				summary: 'Live content payload (body + provenance)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -934,6 +996,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/nodes/{id}/history',
+				operationId: 'node_history',
+				tags: ['read'],
 				summary: 'Version trail for a node',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -952,6 +1016,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/retrieve',
+				operationId: 'retrieve',
+				tags: ['read'],
 				summary: 'GraphRAG vector retrieve',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -978,6 +1044,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/journey',
+				operationId: 'journey',
+				tags: ['read'],
 				summary: 'Time-respecting traversal',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1005,6 +1073,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/changes',
+				operationId: 'change_feed',
+				tags: ['read'],
 				summary: 'Change feed / CDC tail',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1104,6 +1174,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/diff',
+				operationId: 'diff',
+				tags: ['read'],
 				summary: 'Snapshot delta over (t1, t2]',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1121,6 +1193,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/hybrid',
+				operationId: 'hybrid_search',
+				tags: ['read'],
 				summary: 'Hybrid retrieve (ANN + FTS + RRF + MMR)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1149,6 +1223,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/bulk',
+				operationId: 'bulk_load',
+				tags: ['write'],
 				summary: 'Bulk-load nodes',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -1175,6 +1251,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/match',
+				operationId: 'match_pattern',
+				tags: ['read'],
 				summary: 'Multi-hop pattern query',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1231,6 +1309,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/algorithms/shortest-path',
+				operationId: 'shortest_path',
+				tags: ['read'],
 				summary: 'Shortest path',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
@@ -1249,6 +1329,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/algorithms/pagerank',
+				operationId: 'pagerank',
+				tags: ['write'],
 				summary: 'PageRank (persists)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -1267,6 +1349,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/algorithms/community',
+				operationId: 'community',
+				tags: ['write'],
 				summary: 'Community detection (persists)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -1285,6 +1369,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'post',
 				path: '/t/{tenant}/p/{project}/algorithms/centrality',
+				operationId: 'centrality',
+				tags: ['write'],
 				summary: 'Degree centrality (persists)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
@@ -1306,6 +1392,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			createRoute({
 				method: 'get',
 				path: '/t/{tenant}/p/{project}/algorithms/top',
+				operationId: 'top_nodes',
+				tags: ['read'],
 				summary: 'Top nodes by a persisted metric',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],

@@ -111,12 +111,10 @@ async function postNode(
 
 test('P11: addNode over HTTP -> 201 with parsed data, then getNode round-trips', async () => {
 	const s = await setup();
-	const created = await postNode(
-		s,
-		{ user: s.editor, tenant: s.tenantA },
-		s.pA,
-		{ type: 'device', data: { type: 'router' } },
-	);
+	const created = await postNode(s, { user: s.editor, tenant: s.tenantA }, s.pA, {
+		type: 'device',
+		data: { type: 'router' },
+	});
 	expect(created.status).toBe(201);
 	expect(created.json.type).toBe('device');
 	expect(created.json.data).toEqual({ type: 'router', crit: 1 }); // default applied
@@ -132,12 +130,10 @@ test('P11: addNode over HTTP -> 201 with parsed data, then getNode round-trips',
 
 test('P11: viewer cannot write -> 403', async () => {
 	const s = await setup();
-	const res = await postNode(
-		s,
-		{ user: s.viewer, tenant: s.tenantA },
-		s.pA,
-		{ type: 'person', data: { name: 'ada' } },
-	);
+	const res = await postNode(s, { user: s.viewer, tenant: s.tenantA }, s.pA, {
+		type: 'person',
+		data: { name: 'ada' },
+	});
 	expect(res.status).toBe(403);
 	cleanup(s);
 });
@@ -166,12 +162,10 @@ test('P11 HEADLINE: cross-tenant access is rejected (404, no existence leak)', a
 
 test('P11: physical isolation — a node created in tenant B is invisible under tenant A', async () => {
 	const s = await setup();
-	const inB = await postNode(
-		s,
-		{ user: s.editorB, tenant: s.tenantB },
-		s.pB,
-		{ type: 'person', data: { name: 'bob' } },
-	);
+	const inB = await postNode(s, { user: s.editorB, tenant: s.tenantB }, s.pB, {
+		type: 'person',
+		data: { name: 'bob' },
+	});
 	expect(inB.status).toBe(201);
 	// same id, queried under A's project DB -> different physical DB -> 404
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${inB.json.id}`, {
@@ -195,12 +189,10 @@ test('P11: bad data -> 400 (per-type ZodError mapped)', async () => {
 
 test('P11: unknown type -> 400', async () => {
 	const s = await setup();
-	const res = await postNode(
-		s,
-		{ user: s.editor, tenant: s.tenantA },
-		s.pA,
-		{ type: 'ghost', data: {} },
-	);
+	const res = await postNode(s, { user: s.editor, tenant: s.tenantA }, s.pA, {
+		type: 'ghost',
+		data: {},
+	});
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
@@ -341,12 +333,10 @@ test('P11 HEADLINE: hc<AppType> client round-trips over real HTTP (Bun.serve)', 
 
 test('P11: viewer (read role) can GET a node -> 200 (read-side authz)', async () => {
 	const s = await setup();
-	const created = await postNode(
-		s,
-		{ user: s.editor, tenant: s.tenantA },
-		s.pA,
-		{ type: 'person', data: { name: 'ada' } },
-	);
+	const created = await postNode(s, { user: s.editor, tenant: s.tenantA }, s.pA, {
+		type: 'person',
+		data: { name: 'ada' },
+	});
 	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${created.json.id}`, {
 		headers: hdr(s.viewer, s.tenantA),
 	});
@@ -440,5 +430,36 @@ test('P11: retrieve without an embed fn -> 501', async () => {
 		headers: hdr(s.editor, s.tenantA),
 	});
 	expect(res.status).toBe(501);
+	cleanup(s);
+});
+
+test('P11: list_projects returns the caller tenant projects, without db namespaces', async () => {
+	const s = await setup();
+
+	const res = await s.app.request(`/t/${s.tenantA}/projects`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(res.status).toBe(200);
+	const body = (await res.json()) as { projects: Array<Record<string, unknown>> };
+	expect(body.projects.map((p) => p.id)).toContain(s.pA);
+	// Tenant isolation: tenant B's project must not appear.
+	expect(body.projects.map((p) => p.id)).not.toContain(s.pB);
+	// §2.9 — the sqld namespace is internal routing detail and never crosses the wire.
+	for (const p of body.projects) expect(p.dbNamespace).toBeUndefined();
+
+	// Confused-deputy guard: a route tenant that isn't the principal's is 404, not 403,
+	// so cross-tenant existence doesn't leak.
+	const cross = await s.app.request(`/t/${s.tenantB}/projects`, {
+		headers: hdr(s.editor, s.tenantA),
+	});
+	expect(cross.status).toBe(404);
+
+	// A principal with no membership row in the tenant is 403.
+	const stranger = await createUser(s.control, { email: `x-${ulid()}@a.test` });
+	const noMem = await s.app.request(`/t/${s.tenantA}/projects`, {
+		headers: hdr(stranger, s.tenantA),
+	});
+	expect(noMem.status).toBe(403);
+
 	cleanup(s);
 });
