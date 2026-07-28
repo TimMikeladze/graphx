@@ -14,7 +14,7 @@ import {
 	TriggerRunner,
 	webhookAction,
 } from '../src/triggers.ts';
-import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { makeTestDb } from './harness.ts';
 
 // Eventing Layer 3 — declarative triggers over the durable graph_outbox. Every test drives the
 // runner through `runOnce()` rather than `start()`, so nothing here depends on wall-clock timing.
@@ -259,6 +259,12 @@ test('start defaults to now, skipping events that predate the first poll', async
 		triggers: [{ name: 'record', match: {}, action: (e) => void seen.push(e.id) }],
 	});
 
+	// Written AFTER construction but BEFORE the first poll. `'now'` means the head as of that first
+	// poll, so this is skipped too — the clause that distinguishes first-poll seeding from
+	// construction-time seeding, which is otherwise untestable from the outside.
+	await g.addNode({ type: 'person', data: { name: 'mid' } });
+	await settle(g);
+
 	// The first cycle seeds the cursor at the current head and delivers nothing.
 	expect((await runner.runOnce()).delivered).toBe(0);
 	expect(seen).toEqual([]);
@@ -345,53 +351,54 @@ test('a second runner resumes at exactly the undelivered remainder', async () =>
 	expect(seenB).toEqual([ids[2], ids[3]]); // no replay, no skip
 });
 
-test.skipIf(TEST_DRIVER === 'postgres')(
-	'a process killed mid-batch redelivers only what it had not checkpointed',
-	async () => {
-		const { client, sibling, teardown } = makeTestDb({ file: true });
-		teardowns.push(teardown);
-		await init(client, 4);
-		const g = new Graph(client, SCHEMA, undefined, { outbox: true });
+// Runs on BOTH drivers: `makeTestDb` exposes a `sibling` factory for Postgres as well as libSQL,
+// and its teardown already copes with a test having closed the main client. The kill is simulated
+// by closing the client mid-cycle, which both drivers reject on synchronously.
+test('a process killed mid-batch redelivers only what it had not checkpointed', async () => {
+	const { client, sibling, teardown } = makeTestDb({ file: true });
+	teardowns.push(teardown);
+	await init(client, 4);
+	const g = new Graph(client, SCHEMA, undefined, { outbox: true });
 
-		const ids: string[] = [];
-		for (let i = 0; i < 4; i++) {
-			ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
-		}
+	const ids: string[] = [];
+	for (let i = 0; i < 4; i++) {
+		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+	}
+	await settle(g);
 
-		const seenA: string[] = [];
-		const a = new TriggerRunner(g, {
-			name: 'sub-crash',
-			start: 'beginning',
-			retries: 1,
-			backoffMs: 1,
-			triggers: [
-				{
-					name: 'record',
-					match: {},
-					action: (e) => {
-						if (e.id === ids[2]) {
-							client.close(); // the process dies before this event is delivered
-							throw new Error('process died');
-						}
-						seenA.push(e.id);
-					},
+	const seenA: string[] = [];
+	const a = new TriggerRunner(g, {
+		name: 'sub-crash',
+		start: 'beginning',
+		retries: 1,
+		backoffMs: 1,
+		triggers: [
+			{
+				name: 'record',
+				match: {},
+				action: (e) => {
+					if (e.id === ids[2]) {
+						client.close(); // the process dies before this event is delivered
+						throw new Error('process died');
+					}
+					seenA.push(e.id);
 				},
-			],
-		});
-		await expect(a.runOnce()).rejects.toThrow();
-		expect(seenA).toEqual([ids[0], ids[1]]);
+			},
+		],
+	});
+	await expect(a.runOnce()).rejects.toThrow();
+	expect(seenA).toEqual([ids[0], ids[1]]);
 
-		const revived = new Graph((sibling as () => DbClient)(), SCHEMA, undefined, { outbox: true });
-		const seenB: string[] = [];
-		const b = new TriggerRunner(revived, {
-			name: 'sub-crash',
-			start: 'beginning',
-			triggers: [{ name: 'record', match: {}, action: (e) => void seenB.push(e.id) }],
-		});
-		await b.runOnce();
-		expect(seenB).toEqual([ids[2], ids[3]]);
-	},
-);
+	const revived = new Graph((sibling as () => DbClient)(), SCHEMA, undefined, { outbox: true });
+	const seenB: string[] = [];
+	const b = new TriggerRunner(revived, {
+		name: 'sub-crash',
+		start: 'beginning',
+		triggers: [{ name: 'record', match: {}, action: (e) => void seenB.push(e.id) }],
+	});
+	await b.runOnce();
+	expect(seenB).toEqual([ids[2], ids[3]]);
+});
 
 test('concurrency dispatches in parallel up to the bound and still drains the page', async () => {
 	const g = await makeGraph();
@@ -455,52 +462,50 @@ test('concurrent batches still checkpoint, so a restart delivers nothing twice',
 	expect(second).toEqual([]);
 });
 
-test.skipIf(TEST_DRIVER === 'postgres')(
-	'a dead-letter failure drains its in-flight siblings before the cycle rejects, so a retry never overlaps them',
-	async () => {
-		const g = await makeGraph();
-		const ids: string[] = [];
-		for (let i = 0; i < 6; i++) {
-			ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
-		}
+test('a dead-letter failure drains its in-flight siblings before the cycle rejects, so a retry never overlaps them', async () => {
+	const g = await makeGraph();
+	const ids: string[] = [];
+	for (let i = 0; i < 6; i++) {
+		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+	}
+	await settle(g);
 
-		// ids[0] is claimed first (pool() hands out indices in seq order) — closing the client in
-		// its action makes the retry-exhausted dead-letter INSERT itself throw, an infra failure
-		// deliver() does not catch. ids[1]/ids[2] are its concurrent siblings under `concurrency: 3`;
-		// they never touch the client, so they only fail if pool() lets the rejection race ahead of
-		// them instead of draining every in-flight worker first.
-		let inFlight = 0;
-		const seen: string[] = [];
-		const runner = new TriggerRunner(g, {
-			name: 'sub-conc-drain',
-			start: 'beginning',
-			concurrency: 3,
-			retries: 1,
-			triggers: [
-				{
-					name: 'record',
-					match: {},
-					action: async (e) => {
-						if (e.id === ids[0]) {
-							g.raw.close();
-							throw new Error('boom');
-						}
-						inFlight++;
-						await new Promise((r) => setTimeout(r, 15));
-						seen.push(e.id);
-						inFlight--;
-					},
+	// ids[0] is claimed first (pool() hands out indices in seq order) — closing the client in
+	// its action makes the retry-exhausted dead-letter INSERT itself throw, an infra failure
+	// deliver() does not catch. ids[1]/ids[2] are its concurrent siblings under `concurrency: 3`;
+	// they never touch the client, so they only fail if pool() lets the rejection race ahead of
+	// them instead of draining every in-flight worker first.
+	let inFlight = 0;
+	const seen: string[] = [];
+	const runner = new TriggerRunner(g, {
+		name: 'sub-conc-drain',
+		start: 'beginning',
+		concurrency: 3,
+		retries: 1,
+		triggers: [
+			{
+				name: 'record',
+				match: {},
+				action: async (e) => {
+					if (e.id === ids[0]) {
+						g.raw.close();
+						throw new Error('boom');
+					}
+					inFlight++;
+					await new Promise((r) => setTimeout(r, 15));
+					seen.push(e.id);
+					inFlight--;
 				},
-			],
-		});
+			},
+		],
+	});
 
-		await expect(runner.runOnce()).rejects.toThrow();
-		// By the time the rejection reaches us, every sibling dispatched alongside the failing one
-		// has fully finished — none left running detached to race a caller's redelivery of the page.
-		expect(inFlight).toBe(0);
-		expect(seen.sort()).toEqual([ids[1], ids[2]].sort());
-	},
-);
+	await expect(runner.runOnce()).rejects.toThrow();
+	// By the time the rejection reaches us, every sibling dispatched alongside the failing one
+	// has fully finished — none left running detached to race a caller's redelivery of the page.
+	expect(inFlight).toBe(0);
+	expect(seen.sort()).toEqual([ids[1], ids[2]].sort());
+});
 
 test('start polls until stopped, and stop actually stops', async () => {
 	const g = await makeGraph();

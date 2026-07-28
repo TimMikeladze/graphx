@@ -224,6 +224,11 @@ export class TriggerRunner<S extends GraphSchema> {
 		if (opts.concurrency !== undefined && (!Number.isInteger(opts.concurrency) || opts.concurrency < 1)) {
 			throw new Error(`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`);
 		}
+		// `retries: 0` would dead-letter every matched event without ever invoking its action,
+		// recording `attempts: 0` and an empty error — a silent black hole rather than a config error.
+		if (opts.retries !== undefined && (!Number.isInteger(opts.retries) || opts.retries < 1)) {
+			throw new Error(`TriggerRunner: retries must be a positive integer, got ${opts.retries}`);
+		}
 		this.name = opts.name;
 		this.triggers = opts.triggers;
 		this.concurrency = opts.concurrency ?? 1;
@@ -259,7 +264,10 @@ export class TriggerRunner<S extends GraphSchema> {
 				const outcome = await this.dispatch(event);
 				delivered += outcome.delivered;
 				deadLettered += outcome.deadLettered;
-				this.cursor = event.seq as number;
+				// `seq` is optional on GraphEvent (pure in-proc emits lack one) but always set by
+				// `rowToEvent`. Falling back to the current cursor rather than asserting keeps a
+				// hypothetical undefined from rewinding the cursor and replaying the whole outbox.
+				this.cursor = event.seq ?? this.cursor;
 				await this.saveCursor(this.cursor);
 			}
 		} else if (page.events.length > 0) {
