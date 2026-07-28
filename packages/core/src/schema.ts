@@ -112,6 +112,31 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
   source TEXT
 );
 
+-- Eventing (Layer 3): trigger runner state. One cursor row per subscription name — the runner
+-- resumes from it after a restart, which is the whole reason triggers ride the durable outbox
+-- rather than the best-effort in-proc bus.
+CREATE TABLE IF NOT EXISTS trigger_cursors (
+  name       TEXT PRIMARY KEY,
+  seq        INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Events whose action exhausted its retries. Written so a poison event can be inspected instead
+-- of wedging its subscription forever. \`trigger_name\` rather than \`trigger\` — the latter is a
+-- reserved word in Postgres.
+CREATE TABLE IF NOT EXISTS trigger_dead_letters (
+  id           TEXT PRIMARY KEY,
+  subscription TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  seq          INTEGER NOT NULL,
+  event        TEXT NOT NULL,
+  error        TEXT NOT NULL,
+  attempts     INTEGER NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
+  ON trigger_dead_letters(subscription, created_at DESC);
+
 -- D4/B10: analytics live in a SIDE table, UPSERTed by P8 jobs and JOINed by topNodes.
 -- Version rows stay byte-stable — no analytics columns on node_versions. Per-metric
 -- indexes back the ORDER BY <metric> DESC in topNodes.

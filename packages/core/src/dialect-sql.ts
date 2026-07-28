@@ -159,6 +159,31 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
 );
 ALTER TABLE graph_outbox ADD COLUMN IF NOT EXISTS source text;
 
+-- Eventing (Layer 3): trigger runner state. One cursor row per subscription name — the runner
+-- resumes from it after a restart, which is the whole reason triggers ride the durable outbox
+-- rather than the best-effort in-proc bus.
+CREATE TABLE IF NOT EXISTS trigger_cursors (
+  name       text PRIMARY KEY,
+  seq        bigint NOT NULL,
+  updated_at bigint NOT NULL
+);
+
+-- Events whose action exhausted its retries. Written so a poison event can be inspected instead
+-- of wedging its subscription forever. \`trigger_name\` rather than \`trigger\` — the latter is a
+-- reserved word in Postgres.
+CREATE TABLE IF NOT EXISTS trigger_dead_letters (
+  id           text PRIMARY KEY,
+  subscription text NOT NULL,
+  trigger_name text NOT NULL,
+  seq          bigint NOT NULL,
+  event        text NOT NULL,
+  error        text NOT NULL,
+  attempts     bigint NOT NULL,
+  created_at   bigint NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
+  ON trigger_dead_letters(subscription, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS node_analytics (
   id          text PRIMARY KEY REFERENCES node_identity(id),
   pagerank    real,
