@@ -202,8 +202,10 @@ for clients that don't implement resources.
   (see below) — only the resource form is affected.
 - **The binary runs schemaless.** A `GraphSchema` is a TypeScript value, so `graphx-mcp` can't
   import yours. `describe_schema` falls back to sampling distinct `type` values off `GET /nodes`
-  and returns them tagged `inferred: true`, with no property schemas and no relations. Embed the
-  server as a library (above) to get real schema-aware tool descriptions and the resource.
+  and returns them tagged `inferred: true`, with no property schemas and no relations. A failed
+  sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
+  unreachable graph never reads as an empty one. Embed the server as a library (above) to get real
+  schema-aware tool descriptions and the resource.
 - **The binary defaults to `hashEmbed`.** `retrieve` and `hybrid_search` need an embedder;
   `hashEmbed()` is lexical and deterministic, not semantic, and the binary logs one line to stderr
   on startup saying so. Pass your own `embed` through the library entry points for real vector

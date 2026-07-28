@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Backend } from './backend.ts';
-import type { GraphSchemaLike } from './server.ts';
+import { type GraphSchemaLike, toToolResult } from './server.ts';
 
 /**
  * Graph-schema discovery. Node types and relation names are compile-time knowledge in
@@ -51,12 +51,19 @@ export function schemaDoc(schema: GraphSchemaLike): SchemaDoc {
 	return { nodes, edges };
 }
 
-/** Fallback for a schemaless server: sample distinct node types off the graph. */
+/**
+ * Fallback for a schemaless server: sample distinct node types off the graph.
+ *
+ * A non-2xx comes back as the failing `Response` rather than an empty document. Swallowing it
+ * would answer 401, 403, 404 and 500 with the same `{nodes:{},edges:[]}` an empty graph
+ * produces, and an agent reads that as "this graph has no types" — the one reading that stops
+ * it from retrying.
+ */
 export async function inferSchemaDoc(
 	backend: Backend,
 	tenant: string,
 	project: string,
-): Promise<SchemaDoc> {
+): Promise<SchemaDoc | Response> {
 	const res = await backend.call(
 		'GET',
 		`/t/${encodeURIComponent(tenant)}/p/${encodeURIComponent(project)}/nodes`,
@@ -64,7 +71,7 @@ export async function inferSchemaDoc(
 			query: { limit: '200' },
 		},
 	);
-	if (!res.ok) return { nodes: {}, edges: [], inferred: true };
+	if (!res.ok) return res;
 	const body = (await res.json()) as { nodes?: Array<{ type?: string }> };
 	const nodes: Record<string, unknown> = {};
 	for (const n of body.nodes ?? []) {
@@ -107,6 +114,9 @@ export function registerSchema(
 		},
 		async (args: { tenant: string; project: string }) => {
 			const doc = known ?? (await inferSchemaDoc(opts.backend, args.tenant, args.project));
+			// Inference reaches the graph over HTTP, so its failures report like every other
+			// tool's: an isError result carrying the status, not a document.
+			if (doc instanceof Response) return await toToolResult(doc);
 			const text = JSON.stringify(doc);
 			return {
 				content: [{ type: 'text' as const, text }],
