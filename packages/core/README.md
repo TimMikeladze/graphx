@@ -131,13 +131,13 @@ it with [`@graphx/react`](../react) for typed hooks.
 
 ### Machine-readable contract
 
-`GET /openapi.json` serves an OpenAPI 3.1 document (unauthenticated, like `/health`). Request bodies
-and query params are generated from the same Zod wire schemas the routes validate against, so the
-spec can't drift; a test pins the documented routes to the live `app.routes`. An interactive
+`GET /openapi.json` serves an OpenAPI 3.1 document (unauthenticated, like `/health`). The app is a
+[`@hono/zod-openapi`](https://github.com/honojs/middleware/tree/main/packages/zod-openapi) app: each
+route declares its path, request schemas and response schemas in one place, and the document is
+generated from those declarations — so the contract can't drift from what is served. An interactive
 reference (Scalar) is served at `GET /docs` by default — pass `docs: false` to disable it (it loads
-the viewer from a CDN; the spec itself is served locally). Use the spec to generate
-clients in any language. (`buildOpenApiDocument({ servers, title, version })` is also exported for
-emitting a static spec.)
+the viewer from a CDN; the spec itself is served locally). Use the spec to generate clients in any
+language; `openapi: { title, version, servers }` sets the document's `info`/`servers`.
 
 ### Pagination
 

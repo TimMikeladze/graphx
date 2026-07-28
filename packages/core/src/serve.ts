@@ -1,14 +1,15 @@
 import { createClient } from '@libsql/client';
 import type { DbClient } from './dialect.ts';
-import { zValidator } from '@hono/zod-validator';
+// `z` comes from the OpenAPI wrapper (the same zod instance, extended with `.openapi()` for the
+// few places the generated schema needs an override) — NOT a second copy of zod.
+import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
 import type { Context, MiddlewareHandler } from 'hono';
-import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import { logger as honoLogger } from 'hono/logger';
 import { streamSSE } from 'hono/streaming';
-import { z, ZodError } from 'zod';
+import { ZodError } from 'zod';
 import {
 	centrality,
 	type CentralityKind,
@@ -34,7 +35,6 @@ import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from '.
 import { type GraphEventOptions, scopeEvents } from './events.ts';
 import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
-import { buildOpenApiDocument, type OpenApiOptions } from './openapi.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
@@ -59,6 +59,18 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  * `cfg.authenticate` is the single authn injection point — verify a JWT / session /
  * hashed API key and return `{ userId, tenantId }`; throwing is surfaced as 401.
  */
+
+/**
+ * `info`/`servers` for the generated `GET /openapi.json` document (§14). The paths, parameters,
+ * request bodies and response schemas are NOT configurable — they are generated from the route
+ * definitions below, so the published contract cannot drift from what the app actually serves.
+ */
+export interface OpenApiOptions {
+	title?: string;
+	version?: string;
+	/** OpenAPI `servers` list, e.g. `[{ url: 'https://api.example.com' }]`. */
+	servers?: Array<{ url: string; description?: string }>;
+}
 
 /** Per-request server config. `authenticate` is authn layer 1; `embed` powers `retrieve`. */
 export interface ServeConfig<S extends GraphSchema> {
@@ -192,6 +204,24 @@ export async function graphForProject<S extends GraphSchema>(
 
 const directionSchema = z.enum(['forward', 'reverse', 'both']);
 
+/**
+ * Query params arrive as strings, so the numeric ones coerce. A bare `z.coerce.number()` publishes
+ * its INPUT type — which includes `null`, since `Number(null)` is 0 — and a query string can't
+ * carry a null. The `.openapi()` override keeps the published parameter at what the route really
+ * takes: a number, with the same bound the validator enforces.
+ */
+const numQuery = z.coerce.number().openapi({ type: 'number' });
+const posIntQuery = z.coerce
+	.number()
+	.int()
+	.positive()
+	.openapi({ type: 'integer', exclusiveMinimum: 0 });
+const nonNegIntQuery = z.coerce
+	.number()
+	.int()
+	.nonnegative()
+	.openapi({ type: 'integer', minimum: 0 });
+
 /** POST /nodes body. `data` is validated per-type by `Graph.addNode` (ZodError → 400). */
 const nodeInputSchema = z.object({
 	type: z.string(),
@@ -232,17 +262,17 @@ const neighborQuerySchema = z.object({
 
 /** GET /nodes/:id/neighborsPage query — neighbor filters + keyset pagination (§19.7). */
 const neighborPageQuerySchema = neighborQuerySchema.extend({
-	limit: z.coerce.number().int().positive().optional(),
+	limit: posIntQuery.optional(),
 	cursor: z.string().optional(),
 });
 
 /** GET /retrieve query (§14). `asOf`/`k`/`maxDepth` coerced from strings. */
 const retrieveQuerySchema = z.object({
 	query: z.string(),
-	k: z.coerce.number().optional(),
-	maxDepth: z.coerce.number().optional(),
+	k: numQuery.optional(),
+	maxDepth: numQuery.optional(),
 	direction: directionSchema.optional(),
-	asOf: z.coerce.number().optional(),
+	asOf: numQuery.optional(),
 });
 
 /** POST /journey body (§14). `start` = ULID, `from` = epoch ms. */
@@ -258,8 +288,8 @@ const journeyInputSchema = z.object({
 const nodeListQuerySchema = z.object({
 	type: z.string().optional(),
 	q: z.string().optional(),
-	asOf: z.coerce.number().optional(),
-	limit: z.coerce.number().optional(),
+	asOf: numQuery.optional(),
+	limit: numQuery.optional(),
 	cursor: z.string().optional(),
 });
 
@@ -267,7 +297,7 @@ const nodeListQuerySchema = z.object({
 const graphSliceQuerySchema = z.object({
 	type: z.string().optional(),
 	q: z.string().optional(),
-	asOf: z.coerce.number().optional(),
+	asOf: numQuery.optional(),
 });
 
 /** POST /algorithms/shortest-path body (§8). `heuristic` is SDK-only (a function, not wire-serializable). */
@@ -297,7 +327,7 @@ const centralitySchema = z.object({ type: z.enum(['degree', 'in', 'out']).option
 const topNodesQuerySchema = z.object({
 	by: z.enum(['pagerank', 'community', 'degree']),
 	type: z.string().optional(),
-	limit: z.coerce.number().int().positive().optional(),
+	limit: posIntQuery.optional(),
 });
 
 /** Pattern hop direction (`out`/`in`/`both`) — the PatternBuilder vocab (not the retrieve fwd/rev/both). */
@@ -370,13 +400,17 @@ const hybridInputSchema = z.object({
 const changesQuerySchema = z.object({
 	nodes: z.string().optional(),
 	edges: z.string().optional(),
-	limit: z.coerce.number().int().positive().optional(),
+	limit: posIntQuery.optional(),
 });
 
-/** GET /diff query — both window bounds (epoch ms) are required. */
+/**
+ * GET /diff query — both window bounds (epoch ms) are required. A coerced field reads as optional
+ * to the document generator (its input accepts anything), so the two required params say so
+ * explicitly; the validator already rejects a missing bound with a 400.
+ */
 const diffQuerySchema = z.object({
-	t1: z.coerce.number(),
-	t2: z.coerce.number(),
+	t1: numQuery.openapi({ param: { required: true } }),
+	t2: numQuery.openapi({ param: { required: true } }),
 });
 
 /**
@@ -386,38 +420,156 @@ const diffQuerySchema = z.object({
  */
 const eventsQuerySchema = z.object({
 	since: z.enum(['now', 'beginning']).optional(),
-	cursor: z.coerce.number().int().nonnegative().optional(),
-	poll: z.coerce.number().int().positive().optional(),
+	cursor: nonNegIntQuery.optional(),
+	poll: posIntQuery.optional(),
 });
 
+// --- response contracts ---
+//
+// The route definitions below declare what each route RETURNS as well as what it accepts, so the
+// published document describes real success bodies (not an opaque `{}`) and the handler's
+// `c.json(...)` is type-checked against the declaration.
+//
+// These describe the WIRE shape. The SDK's own types are richer — `data` is per-type Zod-validated
+// (`DataOf<S, K>`) rather than an open record — so a handler returning a schema-generic domain type
+// is cast to the wire type at the `c.json` call. The cast is safe by construction (every field the
+// wire schema names is present on the domain type) and it is why the response schemas live next to
+// the routes rather than being inferred from the SDK.
+
+/** The `{ error }` body every failure branch of {@link onError} returns. */
+const errorSchema = z.object({ error: z.string(), issues: z.unknown().optional() });
+
+/** A node projection: identity + the validated per-type `data` (open at the wire). */
+const nodeSchema = z.object({
+	id: z.string(),
+	type: z.string(),
+	data: z.record(z.string(), z.unknown()),
+});
+
+/** What `addEdge` returns — the minted edge's identity, not the whole version row. */
+const edgeSchema = z.object({
+	id: z.string(),
+	rel: z.string(),
+	src: z.string(),
+	dst: z.string(),
+});
+
+/** Raw version rows (`node_versions` / the CDC changelog) are returned column-for-column. */
+const versionRowSchema = z.record(z.string(), z.unknown());
+
+const nodeListPageSchema = z.object({
+	nodes: z.array(nodeSchema),
+	nextCursor: z.string().nullable(),
+});
+
+const neighborPageSchema = z.object({
+	rows: z.array(nodeSchema),
+	nextCursor: z.string().nullable(),
+});
+
+const nodeContentSchema = z.object({
+	body: z.string().nullable(),
+	uri: z.string().nullable(),
+	contentType: z.string().nullable(),
+	contentHash: z.string().nullable(),
+});
+
+const graphSliceSchema = z.object({
+	nodes: z.array(z.object({ id: z.string(), type: z.string(), label: z.string().optional() })),
+	links: z.array(
+		z.object({
+			id: z.string(),
+			source: z.string(),
+			target: z.string(),
+			rel: z.string(),
+			weight: z.number(),
+		}),
+	),
+	truncated: z.boolean(),
+});
+
+const retrievedNodeSchema = z.object({
+	id: z.string(),
+	body: z.string().nullable(),
+	uri: z.string().nullable(),
+	depth: z.number(),
+});
+
+const journeyRowSchema = z.object({
+	id: z.string(),
+	arrival_t: z.number(),
+	hops: z.number(),
+	type: z.string(),
+	name: z.unknown(),
+});
+
+const changeFeedPageSchema = z.object({
+	nodes: z.array(versionRowSchema),
+	edges: z.array(versionRowSchema),
+	nextCursor: z.object({ nodes: z.string().nullable(), edges: z.string().nullable() }),
+});
+
+const temporalDiffSchema = z.object({
+	nodes: z.array(versionRowSchema),
+	edges: z.array(versionRowSchema),
+});
+
+/** One `match` row: the selected aliases, each bound to a node projection. */
+const patternPageSchema = z.object({
+	rows: z.array(z.record(z.string(), nodeSchema)),
+	nextCursor: z.string().nullable(),
+});
+
+const bulkResultSchema = z.object({ ids: z.array(z.string()), count: z.number() });
+
+/** `pagerank`/`community`/`centrality` serialize their `Map<id, score>` as a plain object. */
+const scoresSchema = z.object({ scores: z.record(z.string(), z.number()) });
+
+/** `null` when no path exists between the endpoints. */
+const shortestPathResultSchema = z
+	.object({ path: z.array(z.string()), cost: z.number() })
+	.nullable();
+
+const topNodeSchema = z.object({
+	id: z.string(),
+	type: z.string(),
+	pagerank: z.number().nullable(),
+	community: z.number().nullable(),
+	degree: z.number().nullable(),
+});
+
+type WireNode = z.infer<typeof nodeSchema>;
+
+// --- route definition helpers ---
+
+/** Path params for every tenant-scoped route; `{id}` routes extend it. */
+const scopeParams = z.object({ tenant: z.string(), project: z.string() });
+const idParams = scopeParams.extend({ id: z.string() });
+
+/** A JSON `{ error }` response with the given description. */
+function jsonError(description: string) {
+	return { description, content: { 'application/json': { schema: errorSchema } } };
+}
+
+/** A JSON success response carrying `schema`. */
+function json<T extends z.ZodType>(description: string, schema: T) {
+	return { description, content: { 'application/json': { schema } } };
+}
+
 /**
- * The route wire schemas, keyed for the OpenAPI generator ({@link buildOpenApiDocument}). Exported as
- * a `Record<string, z.ZodType>` (not the individual consts) so the export stays isolated-declarable
- * while the routes keep using the precise local consts for `zValidator` typing. Single source of
- * truth: the same objects feed both runtime validation and the published contract.
+ * The failure branches every authenticated route shares: 400 (wire validation or a domain error
+ * mapped by {@link onError}), 401 (authn), 404 (unknown project — the confused-deputy guard — or an
+ * unknown id). Write routes add 403 (role below the op).
  */
-export const WIRE_SCHEMAS: Record<string, z.ZodType> = {
-	nodeInput: nodeInputSchema,
-	nodeListQuery: nodeListQuerySchema,
-	patchNode: patchNodeSchema,
-	edgeInput: edgeInputSchema,
-	neighborQuery: neighborQuerySchema,
-	neighborPageQuery: neighborPageQuerySchema,
-	graphSliceQuery: graphSliceQuerySchema,
-	retrieveQuery: retrieveQuerySchema,
-	hybridInput: hybridInputSchema,
-	journeyInput: journeyInputSchema,
-	matchInput: matchInputSchema,
-	bulkInput: bulkInputSchema,
-	changesQuery: changesQuerySchema,
-	eventsQuery: eventsQuerySchema,
-	diffQuery: diffQuerySchema,
-	shortestPath: shortestPathSchema,
-	pageRank: pageRankSchema,
-	community: communitySchema,
-	centrality: centralitySchema,
-	topNodesQuery: topNodesQuerySchema,
+const READ_ERRORS = {
+	400: jsonError('Invalid request'),
+	401: jsonError('Unauthenticated'),
+	404: jsonError('Not found'),
 };
+const WRITE_ERRORS = { ...READ_ERRORS, 403: jsonError('Forbidden') };
+
+/** Bearer auth applies to every tenant-scoped route (the `/health`-style ops routes are public). */
+const SECURITY = [{ bearerAuth: [] }];
 
 /** Authn middleware: run `cfg.authenticate`, put the principal on ctx, 401 on throw. */
 function authn<S extends GraphSchema>(cfg: ServeConfig<S>): MiddlewareHandler<ServeEnv<S>> {
@@ -506,87 +658,192 @@ function onError(err: Error, c: Context) {
 	return c.json({ error: 'internal' }, 500);
 }
 
-/** Build the chained Hono app for `cfg` (internal; the chain's type becomes AppType). */
+/** Build the chained OpenAPI app for `cfg` (internal; the chain's type becomes AppType). */
 function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	// journey takes its own opt-in upcaster (getNode/neighbors upcast via the project Graph).
 	const journeyUpcaster = cfg.upcasters ? new Upcaster(cfg.schema, cfg.upcasters) : undefined;
-	const base = new Hono<ServeEnv<S>>();
+	const base = new OpenAPIHono<ServeEnv<S>>({
+		// Wire-validation failures answer with the SAME `{ error, issues }` body every other failure
+		// branch uses (see `onError`), which is what the 400 response schema documents and what
+		// `@graphx/react` parses. The wrapper's default hook would emit `{ success, error }` instead.
+		defaultHook: (result, c) =>
+			result.success
+				? undefined
+				: c.json({ error: 'validation', issues: result.error.issues }, 400),
+	});
+	// `cfg.authenticate` is the injection point — bearer is the documented default; swap the
+	// scheme to match your deployment (session cookie, hashed API key, etc.).
+	base.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
+		type: 'http',
+		scheme: 'bearer',
+	});
 	// Cross-cutting middleware must register BEFORE the route handlers (Hono dispatches in
 	// registration order), so a `.use('*')` added after the chain wouldn't wrap earlier routes.
 	if (cfg.logger) base.use('*', honoLogger());
 	if (cfg.cors) base.use('*', cors(cfg.cors === true ? { origin: '*' } : cfg.cors));
+	// Authn for the whole tenant group. Registered off the chain: `Hono.use` returns a plain
+	// `Hono`, which would drop `.openapi()` from the chain's type for every route after it.
+	base.use('/t/:tenant/p/:project/*', authn(cfg));
+	// Interactive API reference (Scalar, loaded from CDN) at /docs — points at /openapi.json.
+	// On by default (unauthenticated, tenant-agnostic like /openapi.json); `docs: false` disables it.
+	// Left off the contract itself (it serves HTML for humans, not an API surface) and off the
+	// chain (plain `.get` returns a `Hono`, which would drop `.openapi()` from the chain's type).
+	base.get('/docs', (c) =>
+		cfg.docs === false ? c.notFound() : c.html(docsHtml(cfg.openapi?.title ?? 'graphx API')),
+	);
 	const app = base
 		// §19.6 ops endpoints — UNAUTHENTICATED + tenant-agnostic by construction: mounted
 		// OUTSIDE the `/t/:tenant/p/:project/*` authn group, so they never touch the
 		// confused-deputy guard. /health = process up (always 200); /ready gates the load
 		// balancer on the sync-before-serve latch (default ready when no latch is configured).
-		.get('/health', (c) => c.json({ status: 'ok' }))
-		.get('/ready', (c) => {
-			const ready = cfg.readiness ? cfg.readiness.isReady() : true;
-			return c.json({ status: ready ? 'ready' : 'not-ready' }, ready ? 200 : 503);
-		})
-		// Machine-readable HTTP contract (§14). Unauthenticated + tenant-agnostic, like /health.
-		// Request/query schemas are generated from the same Zod wire schemas the routes validate.
-		.get('/openapi.json', (c) => c.json(buildOpenApiDocument(cfg.openapi)))
-		// Interactive API reference (Scalar, loaded from CDN) at /docs — points at /openapi.json.
-		// On by default (unauthenticated, tenant-agnostic like /openapi.json); `docs: false` disables it.
-		.get('/docs', (c) =>
-			cfg.docs === false ? c.notFound() : c.html(docsHtml(cfg.openapi?.title ?? 'graphx API')),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/health',
+				summary: 'Liveness — the process is up',
+				security: [],
+				responses: { 200: json('OK', z.object({ status: z.literal('ok') })) },
+			}),
+			(c) => c.json({ status: 'ok' } as const, 200),
 		)
-		.use('/t/:tenant/p/:project/*', authn(cfg))
-		.post(
-			'/t/:tenant/p/:project/nodes',
-			requireGraph(cfg, 'write'),
-			zValidator('json', nodeInputSchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/ready',
+				summary: 'Readiness — sync-before-serve latch (503 until ready)',
+				security: [],
+				responses: {
+					200: json('Ready', z.object({ status: z.literal('ready') })),
+					503: json('Not ready', z.object({ status: z.literal('not-ready') })),
+				},
+			}),
+			(c) => {
+				const ready = cfg.readiness ? cfg.readiness.isReady() : true;
+				return ready
+					? c.json({ status: 'ready' } as const, 200)
+					: c.json({ status: 'not-ready' } as const, 503);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/nodes',
+				summary: 'Create a node',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: nodeInputSchema } } },
+				},
+				responses: { 201: json('Created', nodeSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const node = await c
 					.get('graph')
 					.addNode(c.req.valid('json') as AddNodeInput<S, NodeType<S>>);
-				return c.json(node, 201);
+				return c.json(node as WireNode, 201);
 			},
 		)
-		.post(
-			'/t/:tenant/p/:project/edges',
-			requireGraph(cfg, 'write'),
-			zValidator('json', edgeInputSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/edges',
+				summary: 'Create an edge',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: edgeInputSchema } } },
+				},
+				responses: { 201: json('Created', edgeSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const edge = await c.get('graph').addEdge(c.req.valid('json') as AddEdgeInput<S, Rel<S>>);
 				return c.json(edge, 201);
 			},
 		)
-		.get('/t/:tenant/p/:project/nodes/:id', requireGraph(cfg, 'read'), async (c) => {
-			const node = await c.get('graph').getNode(c.req.param('id'));
-			if (!node) throw new HTTPException(404, { message: 'node not found' });
-			return c.json(node);
-		})
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				summary: 'Get a node by id',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: idParams },
+				responses: { 200: json('OK', nodeSchema), ...READ_ERRORS },
+			}),
+			async (c) => {
+				const node = await c.get('graph').getNode(c.req.param('id'));
+				if (!node) throw new HTTPException(404, { message: 'node not found' });
+				return c.json(node as WireNode, 200);
+			},
+		)
 		// Edit a node's data/metadata in place (conditional-close successor, §19.1). Returns
 		// the refreshed (upcast) live version; an unknown id throws `no live version` -> 404.
-		.patch(
-			'/t/:tenant/p/:project/nodes/:id',
-			requireGraph(cfg, 'write'),
-			zValidator('json', patchNodeSchema),
+		.openapi(
+			createRoute({
+				method: 'patch',
+				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				summary: 'Update a node',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: idParams,
+					body: { required: true, content: { 'application/json': { schema: patchNodeSchema } } },
+				},
+				responses: { 200: json('OK', nodeSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const graph = c.get('graph');
 				await graph.updateNode(c.req.param('id'), c.req.valid('json'));
-				return c.json(await graph.getNode(c.req.param('id')));
+				// updateNode succeeded, so the live version exists — the `| null` is unreachable here.
+				return c.json((await graph.getNode(c.req.param('id'))) as WireNode, 200);
 			},
 		)
 		// Remove an edge (close the live version, no successor). 204 on success; an unknown
 		// id throws `no live version` -> 404.
-		.delete('/t/:tenant/p/:project/edges/:id', requireGraph(cfg, 'write'), async (c) => {
-			await c.get('graph').deleteEdge(c.req.param('id'));
-			return c.body(null, 204);
-		})
+		.openapi(
+			createRoute({
+				method: 'delete',
+				path: '/t/{tenant}/p/{project}/edges/{id}',
+				summary: 'Delete an edge',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: { params: idParams },
+				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				await c.get('graph').deleteEdge(c.req.param('id'));
+				return c.body(null, 204);
+			},
+		)
 		// Retract a node (bitemporal close, no successor). 204 on success; an unknown id
 		// throws `no live version` -> 404. Mirrors deleteEdge.
-		.delete('/t/:tenant/p/:project/nodes/:id', requireGraph(cfg, 'write'), async (c) => {
-			await c.get('graph').deleteNode(c.req.param('id'));
-			return c.body(null, 204);
-		})
-		.get(
-			'/t/:tenant/p/:project/nodes/:id/neighbors',
-			requireGraph(cfg, 'read'),
-			zValidator('query', neighborQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'delete',
+				path: '/t/{tenant}/p/{project}/nodes/{id}',
+				summary: 'Retract a node',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: { params: idParams },
+				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				await c.get('graph').deleteNode(c.req.param('id'));
+				return c.body(null, 204);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/neighbors',
+				summary: 'Neighbors (unpaginated)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: idParams, query: neighborQuerySchema },
+				responses: { 200: json('OK', z.array(nodeSchema)), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { direction, rel } = c.req.valid('query');
 				const list = await c.get('graph').neighbors(c.req.param('id'), {
@@ -594,15 +851,21 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					rels: rel ? [rel] : undefined,
 					limits: cfg.limits,
 				});
-				return c.json(list);
+				return c.json(list as WireNode[], 200);
 			},
 		)
 		// Keyset-paginated neighbors (§19.7) — backs the infinite-scroll `useNeighbors`.
 		// A tampered cursor throws `invalid cursor` -> 400.
-		.get(
-			'/t/:tenant/p/:project/nodes/:id/neighborsPage',
-			requireGraph(cfg, 'read'),
-			zValidator('query', neighborPageQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/neighborsPage',
+				summary: 'Neighbors (keyset paginated)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: idParams, query: neighborPageQuerySchema },
+				responses: { 200: json('OK', neighborPageSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { direction, rel, limit, cursor } = c.req.valid('query');
 				const page = await c.get('graph').neighborsPage(c.req.param('id'), {
@@ -612,46 +875,93 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					cursor,
 					limits: cfg.limits,
 				});
-				return c.json(page);
+				return c.json(page as z.infer<typeof neighborPageSchema>, 200);
 			},
 		)
-		.get(
-			'/t/:tenant/p/:project/nodes',
-			requireGraph(cfg, 'read'),
-			zValidator('query', nodeListQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes',
+				summary: 'List nodes (keyset paginated)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: nodeListQuerySchema },
+				responses: { 200: json('OK', nodeListPageSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { type, q, asOf, limit, cursor } = c.req.valid('query');
 				const page = await c
 					.get('graph')
 					.listNodes({ type, q, asOf, limit, cursor, limits: cfg.limits });
-				return c.json(page);
+				return c.json(page as z.infer<typeof nodeListPageSchema>, 200);
 			},
 		)
-		.get(
-			'/t/:tenant/p/:project/graph',
-			requireGraph(cfg, 'read'),
-			zValidator('query', graphSliceQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/graph',
+				summary: 'Canvas slice (nodes + links)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: graphSliceQuerySchema },
+				responses: { 200: json('OK', graphSliceSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { type, q, asOf } = c.req.valid('query');
 				const slice = await c.get('graph').graphSlice({ type, q, asOf, limits: cfg.limits });
-				return c.json(slice);
+				return c.json(slice, 200);
 			},
 		)
 		// The live version's content payload (body + provenance), fetched on demand — kept off
 		// `GET /nodes/:id` so the typed node projection stays small.
-		.get('/t/:tenant/p/:project/nodes/:id/content', requireGraph(cfg, 'read'), async (c) => {
-			const content = await c.get('graph').getNodeContent(c.req.param('id'));
-			if (!content) throw new HTTPException(404, { message: 'node not found' });
-			return c.json(content);
-		})
-		.get('/t/:tenant/p/:project/nodes/:id/history', requireGraph(cfg, 'read'), async (c) => {
-			const versions = await history(c.get('graph').raw, c.req.param('id'));
-			return c.json({ versions });
-		})
-		.get(
-			'/t/:tenant/p/:project/retrieve',
-			requireGraph(cfg, 'read'),
-			zValidator('query', retrieveQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/content',
+				summary: 'Live content payload (body + provenance)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: idParams },
+				responses: { 200: json('OK', nodeContentSchema), ...READ_ERRORS },
+			}),
+			async (c) => {
+				const content = await c.get('graph').getNodeContent(c.req.param('id'));
+				if (!content) throw new HTTPException(404, { message: 'node not found' });
+				return c.json(content, 200);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/history',
+				summary: 'Version trail for a node',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: idParams },
+				responses: {
+					200: json('OK', z.object({ versions: z.array(versionRowSchema) })),
+					...READ_ERRORS,
+				},
+			}),
+			async (c) => {
+				const versions = await history(c.get('graph').raw, c.req.param('id'));
+				return c.json({ versions }, 200);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/retrieve',
+				summary: 'GraphRAG vector retrieve',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: retrieveQuerySchema },
+				responses: {
+					200: json('OK', z.array(retrievedNodeSchema)),
+					...READ_ERRORS,
+					501: jsonError('No embedder configured'),
+				},
+			}),
 			async (c) => {
 				if (!cfg.embed) throw new HTTPException(501, { message: 'retrieve not configured' });
 				const rows = await retrieve(c.get('graph').raw, cfg.embed, {
@@ -661,13 +971,22 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 						? { sink: cfg.metrics, op: 'retrieve', tenant: c.get('principal').tenantId }
 						: undefined,
 				});
-				return c.json(rows);
+				return c.json(rows, 200);
 			},
 		)
-		.post(
-			'/t/:tenant/p/:project/journey',
-			requireGraph(cfg, 'read'),
-			zValidator('json', journeyInputSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/journey',
+				summary: 'Time-respecting traversal',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: journeyInputSchema } } },
+				},
+				responses: { 200: json('OK', z.array(journeyRowSchema)), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const rows = await journey(c.get('graph').raw, {
 					...c.req.valid('json'),
@@ -677,15 +996,21 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 						? { sink: cfg.metrics, op: 'journey', tenant: c.get('principal').tenantId }
 						: undefined,
 				});
-				return c.json(rows);
+				return c.json(rows, 200);
 			},
 		)
 		// §19.10 CDC tail — the headline live-sync route. RAW changelog (no upcaster):
 		// reports the bytes written, paged by opaque per-stream `(valid_from, ver)` cursors.
-		.get(
-			'/t/:tenant/p/:project/changes',
-			requireGraph(cfg, 'read'),
-			zValidator('query', changesQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/changes',
+				summary: 'Change feed / CDC tail',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: changesQuerySchema },
+				responses: { 200: json('OK', changeFeedPageSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { nodes, edges, limit } = c.req.valid('query');
 				const page = await changeFeed(
@@ -693,7 +1018,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					{ nodes, edges },
 					{ limit, limits: cfg.limits },
 				);
-				return c.json(page);
+				return c.json(page, 200);
 			},
 		)
 		// Live event stream (SSE, eventing Layer 3) — pushes the durable outbox tail, which IS
@@ -702,10 +1027,23 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		// polls when caught up; a browser resumes after a drop via the auto-sent Last-Event-ID.
 		// Requires the outbox (501 otherwise). NOTE: EventSource can't send auth headers — deployments
 		// serving browsers must let `authenticate` read the token from a query param or cookie.
-		.get(
-			'/t/:tenant/p/:project/events',
-			requireGraph(cfg, 'read'),
-			zValidator('query', eventsQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/events',
+				summary: 'Live event stream (SSE, delete-inclusive)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: eventsQuerySchema },
+				responses: {
+					200: {
+						description: 'SSE frames: `event: <op>`, `data: <GraphEvent json>`, `id: <seq>`',
+						content: { 'text/event-stream': { schema: z.string() } },
+					},
+					...READ_ERRORS,
+					501: jsonError('No outbox configured'),
+				},
+			}),
 			async (c) => {
 				if (!cfg.events?.outbox) {
 					throw new HTTPException(501, {
@@ -762,36 +1100,64 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		)
 		// Snapshot delta over (t1, t2] — the close-aware companion to /changes (reconciles
 		// supersession/delete closes that the valid_from-only feed omits, per decision A.3).
-		.get(
-			'/t/:tenant/p/:project/diff',
-			requireGraph(cfg, 'read'),
-			zValidator('query', diffQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/diff',
+				summary: 'Snapshot delta over (t1, t2]',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: diffQuerySchema },
+				responses: { 200: json('OK', temporalDiffSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { t1, t2 } = c.req.valid('query');
-				return c.json(await diff(c.get('graph').raw, t1, t2));
+				return c.json(await diff(c.get('graph').raw, t1, t2), 200);
 			},
 		)
 		// Hybrid GraphRAG search (ANN + FTS5 → RRF → walk → MMR). Needs an embedder (501
 		// otherwise, like /retrieve); `rerank` is SDK-only (not wire-serializable).
-		.post(
-			'/t/:tenant/p/:project/hybrid',
-			requireGraph(cfg, 'read'),
-			zValidator('json', hybridInputSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/hybrid',
+				summary: 'Hybrid retrieve (ANN + FTS + RRF + MMR)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: hybridInputSchema } } },
+				},
+				responses: {
+					200: json('OK', z.array(retrievedNodeSchema)),
+					...READ_ERRORS,
+					501: jsonError('No embedder configured'),
+				},
+			}),
 			async (c) => {
 				if (!cfg.embed) throw new HTTPException(501, { message: 'hybrid retrieve not configured' });
 				const rows = await hybridRetrieve(c.get('graph').raw, cfg.embed, {
 					...c.req.valid('json'),
 					limits: cfg.limits,
 				});
-				return c.json(rows);
+				return c.json(rows, 200);
 			},
 		)
 		// Batch node ingestion (§19.8). Validates every row up front (unknown type / bad data →
 		// 400 before any index is dropped), loads in chunks, returns the minted ids + count.
-		.post(
-			'/t/:tenant/p/:project/bulk',
-			requireGraph(cfg, 'write'),
-			zValidator('json', bulkInputSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/bulk',
+				summary: 'Bulk-load nodes',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: bulkInputSchema } } },
+				},
+				responses: { 201: json('Created', bulkResultSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const { rows, chunkSize, loadTs } = c.req.valid('json');
 				const result = await bulkLoad(c.get('graph').raw, cfg.schema, rows as BulkRow<S>[], {
@@ -805,10 +1171,19 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		// Multi-hop pattern query (§8/§17). The JSON `steps` chain is replayed onto a
 		// PatternBuilder; `page` keyset-paginates, else `run()` returns the whole result.
 		// A malformed program (e.g. no node step) throws `PatternBuilder: ...` -> 400.
-		.post(
-			'/t/:tenant/p/:project/match',
-			requireGraph(cfg, 'read'),
-			zValidator('json', matchInputSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/match',
+				summary: 'Multi-hop pattern query',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: matchInputSchema } } },
+				},
+				responses: { 200: json('OK', patternPageSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { steps, where, asOf, select, page } = c.req.valid('json');
 				// Guard select against undeclared aliases up front — otherwise the compiled SQL
@@ -843,60 +1218,114 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				for (const cond of where ?? []) builder.where(cond.alias, cond.key, cond.value);
 				if (asOf !== undefined) builder.asOf(asOf);
 				const query = await builder.select(...select);
-				if (page) return c.json(await query.page({ ...page, limits: cfg.limits }));
-				return c.json({ rows: await query.run(), nextCursor: null });
+				const result = page
+					? await query.page({ ...page, limits: cfg.limits })
+					: { rows: await query.run(), nextCursor: null };
+				return c.json(result as z.infer<typeof patternPageSchema>, 200);
 			},
 		)
 		// --- P8 analytics (§8). shortestPath/topNodes are reads; pagerank/community/centrality
 		// PERSIST to node_analytics, so they require `write`. Map results (id -> score) serialize
 		// as a plain `scores` object. ---
-		.post(
-			'/t/:tenant/p/:project/algorithms/shortest-path',
-			requireGraph(cfg, 'read'),
-			zValidator('json', shortestPathSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/algorithms/shortest-path',
+				summary: 'Shortest path',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: shortestPathSchema } } },
+				},
+				responses: { 200: json('OK', shortestPathResultSchema), ...READ_ERRORS },
+			}),
 			async (c) => {
 				const { src, dst, ...opts } = c.req.valid('json');
-				return c.json(await shortestPath(c.get('graph').raw, src, dst, opts));
+				return c.json(await shortestPath(c.get('graph').raw, src, dst, opts), 200);
 			},
 		)
-		.post(
-			'/t/:tenant/p/:project/algorithms/pagerank',
-			requireGraph(cfg, 'write'),
-			zValidator('json', pageRankSchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/algorithms/pagerank',
+				summary: 'PageRank (persists)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: pageRankSchema } } },
+				},
+				responses: { 200: json('OK', scoresSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const scores = await pagerank(c.get('graph').raw, c.req.valid('json'));
-				return c.json({ scores: Object.fromEntries(scores) });
+				return c.json({ scores: Object.fromEntries(scores) }, 200);
 			},
 		)
-		.post(
-			'/t/:tenant/p/:project/algorithms/community',
-			requireGraph(cfg, 'write'),
-			zValidator('json', communitySchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/algorithms/community',
+				summary: 'Community detection (persists)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: communitySchema } } },
+				},
+				responses: { 200: json('OK', scoresSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const scores = await community(c.get('graph').raw, c.req.valid('json'));
-				return c.json({ scores: Object.fromEntries(scores) });
+				return c.json({ scores: Object.fromEntries(scores) }, 200);
 			},
 		)
-		.post(
-			'/t/:tenant/p/:project/algorithms/centrality',
-			requireGraph(cfg, 'write'),
-			zValidator('json', centralitySchema),
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/algorithms/centrality',
+				summary: 'Degree centrality (persists)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: centralitySchema } } },
+				},
+				responses: { 200: json('OK', scoresSchema), ...WRITE_ERRORS },
+			}),
 			async (c) => {
 				const scores = await centrality(
 					c.get('graph').raw,
 					c.req.valid('json').type as CentralityKind | undefined,
 				);
-				return c.json({ scores: Object.fromEntries(scores) });
+				return c.json({ scores: Object.fromEntries(scores) }, 200);
 			},
 		)
-		.get(
-			'/t/:tenant/p/:project/algorithms/top',
-			requireGraph(cfg, 'read'),
-			zValidator('query', topNodesQuerySchema),
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/algorithms/top',
+				summary: 'Top nodes by a persisted metric',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: topNodesQuerySchema },
+				responses: { 200: json('OK', z.array(topNodeSchema)), ...READ_ERRORS },
+			}),
 			async (c) => {
-				return c.json(await topNodes(c.get('graph').raw, c.req.valid('query')));
+				return c.json(await topNodes(c.get('graph').raw, c.req.valid('query')), 200);
 			},
-		);
+		)
+		// Machine-readable HTTP contract (§14), GENERATED from the route definitions above —
+		// paths, parameters, request bodies and response schemas all come from the same objects
+		// the routes validate against, so the contract cannot drift from what is served.
+		// Unauthenticated + tenant-agnostic, like /health.
+		.doc31('/openapi.json', {
+			openapi: '3.1.0',
+			info: { title: cfg.openapi?.title ?? 'graphx', version: cfg.openapi?.version ?? '0.1.0' },
+			...(cfg.openapi?.servers ? { servers: cfg.openapi.servers } : {}),
+			security: [{ bearerAuth: [] }],
+		});
 	app.onError(onError);
 	return app;
 }
@@ -906,7 +1335,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
  *
  * IMPORTANT — known limitation. This package compiles with `isolatedDeclarations`, which
  * cannot emit Hono's *inferred* per-route RPC schema into `.d.ts` (that schema is produced
- * by whole-program inference over the `.post(...).get(...)` chain; probed as TS9007/TS9010).
+ * by whole-program inference over the `.openapi(...).openapi(...)` chain; probed as TS9007/TS9010).
  * So the published `AppType` is the app at the ENV level only. From the built `.d.ts`,
  * `hc<AppType>(url)` is RUNTIME-correct (paths/bodies match the wire Zod contracts) but
  * NOT statically typed: `client.t[...]` request bodies and `res.json()` rows resolve to
@@ -914,7 +1343,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
  * SOURCE rather than the package types: `const app = createApp(cfg); export type AppType =
  * typeof app;` in a module WITHOUT `isolatedDeclarations` recovers full per-route types.
  */
-export type AppType = Hono<ServeEnv<GraphSchema>>;
+export type AppType = OpenAPIHono<ServeEnv<GraphSchema>>;
 
 /**
  * Batteries-included dev config — pass a `schema` (no `control`/`authenticate`) and `createApp`
@@ -952,7 +1381,7 @@ export interface DevServeConfig<S extends GraphSchema> {
 
 /** What the dev `createApp` returns: the app plus the bootstrapped ids + a seed-graph handle. */
 export interface CreateAppResult<S extends GraphSchema> {
-	app: Hono<ServeEnv<S>>;
+	app: OpenAPIHono<ServeEnv<S>>;
 	control: DbClient;
 	tenant: string;
 	project: string;
@@ -1015,10 +1444,10 @@ async function bootstrapDevApp<S extends GraphSchema>(
 export function createApp<S extends GraphSchema>(
 	cfg: DevServeConfig<S>,
 ): Promise<CreateAppResult<S>>;
-export function createApp<S extends GraphSchema>(cfg: ServeConfig<S>): Hono<ServeEnv<S>>;
+export function createApp<S extends GraphSchema>(cfg: ServeConfig<S>): OpenAPIHono<ServeEnv<S>>;
 export function createApp<S extends GraphSchema>(
 	cfg: ServeConfig<S> | DevServeConfig<S>,
-): Hono<ServeEnv<S>> | Promise<CreateAppResult<S>> {
+): OpenAPIHono<ServeEnv<S>> | Promise<CreateAppResult<S>> {
 	if ('control' in cfg && cfg.control) return buildApp(cfg as ServeConfig<S>);
 	return bootstrapDevApp(cfg as DevServeConfig<S>);
 }
