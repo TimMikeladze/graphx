@@ -95,11 +95,15 @@ export const traversalSuite: Suite = {
 		}),
 
 		defineCase<Pair[]>({
-			name: 'shortestPath (sql mode)',
+			name: 'shortestPath (sql mode, maxDepth=4)',
 			setup: twoHopPairs,
 			async run(ctx, i, pairs) {
 				const { a, b } = pick(pairs, i);
-				await shortestPath(ctx.client, a, b, { mode: 'sql' });
+				// The depth bound is not tuning, it is required. Unbounded sql-mode on this corpus does
+				// not finish in minutes even at 1k nodes and 2.5k edges: the recursive CTE enumerates
+				// paths rather than visiting nodes, so a cyclic graph with hubs explodes. Bounded, it
+				// is comparable against the memory mode above; unbounded it is not a usable call.
+				await shortestPath(ctx.client, a, b, { mode: 'sql', maxDepth: 4 });
 			},
 		}),
 

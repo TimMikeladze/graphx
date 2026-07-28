@@ -7,10 +7,11 @@
  * the question a two-week-old result file gets asked.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { CorpusStats } from './corpus.ts';
 import type { Result } from './types.ts';
 
-const RESULTS_DIR = `${import.meta.dir}/../../bench/results`;
+const RESULTS_DIR = resolve(import.meta.dirname, '../../bench/results');
 
 /** Adaptive precision: sub-millisecond calls need decimals, multi-second ones do not. */
 export function ms(value: number): string {
@@ -45,9 +46,7 @@ function row(result: Result): string[] {
 
 /** Left-align the first two columns (names), right-align the numbers. */
 function render(rows: string[][]): string {
-	const widths = HEADERS.map((h, c) =>
-		Math.max(h.length, ...rows.map((r) => (r[c] ?? '').length)),
-	);
+	const widths = HEADERS.map((h, c) => Math.max(h.length, ...rows.map((r) => (r[c] ?? '').length)));
 	const line = (cells: string[]): string =>
 		cells
 			.map((cell, c) => {
@@ -70,7 +69,7 @@ export function formatResults(results: Result[]): string {
 	for (const suite of suites) {
 		const inSuite = results.filter((r) => r.suite === suite);
 		out.push('', `## ${suite}`, '');
-		for (const variant of [...new Set(inSuite.map((r) => r.variant))]) {
+		for (const variant of new Set(inSuite.map((r) => r.variant))) {
 			const first = inSuite.find((r) => r.variant === variant) as Result;
 			out.push(`   ${variant}: ${describeCorpus(first.corpus)}`);
 		}

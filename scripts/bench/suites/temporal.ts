@@ -69,29 +69,29 @@ export const temporalSuite: Suite = {
 			async run(ctx) {
 				// person -authored-> document -mentions-> person: two joins over the live views, the
 				// shape a real query would use and the one where a missing index would show.
-				await match(demoSchema, ctx.client)
+				const query = await match(demoSchema, ctx.client)
 					.node('a', 'person')
 					.out('authored')
 					.node('b', 'document')
 					.out('mentions')
 					.node('c', 'person')
-					.select('a', 'c')
-					.page({ limit: 200 });
+					.select('a', 'c');
+				await query.page({ limit: 200 });
 			},
 		}),
 
 		defineCase<void>({
 			name: 'match 3-hop chain (asOf past)',
 			async run(ctx, i) {
-				await match(demoSchema, ctx.client)
+				const query = await match(demoSchema, ctx.client)
 					.node('a', 'person')
 					.out('authored')
 					.node('b', 'document')
 					.out('mentions')
 					.node('c', 'person')
 					.asOf(pick(AS_OF, i))
-					.select('a', 'c')
-					.page({ limit: 200 });
+					.select('a', 'c');
+				await query.page({ limit: 200 });
 			},
 		}),
 	],

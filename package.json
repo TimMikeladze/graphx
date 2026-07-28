@@ -16,6 +16,7 @@
 	],
 	"type": "module",
 	"scripts": {
+		"bench": "bun scripts/bench/index.ts",
 		"build": "bunup",
 		"dev": "bunup --watch",
 		"dev:admin": "bun scripts/dev-admin.ts",

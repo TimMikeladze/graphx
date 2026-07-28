@@ -26,3 +26,7 @@ yarn-error.log*
 
 # scripts/seed rebuild fingerprint for the admin dev server's demo databases
 .seed-cache.json
+
+# scripts/bench output — cached corpora and run results. Anchored to the root so it does not also
+# swallow scripts/bench, which is the harness itself.
+/bench/

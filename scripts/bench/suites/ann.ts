@@ -14,18 +14,23 @@ import { hybridRetrieve, retrieve } from '../../../packages/core/src/index.ts';
 import { embed } from '../corpus.ts';
 import { defineCase, pick, type Suite } from '../types.ts';
 
-const VECTORS = [1_000, 5_000, 25_000];
+// Capped by the live node count of the fixed 10k corpus: a cap above it just embeds everything.
+const VECTORS = [1_000, 5_000, 10_000];
 
 export const annSuite: Suite = {
 	name: 'ann',
-	// Fixed graph, swept index. Building the 25k-vector corpus is the slowest thing this harness
-	// does (~2 minutes on libSQL) — it is cached like every other corpus, so only the first run pays.
-	variants: () =>
-		VECTORS.map((embedded) => ({
-			label: `10k/${embedded / 1000}k vec`,
-			scale: '10k' as const,
-			embedded,
-		})),
+	// Fixed graph, swept index. Building the 10k-vector corpus is the slowest thing this harness
+	// does (~40s on libSQL) — it is cached like every other corpus, so only the first run pays.
+	// The node count is the constant here, so a run restricted to other scales skips this suite
+	// rather than silently ignoring the restriction.
+	variants: (scales) =>
+		scales.includes('10k')
+			? VECTORS.map((embedded) => ({
+					label: `10k/${embedded / 1000}k vec`,
+					scale: '10k' as const,
+					embedded,
+				}))
+			: [],
 	cases: [
 		defineCase<void>({
 			name: 'retrieve seeds only (k=10, depth=0)',

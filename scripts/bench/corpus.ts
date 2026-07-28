@@ -24,6 +24,7 @@
  */
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
 import type { DbClient, EmbedFn } from '../../packages/core/src/index.ts';
@@ -78,7 +79,7 @@ export const DRIVER = process.env.GRAPHX_BENCH_DRIVER ?? 'libsql';
 const PG_URL =
 	process.env.GRAPHX_BENCH_PG_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5455/graphx_test';
 
-const CORPUS_DIR = `${import.meta.dir}/../../bench/.corpus`;
+const CORPUS_DIR = resolve(import.meta.dirname, '../../bench/.corpus');
 
 /** Everything that changes the generated data. Any difference is a different corpus. */
 export interface CorpusKey {
@@ -179,7 +180,9 @@ async function ensureLibsqlCorpus(key: CorpusKey, scale: Scale, log: Logger): Pr
 
 	const building = `${path}.building`;
 	removeDb(building);
-	log(`seeding ${scale} corpus (${SCALES[scale].toLocaleString()} nodes) — this is cached`);
+	log(
+		`seeding ${scale} corpus (${SCALES[scale].toLocaleString()} nodes, ${key.embedded.toLocaleString()} vectors) — later runs reuse it`,
+	);
 	const client = createClient({ url: `file:${building}` });
 	await init(client, key.dim);
 	await seedInto(client, key);
@@ -238,7 +241,7 @@ async function openPgCorpus(
 	await init(client, key.dim);
 	const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
 	if (Number(rows.rows[0]?.c ?? 0) !== key.nodes) {
-		log(`seeding ${scale} corpus into schema ${schema} — this is cached`);
+		log(`seeding ${scale} corpus into schema ${schema} — later runs reuse it`);
 		await seedInto(client, key);
 	}
 	return client;
@@ -265,7 +268,10 @@ function stride<T>(items: T[], count: number): T[] {
 function queriesFrom(bodies: string[]): string[] {
 	const out: string[] = [];
 	for (const body of bodies) {
-		const words = body.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+		const words = body
+			.toLowerCase()
+			.split(/\W+/)
+			.filter((w) => w.length > 3);
 		if (words.length >= 3) out.push(words.slice(0, 3).join(' '));
 	}
 	return out.length > 0 ? out : ['platform'];
@@ -277,7 +283,10 @@ async function buildCorpus(client: DbClient, scale: Scale, key: CorpusKey): Prom
 	// because `nodes` is ordered by the ULID primary key.
 	const sample = await client.execute('SELECT id, body FROM nodes ORDER BY id LIMIT 4000');
 	const rows = sample.rows as unknown as Array<{ id: string; body: string | null }>;
-	const nodeIds = stride(rows.map((r) => String(r.id)), 500);
+	const nodeIds = stride(
+		rows.map((r) => String(r.id)),
+		500,
+	);
 	const queries = stride(queriesFrom(rows.map((r) => r.body ?? '').filter(Boolean)), 100);
 	return {
 		client,
@@ -343,10 +352,13 @@ export async function freshCorpus(
 		await init(client, key.dim);
 		await seedInto(client, key);
 		const corpus = await buildCorpus(client, scale, key);
-		return { ...corpus, close: async () => {
-			await closeClient(client);
-			await dropPgSchema(schema);
-		} };
+		return {
+			...corpus,
+			close: async () => {
+				await closeClient(client);
+				await dropPgSchema(schema);
+			},
+		};
 	}
 	const path = await ensureLibsqlCorpus(key, scale, log);
 	const scratch = `${CORPUS_DIR}/scratch-${scale}.db`;
@@ -354,10 +366,13 @@ export async function freshCorpus(
 	copyFileSync(path, scratch);
 	const client = createClient({ url: `file:${scratch}` });
 	const corpus = await buildCorpus(client, scale, key);
-	return { ...corpus, close: async () => {
-		client.close();
-		removeDb(scratch);
-	} };
+	return {
+		...corpus,
+		close: async () => {
+			client.close();
+			removeDb(scratch);
+		},
+	};
 }
 
 /** Delete every cached corpus, so the next run rebuilds from nothing. */
