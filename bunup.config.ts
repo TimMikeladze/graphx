@@ -33,6 +33,16 @@ export default defineWorkspace([
 		},
 	},
 	{
+		name: 'mcp',
+		root: 'packages/mcp',
+		// `bin.ts` is a separate entry so `dist/bin.js` is the executable the `graphx-mcp`
+		// bin points at; the shebang makes it runnable directly (mirrors cli).
+		config: {
+			entry: ['src/index.ts', 'src/bin.ts'],
+			banner: '#!/usr/bin/env bun',
+		},
+	},
+	{
 		name: 'react',
 		root: 'packages/react',
 		// React Query hooks layered over core's HTTP surface. `dts.inferTypes` makes bunup use
