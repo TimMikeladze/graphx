@@ -64,7 +64,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 ## Using the SDK
 
 ```ts
-import { getDb, init, Graph, defineGraphSchema } from '@graphx/core';
+import { getDb, init, Graph, defineGraphSchema, hashEmbed } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -77,15 +77,18 @@ const schema = defineGraphSchema({
   },
 });
 
+const embed = hashEmbed(768);
 const db = getDb('acme__alpha'); // one cached client per namespace (tenant)
 await init(db, 768);             // tables, indexes, vector column
 const g = new Graph(db, schema);
 
 const site = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+const body = 'free text — indexed for FTS, and embedded for vector search when `emb` is supplied';
 const gw = await g.addNode({
   type: 'gateway',
   data: { name: 'gw-1', firmware: '2.1.0' },
-  body: 'free text — embedded for vector search and indexed for FTS',
+  body,
+  emb: await embed(body), // `Graph` never calls the embedder for you — see below
 });
 await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 
@@ -93,8 +96,17 @@ await g.updateNode(gw.id, { data: { firmware: '2.2.0' } }); // shallow merge, op
 await g.deleteNode(gw.id);                                   // closes the version; nothing is erased
 ```
 
+`Graph` is embedder-free by design: `emb` is a plain `number[]` you pass in (the serving layer and
+`bulkLoad` embed on your behalf). Omit it and the node's vector column stays NULL — it is still
+found by FTS and by `hybridRetrieve`, but never by the ANN seeds `retrieve` runs on.
+
 Reads on `Graph`: `getNode`, `getNodeContent`, `neighbors`, `neighborsPage`, `listNodes`,
 `graphSlice`.
+
+```ts
+await g.neighbors(gw.id, { rels: ['deployedAt'], direction: 'forward' }); // AnyNode[]
+const page = await g.listNodes({ type: 'alert', limit: 50 });            // { nodes, nextCursor }
+```
 
 Every write is bitemporal. Versions carry `valid_from` / `valid_to` (`FOREVER` = live), so history is
 append-only and `asOf` reads reconstruct the graph as it stood at any timestamp.
@@ -110,14 +122,15 @@ await retrieve(db, embed, { query: 'overheating sensor', k: 10, maxDepth: 2, rel
 // Vector + FTS5 fused with RRF, optional rerank / MMR
 await hybridRetrieve(db, embed, { query: 'overheating sensor', k: 10 });
 
-// Pattern match — rows typed per alias
-await match(schema, db)
+// Pattern match — rows typed per alias. `select()` is async: it compiles the SQL and
+// hands back the runnable query, so await it before `.run()` / `.page()`.
+const q = await match(schema, db)
   .node('d', 'device').in('raised').node('a', 'alert')
-  .select('d', 'a')
-  .run();
+  .select('d', 'a');
+const rows = await q.run(); // rows[0].d.data, rows[0].a.data
 
 // Traversal and analytics
-await journey(db, { start: id, maxDepth: 6, direction: 'forward' });
+await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' }); // `from` (epoch ms) is required
 await shortestPath(db, srcId, dstId);
 await pagerank(db);
 
@@ -167,7 +180,7 @@ const g = createGraphHooks<Schema>();
 // <GraphProvider bootstrap="/demo"> fetches the tenant/project/user ids itself
 g.useNode(id, 'gateway');                                  // NodeOf<Schema,'gateway'> | null
 g.useNeighbors(id, { rel: 'deployedAt' });                 // site[]
-g.useListNodes({ kind: 'alert' });                         // alert[]
+g.useListNodes({ type: 'alert' });                         // alert[]
 g.useMatch((q) => q.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
 g.useChangeFeedSync();                                     // tails /changes, invalidates exact keys
 ```

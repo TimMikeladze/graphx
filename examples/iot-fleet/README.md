@@ -40,7 +40,7 @@ routes, real Zod validation, real CDC keyset, no listener. It also turns on `{ v
 
 ```
 gateway --deployedAt--> site
-device  --connectedTo-> gateway   (props: { rssi })
+device  --connectedTo-> gateway   (data: { rssi })
 alert   --raised------> device
 ```
 
@@ -54,7 +54,7 @@ alert   --raised------> device
   - `g.useNode(id, 'gateway')` → `NodeOf<Schema,'gateway'> | null`
   - `g.useNeighbors(id, { rel: 'deployedAt' })` → `site[]` (from `deployedAt.to`);
     `{ rel: 'connectedTo', direction: 'reverse' }` → `device[]` (from `connectedTo.from`)
-  - `g.useListNodes({ kind: 'alert' })` → `alert[]`
+  - `g.useListNodes({ type: 'alert' })` → `alert[]`
   - `g.useMatch(q => q.node('d','device').in('raised').node('a','alert').select('d','a'))` → rows
     typed per alias (`{ d: device; a: alert }`); the object form (`{ steps, select }`) works too
 - `g.useChangeFeedSync()` tails `/changes` and invalidates exactly the affected query keys — ack an

@@ -49,7 +49,7 @@ function NodeCard({ id }: { id: string }) {
   const { data, isLoading } = g.useNode(id); // data: AnyNode<typeof schema> | null
   const update = g.useUpdateNode();
   if (isLoading) return <Spinner />;
-  return <button onClick={() => update.mutate({ id, patch: { props: { name: 'Ada' } } })}>{data?.props.name}</button>;
+  return <button onClick={() => update.mutate({ id, patch: { data: { name: 'Ada' } } })}>{data?.data.name}</button>;
 }
 ```
 
@@ -75,22 +75,22 @@ function NodeCard({ id }: { id: string }) {
 ## Hooks
 
 **Queries** (`useQuery`): `useNode(id)` → `AnyNode<S> | null` (→ `null` on 404); pass the expected
-kind — `useNode(id, 'device')` → `NodeOf<S,'device'> | null` (narrowed, and runtime-checked: a
-mismatched stored kind resolves to `null`, so no discriminating). `useHistory`, `useGraphSlice`, `useRetrieve`,
+type — `useNode(id, 'device')` → `NodeOf<S,'device'> | null` (narrowed, and runtime-checked: a
+mismatched stored type resolves to `null`, so no discriminating). `useHistory`, `useGraphSlice`, `useRetrieve`,
 `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
 
 `useMatch` is fully typed per alias — pass the spec inline and each selected alias's row is
-kind-narrowed from the pattern:
+type-narrowed from the pattern:
 ```ts
 const m = g.useMatch({
-  steps: [{ node: { alias: 'p', kind: 'person' } }, { edge: { rel: 'owns' } },
-          { node: { alias: 'd', kind: 'device' } }],
+  steps: [{ node: { alias: 'p', type: 'person' } }, { edge: { rel: 'owns' } },
+          { node: { alias: 'd', type: 'device' } }],
   select: ['p', 'd'],
 });
-m.data?.rows[0]?.d.props.type;   // ^? typed NodeOf<S,'device'> — node.kind & rel are schema-checked
+m.data?.rows[0]?.d.data.name;   // ^? typed NodeOf<S,'device'> — node.type & rel are schema-checked
 ```
 
-…or build the same spec fluently (kind/rel-checked, same per-alias row types):
+…or build the same spec fluently (type/rel-checked, same per-alias row types):
 
 ```ts
 const m = g.useMatch((q) => q.node('p', 'person').out('owns').node('d', 'device').select('p', 'd'));
@@ -99,8 +99,8 @@ const m = g.useMatch((q) => q.node('p', 'person').out('owns').node('d', 'device'
 **Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
 `useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`. Both narrow when you scope
 them: `useNeighbors(id, { rel: 'owns' })` → rows typed `NodeOf<S,'device'>[]` (the schema's
-`owns.to` pins it; reverse hops use `from`); `useListNodes({ kind: 'device' })` → `NodeOf<S,'device'>[]`.
-The server enforces the rel/kind filter, so the narrowing is server-backed, not a blind cast.
+`owns.to` pins it; reverse hops use `from`); `useListNodes({ type: 'device' })` → `NodeOf<S,'device'>[]`.
+The server enforces the rel/type filter, so the narrowing is server-backed, not a blind cast.
 
 **Mutations** (`useMutation`, invalidate-on-settle): `useAddNode`, `useAddEdge`, `useUpdateNode`,
 `useDeleteEdge`, `useDeleteNode`, `useBulkLoad`, and the persisted-analytics ops `usePagerank`,

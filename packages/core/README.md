@@ -25,7 +25,7 @@ Optional subpaths pull optional peers only when imported: `@graphx/core/pg` (Pos
 ## Quickstart
 
 ```ts
-import { getDb, init, defineGraphSchema, Graph } from '@graphx/core';
+import { getDb, init, defineGraphSchema, Graph, hashEmbed } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -42,13 +42,23 @@ const schema = defineGraphSchema({
 const client = getDb('my-project'); // libSQL: file:my-project.db
 await init(client, 768);            // create schema + vector index (dim 768)
 
+const embed = hashEmbed(768);
 const g = new Graph(client, schema);
-const ada = await g.addNode({ kind: 'person', props: { name: 'Ada' } });
-const paper = await g.addNode({ kind: 'doc', props: { title: 'Notes' }, body: 'analytical engine' });
+const ada = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+const paper = await g.addNode({
+  type: 'doc',
+  data: { title: 'Notes' },
+  body: 'analytical engine',
+  emb: await embed('analytical engine'), // `Graph` never calls the embedder itself
+});
 await g.addEdge({ rel: 'wrote', src: ada.id, dst: paper.id });
 
-const neighbors = await g.neighbors(ada.id);
+const neighbors = await g.neighbors(ada.id, { rels: ['wrote'] }); // omit `rels` for every relation
+const page = await g.listNodes({ type: 'doc' });                  // { nodes, nextCursor }
 ```
+
+A node written without `emb` has a NULL vector: FTS and `hybridRetrieve` still find it, the ANN
+seeds behind `retrieve` never do. The serving layer and `bulkLoad` embed for you; `Graph` does not.
 
 ### Retrieval
 
@@ -97,7 +107,7 @@ const { app, tenant, project, user } = await createApp({
   embed: hashEmbed(),            // optional; enables /retrieve + /hybrid. Auto-dim sizes the vector column to it.
   cors: true,                    // optional; browser SPA on another origin, no dev proxy
   logger: true,                  // optional; log every request
-  seed: async (g) => { await g.addNode({ kind: 'device', props: { name: 'temp-1' } }); },
+  seed: async (g) => { await g.addNode({ type: 'device', data: { name: 'temp-1' } }); },
 });
 export default { fetch: app.fetch };  // GET /demo returns { tenant, project, user }
 ```
