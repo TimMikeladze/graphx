@@ -16,6 +16,7 @@ export {
 	type SchemaEdge,
 	schemaDoc,
 } from './resources.ts';
+export { parseSchemaFile } from './schema-file.ts';
 export {
 	createGraphxMcp,
 	createMcpApp,
