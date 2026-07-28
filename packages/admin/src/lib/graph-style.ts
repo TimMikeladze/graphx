@@ -40,9 +40,19 @@ export interface LabelSettings {
    * only; xyflow draws the caption inside every card, so there is nothing to ration.
    */
   limit: number
+  /**
+   * Draw each node's avatar (when its data carries one) instead of a plain colored dot. A node
+   * without a picture is unaffected either way.
+   */
+  images: boolean
 }
 
-export const DEFAULT_LABEL_SETTINGS: LabelSettings = { source: "name", edges: false, limit: 40 }
+export const DEFAULT_LABEL_SETTINGS: LabelSettings = {
+  source: "name",
+  edges: false,
+  limit: 40,
+  images: true,
+}
 
 /** Distinct types present in a slice, for the canvas legend. */
 export function legendOf(

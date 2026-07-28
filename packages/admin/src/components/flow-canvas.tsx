@@ -32,7 +32,7 @@ import {
   type FlowNodeData,
   type GraphFlowNode,
 } from "@/lib/flow-adapter"
-import { FlowLabelSourceContext } from "@/lib/flow-label-source"
+import { FlowLabelSourceContext, FlowShowImagesContext } from "@/lib/flow-label-source"
 import type { LabelSettings } from "@/lib/graph-style"
 import type { FlowLayout, GraphSlice, RendererHandle } from "@/lib/types"
 import "@xyflow/react/dist/style.css"
@@ -223,6 +223,7 @@ function FlowCanvasInner({
 
   return (
     <FlowLabelSourceContext value={labels.source}>
+      <FlowShowImagesContext value={labels.images}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -268,6 +269,7 @@ function FlowCanvasInner({
         />
       </ReactFlow>
       <CanvasMenu state={menu} onClose={closeMenu} />
+      </FlowShowImagesContext>
     </FlowLabelSourceContext>
   )
 }

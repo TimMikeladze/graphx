@@ -22,6 +22,11 @@ export interface CosmoNode {
   labelId: string
   /** Name and type together. */
   labelBoth: string
+  /**
+   * Avatar/thumbnail URL for `pointImageUrlBy`, or `""` when the node has none (Cosmograph
+   * loads nothing for an empty cell, leaving the colored dot).
+   */
+  image: string
   // Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
   [key: string]: unknown
 }
@@ -79,6 +84,7 @@ export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): Co
       label,
       labelId: shortId(n.id, 6, 4),
       labelBoth: `${label} · ${n.type}`,
+      image: n.image ?? "",
     }
   })
 
@@ -106,4 +112,12 @@ export const LABEL_COLUMN: Record<Exclude<LabelSource, "off">, string> = {
   type: "type",
   id: "labelId",
   both: "labelBoth",
+}
+
+/** The {@link CosmoNode} column holding the avatar URL, for Cosmograph's `pointImageUrlBy`. */
+export const IMAGE_COLUMN = "image"
+
+/** True when any node in the slice has a picture — the toggle is pointless otherwise. */
+export function sliceHasImages(slice: GraphSlice): boolean {
+  return slice.nodes.some((n) => n.image)
 }

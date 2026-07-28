@@ -51,6 +51,8 @@ export interface FlowNodeData {
   labelBoth: string
   /** Edges touching this node, within the slice — shown on the card and sizing nothing else. */
   degree: number
+  /** Avatar/thumbnail URL, when the node's data carries one. */
+  image?: string
   [key: string]: unknown
 }
 
@@ -100,6 +102,7 @@ export function toFlow(slice: GraphSlice, opts: ToFlowOpts = {}): FlowData {
         labelId: shortId(n.id, 6, 4),
         labelBoth: `${label} · ${n.type}`,
         degree: degree.get(n.id) ?? 0,
+        image: n.image,
       },
     }
   })

@@ -125,6 +125,25 @@ export function GraphLabelsMenu({
               Every edge on a small graph; on a dense one they are dropped rather than smeared.
             </p>
           </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="label-images">Node images</Label>
+            <Select
+              value={settings.images ? "on" : "off"}
+              onValueChange={(v) => onChange({ ...settings, images: v === "on" })}
+            >
+              <SelectTrigger id="label-images" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="on">Show avatars</SelectItem>
+                <SelectItem value="off">Off</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              For nodes whose data carries an image URL; the rest keep their type dot.
+            </p>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

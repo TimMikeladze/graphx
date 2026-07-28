@@ -501,7 +501,15 @@ const schemaDocSchema = z.object({
 });
 
 const graphSliceSchema = z.object({
-	nodes: z.array(z.object({ id: z.string(), type: z.string(), label: z.string().optional() })),
+	nodes: z.array(
+		z.object({
+			id: z.string(),
+			type: z.string(),
+			label: z.string().optional(),
+			/** Avatar/thumbnail URL; always absolute http(s) (see `sliceImage`). */
+			image: z.string().optional(),
+		}),
+	),
 	links: z.array(
 		z.object({
 			id: z.string(),

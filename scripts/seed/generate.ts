@@ -177,6 +177,15 @@ const TICKET_STATES = ["open", "in progress", "blocked", "closed"]
 const PROJECT_STATES = ["planned", "active", "paused", "shipped"]
 const LANGUAGES = ["typescript", "rust", "go", "python", "kotlin"]
 
+/**
+ * A deterministic demo avatar for a person, so the explorer's canvases have pictures to draw.
+ * DiceBear is used because it serves `Access-Control-Allow-Origin: *` — Cosmograph reads its
+ * point images back off a canvas, which a cross-origin image without CORS headers taints.
+ */
+function avatarUrl(name: string): string {
+  return `https://api.dicebear.com/9.x/thumbs/png?seed=${encodeURIComponent(name)}`
+}
+
 /** Pick uniformly from an array (never empty — every bank above is non-empty). */
 function pick<T>(rand: () => number, arr: readonly T[]): T {
   return arr[Math.floor(rand() * arr.length)] as T
@@ -330,7 +339,7 @@ export function generate(config: GenConfig): Plan {
     if (kind === "person") {
       const name = `${pick(rand, FIRST)} ${pick(rand, LAST)}`
       const title = pick(rand, TITLES)
-      data = { name, title, location: pick(rand, CITIES) }
+      data = { name, title, location: pick(rand, CITIES), avatar: avatarUrl(name) }
       body = makeBody(rand, `${name} is a ${title} working on ${pick(rand, topic)}.`, community, 2)
     } else if (kind === "team") {
       const name = `${pick(rand, topic)} team`

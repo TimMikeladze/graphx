@@ -64,6 +64,18 @@ describe("toFlow", () => {
     ])
   })
 
+  it("passes the node's image through, and leaves it unset when there is none", () => {
+    const { nodes } = toFlow({
+      ...slice,
+      nodes: [
+        { id: "n1", type: "person", image: "https://cdn.example/ada.png" },
+        { id: "n2", type: "person" },
+      ],
+    })
+    expect(nodes[0]?.data.image).toBe("https://cdn.example/ada.png")
+    expect(nodes[1]?.data.image).toBeUndefined()
+  })
+
   it("counts degree within the slice", () => {
     const byId = Object.fromEntries(toFlow(slice).nodes.map((n) => [n.id, n.data.degree]))
     expect(byId).toEqual({ n1: 1, n2: 2, n3: 1 })

@@ -7,3 +7,9 @@ import type { LabelSource } from "./graph-style"
  * out — the graph. Kept out of the card module so that file only exports its component.
  */
 export const FlowLabelSourceContext = createContext<LabelSource>("name")
+
+/**
+ * Whether the cards draw each node's avatar. Carried by context for the same reason as the
+ * caption source: toggling pictures must re-render the cards, not rebuild and re-lay-out the graph.
+ */
+export const FlowShowImagesContext = createContext<boolean>(true)

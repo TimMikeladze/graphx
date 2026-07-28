@@ -9,7 +9,14 @@ import { defineGraphSchema } from '../../packages/core/src/index.ts'
 
 export const demoSchema = defineGraphSchema({
   nodes: {
-    person: z.object({ name: z.string(), title: z.string(), location: z.string() }),
+    // `avatar` is one of the keys the graph slice reads as a node picture, so the demo graph
+    // exercises the canvases' avatar rendering.
+    person: z.object({
+      name: z.string(),
+      title: z.string(),
+      location: z.string(),
+      avatar: z.string().optional(),
+    }),
     team: z.object({ name: z.string(), charter: z.string() }),
     org: z.object({ name: z.string(), industry: z.string() }),
     project: z.object({ name: z.string(), status: z.string() }),
@@ -38,4 +45,4 @@ export type DemoSchema = typeof demoSchema
  * Bumped whenever the schema or the generator's output changes shape. Feeds the seed-cache
  * fingerprint, so an edit here invalidates every cached demo database.
  */
-export const DEMO_SCHEMA_VERSION = 1
+export const DEMO_SCHEMA_VERSION = 2

@@ -95,6 +95,12 @@ export interface GraphSliceNode {
   type: string
   /** Server-derived display label (the node's name/title/…); absent when data carries none. */
   label?: string
+  /**
+   * Server-derived avatar/thumbnail URL (the node's image/avatar/… property); absent when data
+   * carries none. Always an absolute http(s) URL — the server rejects every other scheme, so it
+   * is safe to put straight into an `<img src>`.
+   */
+  image?: string
 }
 
 /** A canvas link in a graph slice (Cosmograph `source`/`target` naming). */

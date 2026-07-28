@@ -166,6 +166,12 @@ export interface GraphSliceNode {
 	 * the props (that is what `GET /nodes/:id` is for).
 	 */
 	label?: string;
+	/**
+	 * An avatar/thumbnail URL for rendering the node as a picture instead of a plain dot — the
+	 * first {@link IMAGE_KEYS} property the node's data carries, and only when it passes
+	 * {@link isRenderableImageUrl}. Absent when the node carries none.
+	 */
+	image?: string;
 }
 
 /** A canvas link in a {@link GraphSlice} (Cosmograph `source`/`target` naming). */
@@ -208,6 +214,49 @@ function sliceLabel(data: Record<string, unknown>): string | undefined {
 	for (const k of LABEL_KEYS) {
 		const v = data[k];
 		if (typeof v === 'string' && v.trim()) return v.trim().slice(0, LABEL_MAX);
+	}
+	return undefined;
+}
+
+/**
+ * Property keys, in priority order, that carry a node's avatar/thumbnail URL. Kept in sync with
+ * the admin UI, so a node shows the same picture on either canvas.
+ */
+const IMAGE_KEYS = [
+	'image',
+	'imageUrl',
+	'image_url',
+	'avatar',
+	'avatarUrl',
+	'avatar_url',
+	'thumbnail',
+	'icon',
+	'photo',
+];
+
+/**
+ * Longest image URL the slice will carry. Also the reason `data:` URIs are not accepted: a real
+ * inline image is orders of magnitude longer than this, and a slice may hold thousands of nodes.
+ */
+const IMAGE_URL_MAX = 512;
+
+/**
+ * Whether a URL is safe to hand a renderer. A node's `data` is author-controlled and its image
+ * ends up in an `<img src>`, so only absolute http(s) URLs pass — `javascript:` and friends are
+ * rejected here rather than trusted to the client.
+ */
+function isRenderableImageUrl(url: string): boolean {
+	const scheme = url.slice(0, 8).toLowerCase();
+	return scheme.startsWith('https://') || scheme.startsWith('http://');
+}
+
+/** The first {@link IMAGE_KEYS} property that holds a short, renderable http(s) URL. */
+function sliceImage(data: Record<string, unknown>): string | undefined {
+	for (const k of IMAGE_KEYS) {
+		const v = data[k];
+		if (typeof v !== 'string') continue;
+		const url = v.trim();
+		if (url.length > 0 && url.length <= IMAGE_URL_MAX && isRenderableImageUrl(url)) return url;
 	}
 	return undefined;
 }
@@ -787,7 +836,7 @@ export class Graph<S extends GraphSchema> {
 		if (filter === null) return { nodes: [], links: [], truncated: false };
 		const maxRows = resolveLimits(opts.limits).maxRows;
 
-		// 1) The capped node set (id + type + data, the last only to derive a display label).
+		// 1) The capped node set (id + type + data, the last only to derive a label + image).
 		// Reused as a subquery for the edge endpoint filter, which selects `id` back out of it.
 		const nodeSub = `SELECT nv.id AS id, nv.type AS type, nv.data AS data
 			FROM node_versions nv
@@ -797,8 +846,13 @@ export class Graph<S extends GraphSchema> {
 		const nodesRes = await this.raw.execute({ sql: nodeSub, args: filter.args });
 		const nodes: GraphSliceNode[] = nodesRes.rows.map((r) => {
 			const type = String(r.type);
-			const label = sliceLabel(this.upcaster.apply(type, parseData(r.data)));
-			return label === undefined ? { id: String(r.id), type } : { id: String(r.id), type, label };
+			const data = this.upcaster.apply(type, parseData(r.data)) as Record<string, unknown>;
+			const node: GraphSliceNode = { id: String(r.id), type };
+			const label = sliceLabel(data);
+			if (label !== undefined) node.label = label;
+			const image = sliceImage(data);
+			if (image !== undefined) node.image = image;
+			return node;
 		});
 		const truncated = nodes.length >= maxRows;
 

@@ -136,6 +136,79 @@ test('graphSlice labels are trimmed and capped', async () => {
 	raw.close();
 });
 
+test('graphSlice nodes carry an image URL drawn from data', async () => {
+	const raw = makeTestDb().client;
+	await init(raw);
+	const schema = defineGraphSchema({
+		nodes: {
+			person: z.object({ name: z.string(), avatar: z.string().optional() }),
+			doc: z.object({ title: z.string() }),
+		},
+		edges: {},
+	});
+	const g = new Graph(raw, schema);
+	const withImage = await g.addNode({
+		type: 'person',
+		data: { name: 'Ada', avatar: 'https://cdn.example/ada.png' },
+	});
+	const without = await g.addNode({ type: 'doc', data: { title: 'notes' } });
+	const byId = new Map((await g.graphSlice()).nodes.map((n) => [n.id, n]));
+	expect(byId.get(withImage.id)?.image).toBe('https://cdn.example/ada.png');
+	expect(byId.get(without.id)?.image).toBeUndefined();
+	raw.close();
+});
+
+test('graphSlice image keys are tried in priority order', async () => {
+	const raw = makeTestDb().client;
+	await init(raw);
+	const schema = defineGraphSchema({
+		nodes: { person: z.object({ image: z.string(), avatar: z.string() }) },
+		edges: {},
+	});
+	const g = new Graph(raw, schema);
+	const n = await g.addNode({
+		type: 'person',
+		data: { image: 'https://cdn.example/first.png', avatar: 'https://cdn.example/second.png' },
+	});
+	const byId = new Map((await g.graphSlice()).nodes.map((x) => [x.id, x]));
+	expect(byId.get(n.id)?.image).toBe('https://cdn.example/first.png');
+	raw.close();
+});
+
+test('graphSlice drops image URLs that are not http(s), and over-long ones', async () => {
+	const raw = makeTestDb().client;
+	await init(raw);
+	const schema = defineGraphSchema({
+		nodes: { person: z.object({ name: z.string(), image: z.string() }) },
+		edges: {},
+	});
+	const g = new Graph(raw, schema);
+	// A node's `data` is author-controlled and its image lands in an `<img src>`, so anything
+	// that is not a plain http(s) URL must never leave the server.
+	const script = await g.addNode({
+		type: 'person',
+		data: { name: 'x', image: 'javascript:alert(1)' },
+	});
+	const upper = await g.addNode({
+		type: 'person',
+		data: { name: 'x', image: 'JavaScript:alert(1)' },
+	});
+	const dataUri = await g.addNode({
+		type: 'person',
+		data: { name: 'x', image: 'data:image/png;base64,iVBORw0KGgo=' },
+	});
+	const relative = await g.addNode({ type: 'person', data: { name: 'x', image: '/avatars/a.png' } });
+	const long = await g.addNode({
+		type: 'person',
+		data: { name: 'x', image: `https://cdn.example/${'x'.repeat(600)}.png` },
+	});
+	const byId = new Map((await g.graphSlice()).nodes.map((n) => [n.id, n]));
+	for (const n of [script, upper, dataUri, relative, long]) {
+		expect(byId.get(n.id)?.image).toBeUndefined();
+	}
+	raw.close();
+});
+
 test('graphSlice with an unmatched full-text query returns empty', async () => {
 	const g = await graph();
 	await g.addNode({ type: 'person', data: { name: 'p1' }, body: 'hello' });

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { Cosmograph, type CosmographRef } from "@cosmograph/react"
-import { type CosmoNode, LABEL_COLUMN, toCosmograph } from "@/lib/cosmograph-adapter"
+import {
+  type CosmoNode,
+  IMAGE_COLUMN,
+  LABEL_COLUMN,
+  sliceHasImages,
+  toCosmograph,
+} from "@/lib/cosmograph-adapter"
 import { colorForType, type LabelSettings } from "@/lib/graph-style"
 import { shortId } from "@/lib/format"
 import type { GraphSlice, RendererHandle } from "@/lib/types"
@@ -31,10 +37,18 @@ const EDGE_LABEL_THROTTLE_MS = 200
 const SETTLE_MS = 8000
 
 /**
- * Every caption column, declared so Cosmograph keeps them in the point data. Module-level so its
- * identity is stable across renders and cannot look like a config change.
+ * Every caption column plus the avatar URL, declared so Cosmograph keeps them in the point data.
+ * The image column is declared even while pictures are off: a column Cosmograph does not consume
+ * at upload time is dropped, and turning the toggle on later would then find nothing.
+ * Module-level so its identity is stable across renders and cannot look like a config change.
  */
-const CAPTION_COLUMNS = Object.values(LABEL_COLUMN)
+const EXTRA_COLUMNS = [...Object.values(LABEL_COLUMN), IMAGE_COLUMN]
+
+/**
+ * On-canvas size of a node's avatar, in pixels. Sits between the smallest and largest degree-sized
+ * point (11–34) so a picture neither vanishes on a leaf nor swamps a hub.
+ */
+const IMAGE_SIZE = 26
 
 type Hover = { id: string; type: string; x: number; y: number }
 
@@ -79,6 +93,10 @@ export function GraphCanvas({
   const [edgeLabels, setEdgeLabels] = useState<EdgeLabel[]>([])
   const showNodeLabels = labels.source !== "off"
   const showEdgeLabels = labels.edges
+  // Pointing `pointImageUrlBy` at a column of empty strings costs a pass over every point for
+  // nothing, so it is only wired up when the slice actually carries pictures.
+  const hasImages = useMemo(() => sliceHasImages(slice), [slice])
+  const showImages = labels.images && hasImages
 
   // Read inside Cosmograph's callbacks, which are invoked at simulation-tick rate: reading refs
   // keeps them correct without re-subscribing (and without a stale closure) on every render.
@@ -286,7 +304,13 @@ export function GraphCanvas({
         // Columns Cosmograph does not consume itself are dropped from the point data unless
         // they are declared here — without this, pointing `pointLabelBy` at one of the other
         // caption columns finds nothing and the captions never change.
-        pointIncludeColumns={CAPTION_COLUMNS}
+        pointIncludeColumns={EXTRA_COLUMNS}
+        // Avatars: drawn over the point, replacing its dot once the picture has loaded. Nodes
+        // whose image cell is empty — or whose URL is cross-origin without CORS, which is what
+        // Cosmograph's canvas read needs — simply keep the colored dot.
+        pointImageUrlBy={showImages ? IMAGE_COLUMN : undefined}
+        pointImageSize={IMAGE_SIZE}
+        hidePointShapesForLoadedImages
         // `showLabels` is the master switch for every non-hovered label, custom ones included,
         // so it is on whenever either kind is wanted; the rest scope it to point labels.
         showLabels={showNodeLabels || showEdgeLabels}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { LABEL_COLUMN, toCosmograph } from "./cosmograph-adapter"
+import { LABEL_COLUMN, sliceHasImages, toCosmograph } from "./cosmograph-adapter"
 import { colorForType, legendOf } from "./graph-style"
 import type { GraphSlice } from "./types"
 
@@ -86,6 +86,35 @@ describe("toCosmograph", () => {
   it("flags the selected node only", () => {
     const { nodes } = toCosmograph(slice, { selectedId: "n3" })
     expect(nodes.filter((n) => n.selected).map((n) => n.id)).toEqual(["n3"])
+  })
+})
+
+describe("toCosmograph images", () => {
+  it("carries the server image URL on its own column", () => {
+    const { nodes } = toCosmograph({
+      ...slice,
+      nodes: [{ id: "n1", type: "person", image: "https://cdn.example/ada.png" }],
+    })
+    expect(nodes[0]?.image).toBe("https://cdn.example/ada.png")
+  })
+
+  it("uses an empty cell for a node with no image, so Cosmograph loads nothing", () => {
+    const { nodes } = toCosmograph(slice)
+    expect(nodes.map((n) => n.image)).toEqual(["", "", ""])
+  })
+})
+
+describe("sliceHasImages", () => {
+  it("is false when no node carries a picture", () => {
+    expect(sliceHasImages(slice)).toBe(false)
+  })
+  it("is true when any node does", () => {
+    expect(
+      sliceHasImages({
+        ...slice,
+        nodes: [{ id: "n1", type: "person" }, { id: "n2", type: "person", image: "https://x/a.png" }],
+      }),
+    ).toBe(true)
   })
 })
 
