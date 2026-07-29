@@ -2849,9 +2849,13 @@ first element alone and truncates floats without error."
 
 ## Task 9: `duckdbSchema(dim)` and the live/history split
 
-> **Deviation from the spec's staging, deliberate:** §15 assigns the live/history split to stage 4. It lands here instead, because it is pure DDL and writing the schema twice — once flat, then again split — would be waste. Nothing else moves.
+> **Correction, applied during execution (Task 11 found it).** An earlier version of this task made `node_versions` and `edge_versions` *views* over separate `nv_live` / `nv_history` tables. DuckDB refuses `INSERT` into a `UNION ALL` view, and every write path in the codebase — `Graph.addNode`/`addEdge`/`updateNode`/`deleteNode`/`deleteEdge`, `bulkLoad`, `bulkEdges`, and auth — writes to those names directly, because on libSQL and Postgres they are real tables. The split as a *local schema* broke the entire write path.
+>
+> The split now lives where it actually pays off: **in the Parquet layout**, not the local materialization. Task 15 exports `valid_to = FOREVER` rows to a live file and the rest to history files; Task 14 loads both back into one table. The local database keeps single tables and needs no write-path changes at all.
+>
+> What that costs: the one-live-row-per-id invariant is no longer backed by a primary key. It is enforced by the writer mutex (Task 16) and the same application-level checking Task 12 establishes for unique props — which was already the accepted model for constraints DuckDB cannot express.
 
-The split is what makes the schema expressible at all. Every index in graphx is *partial* over `WHERE valid_to = 8640000000000000`, and DuckDB has no partial indexes. Putting live rows in their own table makes the predicate physical: the index scope becomes the table, and what is left is a plain index.
+This schema is the third sibling of `schema()` (libSQL) and `postgresSchema()`, and deliberately mirrors the Postgres one: single version tables, `nodes`/`edges` as views filtered to `valid_to = FOREVER`.
 
 **Files:**
 - Modify: `packages/core/src/dialect-sql.ts` (add `duckdbSchema`)
@@ -2860,7 +2864,7 @@ The split is what makes the schema expressible at all. Every index in graphx is 
 
 **Interfaces:**
 - Consumes: `createDuckClient` from Task 8.
-- Produces: `function duckdbSchema(dim?: number): string` exported from `dialect-sql.ts`. Physical tables `nv_live`, `nv_history`, `ev_live`, `ev_history`; compatibility views `node_versions` (= `nv_live UNION ALL nv_history`), `edge_versions`, `nodes`, `edges`.
+- Produces: `function duckdbSchema(dim?: number): string` exported from `dialect-sql.ts`. Real tables `node_versions` and `edge_versions`; views `nodes` and `edges` filtered to `valid_to = FOREVER`. Same shape as `postgresSchema()`, so every existing write path works unchanged.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2874,7 +2878,7 @@ import { init, readEmbDim } from '../src/schema.ts';
 const FOREVER = 8640000000000000;
 
 describe('duckdbSchema', () => {
-	test('init creates the split tables and their compatibility views', async () => {
+	test('init creates the version tables and their views', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		const r = await c.execute(
@@ -2882,7 +2886,7 @@ describe('duckdbSchema', () => {
 			 WHERE view_name IN ('node_versions','edge_versions','nodes','edges')`,
 		);
 		const names = r.rows.map((x) => String(x.table_name ?? x.view_name));
-		for (const t of ['nv_live', 'nv_history', 'ev_live', 'ev_history']) {
+		for (const t of ['node_versions', 'edge_versions', 'node_identity', 'graph_outbox']) {
 			expect(names).toContain(t);
 		}
 		await c.end();
@@ -2895,16 +2899,16 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('node_versions unions live and history', async () => {
+	test('nodes shows only the live version, node_versions shows every one', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 10, FOREVER],
 		});
 		await c.execute({
-			sql: `INSERT INTO nv_history (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [2, 'n1', 'Doc', 1, 10],
 		});
 		expect((await c.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(2);
@@ -2912,20 +2916,21 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('the live table enforces one row per id without a partial index', async () => {
+	test('two live rows for one id are NOT rejected by the store — the writer must prevent them', async () => {
+		// On libSQL and Postgres a partial unique index makes this impossible. DuckDB has
+		// no partial indexes, so the invariant is upheld by the serialized writer (Task 16)
+		// and application-level checks (Task 12) instead. This test pins that the store
+		// gives no backstop, so nobody later mistakes silence for enforcement.
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
-		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-			args: [1, 'n1', 'Doc', 10, FOREVER],
-		});
-		await expect(
-			c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-				args: [2, 'n1', 'Doc', 20, FOREVER],
-			}),
-		).rejects.toThrow();
+		for (const ver of [1, 2]) {
+			await c.execute({
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+				args: [ver, 'n1', 'Doc', ver * 10, FOREVER],
+			});
+		}
+		expect((await c.execute('SELECT count(*) AS n FROM nodes')).rows[0]?.n).toBe(2);
 		await c.end();
 	});
 
@@ -2953,10 +2958,10 @@ describe('duckdbSchema', () => {
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (id, type, valid_from) VALUES (?, ?, ?)`,
+			sql: `INSERT INTO node_versions (id, type, valid_from) VALUES (?, ?, ?)`,
 			args: ['n1', 'Doc', 1],
 		});
-		const r = await c.execute('SELECT ver FROM nv_live');
+		const r = await c.execute('SELECT ver FROM node_versions');
 		expect(Number(r.rows[0]?.ver)).toBeGreaterThan(0);
 		await c.end();
 	});
@@ -2980,10 +2985,10 @@ describe('duckdbSchema', () => {
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 1, FOREVER],
 		});
-		expect((await c.execute('SELECT valid_to FROM nv_live')).rows[0]?.valid_to).toBe(FOREVER);
+		expect((await c.execute('SELECT valid_to FROM node_versions')).rows[0]?.valid_to).toBe(FOREVER);
 		await c.end();
 	});
 });
@@ -3059,35 +3064,24 @@ CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT INTO graph_meta (key, value) VALUES ('emb_dim', '${dim}') ON CONFLICT DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS nv_live (${nodeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS nv_history (${nodeCols},
+CREATE TABLE IF NOT EXISTS node_versions (${nodeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS nv_hist_asof ON nv_history(id, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS nv_live_type ON nv_live(type);
+CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 
-CREATE TABLE IF NOT EXISTS ev_live (${edgeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS ev_history (${edgeCols},
+CREATE TABLE IF NOT EXISTS edge_versions (${edgeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS ev_live_src ON ev_live(src);
-CREATE INDEX IF NOT EXISTS ev_live_dst ON ev_live(dst);
-CREATE INDEX IF NOT EXISTS ev_hist_src ON ev_history(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_hist_dst ON ev_history(dst, valid_from, valid_to);
-
-CREATE OR REPLACE VIEW node_versions AS
-  SELECT * FROM nv_live UNION ALL SELECT * FROM nv_history;
-CREATE OR REPLACE VIEW edge_versions AS
-  SELECT * FROM ev_live UNION ALL SELECT * FROM ev_history;
+CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE OR REPLACE VIEW nodes AS
-  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb FROM nv_live;
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
+  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
 CREATE OR REPLACE VIEW edges AS
-  SELECT id, src, dst, rel, weight, data, source FROM ev_live;
+  SELECT id, src, dst, rel, weight, data, source
+  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
@@ -3283,7 +3277,7 @@ describe('duckdb fragments, executed', () => {
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
 				      VALUES (nextval('seq_ver'), ?, 'Doc', ?, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
 				args: [id, from, embParam([...vec])],
 			});
@@ -3306,7 +3300,7 @@ describe('duckdb fragments, executed', () => {
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
 				      VALUES (nextval('seq_ver'), ?, 'Doc', 1, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
 				args: [id, embParam([...vec])],
 			});
@@ -3398,8 +3392,8 @@ case 'duckdb':
   SELECT unnest(ids) AS id
   FROM (
     SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   )`;
 
 // vecSeedLive — args: embedding JSON, k. Identical shape; the caller wants ids only.
@@ -3408,8 +3402,8 @@ case 'duckdb':
 SELECT unnest(ids) AS id
 FROM (
   SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-  FROM nv_live
-  WHERE emb IS NOT NULL
+  FROM node_versions
+  WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
 )`;
 
 // annSeedsAsOf — args: embedding JSON, over-fetch k, t, t, final k. Ranks by true
@@ -3419,8 +3413,8 @@ case 'duckdb':
   SELECT live.id AS id, live.rk AS rk
   FROM (
     SELECT id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')) AS rk
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
     ORDER BY rk
     LIMIT ?
   ) live
@@ -3642,7 +3636,7 @@ is unverified on DuckDB."
 
 Neither constraint gets a store-level index on DuckDB, for two different reasons.
 
-`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns and `ev_live` holds exactly the live rows — but the libSQL and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on `ev_live` would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
+`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns — but the libSQL and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on live edges would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
 
 **Files:**
 - Modify: `packages/core/src/constraints.ts:62-91`
@@ -3778,7 +3772,7 @@ export async function declareDuckUniqueProp(
 	// loudly, the way creating a unique index over duplicates would on the other backends.
 	const dupes = await client.execute({
 		sql: `SELECT json_extract_string(data, '$.${prop}') AS v, count(*) AS n
-		      FROM nv_live WHERE type = ? AND json_extract_string(data, '$.${prop}') IS NOT NULL
+		      FROM node_versions WHERE valid_to = 8640000000000000 AND type = ? AND json_extract_string(data, '$.${prop}') IS NOT NULL
 		      GROUP BY 1 HAVING count(*) > 1 LIMIT 1`,
 		args: [type],
 	});
@@ -3813,7 +3807,7 @@ export async function assertUniqueProps(
 		const value = data[prop];
 		if (value === undefined || value === null) continue;
 		const r = await client.execute({
-			sql: `SELECT id FROM nv_live
+			sql: `SELECT id FROM node_versions
 			      WHERE type = ? AND json_extract_string(data, '$.${prop}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}
 			      LIMIT 1`,
@@ -3841,7 +3835,7 @@ In `constraints.ts`, replace the `duckdb` throw in `declareUniqueNodeProp`:
 	}
 ```
 
-And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial* unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` on `ev_live` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
+And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial* unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
 
 ```ts
 	if (dialectOf(client) === 'duckdb') {
@@ -3888,8 +3882,8 @@ serialized - a read-then-write cannot be raced in-process, and another
 process cannot commit without winning the manifest CAS.
 
 declareSingleValuedRel needs no such treatment: src and rel are real
-columns and ev_live holds exactly the live rows, so the live/history
-split turns that partial index into an ordinary one."
+columns, but scoping a unique index to one rel needs a partial index,
+which DuckDB does not have."
 ```
 
 ---
@@ -4098,12 +4092,12 @@ describe('materialize', () => {
 		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
 		const manifest: Manifest = {
 			...emptyManifest(4, 'h'),
-			tables: { nv_live: { files: [key] } },
+			tables: { node_versions: { files: [key] } },
 		};
 
 		const c = createDuckClient();
 		await materialize(c, manifest, cache);
-		expect((await c.execute('SELECT count(*) AS n FROM nv_live')).rows[0]?.n).toBe(1);
+		expect((await c.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(1);
 		expect((await c.execute('SELECT count(*) AS n FROM nodes')).rows[0]?.n).toBe(1);
 		await c.end();
 	});
@@ -4151,19 +4145,17 @@ import type { Manifest } from './objstore/manifest.ts';
  * "publish this materialization".
  *
  * Files load into real TABLES rather than views over `read_parquet`, for two reasons. The
- * writer must mutate them, and views cannot be indexed or constrained — so `nv_live`'s
- * PRIMARY KEY, which is how the one-live-row-per-id invariant is enforced without a
- * partial index, would not exist.
+ * writer must mutate them, and a view cannot be inserted into — DuckDB rejects INSERT
+ * against a UNION ALL view, which is what broke the write path when the live/history
+ * split lived in the local schema instead of the Parquet layout.
  */
 
 /** Every table a manifest can carry. Order matters: identity tables load before referents. */
 export const SNAPSHOT_TABLES = [
 	'node_identity',
 	'edge_identity',
-	'nv_live',
-	'nv_history',
-	'ev_live',
-	'ev_history',
+	'node_versions',
+	'edge_versions',
 	'graph_outbox',
 	'node_analytics',
 	'trigger_cursors',
@@ -4247,8 +4239,7 @@ git add packages/core/src/duck-materialize.ts packages/core/test/duck-materializ
 git commit -m "feat(core): materialize a snapshot into a local DuckDB
 
 Parquet loads into real tables rather than views over read_parquet: the
-writer mutates them, and a view cannot carry nv_live's PRIMARY KEY, which
-is how one-live-row-per-id is enforced without a partial index.
+writer mutates them, and DuckDB rejects INSERT against a view.
 
 Sets validate_external_file_cache = NO_VALIDATION, which takes a warm
 repeat query from one HEAD request to zero requests. That setting serves
@@ -4271,7 +4262,7 @@ The write direction, and the point at which `DuckClient` stops being a local dat
 **Interfaces:**
 - Consumes: `SnapshotStore`, `Manifest` (Task 5); `FileCache` (Task 6); `materialize`, `SNAPSHOT_TABLES` (Task 14).
 - Produces:
-  - `async function exportTable(client: DbClient, table: string, cache: FileCache, tmpDir: string): Promise<string | null>` — writes a table to Parquet, uploads it, returns its content key (null when the table is empty)
+  - `async function exportTable(client, table, cache, tmpDir, where?, suffix?): Promise<string | null>` — writes a table (or the subset matching `where`) to Parquet, uploads it, returns its content key; null when empty
   - `async function buildManifest(client: DbClient, base: Manifest | null, cache: FileCache, tmpDir: string, dirty: Set<string>): Promise<Manifest>`
   - `async function commitSnapshot(client: DbClient, snapshots: SnapshotStore, cache: FileCache, tmpDir: string, base: Manifest | null, dirty: Set<string>): Promise<Manifest>`
   - `DuckClientOptions` gains `store?: ObjectStore`, `cacheDir?: string`; `DbConfig` gains `bucket`, `prefix`, `cacheDir`, `endpoint`, `region`, `snapshot`.
@@ -4380,10 +4371,10 @@ describe('snapshot commit', () => {
 		await c.open();
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from) VALUES (?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from) VALUES (?,?,?,?)`,
 			args: [17, 'n1', 'Doc', 1],
 		});
-		const m = await c.commit(new Set(['node_identity', 'nv_live']));
+		const m = await c.commit(new Set(['node_identity', 'node_versions']));
 		expect(m.verHigh).toBe(17);
 		await c.end();
 	});
@@ -4400,6 +4391,7 @@ Expected: FAIL — `DuckClient` has no `open`, `commit`, or `snapshot`.
 ```ts
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { FOREVER } from './db.ts';
 import type { DbClient } from './dialect.ts';
 import { SNAPSHOT_TABLES } from './duck-materialize.ts';
 import type { FileCache } from './objstore/cache.ts';
@@ -4428,14 +4420,17 @@ export async function exportTable(
 	table: string,
 	cache: FileCache,
 	tmpDir: string,
+	where?: string,
+	suffix?: string,
 ): Promise<string | null> {
-	const count = await client.execute(`SELECT count(*) AS n FROM ${table}`);
+	const filter = where ? ` WHERE ${where}` : '';
+	const count = await client.execute(`SELECT count(*) AS n FROM ${table}${filter}`);
 	if (Number(count.rows[0]?.n ?? 0) === 0) return null;
-	const path = join(tmpDir, `${table}.parquet`);
+	const path = join(tmpDir, `${table}${suffix ? `.${suffix}` : ''}.parquet`);
 	// zstd and a fixed row-group size so identical content yields identical bytes, which
 	// is what makes the content hash stable across writers and runs.
 	await client.execute(
-		`COPY (SELECT * FROM ${table} ORDER BY ALL) TO '${path.replace(/'/g, "''")}'
+		`COPY (SELECT * FROM ${table}${filter} ORDER BY ALL) TO '${path.replace(/'/g, "''")}'
 		 (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 122880)`,
 	);
 	try {
@@ -4444,6 +4439,21 @@ export async function exportTable(
 		await rm(path, { force: true });
 	}
 }
+
+/**
+ * Tables exported as two files — live rows and history rows — rather than one.
+ *
+ * This is where the live/history split lives. It was briefly a *local schema* split, with
+ * `node_versions` as a view over two tables, and that broke every write path: DuckDB
+ * rejects `INSERT` into a `UNION ALL` view while `graph.ts`, `bulk.ts`, and auth all write
+ * to `node_versions` by name. As a storage layout it costs nothing and still buys what the
+ * split was for — a reader that only needs current state fetches the live file alone, and
+ * history partitions by close time for tiering.
+ */
+const SPLIT_TABLES: Record<string, string> = {
+	node_versions: 'valid_to',
+	edge_versions: 'valid_to',
+};
 
 /** The next manifest: dirty tables re-exported, clean tables carried forward. */
 export async function buildManifest(
@@ -4457,6 +4467,22 @@ export async function buildManifest(
 	for (const table of SNAPSHOT_TABLES) {
 		if (!dirty.has(table) && base?.tables[table]) {
 			tables[table] = base.tables[table];
+			continue;
+		}
+		const splitOn = SPLIT_TABLES[table];
+		if (splitOn) {
+			// Live first, so a reader that wants only current state can take files[0].
+			const live = await exportTable(client, table, cache, tmpDir, `${splitOn} = ${FOREVER}`, 'live');
+			const history = await exportTable(
+				client,
+				table,
+				cache,
+				tmpDir,
+				`${splitOn} <> ${FOREVER}`,
+				'history',
+			);
+			const files = [live, history].filter((k): k is string => k !== null);
+			if (files.length > 0) tables[table] = { files };
 			continue;
 		}
 		const key = await exportTable(client, table, cache, tmpDir);
@@ -4737,12 +4763,12 @@ describe('duckdb end to end', () => {
 			Array.from({ length: 8 }, (_, i) => g.updateNode(n.id, { data: { v: i + 1 } })),
 		);
 		const live = await c.execute({
-			sql: 'SELECT count(*) AS n FROM nv_live WHERE id = ?',
+			sql: 'SELECT count(*) AS n FROM node_versions WHERE id = ? AND valid_to = 8640000000000000',
 			args: [n.id],
 		});
 		expect(live.rows[0]?.n).toBe(1);
 		const history = await c.execute({
-			sql: 'SELECT valid_from, valid_to FROM nv_history WHERE id = ? ORDER BY valid_from',
+			sql: 'SELECT valid_from, valid_to FROM node_versions WHERE id = ? AND valid_to <> 8640000000000000 ORDER BY valid_from',
 			args: [n.id],
 		});
 		// Intervals must be contiguous and non-overlapping.
@@ -4838,7 +4864,7 @@ private async touched(...tables: string[]): Promise<void> {
 }
 ```
 
-Call `touched(...)` at the end of each mutation — `addNode` (`node_identity`, `nv_live`, `graph_outbox`), `addEdge` (`edge_identity`, `ev_live`, `ev_history`, `graph_outbox`), `updateNode` and `deleteNode` (`nv_live`, `nv_history`, `graph_outbox`), `deleteEdge` (`ev_live`, `ev_history`, `graph_outbox`), `bulkLoad` and `bulkEdges` (all six version tables plus identity).
+Call `touched(...)` at the end of each mutation — `addNode` (`node_identity`, `node_versions`, `graph_outbox`), `addEdge` (`edge_identity`, `edge_versions`, `graph_outbox`), `updateNode` and `deleteNode` (`node_versions`, `graph_outbox`), `deleteEdge` (`edge_versions`, `graph_outbox`), `bulkLoad` and `bulkEdges` (both version tables plus identity).
 
 Wrap the bodies of `runWriteBatch` and `runConditionalClose` in `this.serialize(...)`.
 
