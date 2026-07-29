@@ -1746,20 +1746,11 @@ reader later."
   - `class DuckPool` with constructor `(path: string, opts?: { max?: number })` and methods `acquire(): Promise<PooledConnection>`, `withConnection<T>(fn: (c: PooledConnection) => Promise<T>): Promise<T>`, `close(): Promise<void>`
   - `function isFatalInstanceError(e: unknown): boolean`
 
-- [ ] **Step 1: Add the dependency and the subpath export**
+- [ ] **Step 1: Add the dependency**
 
-In `packages/core/package.json`, add to `exports` after the `./pg` entry:
+Only the dependency declarations land here. The `./duck` export map and the bunup entry point at `src/duck.ts`, which Task 8 creates — wiring them now would leave `bun run build` pointing at a file that does not exist, so they move to Task 8 with the file they describe.
 
-```json
-		"./duck": {
-			"import": {
-				"types": "./dist/duck.d.ts",
-				"default": "./dist/duck.js"
-			}
-		},
-```
-
-Add to `devDependencies`:
+In `packages/core/package.json`, add to `devDependencies`:
 
 ```json
 		"@duckdb/node-api": "1.5.5-r.2",
@@ -1777,22 +1768,6 @@ Add to `peerDependenciesMeta`:
 		"@duckdb/node-api": {
 			"optional": true
 		},
-```
-
-In `bunup.config.ts`, extend the core entry list and its comment:
-
-```ts
-	{
-		name: 'core',
-		root: 'packages/core',
-		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
-		// one registers that driver with `getDb` (side effect). They stay separate entries
-		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
-		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
-		config: {
-			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
-		},
-	},
 ```
 
 Run: `bun install`
@@ -2054,11 +2029,8 @@ Expected: PASS, 6 tests. The "two concurrent transactions do not merge" test is 
 
 - [ ] **Step 6: Verify the peer stays optional**
 
-Run: `bun run build`
-Expected: exit 0, and `packages/core/dist/duck.js` exists.
-
 Run: `grep -rn "duckdb" packages/core/src/index.ts packages/core/src/db.ts`
-Expected: no matches. Nothing on the default import path may reference the driver.
+Expected: no matches. Nothing on the default import path may reference the driver. (The `dist/duck.js` build check belongs to Task 8, which creates the file that entry points at.)
 
 Run: `bun run type-check && bun run lint`
 Expected: both exit 0.
@@ -2520,6 +2492,39 @@ registerDuckDriver(
 		}),
 );
 ```
+
+- [ ] **Step 4b: Wire the `./duck` subpath**
+
+Task 7 declared the dependency but deliberately left the export map alone, because it points at `src/duck.ts` — the file you just created. Wire it now that the target exists.
+
+In `packages/core/package.json`, add to `exports` after the `./pg` entry:
+
+```json
+		"./duck": {
+			"import": {
+				"types": "./dist/duck.d.ts",
+				"default": "./dist/duck.js"
+			}
+		},
+```
+
+In `bunup.config.ts`, extend the core entry list and its comment:
+
+```ts
+	{
+		name: 'core',
+		root: 'packages/core',
+		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
+		// one registers that driver with `getDb` (side effect). They stay separate entries
+		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
+		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
+		config: {
+			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
+		},
+	},
+```
+
+Verify: `bun run build` exits 0 and `packages/core/dist/duck.js` exists.
 
 - [ ] **Step 5: Register the third driver in `db.ts`**
 
