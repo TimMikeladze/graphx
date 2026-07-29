@@ -119,6 +119,33 @@ describe('DuckPool', () => {
 		await pool.close();
 	});
 
+	test('a same-tick arrival cannot jump a queued waiter', async () => {
+		// Pushing a released connection to `idle` and waking someone to go find it leaves a
+		// microtask-sized window in which a fresh acquire() takes it first. Sustained, that
+		// starves the queued waiter indefinitely — verified, not theoretical. Direct handoff
+		// closes the window.
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const order: string[] = [];
+		const queued = pool.acquire().then((c) => {
+			order.push('queued');
+			return c;
+		});
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Release and immediately race a fresh caller in the same tick.
+		held.release();
+		const fresh = pool.acquire().then((c) => {
+			order.push('fresh');
+			return c;
+		});
+
+		(await queued).release();
+		(await fresh).release();
+		expect(order).toEqual(['queued', 'fresh']);
+		await pool.close();
+	});
+
 	test('isFatalInstanceError recognizes an invalidated database', () => {
 		expect(isFatalInstanceError(new Error('FATAL Error: database has been invalidated'))).toBe(
 			true,

@@ -47,9 +47,15 @@ interface TaggedConnection {
 export class DuckPool {
 	private instance?: Promise<DuckDBInstance>;
 	private readonly idle: TaggedConnection[] = [];
-	/** Resumption callbacks, not connection callbacks: a woken waiter re-enters `checkout`
-	 *  and takes whatever is available then, which keeps the queue strictly FIFO. */
-	private readonly waiting: Array<() => void> = [];
+	/**
+	 * Parked callers, served by DIRECT HANDOFF. `checkin` passes a live connection straight
+	 * to the head of this queue rather than pushing it to `idle` and waking someone to go
+	 * find it — a wake only schedules a microtask, so a fresh `acquire()` in the same tick
+	 * would win the race to `idle.pop()` and could starve a queued waiter indefinitely.
+	 * Resolving with `null` means "a slot freed but there is nothing to hand you" (a
+	 * stale-generation discard, or a failed `connect()`), which grants the turn to create.
+	 */
+	private readonly waiting: Array<(c: TaggedConnection | null) => void> = [];
 	/** Live connections of the CURRENT generation. Reset when the instance is replaced. */
 	private open = 0;
 	private generation = 0;
@@ -116,41 +122,46 @@ export class DuckPool {
 	}
 
 	private async checkout(): Promise<TaggedConnection> {
-		// Set once this caller has been resumed from the head of the queue — it has taken
-		// its turn and may create even though others are still queued behind it.
-		let resumed = false;
 		for (;;) {
 			if (this.closed) throw new Error('duck pool: closed');
-			const spare = this.idle.pop();
-			if (spare) return spare;
-			// A fresh caller may create only when nobody is queued ahead of it, or a late
-			// arrival takes the slot an earlier waiter has been parked on. A RESUMED caller
-			// must be allowed to create regardless: `wake()` frees a slot without pushing
-			// anything to `idle` (the stale-generation discard and the failed-`connect()`
-			// path both do this), so if the resumed waiter deferred to the queue behind it,
-			// it would re-park and nobody would ever create — every caller hanging while
-			// `open < max`.
-			if (this.open < this.max && (resumed || this.waiting.length === 0)) {
-				this.open++;
-				const generation = this.generation;
-				try {
-					return { raw: await (await this.getInstance()).connect(), generation };
-				} catch (e) {
-					this.open--;
-					// The slot we claimed is free again — offer it to whoever was queued
-					// rather than leaving them parked behind a connection that never opened.
-					this.wake();
-					throw e;
-				}
+			// Only a caller with nobody ahead of it may help itself. A queued waiter is
+			// served by direct handoff, so a fresh arrival must not be able to take what
+			// was freed for someone already in line.
+			if (this.waiting.length === 0) {
+				const spare = this.idle.pop();
+				if (spare) return spare;
+				if (this.open < this.max) return this.create();
 			}
-			await new Promise<void>((resolve) => this.waiting.push(resolve));
-			resumed = true;
+			const handed = await new Promise<TaggedConnection | null>((resolve) =>
+				this.waiting.push(resolve),
+			);
+			// A connection handed straight over — no window in which anyone could take it.
+			if (handed) return handed;
+			if (this.closed) throw new Error('duck pool: closed');
+			// Woken because a slot freed with nothing to pass on. We hold the turn, so we
+			// may create even though callers are queued behind us; deferring to them here
+			// would park us again with nobody left to act, and the pool would hang.
+			if (this.open < this.max) return this.create();
 		}
 	}
 
-	/** Resume the longest-waiting caller, if any. */
-	private wake(): void {
-		this.waiting.shift()?.();
+	private async create(): Promise<TaggedConnection> {
+		this.open++;
+		const generation = this.generation;
+		try {
+			return { raw: await (await this.getInstance()).connect(), generation };
+		} catch (e) {
+			this.open--;
+			// The slot we claimed is free again — pass the turn on rather than leaving the
+			// queue parked behind a connection that never opened.
+			this.grantTurn();
+			throw e;
+		}
+	}
+
+	/** Wake the longest-waiting caller with no connection: a slot is free, go make one. */
+	private grantTurn(): void {
+		this.waiting.shift()?.(null);
 	}
 
 	private checkin(c: TaggedConnection): void {
@@ -159,10 +170,17 @@ export class DuckPool {
 		// caller, and counting it would let the pool exceed `max`.
 		if (c.generation !== this.generation || this.closed) {
 			closeQuietly(c.raw);
-		} else {
-			this.idle.push(c);
+			this.grantTurn();
+			return;
 		}
-		this.wake();
+		// Direct handoff: give it to whoever has been waiting longest. Going through
+		// `idle` would open a window for a same-tick arrival to take it first.
+		const next = this.waiting.shift();
+		if (next) {
+			next(c);
+			return;
+		}
+		this.idle.push(c);
 	}
 
 	/**
@@ -185,7 +203,7 @@ export class DuckPool {
 		this.open = 0;
 		// Release everyone parked in the queue. Without this a caller waiting beyond `max`
 		// when the pool closes is never resumed and its promise never settles.
-		while (this.waiting.length > 0) this.wake();
+		while (this.waiting.length > 0) this.grantTurn();
 		const inst = this.instance;
 		this.instance = undefined;
 		if (inst) (await inst).closeSync();
