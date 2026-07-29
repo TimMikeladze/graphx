@@ -34,6 +34,7 @@ describe("stepTick", () => {
     expect(stepTick(TICKS, 900, 1)).toBeUndefined()
     expect(stepTick(TICKS, 100, -1)).toBeUndefined()
     expect(stepTick([], 5, 1)).toBeUndefined()
+    expect(stepTick([], 5, -1)).toBeUndefined()
   })
 })
 

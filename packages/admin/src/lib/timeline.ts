@@ -25,9 +25,8 @@ export function presetTime(preset: TimePreset, now: number): number {
  * between two changes shows the state that had already happened.
  */
 export function nearestTick(ticks: number[], t: number): number | undefined {
-  if (ticks.length === 0) return undefined
-  let best = ticks[0]
-  let bestDist = Math.abs(t - best)
+  let best: number | undefined
+  let bestDist = Number.POSITIVE_INFINITY
   for (const tick of ticks) {
     const dist = Math.abs(t - tick)
     if (dist < bestDist) {
@@ -45,7 +44,8 @@ export function nearestTick(ticks: number[], t: number): number | undefined {
 export function stepTick(ticks: number[], t: number, dir: -1 | 1): number | undefined {
   if (dir === 1) return ticks.find((tick) => tick > t)
   for (let i = ticks.length - 1; i >= 0; i--) {
-    if (ticks[i] < t) return ticks[i]
+    const tick = ticks[i]
+    if (tick !== undefined && tick < t) return tick
   }
   return undefined
 }
