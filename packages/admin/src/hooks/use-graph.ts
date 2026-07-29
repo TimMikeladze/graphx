@@ -46,12 +46,21 @@ export function useNodes(tenant?: string, project?: string, filters: ExplorerFil
   })
 }
 
-/** Governed graph slice for the canvas, keyed on the active filters. */
+/**
+ * Governed graph slice for the canvas, keyed on the active filters.
+ *
+ * Keeps the previous slice on screen while a new one loads. `asOf` is part of the key, so without
+ * this every scrub — and every one of playback's 700ms steps — would flip `isLoading` and send
+ * `GraphShell` down its loading branch, unmounting the canvas and destroying the Cosmograph
+ * instance. The layout would restart from scratch each step, which defeats pinning the simulation
+ * during playback: the pin can only hold a canvas that stays mounted.
+ */
 export function useGraphSlice(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
   return useQuery({
     queryKey: qk.graph(tenant ?? "", project ?? "", filters),
     enabled: Boolean(tenant && project),
     queryFn: () => api.graphSlice(tenant as string, project as string, filters),
+    placeholderData: keepPreviousData,
   })
 }
 

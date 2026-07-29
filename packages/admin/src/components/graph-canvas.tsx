@@ -269,9 +269,17 @@ export function GraphCanvas({
   useEffect(() => {
     const g = cosmoRef.current
     if (!g) return
-    if (paused || pinned) g.pause()
-    else g.start()
-  }, [paused, pinned])
+    if (paused || pinned) {
+      g.pause()
+      return
+    }
+    g.start()
+    // The run that follows an unpin needs its own settle backstop: the rebuilds during playback
+    // took the pin branch, which deliberately skips `armSettle`, so nothing else has armed one.
+    // Without it a slice large enough never to emit `onSimulationEnd` — exactly what SETTLE_MS
+    // exists for — would jitter on until the user reached for Pause.
+    armSettle()
+  }, [paused, pinned, armSettle])
 
   return (
     <div
