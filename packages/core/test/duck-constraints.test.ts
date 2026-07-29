@@ -18,6 +18,10 @@ const SCHEMA = defineGraphSchema({
 	nodes: {
 		Doc: z.object({ slug: z.string().optional(), extra: z.number().optional() }),
 		Note: z.object({ slug: z.string().optional() }),
+		// snake_case-ish names chosen so 'ab' is a LIKE-wildcard prefix of 'a_' — the shape
+		// declaredProps' LIKE bug leaked across (see the regression test below).
+		ab: z.object({ x: z.string().optional() }),
+		a_: z.object({ x: z.string().optional() }),
 	},
 	edges: {
 		owner: { from: 'Doc', to: 'Doc', single: true },
@@ -88,6 +92,34 @@ describe('duckdb constraints', () => {
 		// The second write supersedes the first rather than coexisting with it.
 		const live = await g.neighbors(a.id, { rels: ['owner'] });
 		expect(live).toHaveLength(1);
+		await client.end();
+	});
+
+	test('two concurrent updateNode calls do not deadlock the pool', async () => {
+		// The constraint check runs inside the conditional-close transaction. If it reaches
+		// for a second pooled connection instead of using the transaction's own, every
+		// connection ends up held by a writer waiting for one more, and the process hangs.
+		// Needs at least poolMax concurrent writers to show up — the default is 4.
+		const client = createDuckClient({ poolMax: 2 });
+		await init(client, 4);
+		const g = new Graph(client, SCHEMA);
+		await declareUniqueNodeProp(client, { type: 'Doc', prop: 'slug' });
+		const a = await g.addNode({ type: 'Doc', data: { slug: 'a' } });
+		const b = await g.addNode({ type: 'Doc', data: { slug: 'b' } });
+		await Promise.all([
+			g.updateNode(a.id, { data: { slug: 'a', extra: 1 } }),
+			g.updateNode(b.id, { data: { slug: 'b', extra: 1 } }),
+		]);
+		await client.end();
+	}, 10000);
+
+	test('a declaration for one type does not leak to a type whose name it prefixes', async () => {
+		// '_' is a LIKE wildcard, and this codebase is full of snake_case type names.
+		const { client, g } = await graph();
+		await declareUniqueNodeProp(client, { type: 'ab', prop: 'x' });
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
+		// 'a_' was never declared unique on anything, so this must be allowed.
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
 		await client.end();
 	});
 });

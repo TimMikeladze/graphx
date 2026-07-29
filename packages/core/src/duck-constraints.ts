@@ -1,5 +1,5 @@
 import { FOREVER } from './db.ts';
-import type { DbClient } from './dialect.ts';
+import type { DbClient, SqlResult, SqlStatement } from './dialect.ts';
 
 /**
  * Unique-prop enforcement for DuckDB.
@@ -17,6 +17,16 @@ import type { DbClient } from './dialect.ts';
  * cover is something writing to the bucket outside graphx — `graphx verify` exists for
  * that, and it is stage 7.
  */
+
+/**
+ * The narrowest thing these checks need. Both `DbClient` and `DbTransaction` declare
+ * `execute` identically, and narrowing to it is what lets a check run ON the transaction
+ * that is about to write. Taking a `DbClient` instead would force a caller inside an open
+ * transaction to reach for a second pooled connection — which deadlocks the pool once
+ * enough writers are concurrently mid-transaction, since each holds one connection while
+ * waiting for another (reproduced at the default poolMax of 4).
+ */
+type Executor = { execute(stmt: SqlStatement): Promise<SqlResult> };
 
 const DECL_PREFIX = 'unique_prop:';
 
@@ -57,12 +67,18 @@ export async function declareDuckUniqueProp(
 	}
 }
 
-/** Every prop declared unique for `type`. */
-async function declaredProps(client: DbClient, type: string): Promise<string[]> {
+/**
+ * Every prop declared unique for `type`.
+ *
+ * `starts_with` rather than `LIKE`: a type name containing `_` — and this codebase is full
+ * of snake_case — would otherwise match as a single-character wildcard, so declaring
+ * `ab.x` unique would silently start enforcing uniqueness for type `a_` as well.
+ */
+async function declaredProps(exec: Executor, type: string): Promise<string[]> {
 	const prefix = `${DECL_PREFIX}${type}:`;
-	const r = await client.execute({
-		sql: `SELECT key FROM graph_meta WHERE key LIKE ?`,
-		args: [`${prefix}%`],
+	const r = await exec.execute({
+		sql: `SELECT key FROM graph_meta WHERE starts_with(key, ?)`,
+		args: [prefix],
 	});
 	return r.rows.map((row) => String(row.key).slice(prefix.length));
 }
@@ -70,19 +86,21 @@ async function declaredProps(client: DbClient, type: string): Promise<string[]> 
 /**
  * Throw if writing `data` for a node of `type` would duplicate a declared-unique prop
  * among live rows. `excludeId` is the node being updated, whose own current row must not
- * count against it.
+ * count against it. Takes the narrower {@link Executor} (not `DbClient`) so `updateNode`
+ * can pass its open transaction directly instead of reaching for a second pooled
+ * connection — see the module doc comment.
  */
 export async function assertUniqueProps(
-	client: DbClient,
+	exec: Executor,
 	type: string,
 	data: Record<string, unknown>,
 	excludeId?: string,
 ): Promise<void> {
-	for (const prop of await declaredProps(client, type)) {
+	for (const prop of await declaredProps(exec, type)) {
 		const value = data[prop];
 		if (value === undefined || value === null) continue;
 		const safeProp = safeIdent(prop, 'prop');
-		const r = await client.execute({
+		const r = await exec.execute({
 			sql: `SELECT id FROM node_versions
 			      WHERE type = ? AND valid_to = ${FOREVER} AND json_extract_string(data, '$.${safeProp}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}

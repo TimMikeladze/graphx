@@ -1054,8 +1054,11 @@ export class Graph<S extends GraphSchema> {
 			// DuckDB has no store-level backing for declared-unique props (see
 			// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
 			// `id` is excluded so a node updated to its own current value is never rejected.
+			// `tx`, not `this.raw`: this callback already holds a pooled connection, and
+			// reaching for a second one here deadlocks the pool once enough writers are
+			// concurrently mid-transaction (reproduced at the default poolMax of 4).
 			if (dialectOf(this.raw) === 'duckdb') {
-				await assertUniqueProps(this.raw, successorType, data, id);
+				await assertUniqueProps(tx, successorType, data, id);
 			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).

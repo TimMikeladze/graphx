@@ -107,6 +107,15 @@ export async function declareUniqueNodeProp(
  * (`def.single`), never from the database, so the duckdb arm only records the
  * declaration for durability across restarts, the way the index does on the other two
  * backends — nothing reads it back.
+ *
+ * This makes the duckdb arm's failure mode asymmetric with the other two: on libSQL and
+ * Postgres, calling this WITHOUT also marking the rel `single: true` in the schema still
+ * fails loudly the moment a second live `(src, rel)` edge is written, because the index
+ * enforces it regardless of what `addEdge` believes. On DuckDB there is no index, so the
+ * same mismatch enforces nothing — the declaration is silently inert unless the schema
+ * agrees. Always declare via {@link materializeConstraints} (which derives both from the
+ * same schema) rather than calling this directly, unless you have deliberately checked
+ * the schema already marks the rel `single: true`.
  */
 export async function declareSingleValuedRel(client: DbClient, rel: string): Promise<void> {
 	const safe = safeIdent(rel, 'rel');
