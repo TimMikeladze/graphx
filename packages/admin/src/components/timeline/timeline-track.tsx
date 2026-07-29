@@ -93,12 +93,12 @@ export function TimelineTrack({
         next = stepTick(ticks, current, 1)
         break
       case "Home":
-        // Commit the true extent start, not ticks[0] — when the tick list is truncated to the
-        // most recent window, ticks[0] is only the start of that window, not of history.
+        // Commit the requested window's start, not ticks[0] — when the tick list is truncated,
+        // ticks[0] is only the start of the sample, not of the window itself.
         next = from
         break
       case "End":
-        // Same reasoning: `to` is the true extent end, not the possibly-truncated ticks[-1].
+        // Same reasoning: `to` is the requested window's end, not the possibly-truncated ticks[-1].
         next = to
         break
       default:

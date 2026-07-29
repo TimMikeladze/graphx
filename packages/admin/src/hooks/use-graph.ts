@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { api, type EdgeInput, type NodeInput, type NodePatch } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import type { ExplorerFilters } from "@/lib/types"
@@ -258,5 +264,9 @@ export function useTimeline(
     queryFn: () => api.timeline(tenant as string, project as string, window),
     enabled: Boolean(tenant && project),
     staleTime: 60_000,
+    // The zoom window is part of the query key, so every narrow/widen is a fresh cache entry —
+    // without this, `data` goes undefined for the fetch, blanking the track and greying out every
+    // control for a frame instead of showing the previous window while the new one loads.
+    placeholderData: keepPreviousData,
   })
 }

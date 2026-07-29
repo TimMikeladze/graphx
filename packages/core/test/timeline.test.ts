@@ -145,10 +145,21 @@ test('timeline: the tick list is capped and flags truncation, sampling every k-t
 	const t = await timeline(client, { limits: { maxRows: 3 } });
 	expect(t.ticks.length).toBe(3);
 	expect(t.ticksTruncated).toBe(true);
-	// count=7, cap=3 ⇒ k=ceil(7/3)=3: rn 0,3,6 of {1000,1010,1020,1030,1040,1050,9_000_000}, i.e.
-	// 1000, 1030, 9_000_000 — spread across the window, not the most recent 3.
+	// count=7, cap=3 ⇒ k=ceil((7-1)/(3-1))=ceil(6/2)=3: rn 0,3,6 of
+	// {1000,1010,1020,1030,1040,1050,9_000_000}, i.e. 1000, 1030, 9_000_000 — spread across the
+	// window, not the most recent 3.
 	expect(t.ticks).toEqual([1000, 1030, 9_000_000]);
 	expect(t.ticks).toEqual([...t.ticks].sort((a, b) => a - b));
+});
+
+test('timeline: a cap of one still returns exactly one tick', async () => {
+	const { client } = await freshGraph();
+	// Same seven distinct change points as above — any two of them are enough to reach the
+	// `rn % k = 0 OR rn = lastRn` selection that a cap of one cannot fit both halves of.
+	for (let i = 0; i < 6; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 10, 9_000_000);
+	const t = await timeline(client, { limits: { maxRows: 1 } });
+	expect(t.ticksTruncated).toBe(true);
+	expect(t.ticks.length).toBe(1);
 });
 
 test('timeline: a truncated tick list samples across the window rather than slicing one end', async () => {
@@ -160,7 +171,9 @@ test('timeline: a truncated tick list samples across the window rather than slic
 	const t = await timeline(client, { limits: { maxRows: 8 } });
 
 	expect(t.ticksTruncated).toBe(true);
-	expect(t.ticks.length).toBeLessThanOrEqual(8);
+	// Not just "at most 8": using the whole budget evenly is half the point of the sample, and a
+	// stride that came out too coarse (5 of an allowed 8) would pass an <= check silently.
+	expect(t.ticks.length).toBe(8);
 	// Both ends of the window are always reachable.
 	expect(t.ticks[0]).toBe(t.min);
 	expect(t.ticks[t.ticks.length - 1]).toBe(t.max);

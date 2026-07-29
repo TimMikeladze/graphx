@@ -23,15 +23,23 @@ function ToolButton({
   icon,
   label,
   onClick,
+  disabled,
 }: {
   icon: IconSvgElement
   label: string
   onClick: () => void
+  disabled?: boolean
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" onClick={onClick} aria-label={label}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClick}
+          aria-label={label}
+          disabled={disabled}
+        >
           <HugeiconsIcon icon={icon} strokeWidth={2} />
         </Button>
       </TooltipTrigger>
@@ -47,6 +55,7 @@ export function GraphToolbar({
   flowLayout,
   onFlowLayoutChange,
   paused,
+  pausePinned,
   labels,
   onLabelsChange,
   onFit,
@@ -60,8 +69,13 @@ export function GraphToolbar({
   onRendererChange: (renderer: Renderer) => void
   flowLayout: FlowLayout
   onFlowLayoutChange: (layout: FlowLayout) => void
-  /** Cosmograph's simulation state. The flow layout is computed once, so it has none. */
+  /**
+   * Cosmograph's effective simulation state (the toolbar's own pause OR'd with playback's pin —
+   * the caller merges these only for display, never for a state transition to react to).
+   */
   paused: boolean
+  /** Playback owns the simulation for its duration, so the pause control is inert while true. */
+  pausePinned?: boolean
   labels: LabelSettings
   onLabelsChange: (next: LabelSettings) => void
   onFit: () => void
@@ -100,6 +114,7 @@ export function GraphToolbar({
           icon={paused ? PlayIcon : PauseIcon}
           label={paused ? "Resume layout" : "Pause layout"}
           onClick={onTogglePause}
+          disabled={pausePinned}
         />
       ) : (
         <ToolButton

@@ -66,6 +66,7 @@ export function GraphCanvas({
   labels,
   paused,
   onPausedChange,
+  pinned,
   handleRef,
 }: {
   slice: GraphSlice
@@ -75,6 +76,13 @@ export function GraphCanvas({
   /** The simulation's run state, lifted so the shared toolbar can show and toggle it. */
   paused: boolean
   onPausedChange: (paused: boolean) => void
+  /**
+   * Hold the simulation still independent of `paused`. Kept as its own prop rather than folded
+   * into `paused` by the caller: playback re-pins across every rebuilt slice, and if that had to
+   * travel back through `paused`/`onPausedChange` it could arrive as a no-op (the state already
+   * reads what it is being set to) and silently stop taking effect — see `onGraphRebuilt` below.
+   */
+  pinned?: boolean
   handleRef: React.RefObject<RendererHandle | null>
 }) {
   // Selection is applied imperatively (selectPoint below), so it must NOT change the points
@@ -104,6 +112,8 @@ export function GraphCanvas({
   selectedRef.current = selectedId
   const pausedRef = useRef(paused)
   pausedRef.current = paused
+  const pinnedRef = useRef(Boolean(pinned))
+  pinnedRef.current = Boolean(pinned)
   const hoverIdRef = useRef<string | undefined>(undefined)
   hoverIdRef.current = hover?.id
 
@@ -210,7 +220,7 @@ export function GraphCanvas({
   /** Stop the layout where it stands (one last fit + edge-label pass, then freeze). */
   const freeze = useCallback(() => {
     const g = cosmoRef.current
-    if (!g || pausedRef.current) return
+    if (!g || pausedRef.current || pinnedRef.current) return
     if (autoFitRef.current && selectedRef.current === undefined) g.fitView(400)
     g.pause()
     pausedRef.current = true
@@ -252,13 +262,16 @@ export function GraphCanvas({
     [releaseAutoFit],
   )
 
-  // Toolbar pause/resume: the prop is the source of truth, the simulation follows it.
+  // Toolbar pause/resume, plus the playback pin: either one held is enough to stop the
+  // simulation. `paused` and `pinned` are tracked as separate dependencies (not pre-merged by
+  // the caller), so a transition in either always re-fires this regardless of what the other is
+  // doing at the time.
   useEffect(() => {
     const g = cosmoRef.current
     if (!g) return
-    if (paused) g.pause()
+    if (paused || pinned) g.pause()
     else g.start()
-  }, [paused])
+  }, [paused, pinned])
 
   return (
     <div
@@ -325,6 +338,16 @@ export function GraphCanvas({
           cosmoRef.current = g
         }}
         onGraphRebuilt={() => {
+          if (pinnedRef.current) {
+            // Playback pins the layout across every step's rebuilt slice. Cosmograph starts a
+            // fresh simulation on each rebuild regardless of props, and no prop changes here (
+            // `pinned` was already true and stays true), so the pause/resume effect below never
+            // re-fires — the re-pause has to be issued imperatively, right here, instead. Also
+            // skip the un-pause/fit/armSettle that follows: they belong to the "new slice, let it
+            // settle" path, not to a slice that is supposed to hold still.
+            cosmoRef.current?.pause()
+            return
+          }
           // A rebuilt graph starts its own simulation, so clear a freeze left over from the
           // previous slice — otherwise the toolbar says paused and the new layout never fits.
           pausedRef.current = false
@@ -338,7 +361,12 @@ export function GraphCanvas({
         // fought. This is also what makes a 5-node slice land centered rather than zoomed into
         // a single point.
         onSimulationTick={() => {
-          if (autoFitRef.current && selectedRef.current === undefined && !pausedRef.current) {
+          if (
+            autoFitRef.current &&
+            selectedRef.current === undefined &&
+            !pausedRef.current &&
+            !pinnedRef.current
+          ) {
             cosmoRef.current?.fitView(0)
           }
           // Edge captions follow the moving points, but at a fraction of the tick rate.

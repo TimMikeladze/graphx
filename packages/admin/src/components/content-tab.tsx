@@ -140,6 +140,7 @@ export function ContentTab({
           autoFocus
           spellCheck={false}
           value={draft}
+          readOnly={readOnly}
           onChange={(e) => edit(e.target.value)}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -155,12 +156,16 @@ export function ContentTab({
         />
         <div className="flex items-center justify-end gap-2">
           <span className="mr-auto text-[0.7rem] text-muted-foreground">
-            {dirty ? "Unsaved changes · ⌘S to save" : "No changes"}
+            {readOnly
+              ? "Read-only while viewing the past — return to now to continue"
+              : dirty
+                ? "Unsaved changes · ⌘S to save"
+                : "No changes"}
           </span>
           <Button variant="ghost" size="sm" onClick={() => edit(null)} disabled={save.isPending}>
             Cancel
           </Button>
-          <Button size="sm" onClick={commit} disabled={!dirty || save.isPending}>
+          <Button size="sm" onClick={commit} disabled={!dirty || save.isPending || readOnly}>
             {save.isPending && (
               <HugeiconsIcon icon={Loading03Icon} strokeWidth={2} className="animate-spin" />
             )}

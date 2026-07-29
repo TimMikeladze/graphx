@@ -182,9 +182,14 @@ export interface Timeline {
   to: number
   /** Change-point counts per equal-width slot over `[from, to]`. */
   buckets: number[]
-  /** Distinct change instants in the window, ascending — what the handle snaps to. */
+  /**
+   * Distinct change instants in the window, ascending — what the handle snaps to.
+   *
+   * On truncation this is a SAMPLE spread evenly across the window (every k-th instant by rank,
+   * always including both ends), not the earliest or most-recent N.
+   */
   ticks: number[]
-  /** True when `ticks` hit the server row cap; narrow the window for an exact list. */
+  /** True when `ticks` is a sample rather than the exact list — narrow the window (`from`/`to`) for exact precision. */
   ticksTruncated: boolean
 }
 

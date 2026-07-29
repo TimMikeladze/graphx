@@ -74,6 +74,9 @@ export function TimelineBar({
 
   useEffect(() => {
     onPlayingChange?.(playing)
+    // If the bar unmounts mid-playback (e.g. the project switches), the parent's `playing` must
+    // not stick on — there is no one left to turn it off otherwise.
+    return () => onPlayingChange?.(false)
   }, [playing, onPlayingChange])
 
   // Every manual interaction stops playback. The interval calls `onChange` directly so that it
@@ -88,8 +91,14 @@ export function TimelineBar({
   }
   // Zoom around what is being viewed, clamped to the extent (`min`/`max`), not to the window —
   // the window is what we are changing, and clamping to it would never let you widen.
-  const doZoom = (factor: number) =>
+  const doZoom = (factor: number) => {
+    setPlaying(false)
     setZoom((w) => zoomWindow(w, current, factor, data?.min ?? 0, data?.max ?? 0))
+  }
+  const fullRange = () => {
+    setPlaying(false)
+    setZoom({})
+  }
 
   // A 32px scrub track on a phone is not usable and the canvas needs the height more, so the bar
   // collapses to what it is showing plus the way back to live.
@@ -189,7 +198,7 @@ export function TimelineBar({
           <HugeiconsIcon icon={ZoomOutAreaIcon} strokeWidth={2} />
         </Button>
         {zoomed && (
-          <Button variant="ghost" size="xs" onClick={() => setZoom({})}>
+          <Button variant="ghost" size="xs" onClick={fullRange}>
             Full range
           </Button>
         )}

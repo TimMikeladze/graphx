@@ -145,8 +145,9 @@ export function GraphShell({
               selectedId={selectedId}
               onSelect={onSelect}
               labels={labels}
-              paused={paused || Boolean(pinSimulation)}
+              paused={paused}
               onPausedChange={setPaused}
+              pinned={pinSimulation}
               handleRef={rendererRef}
             />
           ) : (
@@ -184,7 +185,8 @@ export function GraphShell({
           onRendererChange={onRendererChange}
           flowLayout={flowLayout}
           onFlowLayoutChange={onFlowLayoutChange}
-          paused={paused}
+          paused={paused || Boolean(pinSimulation)}
+          pausePinned={Boolean(pinSimulation)}
           labels={labels}
           onLabelsChange={setLabels}
           onFit={() => rendererRef.current?.fit()}

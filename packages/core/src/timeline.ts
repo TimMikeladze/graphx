@@ -122,6 +122,21 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 			sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t`,
 			args: [from, to],
 		});
+	} else if (cap <= 1) {
+		// A cap this low (a governance-degenerate case no caller exercises — default maxRows is
+		// 10k) can't fit both forced endpoints: rn=0 is already selected by any modulo, so forcing
+		// rn=lastRn too would return two rows for a cap of one. Fall back to the single most
+		// recent instant instead.
+		const lastRn = distinctCount - 1;
+		tickRows = await raw.execute({
+			sql: `SELECT t FROM (
+				SELECT t, row_number() OVER (ORDER BY t) - 1 AS rn
+				FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d
+			) r
+			WHERE rn = ?
+			ORDER BY t`,
+			args: [from, to, lastRn],
+		});
 	} else {
 		// k = ceil((count-1)/(cap-1)), NOT ceil(count/cap): sizing the stride against the number of
 		// GAPS between the two forced endpoints (cap-1) rather than the number of slots (cap) is
@@ -130,9 +145,8 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		// already fills the cap, so forcing the true last (rn=39, not a multiple of 5) makes nine.
 		// This formula both bounds the modulo set to at most cap-1 AND guarantees that whenever it
 		// would otherwise hit exactly cap-1, the endpoint is already a multiple of k — so the forced
-		// add is never a genuine extra. cap<=1 can't fit both endpoints; fall back to the coarsest
-		// possible stride (a governance-degenerate case no caller exercises — default maxRows is 10k).
-		const k = cap <= 1 ? distinctCount : Math.ceil((distinctCount - 1) / (cap - 1));
+		// add is never a genuine extra.
+		const k = Math.ceil((distinctCount - 1) / (cap - 1));
 		const lastRn = distinctCount - 1;
 		tickRows = await raw.execute({
 			sql: `SELECT t FROM (
