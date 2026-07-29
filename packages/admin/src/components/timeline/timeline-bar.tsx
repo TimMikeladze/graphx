@@ -26,6 +26,7 @@ export function TimelineBar({
   asOf,
   onChange,
   onPlayingChange,
+  rendererBusy,
 }: {
   tenant: string
   project: string
@@ -34,6 +35,12 @@ export function TimelineBar({
   onChange: (asOf: number | undefined) => void
   /** Reports playback so the canvas can hold its simulation still while the slice churns. */
   onPlayingChange?: (playing: boolean) => void
+  /**
+   * Whether the renderer is still taking in the slice from the previous step. Playback holds
+   * while it is true; renderers that absorb a slice synchronously (the flow canvas) never report
+   * it, and playback must not depend on the signal being wired at all.
+   */
+  rendererBusy?: boolean
 }) {
   // The scrub window. `{}` is the full extent. Narrowing it makes the server return exact ticks
   // for that span instead of a sample, which is the only way to snap precisely on a dense graph.
@@ -56,18 +63,27 @@ export function TimelineBar({
   // The timer reads its inputs through a ref rather than closing over them. `onChange` is an
   // inline arrow at the call site, so listing it as a dependency would tear the interval down and
   // rebuild it on every parent render — a 700ms timer that keeps restarting never fires.
-  const latest = useRef({ ticks, current, onChange })
-  latest.current = { ticks, current, onChange }
+  const latest = useRef({ ticks, current, onChange, rendererBusy })
+  latest.current = { ticks, current, onChange, rendererBusy }
 
-  // Advance tick-to-tick. Each step is a filter change, so every dependent query refetches; the
-  // interval is slow enough that a step's fetches land before the next one starts on a local DB.
+  // Advance tick-to-tick. 700ms is the *minimum* dwell, not the rate: a step is skipped while the
+  // renderer is still ingesting the previous one, so playback runs at the speed the graph can
+  // actually be drawn. Pushing frames faster than that is what corrupts the WebGL canvas's
+  // DuckDB catalog — see the handover gate in `graph-canvas.tsx` — and even where it survives it
+  // only queues frames that get coalesced away unseen.
   useEffect(() => {
     if (!playing) return
     const id = setInterval(() => {
-      const { ticks: ts, current: now, onChange: emit } = latest.current
+      const { ticks: ts, current: now, onChange: emit, rendererBusy: busy } = latest.current
+      // Reaching the end stops playback whatever the renderer is doing — testing it after the
+      // busy gate would leave the button stuck showing Pause on a run that has nowhere left to go.
       const next = stepTick(ts, now, 1)
-      if (next === undefined) setPlaying(false)
-      else emit(next)
+      if (next === undefined) {
+        setPlaying(false)
+        return
+      }
+      if (busy) return
+      emit(next)
     }, 700)
     return () => clearInterval(id)
   }, [playing])

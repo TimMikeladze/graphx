@@ -35,6 +35,7 @@ export function GraphShell({
   onDeleteEdge,
   timeline,
   pinSimulation,
+  onRendererBusyChange,
 }: {
   slice?: GraphSlice
   isLoading?: boolean
@@ -69,6 +70,12 @@ export function GraphShell({
    * place — which is the whole point of watching it play.
    */
   pinSimulation?: boolean
+  /**
+   * Reports whether the mounted renderer is still taking in the current slice, so a caller driving
+   * `slice` on a clock can pace itself. Only the WebGL canvas ingests asynchronously; the flow
+   * renderer draws synchronously and never reports, which reads as "never busy".
+   */
+  onRendererBusyChange?: (busy: boolean) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
@@ -148,6 +155,7 @@ export function GraphShell({
               paused={paused}
               onPausedChange={setPaused}
               pinned={pinSimulation}
+              onBusyChange={onRendererBusyChange}
               handleRef={rendererRef}
             />
           ) : (

@@ -95,6 +95,9 @@ export function ExplorerPage() {
   const readOnly = filters.asOf !== undefined
   // Playback churns the slice every step; the canvas holds its layout still for the duration.
   const [playing, setPlaying] = useState(false)
+  // Whether the canvas is still ingesting the current slice. Playback waits on it so it advances
+  // at the speed the graph can actually be drawn.
+  const [rendererBusy, setRendererBusy] = useState(false)
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "21rem" } as React.CSSProperties}>
@@ -172,9 +175,11 @@ export function ExplorerPage() {
                   asOf={filters.asOf}
                   onChange={(asOf) => setSearch({ asOf })}
                   onPlayingChange={setPlaying}
+                  rendererBusy={rendererBusy}
                 />
               }
               pinSimulation={playing}
+              onRendererBusyChange={setRendererBusy}
             />
           </div>
           {detailOpen && search.node && (

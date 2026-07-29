@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { Cosmograph, type CosmographRef } from "@cosmograph/react"
 import {
+  type CosmoData,
   type CosmoNode,
   IMAGE_COLUMN,
   LABEL_COLUMN,
@@ -37,6 +38,17 @@ const EDGE_LABEL_THROTTLE_MS = 200
 const SETTLE_MS = 8000
 
 /**
+ * How long a slice may sit un-absorbed before the handover gate is forced open.
+ *
+ * Cosmograph reports a finished slice through `onGraphRebuilt`, but it raises that callback at the
+ * end of a `try` — a rebuild that throws never reports at all. Without this the gate below would
+ * latch shut and the canvas would stop following the graph for the rest of the session. It is a
+ * wedge-breaker, not a pacing device: it is set far above any real ingest (a 10k-point slice takes
+ * seconds, not half a minute) so that it never fires while Cosmograph is merely slow.
+ */
+const ABSORB_TIMEOUT_MS = 30_000
+
+/**
  * Every caption column plus the avatar URL, declared so Cosmograph keeps them in the point data.
  * The image column is declared even while pictures are off: a column Cosmograph does not consume
  * at upload time is dropped, and turning the toggle on later would then find nothing.
@@ -49,6 +61,21 @@ const EXTRA_COLUMNS = [...Object.values(LABEL_COLUMN), IMAGE_COLUMN]
  * point (11–34) so a picture neither vanishes on a leaf nor swamps a hub.
  */
 const IMAGE_SIZE = 26
+
+/**
+ * Values passed straight through to `<Cosmograph>`, hoisted so their identity never changes.
+ *
+ * `Cosmograph` is `React.memo`-wrapped and its update effect is keyed on the props object, so a
+ * single inline literal or arrow defeats the memo and fires another `setConfig` on *every* render
+ * of this component. Those runs are not free and they are not serialized: the library keeps one
+ * in-flight update promise and overwrites it, so one landing during an ingest is exactly the
+ * re-entrancy that corrupts its DuckDB catalog. Everything below therefore has a stable identity.
+ */
+const POINT_SIZE_RANGE: [number, number] = [11, 34]
+const LINK_WIDTH_RANGE: [number, number] = [1, 3]
+const CANVAS_STYLE = { width: "100%", height: "100%" } as const
+/** Cosmograph reads a string color column as a categorical scale unless it is told otherwise. */
+const directColor = (value: unknown) => String(value)
 
 type Hover = { id: string; type: string; x: number; y: number }
 
@@ -67,6 +94,7 @@ export function GraphCanvas({
   paused,
   onPausedChange,
   pinned,
+  onBusyChange,
   handleRef,
 }: {
   slice: GraphSlice
@@ -83,17 +111,89 @@ export function GraphCanvas({
    * reads what it is being set to) and silently stop taking effect — see `onGraphRebuilt` below.
    */
   pinned?: boolean
+  /**
+   * Reports whether Cosmograph is still ingesting a slice. Callers that drive `slice` on a clock
+   * — playback — use it as back-pressure so they advance in step with what is actually on screen
+   * rather than queueing frames the canvas will only skip.
+   */
+  onBusyChange?: (busy: boolean) => void
   handleRef: React.RefObject<RendererHandle | null>
 }) {
   // Selection is applied imperatively (selectPoint below), so it must NOT change the points
   // identity — otherwise every click rebuilds the graph and re-fits, fighting the zoom-to-node.
   const data = useMemo(() => toCosmograph(slice), [slice])
-  // Resolve Cosmograph's click/hover index → our node without re-rendering.
-  const pointsRef = useRef<CosmoNode[]>(data.nodes)
-  pointsRef.current = data.nodes
+
+  /**
+   * The slice Cosmograph is actually holding. It deliberately lags `data`.
+   *
+   * `@cosmograph/cosmograph@2.3.2` cannot take a second slice while it is still ingesting the
+   * first: `ConfigManager.setConfig` overwrites its single in-flight `_configUpdatePromise`
+   * instead of queueing behind it, so two runs interleave over one DuckDB catalog — one swaps the
+   * points table out from under the other's read and the graph dies with
+   * `Catalog Error: Table with name cosmograph_points does not exist!` (or, on a small slice,
+   * `updatePointProperties failed`). The library exposes no way to await or cancel a run, so the
+   * only fix available from outside is to hand it one slice at a time.
+   *
+   * Slices that arrive mid-ingest are coalesced rather than queued: only the newest is worth
+   * drawing, and the ones it skipped were never on screen.
+   */
+  const [shown, setShown] = useState(data)
+  const pendingRef = useRef<CosmoData | undefined>(undefined)
+  // Starts busy: Cosmograph is constructed with the first slice and is ingesting it immediately.
+  const busyRef = useRef(true)
+  const onBusyRef = useRef(onBusyChange)
+  onBusyRef.current = onBusyChange
+  const absorbTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const setBusy = useCallback((busy: boolean) => {
+    if (busyRef.current === busy) return
+    busyRef.current = busy
+    onBusyRef.current?.(busy)
+  }, [])
+
+  // Announce the first build, and never leave a caller stuck waiting on a canvas that has gone.
+  useEffect(() => {
+    onBusyRef.current?.(true)
+    return () => {
+      clearTimeout(absorbTimer.current)
+      onBusyRef.current?.(false)
+    }
+  }, [])
+
+  /** Cosmograph is done with what it was given: hand over whatever arrived in the meantime. */
+  const absorbed = useCallback(() => {
+    clearTimeout(absorbTimer.current)
+    const next = pendingRef.current
+    pendingRef.current = undefined
+    // Staying busy across a back-to-back handover is deliberate — the next ingest starts here.
+    if (next !== undefined) setShown(next)
+    else setBusy(false)
+  }, [setBusy])
+
+  useEffect(() => {
+    if (data === shown) return
+    if (busyRef.current) {
+      pendingRef.current = data
+      return
+    }
+    pendingRef.current = undefined
+    setBusy(true)
+    setShown(data)
+  }, [data, shown, setBusy])
+
+  // Arm the wedge-breaker for whichever slice is currently in flight.
+  useEffect(() => {
+    clearTimeout(absorbTimer.current)
+    absorbTimer.current = setTimeout(absorbed, ABSORB_TIMEOUT_MS)
+  }, [shown, absorbed])
+
+  // Resolve Cosmograph's click/hover index → our node without re-rendering. Keyed to the slice on
+  // screen, not the one waiting: a click must resolve against the points the user actually hit.
+  const pointsRef = useRef<CosmoNode[]>(shown.nodes)
+  pointsRef.current = shown.nodes
   const indexById = useMemo(
-    () => new Map(data.nodes.map((n) => [n.id, n.index])),
-    [data.nodes],
+    () => new Map(shown.nodes.map((n) => [n.id, n.index])),
+    [shown.nodes],
   )
 
   const cosmoRef = useRef<CosmographRef>(undefined)
@@ -128,7 +228,7 @@ export function GraphCanvas({
   const autoFitRef = useRef(true)
   useEffect(() => {
     autoFitRef.current = true
-  }, [data])
+  }, [shown])
   const releaseAutoFit = useCallback(() => {
     autoFitRef.current = false
   }, [])
@@ -165,7 +265,7 @@ export function GraphCanvas({
     if (!g) return
 
     const focus = selectedRef.current ?? hoverIdRef.current
-    const links = data.links
+    const links = shown.links
     const chosen = (
       links.length <= EDGE_LABEL_ALL_MAX
         ? links
@@ -205,7 +305,7 @@ export function GraphCanvas({
       }
       setEdgeLabels(labels)
     })
-  }, [data.links, showEdgeLabels])
+  }, [shown.links, showEdgeLabels])
 
   // Selection/hover changes the focused edge set; toggling recomputes from scratch. The delayed
   // second pass is not redundant: selecting a node also starts a 400ms zoom-to-node, and
@@ -281,6 +381,64 @@ export function GraphCanvas({
     armSettle()
   }, [paused, pinned, armSettle])
 
+  // Every callback handed to `<Cosmograph>` below is memoized for the same reason the literals at
+  // the top of this file are hoisted: an unstable identity defeats the library's `React.memo` and
+  // fires a fresh `setConfig` on each render of this component. They all read mutable state
+  // through refs, so a stable identity costs nothing in correctness.
+  const handleMount = useCallback((g: CosmographRef) => {
+    cosmoRef.current = g
+  }, [])
+
+  const handleGraphRebuilt = useCallback(() => {
+    // The slice is in and drawn — release the handover gate first, so a slice that arrived while
+    // this one was ingesting starts straight away, including on the pinned path below.
+    absorbed()
+    if (pinnedRef.current) {
+      // Playback pins the layout across every step's rebuilt slice. Cosmograph starts a fresh
+      // simulation on each rebuild regardless of props, and no prop changes here (`pinned` was
+      // already true and stays true), so the pause/resume effect above never re-fires — the
+      // re-pause has to be issued imperatively, right here, instead. Also skip the
+      // un-pause/fit/armSettle that follows: they belong to the "new slice, let it settle" path,
+      // not to a slice that is supposed to hold still.
+      cosmoRef.current?.pause()
+      return
+    }
+    // A rebuilt graph starts its own simulation, so clear a freeze left over from the previous
+    // slice — otherwise the toolbar says paused and the new layout never fits.
+    pausedRef.current = false
+    onPausedChange(false)
+    cosmoRef.current?.fitView(300)
+    armSettle()
+  }, [absorbed, armSettle, onPausedChange])
+
+  const handleSimulationTick = useCallback(() => {
+    if (
+      autoFitRef.current &&
+      selectedRef.current === undefined &&
+      !pausedRef.current &&
+      !pinnedRef.current
+    ) {
+      cosmoRef.current?.fitView(0)
+    }
+    // Edge captions follow the moving points, but at a fraction of the tick rate.
+    if (showEdgeLabels && Date.now() - lastEdgeLabelAt.current > EDGE_LABEL_THROTTLE_MS) {
+      rebuildEdgeLabels()
+    }
+  }, [showEdgeLabels, rebuildEdgeLabels])
+
+  const handleClick = useCallback(
+    (index?: number) => onSelect(index === undefined ? undefined : pointsRef.current[index]?.id),
+    [onSelect],
+  )
+
+  const handlePointMouseOver = useCallback((index: number, pointPosition?: [number, number]) => {
+    const n = pointsRef.current[index]
+    if (n && pointPosition)
+      setHover({ id: n.id, type: n.type, x: pointPosition[0], y: pointPosition[1] })
+  }, [])
+
+  const handlePointMouseOut = useCallback(() => setHover(null), [])
+
   return (
     <div
       className="relative h-full w-full"
@@ -291,13 +449,13 @@ export function GraphCanvas({
       onPointerDownCapture={releaseAutoFit}
     >
       <Cosmograph
-        points={data.nodes}
+        points={shown.nodes}
         pointIdBy="id"
         pointIndexBy="index"
         pointColorBy="color"
-        pointColorByFn={(value: unknown) => String(value)}
+        pointColorByFn={directColor}
         pointSizeStrategy="degree"
-        pointSizeRange={[11, 34]}
+        pointSizeRange={POINT_SIZE_RANGE}
         pointDefaultSize={13}
         simulationGravity={0.4}
         simulationCenter={0.5}
@@ -306,9 +464,9 @@ export function GraphCanvas({
         // reads as nodes jittering in place.
         simulationDecay={1000}
         simulationFriction={0.72}
-        links={data.links}
+        links={shown.links}
         linkWidthBy="weight"
-        linkWidthRange={[1, 3]}
+        linkWidthRange={LINK_WIDTH_RANGE}
         linkSourceBy="source"
         linkSourceIndexBy="sourceIndex"
         linkTargetBy="target"
@@ -342,58 +500,20 @@ export function GraphCanvas({
         showHoveredPointLabel={showNodeLabels}
         pointLabelFontSize={12}
         customLabels={showEdgeLabels ? edgeLabels : undefined}
-        onMount={(g) => {
-          cosmoRef.current = g
-        }}
-        onGraphRebuilt={() => {
-          if (pinnedRef.current) {
-            // Playback pins the layout across every step's rebuilt slice. Cosmograph starts a
-            // fresh simulation on each rebuild regardless of props, and no prop changes here (
-            // `pinned` was already true and stays true), so the pause/resume effect below never
-            // re-fires — the re-pause has to be issued imperatively, right here, instead. Also
-            // skip the un-pause/fit/armSettle that follows: they belong to the "new slice, let it
-            // settle" path, not to a slice that is supposed to hold still.
-            cosmoRef.current?.pause()
-            return
-          }
-          // A rebuilt graph starts its own simulation, so clear a freeze left over from the
-          // previous slice — otherwise the toolbar says paused and the new layout never fits.
-          pausedRef.current = false
-          onPausedChange(false)
-          cosmoRef.current?.fitView(300)
-          armSettle()
-        }}
+        onMount={handleMount}
+        onGraphRebuilt={handleGraphRebuilt}
         // Frame the layout as it blooms open (instant fit each tick), then one smooth fit when
         // it settles. Skipped once the user has taken over the view (see `autoFitRef`) or while
         // a node is selected, so neither a manual zoom nor the selection's zoom-to-node is
         // fought. This is also what makes a 5-node slice land centered rather than zoomed into
         // a single point.
-        onSimulationTick={() => {
-          if (
-            autoFitRef.current &&
-            selectedRef.current === undefined &&
-            !pausedRef.current &&
-            !pinnedRef.current
-          ) {
-            cosmoRef.current?.fitView(0)
-          }
-          // Edge captions follow the moving points, but at a fraction of the tick rate.
-          if (showEdgeLabels && Date.now() - lastEdgeLabelAt.current > EDGE_LABEL_THROTTLE_MS) {
-            rebuildEdgeLabels()
-          }
-        }}
+        onSimulationTick={handleSimulationTick}
         // Cosmograph reached its own end before the budget did — freeze there instead.
         onSimulationEnd={freeze}
-        onClick={(index) =>
-          onSelect(index === undefined ? undefined : pointsRef.current[index]?.id)
-        }
-        onPointMouseOver={(index, pointPosition) => {
-          const n = pointsRef.current[index]
-          if (n && pointPosition)
-            setHover({ id: n.id, type: n.type, x: pointPosition[0], y: pointPosition[1] })
-        }}
-        onPointMouseOut={() => setHover(null)}
-        style={{ width: "100%", height: "100%" }}
+        onClick={handleClick}
+        onPointMouseOver={handlePointMouseOver}
+        onPointMouseOut={handlePointMouseOut}
+        style={CANVAS_STYLE}
       />
 
       {hover && (
