@@ -11,6 +11,7 @@ import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
+import { assertUniqueProps } from './duck-constraints.ts';
 import {
 	type GraphEvent,
 	type GraphEventOptions,
@@ -471,6 +472,11 @@ export class Graph<S extends GraphSchema> {
 		];
 		const ob = this.outboxStmt(event);
 		if (ob) stmts.push(ob); // co-write the event row in the same atomic batch (Layer 2)
+		// DuckDB has no store-level backing for declared-unique props (see
+		// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
+		if (dialectOf(this.raw) === 'duckdb') {
+			await assertUniqueProps(this.raw, n.type, parsed as Record<string, unknown>);
+		}
 		await this.runWriteBatch('addNode', () => this.raw.batch(stmts, 'write'));
 
 		this.typeCache.set(id, n.type);
@@ -1044,6 +1050,12 @@ export class Graph<S extends GraphSchema> {
 				// merge the patch, stamp.
 				const merged = { ...this.upcaster.apply(String(cur.type), curRaw), ...patch.data };
 				data = this.upcaster.stamp(successorType, merged);
+			}
+			// DuckDB has no store-level backing for declared-unique props (see
+			// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
+			// `id` is excluded so a node updated to its own current value is never rejected.
+			if (dialectOf(this.raw) === 'duckdb') {
+				await assertUniqueProps(this.raw, successorType, data, id);
 			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).

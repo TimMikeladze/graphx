@@ -249,6 +249,10 @@ export async function bulkLoad<S extends GraphSchema>(
 	if (deferIndexes) {
 		await raw.execute(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
 	}
+	// Runs on all three dialects, incl. DuckDB, which has no ANN or FTS index for it to
+	// inform (see deferIndexes above) — it still refreshes DuckDB's own planner
+	// statistics for the tables just loaded, so it is a no-op only w.r.t. those two
+	// indexes, not a dead call.
 	await raw.execute('ANALYZE');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };

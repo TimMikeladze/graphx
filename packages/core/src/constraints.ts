@@ -1,25 +1,33 @@
 import { FOREVER } from './db.ts';
 import { type DbClient, dialectOf } from './dialect.ts';
+import { declareDuckUniqueProp } from './duck-constraints.ts';
 import type { GraphSchema } from './graph.ts';
 import { ensureColumn } from './schema.ts';
 
 /**
- * P14 — constraints (§19.5). Two declarative guards, both expressed as **partial
- * indexes over LIVE rows only** (`WHERE valid_to = FOREVER`) so the immutable history
- * (closed versions) can never collide with itself:
+ * P14 — constraints (§19.5). Two declarative guards, both scoped to LIVE rows only
+ * (`WHERE valid_to = FOREVER`) so the immutable history (closed versions) can never
+ * collide with itself:
  *
  *  - **Uniqueness** ({@link declareUniqueNodeProp}): a prop is made unique among the
- *    live versions of one type. Implemented as a VIRTUAL generated column extracting
- *    the prop + a partial UNIQUE index over it (type-scoped). The §4.1 `ensureColumn`
- *    guard was built for exactly this (it reads `table_xinfo`, which sees generated
- *    columns) so re-declaring is idempotent.
+ *    live versions of one type. On libSQL a VIRTUAL generated column extracting the
+ *    prop + a partial UNIQUE index over it (type-scoped); the §4.1 `ensureColumn` guard
+ *    was built for exactly this (it reads `table_xinfo`, which sees generated columns)
+ *    so re-declaring is idempotent. On Postgres a partial UNIQUE expression index. On
+ *    DuckDB neither is possible (no partial indexes, no index over a JSON extraction),
+ *    so {@link declareDuckUniqueProp}/`assertUniqueProps` (duck-constraints.ts) enforce
+ *    it in application code instead — exact, not best-effort, because the writer is
+ *    serialized (see duck-constraints.ts's doc comment).
  *  - **Edge cardinality** ({@link declareSingleValuedRel}): a rel is single-valued —
  *    at most one live `(src, rel)` edge — via a partial UNIQUE index on
- *    `edge_versions(src)` filtered to that rel. `Graph.addEdge` additionally closes any
- *    existing live `(src, rel)` in the same write (the conditional-close pattern), so
- *    the normal path upserts (last write wins) while the index hard-guarantees the
+ *    `edge_versions(src)` filtered to that rel, on libSQL and Postgres.
+ *    `Graph.addEdge` additionally closes any existing live `(src, rel)` in the same
+ *    write (the conditional-close pattern) from the schema's `single: true` flag, so the
+ *    normal path upserts (last write wins) while the index hard-guarantees the
  *    invariant under concurrency. {@link materializeConstraints} creates these from a
- *    schema's `single: true` rels.
+ *    schema's `single: true` rels. DuckDB gets no index (same partial-index gap); the
+ *    conditional-close path alone upholds the invariant there, so the duckdb arm only
+ *    records the declaration for durability.
  *
  * Identifiers are inlined into DDL (SQLite can't bind them), so they are validated to a
  * safe `[A-Za-z0-9_]` charset to keep the surface injection-free.
@@ -69,7 +77,8 @@ export async function declareUniqueNodeProp(
 			);
 			return;
 		case 'duckdb':
-			throw new Error('constraints.declareUniqueNodeProp: duckdb not implemented yet');
+			await declareDuckUniqueProp(client, type, prop);
+			return;
 		default: {
 			// libSQL: a VIRTUAL generated column `gp_<prop>` + a partial UNIQUE index over it.
 			const col = `gp_${prop}`;
@@ -91,9 +100,23 @@ export async function declareUniqueNodeProp(
  * Make `rel` single-valued (§19.5): a partial UNIQUE index on `edge_versions(src)`
  * over the live rows of that rel, so at most one live `(src, rel)` edge can exist.
  * Pairs with `Graph.addEdge`'s conditional-close for the upsert path. Idempotent.
+ *
+ * DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` would be
+ * wrong — it would make every rel single-valued, not just the declared one. `addEdge`
+ * decides which rels are single-valued from the in-memory `defineGraphSchema` output
+ * (`def.single`), never from the database, so the duckdb arm only records the
+ * declaration for durability across restarts, the way the index does on the other two
+ * backends — nothing reads it back.
  */
 export async function declareSingleValuedRel(client: DbClient, rel: string): Promise<void> {
 	const safe = safeIdent(rel, 'rel');
+	if (dialectOf(client) === 'duckdb') {
+		await client.execute({
+			sql: `INSERT OR IGNORE INTO graph_meta (key, value) VALUES (?, ?)`,
+			args: [`single_rel:${safe}`, '1'],
+		});
+		return;
+	}
 	await client.execute(
 		`CREATE UNIQUE INDEX IF NOT EXISTS ux_single_${safe} ON edge_versions(src) WHERE valid_to = ${FOREVER} AND rel = ${sqlLiteral(safe)}`,
 	);
