@@ -1,10 +1,4 @@
-import {
-  keepPreviousData,
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api, type EdgeInput, type NodeInput, type NodePatch } from "@/lib/api"
 import { qk } from "@/lib/query-keys"
 import type { ExplorerFilters } from "@/lib/types"
@@ -47,6 +41,36 @@ export function useNodes(tenant?: string, project?: string, filters: ExplorerFil
 }
 
 /**
+ * Scopes a `keepPreviousData` placeholder to the tenant/project it was fetched for.
+ *
+ * Plain `keepPreviousData` is `(prev) => prev` — it retains the previous data for the *whole*
+ * observer whenever any part of the key changes, not just the part the placeholder is meant to
+ * smooth over. `tenant` and `project` live inside these keys right alongside the filters/window
+ * the placeholder actually targets, and `ExplorerPage` never remounts across a tenant or project
+ * switch (TanStack Router doesn't remount on param-only navigation, and the sidebar just calls
+ * `navigate({ params })` on the same route match). Left unscoped, switching scope would keep
+ * painting the previous scope's data — for the graph slice that's the canvas, legend, stats pill
+ * and `truncated` banner, and worse, clicking a node in that stale canvas would carry the old
+ * scope's node id into a lookup under the new one. Comparing the retained query's own key against
+ * the scope being rendered now falls back to `undefined` (a genuine loading state) on a scope
+ * change, and only keeps the placeholder for same-scope key changes — a scrub step, a zoom — which
+ * is the only case any of these placeholders exist for.
+ */
+function sameScopePlaceholder<TData>(
+  tenant: string,
+  project: string,
+): (
+  prev: TData | undefined,
+  prevQuery: { queryKey: readonly unknown[] } | undefined,
+) => TData | undefined {
+  return (prev, prevQuery) => {
+    const key = prevQuery?.queryKey
+    if (!key) return undefined
+    return key[1] === tenant && key[2] === project ? prev : undefined
+  }
+}
+
+/**
  * Governed graph slice for the canvas, keyed on the active filters.
  *
  * Keeps the previous slice on screen while a new one loads. `asOf` is part of the key, so without
@@ -54,13 +78,17 @@ export function useNodes(tenant?: string, project?: string, filters: ExplorerFil
  * `GraphShell` down its loading branch, unmounting the canvas and destroying the Cosmograph
  * instance. The layout would restart from scratch each step, which defeats pinning the simulation
  * during playback: the pin can only hold a canvas that stays mounted.
+ *
+ * The placeholder is scoped to (tenant, project) via `sameScopePlaceholder` rather than plain
+ * `keepPreviousData` — see that function for why an unscoped placeholder leaks the previous
+ * project's graph, node ids included, into a freshly selected one.
  */
 export function useGraphSlice(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
   return useQuery({
     queryKey: qk.graph(tenant ?? "", project ?? "", filters),
     enabled: Boolean(tenant && project),
     queryFn: () => api.graphSlice(tenant as string, project as string, filters),
-    placeholderData: keepPreviousData,
+    placeholderData: sameScopePlaceholder(tenant ?? "", project ?? ""),
   })
 }
 
@@ -275,7 +303,10 @@ export function useTimeline(
     staleTime: 60_000,
     // The zoom window is part of the query key, so every narrow/widen is a fresh cache entry —
     // without this, `data` goes undefined for the fetch, blanking the track and greying out every
-    // control for a frame instead of showing the previous window while the new one loads.
-    placeholderData: keepPreviousData,
+    // control for a frame instead of showing the previous window while the new one loads. Scoped
+    // to (tenant, project) via `sameScopePlaceholder` rather than plain `keepPreviousData`: unscoped,
+    // a tenant/project switch would keep showing the previous project's extent and ticks, since
+    // `ExplorerPage` doesn't remount across that switch either.
+    placeholderData: sameScopePlaceholder(tenant ?? "", project ?? ""),
   })
 }
