@@ -29,7 +29,7 @@ const SCHEMA = defineGraphSchema({
 			status: z.string().default('online'),
 		}),
 	},
-	edges: {},
+	edges: { links: { from: 'device', to: 'device' } },
 });
 
 const UPCAST = defineUpcasters({
@@ -78,4 +78,67 @@ test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when 
 	evict(ns);
 	for (const sfx of ['', '-wal', '-shm']) rmSync(`${ns}.db${sfx}`, { force: true });
 	control.close();
+});
+
+test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async () => {
+	const control = makeTestDb().client;
+	await initControl(control);
+	const tenant = await createTenant(control, { name: 'Acme' });
+	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
+	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
+	const ns = `ns_${ulid().toLowerCase()}`;
+	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+
+	const app = createApp({ control, schema: SCHEMA, authenticate });
+	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
+	const base = `/t/${tenant}/p/${project}`;
+
+	const mk = async (body: unknown) => {
+		const res = await app.request(`${base}/nodes`, {
+			method: 'POST',
+			headers: hdr,
+			body: JSON.stringify(body),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()) as { id: string };
+	};
+	const a = await mk({ type: 'device', data: { name: 'a', criticality: 1 }, body: 'first' });
+	const b = await mk({ type: 'device', data: { name: 'b', criticality: 1 } });
+	const edgeRes = await app.request(`${base}/edges`, {
+		method: 'POST',
+		headers: hdr,
+		body: JSON.stringify({ rel: 'links', src: a.id, dst: b.id }),
+	});
+	expect(edgeRes.status).toBe(201);
+	const edge = (await edgeRes.json()) as { id: string };
+
+	// `Graph.now()` is a monotonic write clock — Math.max(Date.now(), lastTs + 1) — so a burst of
+	// writes in one wall-clock millisecond gets `valid_from` values AHEAD of real time. Snapshot
+	// `t0` only after a buffer, or the as-of reads below land before the writes they must see.
+	await new Promise((r) => setTimeout(r, 5));
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await app.request(`${base}/nodes/${a.id}`, {
+		method: 'PATCH',
+		headers: hdr,
+		body: JSON.stringify({ data: { name: 'a2' }, body: 'second' }),
+	});
+	await app.request(`${base}/edges/${edge.id}`, { method: 'DELETE', headers: hdr });
+
+	const get = async (path: string) => {
+		const res = await app.request(`${base}${path}`, { headers: hdr });
+		expect(res.status).toBe(200);
+		return res.json();
+	};
+
+	expect((await get(`/nodes/${a.id}`)).data.name).toBe('a2');
+	expect((await get(`/nodes/${a.id}?asOf=${t0}`)).data.name).toBe('a');
+	expect((await get(`/nodes/${a.id}/content`)).body).toBe('second');
+	expect((await get(`/nodes/${a.id}/content?asOf=${t0}`)).body).toBe('first');
+	expect((await get(`/nodes/${a.id}/neighbors`)).length).toBe(0);
+	expect((await get(`/nodes/${a.id}/neighbors?asOf=${t0}`)).map((n: any) => n.id)).toEqual([b.id]);
+	expect((await get(`/nodes/${a.id}/neighborsPage?asOf=${t0}`)).rows.length).toBe(1);
+
+	evict(ns);
+	rmSync(`${ns}.db`, { force: true });
 });

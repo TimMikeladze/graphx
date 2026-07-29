@@ -259,6 +259,7 @@ const edgeInputSchema = z.object({
 const neighborQuerySchema = z.object({
 	direction: directionSchema.optional(),
 	rel: z.string().optional(),
+	asOf: numQuery.optional(),
 });
 
 /** GET /nodes/:id/neighborsPage query — neighbor filters + keyset pagination (§19.7). */
@@ -266,6 +267,9 @@ const neighborPageQuerySchema = neighborQuerySchema.extend({
 	limit: posIntQuery.optional(),
 	cursor: z.string().optional(),
 });
+
+/** GET /nodes/:id and GET /nodes/:id/content query — the as-of read instant. */
+const asOfQuerySchema = z.object({ asOf: numQuery.optional() });
 
 /** GET /retrieve query (§14). `asOf`/`k`/`maxDepth` coerced from strings. */
 const retrieveQuerySchema = z.object({
@@ -870,11 +874,11 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				summary: 'Get a node by id',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
-				request: { params: idParams },
+				request: { params: idParams, query: asOfQuerySchema },
 				responses: { 200: json('OK', nodeSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const node = await c.get('graph').getNode(c.req.param('id'));
+				const node = await c.get('graph').getNode(c.req.param('id'), c.req.valid('query'));
 				if (!node) throw new HTTPException(404, { message: 'node not found' });
 				return c.json(node as WireNode, 200);
 			},
@@ -954,10 +958,11 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', z.array(nodeSchema)), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { direction, rel } = c.req.valid('query');
+				const { direction, rel, asOf } = c.req.valid('query');
 				const list = await c.get('graph').neighbors(c.req.param('id'), {
 					direction,
 					rels: rel ? [rel] : undefined,
+					asOf,
 					limits: cfg.limits,
 				});
 				return c.json(list as WireNode[], 200);
@@ -978,10 +983,11 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', neighborPageSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { direction, rel, limit, cursor } = c.req.valid('query');
+				const { direction, rel, asOf, limit, cursor } = c.req.valid('query');
 				const page = await c.get('graph').neighborsPage(c.req.param('id'), {
 					direction,
 					rels: rel ? [rel] : undefined,
+					asOf,
 					limit,
 					cursor,
 					limits: cfg.limits,
@@ -1076,11 +1082,11 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				summary: 'Live content payload (body + provenance)',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'read')],
-				request: { params: idParams },
+				request: { params: idParams, query: asOfQuerySchema },
 				responses: { 200: json('OK', nodeContentSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const content = await c.get('graph').getNodeContent(c.req.param('id'));
+				const content = await c.get('graph').getNodeContent(c.req.param('id'), c.req.valid('query'));
 				if (!content) throw new HTTPException(404, { message: 'node not found' });
 				return c.json(content, 200);
 			},
