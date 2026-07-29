@@ -3213,6 +3213,7 @@ import { describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../src/duck.ts';
 import { embParam } from '../src/duck-value.ts';
 import {
+	annSeedsAsOf,
 	annSeedsLive,
 	jsonArrayRows,
 	jsonEqArg,
@@ -3266,6 +3267,33 @@ describe('duckdb fragments, executed', () => {
 		const c = createDuckClient();
 		const r = await c.execute(`SELECT ${scalarMax('duckdb', '3', '7')} AS m`);
 		expect(r.rows[0]?.m).toBe(7);
+		await c.end();
+	});
+
+	test('annSeedsAsOf excludes a candidate that is nearest but not yet valid at t', async () => {
+		// The highest-risk fragment here: it combines temporal filtering, true-cosine
+		// ranking, and two-phase truncation. A version of it that ignored the temporal
+		// filter would return a plausible, well-ordered, WRONG answer — so the case has to
+		// be built so the nearest vector is the one that must be excluded.
+		const c = createDuckClient();
+		await init(c, 3);
+		for (const [id, vec, from] of [
+			['near', [1, 0, 0], 100],
+			['far', [0, 0, 1], 1],
+		] as const) {
+			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
+			await c.execute({
+				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				      VALUES (nextval('seq_ver'), ?, 'Doc', ?, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
+				args: [id, from, embParam([...vec])],
+			});
+		}
+		// As of t=50, 'near' does not exist yet — even though it is the closest vector.
+		const r = await c.execute({
+			sql: `WITH seeds AS (${annSeedsAsOf('duckdb')}) SELECT id FROM seeds`,
+			args: [embParam([1, 0, 0]), 10, 50, 50, 5],
+		});
+		expect(r.rows.map((x) => x.id)).toEqual(['far']);
 		await c.end();
 	});
 
