@@ -2154,7 +2154,7 @@ git commit -m "feat(admin): lock the explorer read-only while viewing the past"
 In `packages/admin/src/components/timeline/timeline-bar.tsx`, add the imports:
 
 ```ts
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons"
 ```
 
@@ -2163,17 +2163,24 @@ Add `onPlayingChange?: (playing: boolean) => void` to the props type, then the s
 ```ts
   const [playing, setPlaying] = useState(false)
 
+  // The timer reads its inputs through a ref rather than closing over them. `onChange` is an
+  // inline arrow at the call site, so listing it as a dependency would tear the interval down and
+  // rebuild it on every parent render — a 700ms timer that keeps restarting never fires.
+  const latest = useRef({ ticks, current, onChange })
+  latest.current = { ticks, current, onChange }
+
   // Advance tick-to-tick. Each step is a filter change, so every dependent query refetches; the
   // interval is slow enough that a step's fetches land before the next one starts on a local DB.
   useEffect(() => {
     if (!playing) return
     const id = setInterval(() => {
-      const next = stepTick(ticks, current, 1)
+      const { ticks: ts, current: now, onChange: emit } = latest.current
+      const next = stepTick(ts, now, 1)
       if (next === undefined) setPlaying(false)
-      else onChange(next)
+      else emit(next)
     }, 700)
     return () => clearInterval(id)
-  }, [playing, ticks, current, onChange])
+  }, [playing])
 
   useEffect(() => {
     onPlayingChange?.(playing)
