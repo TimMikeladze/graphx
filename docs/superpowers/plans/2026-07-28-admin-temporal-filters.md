@@ -678,7 +678,7 @@ afterAll(async () => {
  */
 async function seedNodeVersion(client: DbClient, id: string, from: number, to: number) {
 	await client.execute({
-		sql: insertOrIgnoreSql(client, 'node_identity', 'id', '?'),
+		sql: insertOrIgnoreSql(client, 'node_identity', 'id', '(?)'),
 		args: [id],
 	});
 	await client.execute({
@@ -921,7 +921,8 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	for (const r of bucketRows.rows as unknown as Array<Record<string, unknown>>) {
 		// t === to bins one past the end; clamp rather than branch in SQL.
 		const idx = Math.min(buckets - 1, Math.max(0, Number(r.b)));
-		counts[idx] += Number(r.n);
+		// `?? 0` satisfies noUncheckedIndexedAccess; the array is pre-filled, so it never fires.
+		counts[idx] = (counts[idx] ?? 0) + Number(r.n);
 	}
 	return { min: lo, max: hi, total, from, to, buckets: counts, ticks, ticksTruncated };
 }
