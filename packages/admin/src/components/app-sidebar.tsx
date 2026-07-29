@@ -7,7 +7,6 @@ import {
   Key01Icon,
 } from "@hugeicons/core-free-icons"
 import { Combobox } from "@/components/combobox"
-import { AsOfPicker } from "@/components/filters/as-of-picker"
 import { KindFilter } from "@/components/filters/kind-filter"
 import { ModeToggle } from "@/components/filters/mode-toggle"
 import { SearchBox } from "@/components/filters/search-box"
@@ -190,8 +189,6 @@ export function AppSidebar({
               types={types}
               onChange={(type) => onFilterChange({ type })}
             />
-            <AsOfPicker value={filters.asOf} onChange={(asOf) => onFilterChange({ asOf })} />
-
             {hasFilters && (
               <div className="flex flex-wrap gap-1 pt-0.5">
                 {filters.type !== undefined && (

@@ -113,7 +113,7 @@ export function TimelineTrack({
     <div
       ref={ref}
       className={cn(
-        "relative h-8 flex-1 touch-none select-none",
+        "relative h-8 flex-1 touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
         disabled ? "cursor-default opacity-50" : "cursor-pointer",
       )}
       onPointerDown={onPointerDown}

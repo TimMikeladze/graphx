@@ -33,6 +33,7 @@ export function GraphShell({
   onDeleteNode,
   onDrawEdge,
   onDeleteEdge,
+  timeline,
 }: {
   slice?: GraphSlice
   isLoading?: boolean
@@ -56,6 +57,11 @@ export function GraphShell({
   /** Edge gestures — flow only; the WebGL canvas has no handles to drag from. */
   onDrawEdge?: (edge: PendingEdge) => void
   onDeleteEdge?: (edge: PendingEdgeDeletion) => void
+  /**
+   * The time-travel bar, docked under the canvas. Passed as a node rather than built here so the
+   * shell stays a pure canvas frame with no data dependencies of its own.
+   */
+  timeline?: React.ReactNode
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
@@ -77,19 +83,25 @@ export function GraphShell({
 
   if (isLoading) {
     return (
-      <div className={cn("h-full w-full", backdrop)}>
-        <EmptyState icon={ChartRelationshipIcon} title="Loading graph…" className="animate-pulse" />
+      <div className="flex h-full w-full flex-col">
+        <div className={cn("min-h-0 flex-1", backdrop)}>
+          <EmptyState icon={ChartRelationshipIcon} title="Loading graph…" className="animate-pulse" />
+        </div>
+        {timeline}
       </div>
     )
   }
   if (!slice || slice.nodes.length === 0) {
     return (
-      <div className={cn("h-full w-full", backdrop)}>
-        <EmptyState
-          icon={ChartRelationshipIcon}
-          title="No graph for these filters"
-          hint="Broaden the NodeType or search filters to see connected nodes."
-        />
+      <div className="flex h-full w-full flex-col">
+        <div className={cn("min-h-0 flex-1", backdrop)}>
+          <EmptyState
+            icon={ChartRelationshipIcon}
+            title="No graph for these filters"
+            hint="Broaden the NodeType or search filters to see connected nodes."
+          />
+        </div>
+        {timeline}
       </div>
     )
   }
@@ -97,113 +109,116 @@ export function GraphShell({
   const legend = legendOf(slice)
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("relative h-full w-full", isCosmograph && "dark text-foreground")}
-      style={isCosmograph ? { background: CANVAS_BG } : undefined}
-    >
-      <ErrorBoundary
-        // Remount the boundary with the renderer, so switching away from a crashed canvas
-        // shows the other one rather than the fallback.
-        key={renderer}
-        fallback={
-          <EmptyState
-            icon={AlertCircleIcon}
-            tone="destructive"
-            title="Graph canvas unavailable"
-            hint={
-              isCosmograph
-                ? "This view needs a WebGL-capable browser/GPU. The flow renderer draws plain DOM and may work here."
-                : "The flow renderer failed to draw this slice."
-            }
-          />
-        }
+    <div className="flex h-full w-full flex-col">
+      <div
+        ref={containerRef}
+        className={cn("relative min-h-0 w-full flex-1", isCosmograph && "dark text-foreground")}
+        style={isCosmograph ? { background: CANVAS_BG } : undefined}
       >
-        {isCosmograph ? (
-          <GraphCanvas
-            slice={slice}
-            selectedId={selectedId}
-            onSelect={onSelect}
-            labels={labels}
-            paused={paused}
-            onPausedChange={setPaused}
-            handleRef={rendererRef}
-          />
-        ) : (
-          <FlowCanvas
-            slice={slice}
-            selectedId={selectedId}
-            onSelect={onSelect}
-            labels={labels}
-            layout={flowLayout}
-            onSwitchToCosmograph={() => onRendererChange("cosmograph")}
-            handleRef={rendererRef}
-            onCreateNode={onCreateNode}
-            onEditNode={onEditNode}
-            onDeleteNode={onDeleteNode}
-            onDrawEdge={onDrawEdge}
-            onDeleteEdge={onDeleteEdge}
-          />
-        )}
-      </ErrorBoundary>
+        <ErrorBoundary
+          // Remount the boundary with the renderer, so switching away from a crashed canvas
+          // shows the other one rather than the fallback.
+          key={renderer}
+          fallback={
+            <EmptyState
+              icon={AlertCircleIcon}
+              tone="destructive"
+              title="Graph canvas unavailable"
+              hint={
+                isCosmograph
+                  ? "This view needs a WebGL-capable browser/GPU. The flow renderer draws plain DOM and may work here."
+                  : "The flow renderer failed to draw this slice."
+              }
+            />
+          }
+        >
+          {isCosmograph ? (
+            <GraphCanvas
+              slice={slice}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              labels={labels}
+              paused={paused}
+              onPausedChange={setPaused}
+              handleRef={rendererRef}
+            />
+          ) : (
+            <FlowCanvas
+              slice={slice}
+              selectedId={selectedId}
+              onSelect={onSelect}
+              labels={labels}
+              layout={flowLayout}
+              onSwitchToCosmograph={() => onRendererChange("cosmograph")}
+              handleRef={rendererRef}
+              onCreateNode={onCreateNode}
+              onEditNode={onEditNode}
+              onDeleteNode={onDeleteNode}
+              onDrawEdge={onDrawEdge}
+              onDeleteEdge={onDeleteEdge}
+            />
+          )}
+        </ErrorBoundary>
 
-      {/* edge falloff that frames the composition (never covers the centered nodes) */}
-      {isCosmograph && <div className="canvas-vignette pointer-events-none absolute inset-0" />}
+        {/* edge falloff that frames the composition (never covers the centered nodes) */}
+        {isCosmograph && <div className="canvas-vignette pointer-events-none absolute inset-0" />}
 
-      {/* stats */}
-      <div className="hud pointer-events-none absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1.5 text-xs tabular-nums">
-        <span className="font-semibold text-foreground">{slice.nodes.length}</span>
-        <span className="text-muted-foreground">nodes</span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="font-semibold text-foreground">{slice.links.length}</span>
-        <span className="text-muted-foreground">edges</span>
-      </div>
-
-      <GraphToolbar
-        renderer={renderer}
-        onRendererChange={onRendererChange}
-        flowLayout={flowLayout}
-        onFlowLayoutChange={onFlowLayoutChange}
-        paused={paused}
-        labels={labels}
-        onLabelsChange={setLabels}
-        onFit={() => rendererRef.current?.fit()}
-        onZoomIn={() => rendererRef.current?.zoomIn()}
-        onZoomOut={() => rendererRef.current?.zoomOut()}
-        onTogglePause={() => setPaused((p) => !p)}
-        onToggleFullscreen={toggleFullscreen}
-        onCreateNode={onCreateNode}
-      />
-
-      {/* legend / quick type filter */}
-      {legend.length > 0 && (
-        <div className="hud absolute bottom-3 left-3 flex max-w-[60%] flex-wrap items-center gap-0.5 p-1.5 text-xs">
-          {legend.map((l) => {
-            const active = activeType === l.type
-            return (
-              <button
-                key={l.type}
-                type="button"
-                disabled={!onTypeFilter}
-                onClick={() => onTypeFilter?.(active ? undefined : l.type)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors",
-                  onTypeFilter && "hover:bg-accent",
-                  active && "bg-accent font-medium",
-                  activeType && !active && "opacity-40",
-                )}
-                title={onTypeFilter ? `Filter to ${l.type}` : l.type}
-              >
-                <span
-                  className="inline-block size-2.5 rounded-full"
-                  style={{ backgroundColor: l.color }}
-                />
-                {l.type}
-              </button>
-            )
-          })}
+        {/* stats */}
+        <div className="hud pointer-events-none absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1.5 text-xs tabular-nums">
+          <span className="font-semibold text-foreground">{slice.nodes.length}</span>
+          <span className="text-muted-foreground">nodes</span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="font-semibold text-foreground">{slice.links.length}</span>
+          <span className="text-muted-foreground">edges</span>
         </div>
-      )}
+
+        <GraphToolbar
+          renderer={renderer}
+          onRendererChange={onRendererChange}
+          flowLayout={flowLayout}
+          onFlowLayoutChange={onFlowLayoutChange}
+          paused={paused}
+          labels={labels}
+          onLabelsChange={setLabels}
+          onFit={() => rendererRef.current?.fit()}
+          onZoomIn={() => rendererRef.current?.zoomIn()}
+          onZoomOut={() => rendererRef.current?.zoomOut()}
+          onTogglePause={() => setPaused((p) => !p)}
+          onToggleFullscreen={toggleFullscreen}
+          onCreateNode={onCreateNode}
+        />
+
+        {/* legend / quick type filter */}
+        {legend.length > 0 && (
+          <div className="hud absolute bottom-3 left-3 flex max-w-[60%] flex-wrap items-center gap-0.5 p-1.5 text-xs">
+            {legend.map((l) => {
+              const active = activeType === l.type
+              return (
+                <button
+                  key={l.type}
+                  type="button"
+                  disabled={!onTypeFilter}
+                  onClick={() => onTypeFilter?.(active ? undefined : l.type)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors",
+                    onTypeFilter && "hover:bg-accent",
+                    active && "bg-accent font-medium",
+                    activeType && !active && "opacity-40",
+                  )}
+                  title={onTypeFilter ? `Filter to ${l.type}` : l.type}
+                >
+                  <span
+                    className="inline-block size-2.5 rounded-full"
+                    style={{ backgroundColor: l.color }}
+                  />
+                  {l.type}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {timeline}
     </div>
   )
 }

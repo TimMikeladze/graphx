@@ -13,6 +13,7 @@ import { NodeDetailSheet } from "@/components/node-detail-sheet"
 import { NodeEditorDialog } from "@/components/node-editor-dialog"
 import { ResultsBanner } from "@/components/results-banner"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { TimelineBar } from "@/components/timeline/timeline-bar"
 import { Button } from "@/components/ui/button"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -153,6 +154,14 @@ export function ExplorerPage() {
               onDeleteNode={(id) => setDeleteFor(id)}
               onDrawEdge={(edge) => setDrawnEdge(edge)}
               onDeleteEdge={(edge) => setEdgeToRemove(edge)}
+              timeline={
+                <TimelineBar
+                  tenant={tenant}
+                  project={project}
+                  asOf={filters.asOf}
+                  onChange={(asOf) => setSearch({ asOf })}
+                />
+              }
             />
           </div>
           {detailOpen && search.node && (
