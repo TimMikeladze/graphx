@@ -167,6 +167,27 @@ export interface RendererHandle {
   zoomOut: () => void
 }
 
+/**
+ * `GET /timeline` — the graph's change points, aggregated for the scrubber. A change point is any
+ * `valid_from` plus any non-FOREVER `valid_to`, so retractions are represented.
+ */
+export interface Timeline {
+  /** Extent over all time, ignoring the requested window. `null` on an empty graph. */
+  min: number | null
+  max: number | null
+  /** Change-point count over the full extent. */
+  total: number
+  /** The window the server actually bucketed. */
+  from: number
+  to: number
+  /** Change-point counts per equal-width slot over `[from, to]`. */
+  buckets: number[]
+  /** Distinct change instants in the window, ascending — what the handle snaps to. */
+  ticks: number[]
+  /** True when `ticks` hit the server row cap; narrow the window for an exact list. */
+  ticksTruncated: boolean
+}
+
 /** Filters that scope the explorer (also the URL search params). */
 export interface ExplorerFilters {
   type?: string

@@ -13,6 +13,7 @@ export function NodeDetailSheet({
   onSelect,
   onEdit,
   onDelete,
+  asOf,
 }: {
   tenant: string
   project: string
@@ -21,6 +22,8 @@ export function NodeDetailSheet({
   onSelect: (id: string) => void
   onEdit?: (id: string) => void
   onDelete?: (id: string) => void
+  /** Viewing instant; absent ⇒ live. */
+  asOf?: number
 }) {
   return (
     <Sheet
@@ -41,6 +44,7 @@ export function NodeDetailSheet({
             onSelect={onSelect}
             onEdit={onEdit}
             onDelete={onDelete}
+            asOf={asOf}
           />
         )}
       </SheetContent>

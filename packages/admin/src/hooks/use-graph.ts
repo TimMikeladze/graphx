@@ -62,11 +62,11 @@ export function useSchema(tenant?: string, project?: string) {
   })
 }
 
-/** A single node (detail Sheet). */
-export function useNode(tenant?: string, project?: string, id?: string) {
+/** A single node (detail Sheet), at `asOf` when one is set. */
+export function useNode(tenant?: string, project?: string, id?: string, asOf?: number) {
   return useQuery({
-    queryKey: qk.node(tenant ?? "", project ?? "", id ?? ""),
-    queryFn: () => api.getNode(tenant as string, project as string, id as string),
+    queryKey: qk.node(tenant ?? "", project ?? "", id ?? "", asOf),
+    queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
     enabled: Boolean(tenant && project && id),
   })
 }
@@ -80,10 +80,11 @@ export function useNodeContent(
   project?: string,
   id?: string,
   enabled = true,
+  asOf?: number,
 ) {
   return useQuery({
-    queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? ""),
-    queryFn: () => api.getNodeContent(tenant as string, project as string, id as string),
+    queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "", asOf),
+    queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
     enabled: Boolean(enabled && tenant && project && id),
   })
 }
@@ -99,7 +100,7 @@ export function useUpdateNodeBody(tenant?: string, project?: string, id?: string
     mutationFn: (body: string) =>
       api.updateNodeBody(tenant as string, project as string, id as string, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? "", project ?? "", id ?? "") })
       qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
     },
   })
@@ -139,8 +140,8 @@ export function useUpdateNode(tenant?: string, project?: string, id?: string) {
       api.updateNode(tenant as string, project as string, id as string, patch),
     onSuccess: () => {
       invalidateGraphViews(qc, tenant, project)
-      qc.invalidateQueries({ queryKey: qk.node(tenant ?? "", project ?? "", id ?? "") })
-      qc.invalidateQueries({ queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.allNode(tenant ?? "", project ?? "", id ?? "") })
+      qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? "", project ?? "", id ?? "") })
       qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
     },
   })
@@ -173,7 +174,7 @@ export function useCreateEdge(tenant?: string, project?: string) {
     onSuccess: (_result, input) => {
       invalidateGraphViews(qc, tenant, project)
       for (const id of [input.src, input.dst]) {
-        qc.invalidateQueries({ queryKey: qk.neighbors(tenant ?? "", project ?? "", id) })
+        qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? "", project ?? "", id) })
       }
     },
   })
@@ -188,17 +189,17 @@ export function useDeleteEdge(tenant?: string, project?: string) {
     onSuccess: (_result, edge) => {
       invalidateGraphViews(qc, tenant, project)
       for (const id of [edge.source, edge.target]) {
-        qc.invalidateQueries({ queryKey: qk.neighbors(tenant ?? "", project ?? "", id) })
+        qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? "", project ?? "", id) })
       }
     },
   })
 }
 
-/** A node's neighbors (detail Sheet · Neighbors tab). */
-export function useNeighbors(tenant?: string, project?: string, id?: string) {
+/** A node's neighbors (detail Sheet · Neighbors tab), at `asOf` when one is set. */
+export function useNeighbors(tenant?: string, project?: string, id?: string, asOf?: number) {
   return useQuery({
-    queryKey: qk.neighbors(tenant ?? "", project ?? "", id ?? ""),
-    queryFn: () => api.neighbors(tenant as string, project as string, id as string),
+    queryKey: qk.neighbors(tenant ?? "", project ?? "", id ?? "", asOf),
+    queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
     enabled: Boolean(tenant && project && id),
   })
 }
@@ -240,5 +241,22 @@ export function useHistory(tenant?: string, project?: string, id?: string) {
     queryKey: qk.history(tenant ?? "", project ?? "", id ?? ""),
     queryFn: () => api.history(tenant as string, project as string, id as string),
     enabled: Boolean(tenant && project && id),
+  })
+}
+
+/**
+ * The project's change-point timeline — what the scrubber draws and snaps to. Written to rarely
+ * relative to how often it is read, so it is kept for a minute rather than refetched per scrub.
+ */
+export function useTimeline(
+  tenant?: string,
+  project?: string,
+  window: { from?: number; to?: number } = {},
+) {
+  return useQuery({
+    queryKey: qk.timeline(tenant ?? "", project ?? "", window),
+    queryFn: () => api.timeline(tenant as string, project as string, window),
+    enabled: Boolean(tenant && project),
+    staleTime: 60_000,
   })
 }

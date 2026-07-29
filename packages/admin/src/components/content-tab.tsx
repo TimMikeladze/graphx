@@ -58,14 +58,17 @@ export function ContentTab({
   project,
   nodeId,
   active,
+  asOf,
 }: {
   tenant: string
   project: string
   nodeId: string
   /** The tab is open — gates the fetch so selecting a node doesn't pull its body. */
   active: boolean
+  /** Viewing instant; absent ⇒ live. */
+  asOf?: number
 }) {
-  const content = useNodeContent(tenant, project, nodeId, active)
+  const content = useNodeContent(tenant, project, nodeId, active, asOf)
   const save = useUpdateNodeBody(tenant, project, nodeId)
   // `null` ⇒ viewing; a string ⇒ editing, holding the working source.
   const [draft, setDraft] = useState<string | null>(() => drafts.get(nodeId) ?? null)

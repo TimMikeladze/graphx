@@ -10,6 +10,7 @@ import type {
   Role,
   SchemaDoc,
   Tenant,
+  Timeline,
   User,
 } from "./types"
 
@@ -185,8 +186,17 @@ export const api = {
   /** The project's declared node types and rels, as JSON Schema (drives the node editor). */
   getSchema: (tenant: string, project: string) =>
     request<SchemaDoc>(`${tp(tenant, project)}/schema`),
-  getNode: (tenant: string, project: string, id: string) =>
-    request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`),
+  getNode: (tenant: string, project: string, id: string, asOf?: number) =>
+    request<GraphNode>(`${tp(tenant, project)}/nodes/${id}${qs({ asOf })}`),
+  /** Change points for the scrubber: full extent, a density histogram, and the snap ticks. */
+  timeline: (
+    tenant: string,
+    project: string,
+    opts: { from?: number; to?: number; buckets?: number } = {},
+  ) =>
+    request<Timeline>(
+      `${tp(tenant, project)}/timeline${qs({ from: opts.from, to: opts.to, buckets: opts.buckets })}`,
+    ),
 
   // --- writes (editor role or above; a viewer's token gets 403) ---
   createNode: (tenant: string, project: string, input: NodeInput) =>
@@ -211,16 +221,16 @@ export const api = {
   /** Close an edge's live version. Like a node retraction, earlier times still see it. */
   deleteEdge: (tenant: string, project: string, id: string) =>
     request<void>(`${tp(tenant, project)}/edges/${id}`, { method: "DELETE" }),
-  getNodeContent: (tenant: string, project: string, id: string) =>
-    request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content`),
+  getNodeContent: (tenant: string, project: string, id: string, asOf?: number) =>
+    request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content${qs({ asOf })}`),
   /** Replace a node's markdown body. Bitemporal — the server opens a successor version. */
   updateNodeBody: (tenant: string, project: string, id: string, body: string) =>
     request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ body }),
     }),
-  neighbors: (tenant: string, project: string, id: string) =>
-    request<GraphNode[]>(`${tp(tenant, project)}/nodes/${id}/neighbors`),
+  neighbors: (tenant: string, project: string, id: string, asOf?: number) =>
+    request<GraphNode[]>(`${tp(tenant, project)}/nodes/${id}/neighbors${qs({ asOf })}`),
   history: (tenant: string, project: string, id: string) =>
     request<{ versions: NodeVersion[] }>(`${tp(tenant, project)}/nodes/${id}/history`).then(
       (r) => r.versions,

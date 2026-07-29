@@ -86,4 +86,41 @@ describe("api transport", () => {
     expect((init.headers as Headers).get("Content-Type")).toBe("application/json")
     expect(init.body).toBe(JSON.stringify({ name: "Acme" }))
   })
+
+  it("passes asOf to the single-node reads", async () => {
+    fetchMock.mockResolvedValue(ok({ id: "n1", type: "device", data: {} }))
+    await api.getNode("tA", "pA", "n1", 1234)
+    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/nodes/n1?asOf=1234")
+
+    fetchMock.mockResolvedValue(ok({ body: null, uri: null, contentType: null, contentHash: null }))
+    await api.getNodeContent("tA", "pA", "n1", 1234)
+    expect(fetchMock.mock.calls[1][0]).toBe("/t/tA/p/pA/nodes/n1/content?asOf=1234")
+
+    fetchMock.mockResolvedValue(ok([]))
+    await api.neighbors("tA", "pA", "n1", 1234)
+    expect(fetchMock.mock.calls[2][0]).toBe("/t/tA/p/pA/nodes/n1/neighbors?asOf=1234")
+  })
+
+  it("omits asOf from the single-node reads when live", async () => {
+    fetchMock.mockResolvedValue(ok({ id: "n1", type: "device", data: {} }))
+    await api.getNode("tA", "pA", "n1")
+    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/nodes/n1")
+  })
+
+  it("builds the timeline URL", async () => {
+    fetchMock.mockResolvedValue(
+      ok({
+        min: 1,
+        max: 2,
+        total: 2,
+        from: 1,
+        to: 2,
+        buckets: [1, 1],
+        ticks: [1, 2],
+        ticksTruncated: false,
+      }),
+    )
+    await api.timeline("tA", "pA", { from: 1, to: 2, buckets: 2 })
+    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/timeline?from=1&to=2&buckets=2")
+  })
 })

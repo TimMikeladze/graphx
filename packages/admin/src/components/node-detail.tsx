@@ -232,6 +232,7 @@ export function NodeDetail({
   onClose,
   onEdit,
   onDelete,
+  asOf,
 }: {
   tenant: string
   project: string
@@ -241,11 +242,13 @@ export function NodeDetail({
   /** Editing entry points; absent ⇒ the inspector is read-only. */
   onEdit?: (id: string) => void
   onDelete?: (id: string) => void
+  /** Viewing instant; absent ⇒ live. */
+  asOf?: number
 }) {
   // Controlled so the Content tab knows when it is on screen (it gates its own fetch on that).
   const [tab, setTab] = useState("data")
-  const node = useNode(tenant, project, nodeId)
-  const neighbors = useNeighbors(tenant, project, nodeId)
+  const node = useNode(tenant, project, nodeId, asOf)
+  const neighbors = useNeighbors(tenant, project, nodeId, asOf)
   const history = useHistory(tenant, project, nodeId)
 
   const label = node.data ? bestLabel(node.data.data) : undefined
@@ -364,6 +367,7 @@ export function NodeDetail({
             project={project}
             nodeId={nodeId}
             active={tab === "content"}
+            asOf={asOf}
           />
         </TabsContent>
         <TabsContent value="neighbors" className="min-h-0 flex-1">

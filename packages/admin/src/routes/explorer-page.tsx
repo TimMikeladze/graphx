@@ -165,6 +165,7 @@ export function ExplorerPage() {
                 onClose={() => setSearch({ node: undefined })}
                 onEdit={(id) => setEditorFor(id)}
                 onDelete={(id) => setDeleteFor(id)}
+                asOf={filters.asOf}
               />
             </aside>
           )}
@@ -181,6 +182,7 @@ export function ExplorerPage() {
           onSelect={(id) => setSearch({ node: id })}
           onEdit={(id) => setEditorFor(id)}
           onDelete={(id) => setDeleteFor(id)}
+          asOf={filters.asOf}
         />
       )}
 
