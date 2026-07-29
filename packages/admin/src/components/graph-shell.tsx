@@ -34,6 +34,7 @@ export function GraphShell({
   onDrawEdge,
   onDeleteEdge,
   timeline,
+  pinSimulation,
 }: {
   slice?: GraphSlice
   isLoading?: boolean
@@ -62,6 +63,12 @@ export function GraphShell({
    * shell stays a pure canvas frame with no data dependencies of its own.
    */
   timeline?: React.ReactNode
+  /**
+   * Hold the force simulation still. A fresh slice on every playback step would otherwise restart
+   * the simulation, so the graph would explode and re-settle each frame rather than evolving in
+   * place — which is the whole point of watching it play.
+   */
+  pinSimulation?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   // Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
@@ -138,7 +145,7 @@ export function GraphShell({
               selectedId={selectedId}
               onSelect={onSelect}
               labels={labels}
-              paused={paused}
+              paused={paused || Boolean(pinSimulation)}
               onPausedChange={setPaused}
               handleRef={rendererRef}
             />

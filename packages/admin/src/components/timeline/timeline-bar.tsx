@@ -1,7 +1,9 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
 import {
   NextIcon,
+  PauseIcon,
+  PlayIcon,
   PreviousIcon,
   ZoomInAreaIcon,
   ZoomOutAreaIcon,
@@ -23,12 +25,15 @@ export function TimelineBar({
   project,
   asOf,
   onChange,
+  onPlayingChange,
 }: {
   tenant: string
   project: string
   /** The current as-of instant; `undefined` ⇒ live. */
   asOf?: number
   onChange: (asOf: number | undefined) => void
+  /** Reports playback so the canvas can hold its simulation still while the slice churns. */
+  onPlayingChange?: (playing: boolean) => void
 }) {
   // The scrub window. `{}` is the full extent. Narrowing it makes the server return exact ticks
   // for that span instead of a sample, which is the only way to snap precisely on a dense graph.
@@ -46,7 +51,37 @@ export function TimelineBar({
   const shown = preview ?? asOf
   const zoomed = zoom.from !== undefined || zoom.to !== undefined
 
-  const go = (t: number | undefined) => onChange(t)
+  const [playing, setPlaying] = useState(false)
+
+  // The timer reads its inputs through a ref rather than closing over them. `onChange` is an
+  // inline arrow at the call site, so listing it as a dependency would tear the interval down and
+  // rebuild it on every parent render — a 700ms timer that keeps restarting never fires.
+  const latest = useRef({ ticks, current, onChange })
+  latest.current = { ticks, current, onChange }
+
+  // Advance tick-to-tick. Each step is a filter change, so every dependent query refetches; the
+  // interval is slow enough that a step's fetches land before the next one starts on a local DB.
+  useEffect(() => {
+    if (!playing) return
+    const id = setInterval(() => {
+      const { ticks: ts, current: now, onChange: emit } = latest.current
+      const next = stepTick(ts, now, 1)
+      if (next === undefined) setPlaying(false)
+      else emit(next)
+    }, 700)
+    return () => clearInterval(id)
+  }, [playing])
+
+  useEffect(() => {
+    onPlayingChange?.(playing)
+  }, [playing, onPlayingChange])
+
+  // Every manual interaction stops playback. The interval calls `onChange` directly so that it
+  // does not pause itself on each step.
+  const go = (t: number | undefined) => {
+    setPlaying(false)
+    onChange(t)
+  }
   const step = (dir: -1 | 1) => {
     const next = stepTick(ticks, current, dir)
     if (next !== undefined) go(next)
@@ -88,6 +123,15 @@ export function TimelineBar({
           onClick={() => step(-1)}
         >
           <HugeiconsIcon icon={PreviousIcon} strokeWidth={2} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={playing ? "Pause playback" : "Play through changes"}
+          disabled={empty || (!playing && stepTick(ticks, current, 1) === undefined)}
+          onClick={() => setPlaying((p) => !p)}
+        >
+          <HugeiconsIcon icon={playing ? PauseIcon : PlayIcon} strokeWidth={2} />
         </Button>
         <Button
           variant="ghost"

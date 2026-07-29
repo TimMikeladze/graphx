@@ -93,6 +93,8 @@ export function ExplorerPage() {
   // A write issued from a historical view lands on the LIVE version, not the one on screen. That
   // is a silent footgun, so the past is read-only rather than merely discouraged.
   const readOnly = filters.asOf !== undefined
+  // Playback churns the slice every step; the canvas holds its layout still for the duration.
+  const [playing, setPlaying] = useState(false)
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "21rem" } as React.CSSProperties}>
@@ -169,8 +171,10 @@ export function ExplorerPage() {
                   project={project}
                   asOf={filters.asOf}
                   onChange={(asOf) => setSearch({ asOf })}
+                  onPlayingChange={setPlaying}
                 />
               }
+              pinSimulation={playing}
             />
           </div>
           {detailOpen && search.node && (
