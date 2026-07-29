@@ -1099,7 +1099,7 @@ Expected: prints `CAS enforced`. Create the bucket first via the MinIO console a
 
 Then tear down: `docker rm -f graphx-minio`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/s3.ts packages/core/test/objstore/s3.test.ts
@@ -1409,9 +1409,13 @@ export class SnapshotStore {
 		for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt++) {
 			const next = await build(current);
 			const expected = current === null ? 0 : current.snapshot + 1;
-			if (next.snapshot !== expected) {
+			const expectedParent = current === null ? null : current.snapshot;
+			// Both fields, not just the number. A manifest with the right number and a
+			// wrong parent records a lineage that never happened, and nothing downstream
+			// would notice — `resolveHead` navigates by number alone.
+			if (next.snapshot !== expected || next.parent !== expectedParent) {
 				throw new Error(
-					`commit: build produced snapshot ${next.snapshot}, expected ${expected} — the builder ignored its base`,
+					`commit: build produced snapshot ${next.snapshot} parent ${next.parent}, expected ${expected} parent ${expectedParent} — the builder ignored its base`,
 				);
 			}
 			try {
@@ -1433,12 +1437,49 @@ export class SnapshotStore {
 }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Cover the branches that only fire when something is wrong**
+
+The seven tests above all drive the happy path. These three cover the failure branches — the ones whose whole purpose is to turn a silent wrong answer into a loud one, and which are therefore never exercised by a passing protocol:
+
+```ts
+test('a build that ignores its base is rejected, not silently corrected', async () => {
+	const s = new SnapshotStore(new MemoryObjectStore());
+	await s.commit(null, async (b) => bump(b));
+	const base = await s.resolveHead();
+	// Right number, wrong parent — a lineage that never happened.
+	await expect(
+		s.commit(base, async (b) => ({ ...bump(b), parent: 99 })),
+	).rejects.toThrow(/ignored its base/);
+	// Wrong number.
+	await expect(
+		s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 })),
+	).rejects.toThrow(/ignored its base/);
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+
+test('a corrupt _head falls back to listing rather than throwing', async () => {
+	const store = new MemoryObjectStore();
+	const s = new SnapshotStore(store);
+	await s.commit(null, async (b) => bump(b));
+	await store.put('_head', new TextEncoder().encode('{not json'));
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+
+test('a _head pointing past the end falls back to listing', async () => {
+	const store = new MemoryObjectStore();
+	const s = new SnapshotStore(store);
+	await s.commit(null, async (b) => bump(b));
+	await store.put('_head', new TextEncoder().encode(JSON.stringify({ snapshot: 99 })));
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+```
+
+- [ ] **Step 6: Run the tests**
 
 Run: `bun test packages/core/test/objstore/snapshot.test.ts`
-Expected: PASS, 7 tests.
+Expected: PASS, 10 tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/manifest.ts packages/core/src/objstore/snapshot.ts packages/core/test/objstore/snapshot.test.ts
@@ -1652,7 +1693,7 @@ Expected: PASS, 6 tests.
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: all green. Stage 2 adds only new modules that nothing imports yet, so nothing existing can regress.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/cache.ts packages/core/test/objstore/cache.test.ts
@@ -2854,7 +2895,7 @@ Expected: PASS, 7 tests.
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/dialect-sql.ts packages/core/src/schema.ts packages/core/test/duck-schema.test.ts
@@ -3529,7 +3570,7 @@ Expected: PASS, 6 tests.
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/duck-constraints.ts packages/core/src/constraints.ts packages/core/src/graph.ts packages/core/test/duck-constraints.test.ts
@@ -4262,7 +4303,7 @@ Expected: PASS, 6 tests.
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/duck-commit.ts packages/core/src/duck.ts packages/core/src/db.ts packages/core/test/duck-commit.test.ts
