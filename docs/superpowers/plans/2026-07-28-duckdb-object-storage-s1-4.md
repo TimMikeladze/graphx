@@ -3244,7 +3244,9 @@ is unverified on DuckDB."
 
 ## Task 12: Constraint enforcement without partial indexes
 
-`declareSingleValuedRel` is solved by the live/history split — a plain `UNIQUE(src, rel)` on `ev_live` is exactly the invariant. `declareUniqueNodeProp` is not: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. It is enforced in application code instead, which is exact because the writer is serialized.
+Neither constraint gets a store-level index on DuckDB, for two different reasons.
+
+`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns and `ev_live` holds exactly the live rows — but the libSQL and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on `ev_live` would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
 
 **Files:**
 - Modify: `packages/core/src/constraints.ts:62-91`
@@ -4483,7 +4485,10 @@ Its 5 tests open 8 connections to one file and rely on write-lock contention, wh
 - [ ] **Step 7: Run everything**
 
 Run: `bun test packages/core/test/duck-e2e.test.ts`
-Expected: PASS, 7 tests.
+Expected: PASS, 5 tests — the last two moved to `p14-concurrency.test.ts` in step 6.
+
+Run: `bun test packages/core/test/p14-concurrency.test.ts`
+Expected: PASS, including the two relocated invariant tests.
 
 Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 30000 2>&1 | tail -40`
 Expected: better than Task 13's number. Update `docs/DUCKDB_SUPPORT.md` with the new counts and re-triage. Every remaining failure must map to full-text (stage 5), events/auth (stage 6), or serving/tooling (stage 7).
