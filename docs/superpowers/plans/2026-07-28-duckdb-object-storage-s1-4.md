@@ -631,9 +631,8 @@ export class MemoryObjectStore implements ObjectStore {
 - [ ] **Step 5: Write `file.ts`**
 
 ```ts
-import { createHash } from 'node:crypto';
-import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { link, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { ObjectExistsError, type ObjectStore } from './store.ts';
 
@@ -650,11 +649,19 @@ export class FileObjectStore implements ObjectStore {
 		return join(this.rootDir, ...key.split('/'));
 	}
 
+	/**
+	 * Absence is load-bearing in this protocol — `resolveHead` probes forward until a
+	 * snapshot is missing — so only a genuine "not there" may return null. A catch-all
+	 * would make a permission error or a path collision indistinguishable from absence,
+	 * and silently resolve an older snapshot as head.
+	 */
 	async get(key: string): Promise<Uint8Array | null> {
 		try {
 			return new Uint8Array(await readFile(this.path(key)));
-		} catch {
-			return null;
+		} catch (e) {
+			const code = (e as NodeJS.ErrnoException).code;
+			if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+			throw e;
 		}
 	}
 
@@ -669,23 +676,43 @@ export class FileObjectStore implements ObjectStore {
 	async put(key: string, body: Uint8Array): Promise<void> {
 		const p = this.path(key);
 		await mkdir(dirname(p), { recursive: true });
-		await writeFile(p, body);
+		await this.writeThenMove(p, body, rename);
 	}
 
+	/**
+	 * Create-only, and atomic in BOTH senses that matter: only one caller wins, and the
+	 * key never exists in a half-written state.
+	 *
+	 * `O_CREAT | O_EXCL` alone gives only the first: it makes the file exist at zero bytes
+	 * and the body lands in a second step, so a reader racing that window gets a truncated
+	 * object instead of `null` — and in this protocol that reader is `resolveHead` parsing
+	 * a manifest. Writing to a temp file first and `link()`ing it into place gives both:
+	 * `link` fails `EEXIST` atomically, and the name it publishes is already complete.
+	 */
 	async putIfAbsent(key: string, body: Uint8Array): Promise<void> {
 		const p = this.path(key);
 		await mkdir(dirname(p), { recursive: true });
-		let handle: Awaited<ReturnType<typeof open>>;
+		await this.writeThenMove(p, body, link, key);
+	}
+
+	/** Write to a sibling temp file, then publish it under `target` in one step. */
+	private async writeThenMove(
+		target: string,
+		body: Uint8Array,
+		publish: (from: string, to: string) => Promise<void>,
+		exclusiveKey?: string,
+	): Promise<void> {
+		const tmp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+		await writeFile(tmp, body);
 		try {
-			handle = await open(p, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY);
+			await publish(tmp, target);
 		} catch (e) {
-			if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new ObjectExistsError(key);
+			if (exclusiveKey !== undefined && (e as NodeJS.ErrnoException).code === 'EEXIST') {
+				throw new ObjectExistsError(exclusiveKey);
+			}
 			throw e;
-		}
-		try {
-			await handle.writeFile(body);
 		} finally {
-			await handle.close();
+			await rm(tmp, { force: true });
 		}
 	}
 
@@ -714,7 +741,30 @@ export class FileObjectStore implements ObjectStore {
 }
 ```
 
-Note: `stat` is imported but unused above — delete that import before committing; `bun run lint` will flag it.
+Two assertions the eight shared tests do not cover, because they all await the writer before reading. Add them to `store.test.ts` for the file store specifically:
+
+```ts
+test('a key is never observable half-written', async () => {
+	const s = new FileObjectStore(mkdtempSync(join(dir, 'fs-')));
+	const big = new Uint8Array(4 * 1024 * 1024).fill(7);
+	const writing = s.putIfAbsent('big', big);
+	// Race the write: every read must see either nothing or the whole object.
+	for (let i = 0; i < 50; i++) {
+		const seen = await s.get('big');
+		if (seen !== null) expect(seen.length).toBe(big.length);
+	}
+	await writing;
+	expect((await s.get('big'))?.length).toBe(big.length);
+});
+
+test('get surfaces a real I/O error instead of reporting absence', async () => {
+	const root = mkdtempSync(join(dir, 'fs-'));
+	const s = new FileObjectStore(root);
+	// A directory where an object should be: EISDIR, which is not "absent".
+	mkdirSync(join(root, 'collide'), { recursive: true });
+	await expect(s.get('collide')).rejects.toThrow();
+});
+```
 
 - [ ] **Step 6: Run the tests**
 
