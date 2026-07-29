@@ -59,6 +59,7 @@ export function ContentTab({
   nodeId,
   active,
   asOf,
+  readOnly,
 }: {
   tenant: string
   project: string
@@ -67,6 +68,8 @@ export function ContentTab({
   active: boolean
   /** Viewing instant; absent ⇒ live. */
   asOf?: number
+  /** Viewing the past — a save would land on the live version, so editing is closed off. */
+  readOnly?: boolean
 }) {
   const content = useNodeContent(tenant, project, nodeId, active, asOf)
   const save = useUpdateNodeBody(tenant, project, nodeId)
@@ -95,13 +98,16 @@ export function ContentTab({
   }, [dirty])
 
   function edit(next: string | null) {
+    // Opening an editor is barred in the past; discarding a draft is always allowed, so a draft
+    // started while live can still be abandoned after scrubbing back.
+    if (readOnly && next !== null) return
     if (next === null) drafts.delete(nodeId)
     else drafts.set(nodeId, next)
     setDraft(next)
   }
 
   function commit() {
-    if (draft === null || save.isPending) return
+    if (readOnly || draft === null || save.isPending) return
     save.mutate(draft, {
       onSuccess: () => {
         edit(null)
@@ -175,7 +181,7 @@ export function ContentTab({
             : "This node has no markdown body yet."
         }
         action={
-          <Button size="sm" onClick={() => edit("")}>
+          <Button size="sm" disabled={readOnly} onClick={() => edit("")}>
             Add content
           </Button>
         }
@@ -194,7 +200,7 @@ export function ContentTab({
             </p>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={() => edit(body)}>
+        <Button variant="outline" size="sm" disabled={readOnly} onClick={() => edit(body)}>
           <HugeiconsIcon icon={Edit02Icon} strokeWidth={2} data-icon="inline-start" />
           Edit
         </Button>

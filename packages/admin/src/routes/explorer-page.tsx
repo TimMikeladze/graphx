@@ -12,6 +12,7 @@ import { NodeDetail } from "@/components/node-detail"
 import { NodeDetailSheet } from "@/components/node-detail-sheet"
 import { NodeEditorDialog } from "@/components/node-editor-dialog"
 import { ResultsBanner } from "@/components/results-banner"
+import { TimeTravelBanner } from "@/components/time-travel-banner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { TimelineBar } from "@/components/timeline/timeline-bar"
 import { Button } from "@/components/ui/button"
@@ -89,6 +90,9 @@ export function ExplorerPage() {
   const projectName = projects.data?.find((p) => p.id === project)?.name ?? project
 
   const detailOpen = Boolean(search.node) && !isMobile
+  // A write issued from a historical view lands on the LIVE version, not the one on screen. That
+  // is a silent footgun, so the past is read-only rather than merely discouraged.
+  const readOnly = filters.asOf !== undefined
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "21rem" } as React.CSSProperties}>
@@ -131,6 +135,9 @@ export function ExplorerPage() {
         </header>
 
         {slice.data?.truncated && <ResultsBanner />}
+        {filters.asOf !== undefined && (
+          <TimeTravelBanner asOf={filters.asOf} onReturn={() => setSearch({ asOf: undefined })} />
+        )}
 
         <div className="flex min-h-0 flex-1">
           {/* detail docks as a fixed pane beside the canvas so the graph never remounts */}
@@ -149,11 +156,13 @@ export function ExplorerPage() {
               onFlowLayoutChange={(l) =>
                 setSearch({ flowLayout: l === "organic" ? "organic" : undefined })
               }
-              onCreateNode={() => setEditorFor(null)}
-              onEditNode={(id) => setEditorFor(id)}
-              onDeleteNode={(id) => setDeleteFor(id)}
-              onDrawEdge={(edge) => setDrawnEdge(edge)}
-              onDeleteEdge={(edge) => setEdgeToRemove(edge)}
+              // GraphShell already treats absent write handlers as a read-only explorer, so the
+              // canvas half of read-only mode is subtractive rather than a new branch.
+              onCreateNode={readOnly ? undefined : () => setEditorFor(null)}
+              onEditNode={readOnly ? undefined : (id) => setEditorFor(id)}
+              onDeleteNode={readOnly ? undefined : (id) => setDeleteFor(id)}
+              onDrawEdge={readOnly ? undefined : (edge) => setDrawnEdge(edge)}
+              onDeleteEdge={readOnly ? undefined : (edge) => setEdgeToRemove(edge)}
               timeline={
                 <TimelineBar
                   tenant={tenant}
@@ -172,9 +181,10 @@ export function ExplorerPage() {
                 nodeId={search.node}
                 onSelect={(id) => setSearch({ node: id })}
                 onClose={() => setSearch({ node: undefined })}
-                onEdit={(id) => setEditorFor(id)}
-                onDelete={(id) => setDeleteFor(id)}
+                onEdit={readOnly ? undefined : (id) => setEditorFor(id)}
+                onDelete={readOnly ? undefined : (id) => setDeleteFor(id)}
                 asOf={filters.asOf}
+                readOnly={readOnly}
               />
             </aside>
           )}
@@ -189,9 +199,10 @@ export function ExplorerPage() {
           nodeId={search.node}
           onClose={() => setSearch({ node: undefined })}
           onSelect={(id) => setSearch({ node: id })}
-          onEdit={(id) => setEditorFor(id)}
-          onDelete={(id) => setDeleteFor(id)}
+          onEdit={readOnly ? undefined : (id) => setEditorFor(id)}
+          onDelete={readOnly ? undefined : (id) => setDeleteFor(id)}
           asOf={filters.asOf}
+          readOnly={readOnly}
         />
       )}
 

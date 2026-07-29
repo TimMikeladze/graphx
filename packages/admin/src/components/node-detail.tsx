@@ -233,6 +233,7 @@ export function NodeDetail({
   onEdit,
   onDelete,
   asOf,
+  readOnly,
 }: {
   tenant: string
   project: string
@@ -244,6 +245,8 @@ export function NodeDetail({
   onDelete?: (id: string) => void
   /** Viewing instant; absent ⇒ live. */
   asOf?: number
+  /** Viewing the past — a write would land on the live version, so editing is closed off. */
+  readOnly?: boolean
 }) {
   // Controlled so the Content tab knows when it is on screen (it gates its own fetch on that).
   const [tab, setTab] = useState("data")
@@ -368,6 +371,7 @@ export function NodeDetail({
             nodeId={nodeId}
             active={tab === "content"}
             asOf={asOf}
+            readOnly={readOnly}
           />
         </TabsContent>
         <TabsContent value="neighbors" className="min-h-0 flex-1">

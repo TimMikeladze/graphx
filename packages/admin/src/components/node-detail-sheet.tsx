@@ -14,6 +14,7 @@ export function NodeDetailSheet({
   onEdit,
   onDelete,
   asOf,
+  readOnly,
 }: {
   tenant: string
   project: string
@@ -24,6 +25,8 @@ export function NodeDetailSheet({
   onDelete?: (id: string) => void
   /** Viewing instant; absent ⇒ live. */
   asOf?: number
+  /** Viewing the past — a write would land on the live version, so editing is closed off. */
+  readOnly?: boolean
 }) {
   return (
     <Sheet
@@ -45,6 +48,7 @@ export function NodeDetailSheet({
             onEdit={onEdit}
             onDelete={onDelete}
             asOf={asOf}
+            readOnly={readOnly}
           />
         )}
       </SheetContent>
