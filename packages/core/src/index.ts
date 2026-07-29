@@ -223,6 +223,15 @@ export {
 	type TemporalDiff,
 } from './temporal.ts';
 
+// Change-point timeline — extent + density histogram + snap ticks (admin scrubber)
+export {
+	DEFAULT_TIMELINE_BUCKETS,
+	MAX_TIMELINE_BUCKETS,
+	type Timeline,
+	timeline,
+	type TimelineOpts,
+} from './timeline.ts';
+
 // P7 — time-respecting traversal
 export { journey, type JourneyOpts, type JourneyRow } from './journey.ts';
 
