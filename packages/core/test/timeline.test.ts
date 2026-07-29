@@ -70,6 +70,22 @@ test('timeline: extent spans both version tables', async () => {
 	expect((t.max as number) >= (t.min as number)).toBe(true);
 });
 
+test('timeline: a closed edge is a change point (the case changeFeed omits)', async () => {
+	const { client, g } = await freshGraph();
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'r' } });
+	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: d.id });
+	const before = await timeline(client);
+	await new Promise((r) => setTimeout(r, 5));
+	await g.deleteEdge(e.id);
+	const after = await timeline(client);
+
+	// The close writes no new valid_from, so only the valid_to half of the CTE can see it.
+	expect(after.total).toBe(before.total + 1);
+	expect(after.max).toBeGreaterThan(before.max as number);
+	expect(after.ticks.length).toBe(before.ticks.length + 1);
+});
+
 test('timeline: a non-FOREVER valid_to counts as its own change point', async () => {
 	const { client } = await freshGraph();
 	await seedNodeVersion(client, 'n1', 1000, 2000);

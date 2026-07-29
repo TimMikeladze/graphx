@@ -88,7 +88,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 			total: 0,
 			from: opts.from ?? 0,
 			to: opts.to ?? 0,
-			buckets: new Array<number>(buckets).fill(0),
+			buckets: Array.from({ length: buckets }, () => 0),
 			ticks: [],
 			ticksTruncated: false,
 		};
@@ -109,7 +109,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	const ticksTruncated = found.length > cap;
 	const ticks = ticksTruncated ? found.slice(0, cap) : found;
 
-	const counts = new Array<number>(buckets).fill(0);
+	const counts = Array.from({ length: buckets }, () => 0);
 	const span = to - from;
 	if (span <= 0) {
 		// Every change point in the window shares one instant — there is nothing to spread, and
@@ -122,8 +122,11 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		return { min: lo, max: hi, total, from, to, buckets: counts, ticks, ticksTruncated };
 	}
 
-	// BIGINT, not INTEGER: `(t - from) * buckets` reaches ~1e14 at epoch-ms scale, far past
-	// Postgres int4's 2.1e9. BIGINT is native on Postgres and carries INTEGER affinity on SQLite.
+	// BIGINT, not INTEGER. The real overflow guard is that `valid_from`/`valid_to` are declared
+	// `bigint` on Postgres (dialect-sql.ts:110-111, 128-129), so `t`'s arithmetic is already
+	// promoted to 64-bit by the column type before this cast ever runs. The cast still earns its
+	// place: it makes the intended width explicit rather than leaning on implicit promotion, and
+	// it is the one spelling valid on both dialects (native on Postgres, INTEGER affinity on SQLite).
 	const bucketRows = await raw.execute({
 		sql: `SELECT CAST((t - ?) * ? / ? AS BIGINT) AS b, COUNT(*) AS n
 			FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? GROUP BY b ORDER BY b`,
