@@ -94,7 +94,23 @@ namespace maps to a schema.
 
 ### 6.1 The live/history split
 
-`node_versions` becomes two physical tables, and `edge_versions` likewise:
+> **Amended during implementation.** This section originally made the split a *local schema*
+> decision — `node_versions` as a view over two tables. That breaks every write path: DuckDB
+> rejects `INSERT` into a `UNION ALL` view, while `Graph`'s five mutation methods, `bulkLoad`,
+> `bulkEdges`, and the auth package all write to `node_versions` and `edge_versions` by name,
+> because on libSQL and Postgres those are real tables.
+>
+> The split is now a **storage-layout** decision only. The local materialization keeps single
+> tables mirroring the Postgres schema, so no write path changes; the commit step exports live
+> and history as separate Parquet files, which is where the benefit actually was — a reader
+> needing only current state fetches the live file, and history stays partitionable by close
+> time for tiering.
+>
+> The cost: one-live-row-per-id is no longer backed by a primary key. It is enforced by the
+> serialized writer (§8.2) and application-level checks (§11) — already the accepted model for
+> constraints DuckDB cannot express.
+
+The layout below describes the **Parquet files in the bucket**, not the local tables:
 
 | logical | physical | contents |
 |---|---|---|
