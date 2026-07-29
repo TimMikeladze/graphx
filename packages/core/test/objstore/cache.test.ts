@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, test } from 'bun:test';
-import { contentKey, FileCache } from '../../src/objstore/cache.ts';
+import { contentKey, FileCache, ObjectNotFoundError } from '../../src/objstore/cache.ts';
 import { MemoryObjectStore } from '../../src/objstore/memory.ts';
 
 const root = mkdtempSync(join(tmpdir(), 'graphx-cache-'));
@@ -84,5 +84,8 @@ describe('FileCache', () => {
 	test('ensure throws a named error for a key that is in neither place', async () => {
 		const cache = new FileCache(new MemoryObjectStore(), mkdtempSync(join(root, 'c-')));
 		await expect(cache.ensure('data/deadbeef.parquet')).rejects.toThrow(/not found/);
+		await expect(cache.ensure('data/deadbeef.parquet')).rejects.toBeInstanceOf(
+			ObjectNotFoundError,
+		);
 	});
 });

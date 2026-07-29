@@ -13,6 +13,17 @@ export function contentKey(bytes: Uint8Array): string {
 	return `data/${createHash('sha256').update(bytes).digest('hex')}.parquet`;
 }
 
+/** `ensure`/`resolve` found no bytes for `key` — neither on disk nor in the store. Named
+ *  so a caller can tell "the snapshot references a missing object" apart from a SQL error
+ *  raised while loading it, the same way {@link ObjectExistsError} is distinguished from a
+ *  generic write failure. */
+export class ObjectNotFoundError extends Error {
+	constructor(readonly key: string) {
+		super(`FileCache: object not found in store or cache: ${key}`);
+		this.name = 'ObjectNotFoundError';
+	}
+}
+
 /**
  * A local, content-addressed mirror of the bucket's data objects.
  *
@@ -64,7 +75,7 @@ export class FileCache {
 		if (await this.has(key)) return path;
 		const bytes = await this.store.get(key);
 		if (bytes === null) {
-			throw new Error(`FileCache: object not found in store or cache: ${key}`);
+			throw new ObjectNotFoundError(key);
 		}
 		await this.writeAtomic(path, bytes);
 		return path;
