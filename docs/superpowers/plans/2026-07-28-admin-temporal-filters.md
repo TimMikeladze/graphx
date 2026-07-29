@@ -234,6 +234,11 @@ test('P6: neighbors(asOf) sees an edge that has since been deleted', async () =>
 	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
 	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
 	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	// `Graph.now()` is a monotonic write clock — Math.max(Date.now(), lastTs + 1) — so several
+	// writes inside one wall-clock millisecond carry `valid_from` values AHEAD of real time. A
+	// timestamp captured immediately after them would precede the writes it must see, and the
+	// as-of read below would legitimately find nothing. Buffer before snapshotting.
+	await new Promise((r) => setTimeout(r, 5));
 	const t0 = Date.now();
 	await new Promise((r) => setTimeout(r, 5));
 	await g.deleteEdge(e.id);
@@ -248,6 +253,7 @@ test('P6: neighbors(asOf) returns the neighbor version live at that instant', as
 	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
 	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
 	await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	await new Promise((r) => setTimeout(r, 5)); // buffer past the monotonic write clock (see above)
 	const t0 = Date.now();
 	await new Promise((r) => setTimeout(r, 5));
 	await g.updateNode(d.id, { data: { type: 'switch' } });
@@ -261,6 +267,7 @@ test('P6: neighbors(asOf) in both directions, and asOf=FOREVER matches the live 
 	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
 	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
 	await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	await new Promise((r) => setTimeout(r, 5)); // buffer past the monotonic write clock (see above)
 	const t = Date.now();
 
 	expect((await g.neighbors(d.id, { direction: 'reverse', asOf: t })).map((n) => n.id)).toEqual([
@@ -279,6 +286,7 @@ test('P6: neighborsPage(asOf) pages the as-of neighbor set', async () => {
 	const b = await g.addNode({ type: 'device', data: { type: 'b' } });
 	await g.addEdge({ rel: 'owns', src: p.id, dst: a.id, data: { since: 1 } });
 	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: b.id, data: { since: 2 } });
+	await new Promise((r) => setTimeout(r, 5)); // buffer past the monotonic write clock (see above)
 	const t0 = Date.now();
 	await new Promise((r) => setTimeout(r, 5));
 	await g.deleteEdge(e.id);
