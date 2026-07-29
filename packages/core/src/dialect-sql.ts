@@ -1,4 +1,4 @@
-import type { Dialect } from './dialect.ts';
+import { assertNever, type Dialect } from './dialect.ts';
 
 /**
  * Per-dialect SQL fragments. This is the home for every SQL string that genuinely
@@ -19,7 +19,16 @@ const FOREVER_LIT = '8640000000000000';
  * strictly an aggregate, so the scalar form is `GREATEST(a, b)`.
  */
 export function scalarMax(dialect: Dialect, a: string, b: string): string {
-	return dialect === 'postgres' ? `GREATEST(${a}, ${b})` : `MAX(${a}, ${b})`;
+	switch (dialect) {
+		case 'libsql':
+			return `MAX(${a}, ${b})`;
+		case 'postgres':
+			return `GREATEST(${a}, ${b})`;
+		case 'duckdb':
+			return notYet('scalarMax', dialect);
+		default:
+			return assertNever(dialect, 'scalarMax');
+	}
 }
 
 /**
@@ -28,7 +37,16 @@ export function scalarMax(dialect: Dialect, a: string, b: string): string {
  * column is cast first. Returns the field as text in both.
  */
 export function jsonField(dialect: Dialect, col: string, key: string): string {
-	return dialect === 'postgres' ? `(${col})::jsonb ->> '${key}'` : `${col} ->> '${key}'`;
+	switch (dialect) {
+		case 'libsql':
+			return `${col} ->> '${key}'`;
+		case 'postgres':
+			return `(${col})::jsonb ->> '${key}'`;
+		case 'duckdb':
+			return notYet('jsonField', dialect);
+		default:
+			return assertNever(dialect, 'jsonField');
+	}
 }
 
 /**
@@ -37,7 +55,16 @@ export function jsonField(dialect: Dialect, col: string, key: string): string {
  * must be `BIGINT`.
  */
 export function epochIntType(dialect: Dialect): string {
-	return dialect === 'postgres' ? 'BIGINT' : 'INTEGER';
+	switch (dialect) {
+		case 'libsql':
+			return 'INTEGER';
+		case 'postgres':
+			return 'BIGINT';
+		case 'duckdb':
+			return notYet('epochIntType', dialect);
+		default:
+			return assertNever(dialect, 'epochIntType');
+	}
 }
 
 /**
@@ -47,16 +74,31 @@ export function epochIntType(dialect: Dialect): string {
  * Postgres (text comparison) — see {@link jsonEqArg}.
  */
 export function jsonEqExpr(dialect: Dialect, col: string, key: string): string {
-	return dialect === 'postgres'
-		? `(${col})::jsonb ->> '${key}' = ?`
-		: `json_extract(${col}, '$.${key}') = ?`;
+	switch (dialect) {
+		case 'libsql':
+			return `json_extract(${col}, '$.${key}') = ?`;
+		case 'postgres':
+			return `(${col})::jsonb ->> '${key}' = ?`;
+		case 'duckdb':
+			return notYet('jsonEqExpr', dialect);
+		default:
+			return assertNever(dialect, 'jsonEqExpr');
+	}
 }
 
 /** The bound value for a {@link jsonEqExpr} filter — text on Postgres (the `->>` is text). */
 export function jsonEqArg(dialect: Dialect, value: unknown): unknown {
-	if (dialect !== 'postgres') return value;
-	if (value === null || value === undefined) return value;
-	return typeof value === 'string' ? value : String(value);
+	switch (dialect) {
+		case 'libsql':
+			return value;
+		case 'postgres':
+			if (value === null || value === undefined) return value;
+			return typeof value === 'string' ? value : String(value);
+		case 'duckdb':
+			return notYet('jsonEqArg', dialect);
+		default:
+			return assertNever(dialect, 'jsonEqArg');
+	}
 }
 
 /**
@@ -71,9 +113,16 @@ export function distinctSelect(
 	keys: string,
 	cols: string,
 ): { select: string; group: string } {
-	return dialect === 'postgres'
-		? { select: `SELECT DISTINCT ON (${keys}) ${cols}`, group: '' }
-		: { select: `SELECT ${cols}`, group: `GROUP BY ${keys}` };
+	switch (dialect) {
+		case 'libsql':
+			return { select: `SELECT ${cols}`, group: `GROUP BY ${keys}` };
+		case 'postgres':
+			return { select: `SELECT DISTINCT ON (${keys}) ${cols}`, group: '' };
+		case 'duckdb':
+			return notYet('distinctSelect', dialect);
+		default:
+			return assertNever(dialect, 'distinctSelect');
+	}
 }
 
 /**
@@ -197,16 +246,22 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
 
-function notYet(fragment: string): never {
-	throw new Error(
-		`dialect-sql: ${fragment}(postgres) not implemented yet — Postgres backend is a later phase`,
-	);
+function notYet(fragment: string, dialect: Dialect): never {
+	throw new Error(`dialect-sql: ${fragment}(${dialect}) not implemented yet`);
 }
 
 /** The embedding column's type. libSQL: native `F32_BLOB(dim)`; Postgres: pgvector `vector(dim)`. */
 export function embColumnType(dialect: Dialect, dim: number): string {
-	if (dialect === 'postgres') notYet('embColumnType');
-	return `F32_BLOB(${dim})`;
+	switch (dialect) {
+		case 'libsql':
+			return `F32_BLOB(${dim})`;
+		case 'postgres':
+			return notYet('embColumnType', dialect);
+		case 'duckdb':
+			return notYet('embColumnType', dialect);
+		default:
+			return assertNever(dialect, 'embColumnType');
+	}
 }
 
 /**
@@ -214,7 +269,16 @@ export function embColumnType(dialect: Dialect, dim: number): string {
  * libSQL parses it with `vector(?)`; pgvector casts the same text with `?::vector`.
  */
 export function embFreshExpr(dialect: Dialect): string {
-	return dialect === 'postgres' ? '?::vector' : 'vector(?)';
+	switch (dialect) {
+		case 'libsql':
+			return 'vector(?)';
+		case 'postgres':
+			return '?::vector';
+		case 'duckdb':
+			return notYet('embFreshExpr', dialect);
+		default:
+			return assertNever(dialect, 'embFreshExpr');
+	}
 }
 
 /**
@@ -251,9 +315,16 @@ function tsQueryOr(): string {
  * before binding.
  */
 export function ftsWhere(dialect: Dialect, alias: string): string {
-	return dialect === 'postgres'
-		? `${alias}.body_tsv @@ ${tsQueryOr()}`
-		: `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
+	switch (dialect) {
+		case 'libsql':
+			return `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
+		case 'postgres':
+			return `${alias}.body_tsv @@ ${tsQueryOr()}`;
+		case 'duckdb':
+			return notYet('ftsWhere', dialect);
+		default:
+			return assertNever(dialect, 'ftsWhere');
+	}
 }
 
 /**
@@ -263,18 +334,24 @@ export function ftsWhere(dialect: Dialect, alias: string): string {
  * distance (`emb <=> $1::vector`). Both yield the top-k live node ids by ANN rank.
  */
 export function annSeedsLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `
+	switch (dialect) {
+		case 'libsql':
+			return `
+  SELECT n.id AS id
+  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+  JOIN node_versions n ON n.rowid = v.id`;
+		case 'postgres':
+			return `
   SELECT id
   FROM node_versions
   WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   ORDER BY emb <=> ?::vector
   LIMIT ?`;
+		case 'duckdb':
+			return notYet('annSeedsLive', dialect);
+		default:
+			return assertNever(dialect, 'annSeedsLive');
 	}
-	return `
-  SELECT n.id AS id
-  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-  JOIN node_versions n ON n.rowid = v.id`;
 }
 
 /**
@@ -284,8 +361,24 @@ export function annSeedsLive(dialect: Dialect): string {
  * index rowid proxy (`MIN(v.id)`); pgvector ranks by real cosine distance.
  */
 export function annSeedsAsOf(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `
+	switch (dialect) {
+		case 'libsql':
+			return `
+  SELECT live.id AS id, live.rk AS rk
+  FROM (
+    SELECT n.id AS id, MIN(v.id) AS rk
+    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+    JOIN node_versions n ON n.rowid = v.id
+    GROUP BY n.id
+  ) live
+  WHERE EXISTS (
+    SELECT 1 FROM node_versions h
+    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
+  )
+  ORDER BY rk
+  LIMIT ?`;
+		case 'postgres':
+			return `
   SELECT live.id AS id, live.rk AS rk
   FROM (
     SELECT id, MIN(emb <=> ?::vector) AS rk
@@ -301,21 +394,11 @@ export function annSeedsAsOf(dialect: Dialect): string {
   )
   ORDER BY rk
   LIMIT ?`;
+		case 'duckdb':
+			return notYet('annSeedsAsOf', dialect);
+		default:
+			return assertNever(dialect, 'annSeedsAsOf');
 	}
-	return `
-  SELECT live.id AS id, live.rk AS rk
-  FROM (
-    SELECT n.id AS id, MIN(v.id) AS rk
-    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-    JOIN node_versions n ON n.rowid = v.id
-    GROUP BY n.id
-  ) live
-  WHERE EXISTS (
-    SELECT 1 FROM node_versions h
-    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
-  )
-  ORDER BY rk
-  LIMIT ?`;
 }
 
 /**
@@ -323,17 +406,23 @@ export function annSeedsAsOf(dialect: Dialect): string {
  * libSQL: partial-live `vector_top_k`; Postgres: live rows ordered by cosine distance.
  */
 export function vecSeedLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `SELECT id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
+FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+JOIN node_versions n ON n.rowid = v.id
+WHERE n.valid_to = ${FOREVER_LIT}`;
+		case 'postgres':
+			return `SELECT id
 FROM node_versions
 WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
 ORDER BY emb <=> ?::vector
 LIMIT ?`;
+		case 'duckdb':
+			return notYet('vecSeedLive', dialect);
+		default:
+			return assertNever(dialect, 'vecSeedLive');
 	}
-	return `SELECT n.id AS id
-FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-JOIN node_versions n ON n.rowid = v.id
-WHERE n.valid_to = ${FOREVER_LIT}`;
 }
 
 /**
@@ -342,38 +431,50 @@ WHERE n.valid_to = ${FOREVER_LIT}`;
  * `tsquery` once via a CTE so the arg count matches libSQL's.
  */
 export function ftsSeedLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
-SELECT n.id AS id
-FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
-ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
-LIMIT ?`;
-	}
-	return `SELECT n.id AS id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
 WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER_LIT}
 ORDER BY rank
 LIMIT ?`;
+		case 'postgres':
+			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+		case 'duckdb':
+			return notYet('ftsSeedLive', dialect);
+		default:
+			return assertNever(dialect, 'ftsSeedLive');
+	}
 }
 
 /** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
 export function ftsSeedAsOf(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
-SELECT n.id AS id
-FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
-ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
-LIMIT ?`;
-	}
-	return `SELECT n.id AS id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
 WHERE nodes_fts MATCH ? AND n.valid_from <= ? AND ? < n.valid_to
 ORDER BY rank
 LIMIT ?`;
+		case 'postgres':
+			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+		case 'duckdb':
+			return notYet('ftsSeedAsOf', dialect);
+		default:
+			return assertNever(dialect, 'ftsSeedAsOf');
+	}
 }
 
 /**
@@ -386,21 +487,44 @@ export function insertOrIgnore(
 	columns: string,
 	values: string,
 ): string {
-	return dialect === 'postgres'
-		? `INSERT INTO ${table} (${columns}) VALUES ${values} ON CONFLICT DO NOTHING`
-		: `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+	switch (dialect) {
+		case 'libsql':
+			return `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+		case 'postgres':
+			return `INSERT INTO ${table} (${columns}) VALUES ${values} ON CONFLICT DO NOTHING`;
+		case 'duckdb':
+			return notYet('insertOrIgnore', dialect);
+		default:
+			return assertNever(dialect, 'insertOrIgnore');
+	}
 }
 
 /** Expand a JSON-array string param into a single `id` column of rows. libSQL `json_each`, PG `jsonb_array_elements_text`. */
 export function jsonArrayRows(dialect: Dialect): string {
-	return dialect === 'postgres'
-		? `SELECT jsonb_array_elements_text(?::jsonb) AS id`
-		: `SELECT value AS id FROM json_each(?)`;
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT value AS id FROM json_each(?)`;
+		case 'postgres':
+			return `SELECT jsonb_array_elements_text(?::jsonb) AS id`;
+		case 'duckdb':
+			return notYet('jsonArrayRows', dialect);
+		default:
+			return assertNever(dialect, 'jsonArrayRows');
+	}
 }
 
 /** Read an embedding back as a JSON-array string. libSQL `vector_extract(emb)`; pgvector's text form IS `[..]`. */
 export function embExtract(dialect: Dialect): string {
-	return dialect === 'postgres' ? 'emb' : 'vector_extract(emb)';
+	switch (dialect) {
+		case 'libsql':
+			return 'vector_extract(emb)';
+		case 'postgres':
+			return 'emb';
+		case 'duckdb':
+			return notYet('embExtract', dialect);
+		default:
+			return assertNever(dialect, 'embExtract');
+	}
 }
 
 /**
@@ -409,7 +533,16 @@ export function embExtract(dialect: Dialect): string {
  * `emb` back as its text form `[1,2,3]`, so it re-casts with `?::vector`.
  */
 export function embRebindExpr(dialect: Dialect): string {
-	return dialect === 'postgres' ? '?::vector' : '?';
+	switch (dialect) {
+		case 'libsql':
+			return '?';
+		case 'postgres':
+			return '?::vector';
+		case 'duckdb':
+			return notYet('embRebindExpr', dialect);
+		default:
+			return assertNever(dialect, 'embRebindExpr');
+	}
 }
 
 /**
@@ -422,10 +555,16 @@ export function embRebindExpr(dialect: Dialect): string {
  * the test/dev scale, tunable at scale.
  */
 export function vectorIndexDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions USING hnsw (emb vector_cosine_ops) WHERE valid_to = ${FOREVER_LIT};`;
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = ${FOREVER_LIT};`;
+		case 'postgres':
+			return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions USING hnsw (emb vector_cosine_ops) WHERE valid_to = ${FOREVER_LIT};`;
+		case 'duckdb':
+			return notYet('vectorIndexDDL', dialect);
+		default:
+			return assertNever(dialect, 'vectorIndexDDL');
 	}
-	return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = ${FOREVER_LIT};`;
 }
 
 /**
@@ -434,8 +573,16 @@ export function vectorIndexDDL(dialect: Dialect): string {
  * GIN index (no virtual table), added when the Postgres adapter lands.
  */
 export function ftsTableDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') notYet('ftsTableDDL');
-	return `CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');`;
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');`;
+		case 'postgres':
+			return notYet('ftsTableDDL', dialect);
+		case 'duckdb':
+			return notYet('ftsTableDDL', dialect);
+		default:
+			return assertNever(dialect, 'ftsTableDDL');
+	}
 }
 
 /**
@@ -445,8 +592,16 @@ export function ftsTableDDL(dialect: Dialect): string {
  * so this becomes an empty string there when the adapter lands.
  */
 export function ftsTriggerDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') notYet('ftsTriggerDDL');
-	return `CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
   INSERT INTO nodes_fts(rowid, body) VALUES (new.ver, new.body);
 END;`;
+		case 'postgres':
+			return notYet('ftsTriggerDDL', dialect);
+		case 'duckdb':
+			return notYet('ftsTriggerDDL', dialect);
+		default:
+			return assertNever(dialect, 'ftsTriggerDDL');
+	}
 }
