@@ -3713,6 +3713,36 @@ describe('duckdb constraints', () => {
 		await client.end();
 	});
 
+	test('two concurrent updateNode calls do not deadlock the pool', async () => {
+		// The constraint check runs inside the conditional-close transaction. If it reaches
+		// for a second pooled connection instead of using the transaction's own, every
+		// connection ends up held by a writer waiting for one more, and the process hangs.
+		// Needs at least poolMax concurrent writers to show up — the default is 4.
+		const client = createDuckClient({ poolMax: 2 });
+		await init(client, 4);
+		const g = new Graph(client, schema);
+		await declareUniqueNodeProp(client, 'Doc', 'slug');
+		const a = await g.addNode({ type: 'Doc', data: { slug: 'a' } });
+		const b = await g.addNode({ type: 'Doc', data: { slug: 'b' } });
+		await Promise.all([
+			g.updateNode(a.id, { data: { slug: 'a', n: 1 } }),
+			g.updateNode(b.id, { data: { slug: 'b', n: 1 } }),
+		]);
+		await client.end();
+	}, 10000);
+
+	test('a declaration for one type does not leak to a type whose name it prefixes', async () => {
+		// `_` is a LIKE wildcard, and this codebase is full of snake_case type names.
+		const client = createDuckClient();
+		await init(client, 4);
+		const g = new Graph(client, schema);
+		await declareUniqueNodeProp(client, 'ab', 'x');
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
+		// 'a_' was never declared unique on anything, so this must be allowed.
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
+		await client.end();
+	});
+
 	test('a single-valued rel is enforced by the live table', async () => {
 		const { client, g } = await graph();
 		await g.declareSingleValuedRel('owner');
@@ -3737,7 +3767,17 @@ Expected: FAIL — `constraints.ts` throws `not implemented yet` for duckdb.
 - [ ] **Step 3: Write `duck-constraints.ts`**
 
 ```ts
-import type { DbClient } from './dialect.ts';
+import type { DbClient, SqlResult, SqlStatement } from './dialect.ts';
+
+/**
+ * The narrowest thing these checks need. Both `DbClient` and `DbTransaction` declare
+ * `execute` identically, and narrowing to it is what lets a check run ON the transaction
+ * that is about to write. Taking a `DbClient` instead would force a caller inside an open
+ * transaction to reach for a second pooled connection — which deadlocks the pool once
+ * enough writers are concurrently mid-transaction, since each holds one connection while
+ * waiting for another.
+ */
+type Executor = { execute(stmt: SqlStatement): Promise<SqlResult> };
 
 /**
  * Unique-prop enforcement for DuckDB.
@@ -3783,13 +3823,20 @@ export async function declareDuckUniqueProp(
 	}
 }
 
-/** Every prop declared unique for `type`. */
-async function declaredProps(client: DbClient, type: string): Promise<string[]> {
-	const r = await client.execute({
-		sql: `SELECT key FROM graph_meta WHERE key LIKE ?`,
-		args: [`${DECL_PREFIX}${type}:%`],
+/**
+ * Every prop declared unique for `type`.
+ *
+ * `starts_with` rather than `LIKE`: a type name containing `_` — and this codebase is full
+ * of snake_case — would otherwise match as a single-character wildcard, so declaring
+ * `ab.x` unique would silently start enforcing uniqueness for type `a_` as well.
+ */
+async function declaredProps(exec: Executor, type: string): Promise<string[]> {
+	const prefix = `${DECL_PREFIX}${type}:`;
+	const r = await exec.execute({
+		sql: `SELECT key FROM graph_meta WHERE starts_with(key, ?)`,
+		args: [prefix],
 	});
-	return r.rows.map((row) => String(row.key).slice(`${DECL_PREFIX}${type}:`.length));
+	return r.rows.map((row) => String(row.key).slice(prefix.length));
 }
 
 /**
@@ -3798,17 +3845,17 @@ async function declaredProps(client: DbClient, type: string): Promise<string[]> 
  * count against it.
  */
 export async function assertUniqueProps(
-	client: DbClient,
+	exec: Executor,
 	type: string,
 	data: Record<string, unknown>,
 	excludeId?: string,
 ): Promise<void> {
-	for (const prop of await declaredProps(client, type)) {
+	for (const prop of await declaredProps(exec, type)) {
 		const value = data[prop];
 		if (value === undefined || value === null) continue;
-		const r = await client.execute({
+		const r = await exec.execute({
 			sql: `SELECT id FROM node_versions
-			      WHERE type = ? AND json_extract_string(data, '$.${prop}') = ?
+			      WHERE valid_to = ${FOREVER} AND type = ? AND json_extract_string(data, '$.${prop}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}
 			      LIMIT 1`,
 			args: excludeId
@@ -3853,11 +3900,26 @@ And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial*
 
 Before writing this, read `graph.ts:531-591`. If that path takes its set of single-valued rels from the in-memory `defineGraphSchema` output rather than from the database, the `graph_meta` row is purely for durability across restarts and nothing else needs to read it. If it queries the database, point that query at `graph_meta` on the duckdb arm.
 
-In `graph.ts`, call `assertUniqueProps` on the duckdb dialect only, inside `addNode` before its write batch and inside `updateNode` inside the conditional-close transaction:
+In `graph.ts`, call `assertUniqueProps` on the duckdb dialect only: in `addNode` before its
+write batch, and in `updateNode` **inside** the conditional-close callback.
+
+`addNode` has no transaction open, so it passes the client:
 
 ```ts
 if (dialectOf(this.raw) === 'duckdb') {
-	await assertUniqueProps(this.raw, type, data, /* excludeId */ undefined);
+	await assertUniqueProps(this.raw, type, data);
+}
+```
+
+`updateNode` must pass the transaction handle, **not** `this.raw`:
+
+```ts
+if (dialectOf(this.raw) === 'duckdb') {
+	// `tx`, not `this.raw`. Reaching for a second pooled connection here deadlocks: this
+	// callback already holds one, and once poolMax writers are concurrently mid-transaction
+	// every connection is held by someone waiting for one more. Reproduced at the default
+	// poolMax of 4.
+	await assertUniqueProps(tx, type, nextData, id);
 }
 ```
 
