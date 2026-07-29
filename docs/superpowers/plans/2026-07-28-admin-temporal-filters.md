@@ -1606,7 +1606,7 @@ git commit -m "feat(admin): add scrub, snap and preset maths for the timeline"
 - Consumes: Task 6's `useTimeline`, Task 7's scrub maths, `fmtTime` from `@/lib/format`, `Button` from `@/components/ui/button`.
 - Produces:
   - `<TimelineTrack ticks buckets from to value onChange onPreview />`
-  - `<TimelineBar tenant project asOf onChange />` — reads `filters.asOf`, calls back with the new one; owns only `playing`.
+  - `<TimelineBar tenant project asOf onChange />` — reads `filters.asOf` and calls back with the new one. In this task its only local state is `preview` (the time under a dragging pointer); Task 11 adds `playing`.
 
 The bar holds no time state. `asOf` lives in the URL, so a time-travelled view is shareable by link, and the browser Back button walks the scrub history.
 
@@ -1921,6 +1921,8 @@ In `packages/admin/src/components/graph-shell.tsx`, add to the props type:
    */
   timeline?: React.ReactNode
 ```
+
+Add `timeline` to the destructured parameter list alongside the other props — the type alone is not enough, and the three `{timeline}` call sites below will not compile without it (`TS2304: Cannot find name 'timeline'`).
 
 Then wrap each of the three returns so the bar survives the loading and empty states. Replace the loading return:
 
