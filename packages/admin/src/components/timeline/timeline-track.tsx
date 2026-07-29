@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { nearestTick, timeToX, xToTime } from "@/lib/timeline"
+import { nearestTick, stepTick, timeToX, xToTime } from "@/lib/timeline"
 import { cn } from "@/lib/utils"
 
 /**
@@ -78,6 +78,33 @@ export function TimelineTrack({
     if (snapped !== undefined) onChange(snapped)
   }
 
+  // Keyboard steps are already tick-aligned, so they commit straight through — no re-snap.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (disabled) return
+    const current = value ?? to
+    let next: number | undefined
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowDown":
+        next = stepTick(ticks, current, -1)
+        break
+      case "ArrowRight":
+      case "ArrowUp":
+        next = stepTick(ticks, current, 1)
+        break
+      case "Home":
+        next = ticks[0]
+        break
+      case "End":
+        next = ticks[ticks.length - 1]
+        break
+      default:
+        return
+    }
+    e.preventDefault()
+    if (next !== undefined) onChange(next)
+  }
+
   const peak = Math.max(1, ...buckets)
   const handleAt = dragging ?? value
   const handleX = handleAt === undefined ? width : timeToX(handleAt, from, to, width)
@@ -93,6 +120,7 @@ export function TimelineTrack({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onKeyDown={onKeyDown}
       role="slider"
       aria-label="As-of time"
       aria-valuemin={from}
