@@ -1873,6 +1873,32 @@ describe('DuckPool', () => {
 		await pool.close();
 	});
 
+	test('a freed slot reaches a waiter even with others queued behind it', async () => {
+		// The slot-freeing paths — a stale-generation discard and a failed connect() —
+		// wake a waiter without pushing anything to `idle`. With more than one caller
+		// queued, a resumed waiter that deferred to the queue behind it would re-park and
+		// nobody would ever create: every caller hanging while `open < max`. One queued
+		// waiter is not enough to catch this; two are.
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const first = pool.acquire();
+		const second = pool.acquire();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Simulate the FATAL path, then hand the corpse back: the slot frees with no
+		// connection pooled.
+		(pool as unknown as { rebuild(): void }).rebuild();
+		held.release();
+
+		const a = await first;
+		expect((await a.run('SELECT 1 AS n')).rows).toEqual([{ n: 1 }]);
+		a.release();
+		const b = await second;
+		expect((await b.run('SELECT 2 AS n')).rows).toEqual([{ n: 2 }]);
+		b.release();
+		await pool.close();
+	});
+
 	test('isFatalInstanceError recognizes an invalidated database', () => {
 		expect(isFatalInstanceError(new Error('FATAL Error: database has been invalidated'))).toBe(
 			true,
@@ -2008,14 +2034,21 @@ export class DuckPool {
 	}
 
 	private async checkout(): Promise<TaggedConnection> {
+		// Set once this caller has been resumed from the head of the queue — it has taken
+		// its turn and may create even though others are still queued behind it.
+		let resumed = false;
 		for (;;) {
 			if (this.closed) throw new Error('duck pool: closed');
 			const spare = this.idle.pop();
 			if (spare) return spare;
-			// Create only when nobody is queued ahead of us. Without that guard a late
-			// arrival takes the slot an earlier waiter has been parked on, and under a
-			// steady stream of arrivals the earlier waiter is never served.
-			if (this.open < this.max && this.waiting.length === 0) {
+			// A fresh caller may create only when nobody is queued ahead of it, or a late
+			// arrival takes the slot an earlier waiter has been parked on. A RESUMED caller
+			// must be allowed to create regardless: `wake()` frees a slot without pushing
+			// anything to `idle` (the stale-generation discard and the failed-`connect()`
+			// path both do this), so if the resumed waiter deferred to the queue behind it,
+			// it would re-park and nobody would ever create — every caller hanging while
+			// `open < max`.
+			if (this.open < this.max && (resumed || this.waiting.length === 0)) {
 				this.open++;
 				const generation = this.generation;
 				try {
@@ -2029,6 +2062,7 @@ export class DuckPool {
 				}
 			}
 			await new Promise<void>((resolve) => this.waiting.push(resolve));
+			resumed = true;
 		}
 	}
 
