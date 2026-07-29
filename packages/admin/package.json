@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
+    "@testing-library/react": "^16.1.0",
     "@types/d3-force": "^3.0.10",
     "@types/dagre": "^0.7.54",
     "@types/node": "^24",
@@ -52,6 +53,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17",
+    "happy-dom": "^16.5.3",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "typescript": "~6",

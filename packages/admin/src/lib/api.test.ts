@@ -105,6 +105,14 @@ describe("api transport", () => {
     fetchMock.mockResolvedValue(ok({ id: "n1", type: "device", data: {} }))
     await api.getNode("tA", "pA", "n1")
     expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/nodes/n1")
+
+    fetchMock.mockResolvedValue(ok({ body: null, uri: null, contentType: null, contentHash: null }))
+    await api.getNodeContent("tA", "pA", "n1")
+    expect(fetchMock.mock.calls[1][0]).toBe("/t/tA/p/pA/nodes/n1/content")
+
+    fetchMock.mockResolvedValue(ok([]))
+    await api.neighbors("tA", "pA", "n1")
+    expect(fetchMock.mock.calls[2][0]).toBe("/t/tA/p/pA/nodes/n1/neighbors")
   })
 
   it("builds the timeline URL", async () => {
