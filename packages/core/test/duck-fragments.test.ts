@@ -72,7 +72,7 @@ describe('duckdb fragments, executed', () => {
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
 				      VALUES (nextval('seq_ver'), ?, 'Doc', ?, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
 				args: [id, from, embParam([...vec])],
 			});
@@ -95,7 +95,7 @@ describe('duckdb fragments, executed', () => {
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
 				      VALUES (nextval('seq_ver'), ?, 'Doc', 1, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
 				args: [id, embParam([...vec])],
 			});

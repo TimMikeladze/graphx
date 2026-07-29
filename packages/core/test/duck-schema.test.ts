@@ -6,15 +6,12 @@ import { init, readEmbDim } from '../src/schema.ts';
 const FOREVER = 8640000000000000;
 
 describe('duckdbSchema', () => {
-	test('init creates the split tables and their compatibility views', async () => {
+	test('init creates the version tables and their views', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
-		const r = await c.execute(
-			`SELECT table_name FROM duckdb_tables() UNION ALL SELECT view_name FROM duckdb_views()
-			 WHERE view_name IN ('node_versions','edge_versions','nodes','edges')`,
-		);
-		const names = r.rows.map((x) => String(x.table_name ?? x.view_name));
-		for (const t of ['nv_live', 'nv_history', 'ev_live', 'ev_history']) {
+		const r = await c.execute('SELECT table_name FROM duckdb_tables()');
+		const names = r.rows.map((x) => String(x.table_name));
+		for (const t of ['node_versions', 'edge_versions', 'node_identity', 'graph_outbox']) {
 			expect(names).toContain(t);
 		}
 		await c.end();
@@ -27,16 +24,16 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('node_versions unions live and history', async () => {
+	test('nodes shows only the live version, node_versions shows every one', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 10, FOREVER],
 		});
 		await c.execute({
-			sql: `INSERT INTO nv_history (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [2, 'n1', 'Doc', 1, 10],
 		});
 		expect((await c.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(2);
@@ -44,20 +41,21 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('the live table enforces one row per id without a partial index', async () => {
+	test('two live rows for one id are NOT rejected by the store — the writer must prevent them', async () => {
+		// On libSQL and Postgres a partial unique index makes this impossible. DuckDB has
+		// no partial indexes, so the invariant is upheld by the serialized writer (Task 16)
+		// and application-level checks (Task 12) instead. This test pins that the store
+		// gives no backstop, so nobody later mistakes silence for enforcement.
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
-		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-			args: [1, 'n1', 'Doc', 10, FOREVER],
-		});
-		await expect(
-			c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-				args: [2, 'n1', 'Doc', 20, FOREVER],
-			}),
-		).rejects.toThrow();
+		for (const ver of [1, 2]) {
+			await c.execute({
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+				args: [ver, 'n1', 'Doc', ver * 10, FOREVER],
+			});
+		}
+		expect((await c.execute('SELECT count(*) AS n FROM nodes')).rows[0]?.n).toBe(2);
 		await c.end();
 	});
 
@@ -85,10 +83,10 @@ describe('duckdbSchema', () => {
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (id, type, valid_from) VALUES (?, ?, ?)`,
+			sql: `INSERT INTO node_versions (id, type, valid_from) VALUES (?, ?, ?)`,
 			args: ['n1', 'Doc', 1],
 		});
-		const r = await c.execute('SELECT ver FROM nv_live');
+		const r = await c.execute('SELECT ver FROM node_versions');
 		expect(Number(r.rows[0]?.ver)).toBeGreaterThan(0);
 		await c.end();
 	});
@@ -112,10 +110,10 @@ describe('duckdbSchema', () => {
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 1, FOREVER],
 		});
-		expect((await c.execute('SELECT valid_to FROM nv_live')).rows[0]?.valid_to).toBe(FOREVER);
+		expect((await c.execute('SELECT valid_to FROM node_versions')).rows[0]?.valid_to).toBe(FOREVER);
 		await c.end();
 	});
 });

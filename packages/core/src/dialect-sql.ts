@@ -261,14 +261,19 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 /**
  * Full DuckDB DDL — the third sibling of {@link schema} (libSQL) and {@link postgresSchema}.
  *
- * The structural difference from both: `node_versions` and `edge_versions` are **views**
- * over a live table and a history table, rather than single tables. Every index in graphx
- * is partial over `WHERE valid_to = FOREVER` (D5), and DuckDB has no partial indexes; the
- * split makes that predicate physical, so the partial index becomes a plain index over a
- * small table and `UNIQUE(id)` on the live table enforces the one-live-row-per-id
- * invariant that libSQL and Postgres get from a partial unique index.
+ * `node_versions`/`edge_versions` are REAL TABLES here, and `nodes`/`edges` are views
+ * filtered to `valid_to = ${FOREVER_LIT}` — structurally the same shape as
+ * {@link postgresSchema}. An earlier version of this function split `node_versions`/
+ * `edge_versions` into separate live/history TABLES with UNION ALL compatibility views
+ * standing in for the names every query uses, to route around DuckDB having no partial
+ * indexes. That broke every write path in the codebase: `Graph.addNode`/`addEdge`/etc.
+ * (graph.ts) and `bulkLoad`/`bulkEdges` (bulk.ts) all INSERT into `node_versions`/
+ * `edge_versions` directly, and DuckDB refuses INSERT into a UNION ALL view ("Catalog
+ * Error: node_versions is not an table"). The live/history split is real and valuable —
+ * it is what makes Task 15's Parquet export cheap — but it belongs in the PARQUET LAYOUT
+ * built at commit time, not in the local schema every write path targets directly.
  *
- * Other differences, all forced:
+ * Other differences from libSQL, all forced:
  *  - `ver`/`seq` come from explicit SEQUENCEs — no rowid alias, no AUTOINCREMENT, no
  *    IDENTITY. The writer allocates from the manifest high-water marks rather than these
  *    at commit time (sequences are non-transactional), but the DEFAULT keeps ad-hoc SQL
@@ -278,6 +283,11 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  *    `FLOAT[N]` — even a pyarrow fixed_size_list reads back as a variable-length list —
  *    so the storage type is the one that survives a round trip. `list_cosine_distance`
  *    accepts it directly and measured faster than casting.
+ *  - No partial index: DuckDB has no partial indexes, so unlike libSQL/Postgres this
+ *    schema does NOT enforce "at most one live row per id" — that invariant is upheld by
+ *    the serialized writer (Task 16) and application-level checks (Task 12) instead. See
+ *    duck-schema.test.ts's "two live rows... are NOT rejected" test, which pins that this
+ *    schema gives no backstop so nobody later mistakes silence here for enforcement.
  *  - No full-text objects and no ANN index: DuckDB has no triggers, its FTS extension
  *    cannot index a view, and its HNSW index cannot be partial, cannot index Parquet, and
  *    silently returns fewer rows than LIMIT under a WHERE filter. Both are built at commit
@@ -320,35 +330,24 @@ CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT INTO graph_meta (key, value) VALUES ('emb_dim', '${dim}') ON CONFLICT DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS nv_live (${nodeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS nv_history (${nodeCols},
+CREATE TABLE IF NOT EXISTS node_versions (${nodeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS nv_hist_asof ON nv_history(id, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS nv_live_type ON nv_live(type);
+CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 
-CREATE TABLE IF NOT EXISTS ev_live (${edgeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS ev_history (${edgeCols},
+CREATE TABLE IF NOT EXISTS edge_versions (${edgeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS ev_live_src ON ev_live(src);
-CREATE INDEX IF NOT EXISTS ev_live_dst ON ev_live(dst);
-CREATE INDEX IF NOT EXISTS ev_hist_src ON ev_history(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_hist_dst ON ev_history(dst, valid_from, valid_to);
-
-CREATE OR REPLACE VIEW node_versions AS
-  SELECT * FROM nv_live UNION ALL SELECT * FROM nv_history;
-CREATE OR REPLACE VIEW edge_versions AS
-  SELECT * FROM ev_live UNION ALL SELECT * FROM ev_history;
+CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE OR REPLACE VIEW nodes AS
-  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb FROM nv_live;
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
+  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
 CREATE OR REPLACE VIEW edges AS
-  SELECT id, src, dst, rel, weight, data, source FROM ev_live;
+  SELECT id, src, dst, rel, weight, data, source
+  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
@@ -500,17 +499,17 @@ export function annSeedsLive(dialect: Dialect): string {
   WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   ORDER BY emb <=> ?::vector
   LIMIT ?`;
-		// Brute-force scan over nv_live (the live scope the live/history split bought).
-		// min_by(id, dist, k) returns the same top-k as ORDER BY dist LIMIT k while
-		// reading a remote Parquet once instead of twice; unnest position supplies rank.
-		// Args: embedding JSON, k.
+		// Brute-force scan over the live scope (valid_to = FOREVER) — DuckDB has no ANN
+		// index (see duckdbSchema). min_by(id, dist, k) returns the same top-k as ORDER
+		// BY dist LIMIT k while reading a remote Parquet once instead of twice; unnest
+		// position supplies rank. Args: embedding JSON, k.
 		case 'duckdb':
 			return `
   SELECT unnest(ids) AS id
   FROM (
     SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   )`;
 		default:
 			return assertNever(dialect, 'annSeedsLive');
@@ -564,8 +563,8 @@ export function annSeedsAsOf(dialect: Dialect): string {
   SELECT live.id AS id, live.rk AS rk
   FROM (
     SELECT id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')) AS rk
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
     ORDER BY rk
     LIMIT ?
   ) live
@@ -603,8 +602,8 @@ LIMIT ?`;
 SELECT unnest(ids) AS id
 FROM (
   SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-  FROM nv_live
-  WHERE emb IS NOT NULL
+  FROM node_versions
+  WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
 )`;
 		default:
 			return assertNever(dialect, 'vecSeedLive');

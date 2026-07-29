@@ -162,10 +162,10 @@ export async function bulkLoad<S extends GraphSchema>(
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
 	const d = dialectOf(raw);
-	// The index-deferral steps below (2–4) run inside a try/finally; a duckdb client must
-	// never reach a throw INSIDE that finally (it would mask whatever the try block threw),
-	// so it is rejected here, up front, by name.
-	if (d === 'duckdb') throw new Error('bulk.bulkLoad: duckdb not implemented yet');
+	// libSQL defers the ANN index and FTS trigger across a bulk load and rebuilds after.
+	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
+	// index-free and its FTS index is built at commit time — so the whole bracket is skipped.
+	const deferIndexes = d === 'libsql';
 	const embExpr = embFreshExpr(d);
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
@@ -199,9 +199,8 @@ export async function bulkLoad<S extends GraphSchema>(
 	);
 
 	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger. libSQL only —
-	// on Postgres there is no FTS trigger (the generated `tsvector` self-maintains) and no HNSW
-	// index is created yet, so there is nothing to defer. (duckdb already rejected above.)
-	if (d !== 'postgres') {
+	// see deferIndexes above for why Postgres and DuckDB both skip this.
+	if (deferIndexes) {
 		await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
 		await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');
 	}
@@ -239,7 +238,7 @@ export async function bulkLoad<S extends GraphSchema>(
 	} finally {
 		// 3. Always restore queryability — recreate the ANN index and the FTS trigger,
 		// even if the load threw (a failed batch is atomic, so no rows leak). libSQL only.
-		if (d !== 'postgres') {
+		if (deferIndexes) {
 			await raw.execute(NV_EMB_IDX_DDL);
 			await raw.execute(NODES_FTS_TRIGGER_DDL);
 		}
@@ -247,7 +246,7 @@ export async function bulkLoad<S extends GraphSchema>(
 
 	// 4. Rebuild the FTS index from the content table (libSQL only — PG's generated tsvector
 	// is already current), then refresh planner stats.
-	if (d !== 'postgres') {
+	if (deferIndexes) {
 		await raw.execute(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
 	}
 	await raw.execute('ANALYZE');
