@@ -38,6 +38,9 @@ export interface DbConfig {
 	authToken?: string;
 	syncUrl?: string;
 	syncInterval?: number;
+	// DuckDB
+	/** Local database path. Default `<namespace>.duckdb`. Stage 4 adds the bucket fields. */
+	duckPath?: string;
 }
 
 /** Builds a Postgres {@link DbClient} for a namespace. Registered by `core/pg` on import. */
@@ -53,9 +56,24 @@ export function registerPgDriver(factory: PgDriverFactory): void {
 	pgFactory = factory;
 }
 
+/** Builds a DuckDB {@link DbClient} for a namespace. Registered by `core/duck` on import. */
+export type DuckDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
+let duckFactory: DuckDriverFactory | undefined;
+
+/**
+ * Register the DuckDB adapter factory. Called as a side effect of importing the
+ * `core/duck` subpath, so `@duckdb/node-api` stays an OPTIONAL peer — it is ~123MB
+ * installed and is never loaded for consumers who do not opt in.
+ */
+export function registerDuckDriver(factory: DuckDriverFactory): void {
+	duckFactory = factory;
+}
+
 function resolveDriver(cfg: DbConfig): Dialect {
 	if (cfg.driver) return cfg.driver;
-	return process.env.GRAPHX_DB_DRIVER === 'postgres' ? 'postgres' : 'libsql';
+	const env = process.env.GRAPHX_DB_DRIVER;
+	if (env === 'postgres' || env === 'duckdb') return env;
+	return 'libsql';
 }
 
 const clients = new Map<string, DbClient>();
@@ -72,14 +90,22 @@ const clients = new Map<string, DbClient>();
 export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	const existing = clients.get(namespace);
 	if (existing) return existing;
+	const driver = resolveDriver(cfg);
 	let client: DbClient;
-	if (resolveDriver(cfg) === 'postgres') {
+	if (driver === 'postgres') {
 		if (!pgFactory) {
 			throw new Error(
 				"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
 			);
 		}
 		client = pgFactory(namespace, cfg);
+	} else if (driver === 'duckdb') {
+		if (!duckFactory) {
+			throw new Error(
+				"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
+			);
+		}
+		client = duckFactory(namespace, cfg);
 	} else {
 		const base = cfg.syncUrl ?? process.env.SQLD_URL;
 		const syncUrl = base ? `${base}/${namespace}` : undefined;

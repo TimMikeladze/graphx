@@ -27,6 +27,12 @@
 				"default": "./dist/pg.js"
 			}
 		},
+		"./duck": {
+			"import": {
+				"types": "./dist/duck.d.ts",
+				"default": "./dist/duck.js"
+			}
+		},
 		"./blob": {
 			"import": {
 				"types": "./dist/blob.d.ts",
