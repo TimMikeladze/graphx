@@ -2286,3 +2286,123 @@ git commit -m "feat(admin): play through the graph's change points"
 - [ ] `bun run type-check` — all packages
 - [ ] `bun run lint`
 - [ ] `grep -rn "as-of-picker\|AsOfPicker" packages/admin/src` returns nothing
+
+---
+
+### Task 12: Tick sampling and window zoom
+
+Added after Task 9's interactive verification measured the tick cap's real behaviour. Supersedes the tick-selection half of `e4438fee`; that commit's other half — `Home`/`End` committing the extent bounds rather than the ends of the tick array — stays correct and is not revisited.
+
+**Why this exists.** `ticks` is capped at `limits.maxRows` (10k). On a measured project with 97,770 change points, taking the *earliest* 10k left the newest 28 days unreachable; taking the *most recent* 10k instead collapsed 99.7% of the track onto a single snap target, because change density concentrates heavily toward now. Any contiguous slice is the wrong shape for a full-extent scrubber. Two changes fix it: sample across the range instead of slicing, and let the bar narrow the window when the user wants precision.
+
+**Files:**
+- Modify: `packages/core/src/timeline.ts` (tick selection)
+- Modify: `packages/core/test/timeline.test.ts`
+- Create: `packages/admin/src/lib/timeline-window.ts`
+- Create: `packages/admin/src/lib/timeline-window.test.ts`
+- Modify: `packages/admin/src/components/timeline/timeline-bar.tsx`
+
+**Interfaces:**
+- Consumes: `timeline(raw, opts)` and its `from`/`to`/`buckets` options; `useTimeline(tenant, project, window)`, which already accepts a window and is currently always called without one.
+- Produces: `zoomWindow(...)`, `fullRange` semantics described below.
+
+- [ ] **Step 1: Write the failing core test**
+
+Append to `packages/core/test/timeline.test.ts`:
+
+```ts
+test('timeline: a truncated tick list samples across the window rather than slicing one end', async () => {
+	const { client } = await freshGraph();
+	// 40 distinct instants spread evenly over [1000, 40000].
+	for (let i = 0; i < 40; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 1000, 9_000_000);
+	const t = await timeline(client, { limits: { maxRows: 8 } });
+
+	expect(t.ticksTruncated).toBe(true);
+	expect(t.ticks.length).toBeLessThanOrEqual(8);
+	// Both ends of the window are always reachable.
+	expect(t.ticks[0]).toBe(t.min);
+	expect(t.ticks[t.ticks.length - 1]).toBe(t.max);
+	// Ascending, and genuinely spread — not bunched into one end.
+	expect(t.ticks.every((v, i, a) => i === 0 || (a[i - 1] as number) <= v)).toBe(true);
+	const mid = t.ticks[Math.floor(t.ticks.length / 2)] as number;
+	const midPct = ((mid - (t.min as number)) / ((t.max as number) - (t.min as number))) * 100;
+	expect(midPct).toBeGreaterThan(25);
+	expect(midPct).toBeLessThan(75);
+});
+
+test('timeline: an untruncated tick list is still every distinct instant', async () => {
+	const { client } = await freshGraph();
+	for (let i = 0; i < 5; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 10, 9_000_000);
+	const t = await timeline(client);
+	expect(t.ticksTruncated).toBe(false);
+	expect(t.ticks).toEqual([1000, 1010, 1020, 1030, 1040, 9_000_000]);
+});
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `bun test packages/core/test/timeline.test.ts -t "samples across"`
+Expected: FAIL — the current implementation returns the newest 8 instants, so `ticks[0]` is far from `t.min` and `midPct` is ~100.
+
+- [ ] **Step 3: Sample instead of slicing**
+
+In `timeline.ts`, replace the single tick query with: count the distinct instants in the window first; if that count is at or under the cap, keep today's simple `ORDER BY t` query. Otherwise select every k-th instant where `k = ceil(count / cap)`, always including the first and last so both ends stay exact:
+
+```sql
+SELECT t FROM (
+  SELECT t, row_number() OVER (ORDER BY t) - 1 AS rn
+  FROM (SELECT DISTINCT t FROM (<CHANGE_POINTS>) cp WHERE t >= ? AND t <= ?) d
+) r
+WHERE rn % ? = 0 OR rn = ?
+ORDER BY t
+```
+
+binding `k` and `lastRn` (`count - 1`). Window functions are available on both dialects (SQLite 3.25+ and Postgres), and `%` is spelled the same in both. `ticksTruncated` stays `true` whenever sampling happened — it now means "reduced precision", not "the tail is missing", so update its doc comment to say that.
+
+- [ ] **Step 4: Verify on both drivers**
+
+Run: `bun test packages/core/test/timeline.test.ts`
+Then: `GRAPHX_TEST_DRIVER=postgres GRAPHX_TEST_PG_URL='postgresql://postgres:postgres@127.0.0.1:5433/graphx_test' bun test packages/core/test/timeline.test.ts --timeout 30000`
+Expected: PASS on both. The window function is the dialect risk here.
+
+- [ ] **Step 5: Write the zoom maths and its test**
+
+Create `packages/admin/src/lib/timeline-window.ts` — pure, DOM-free, mirroring `lib/timeline.ts`:
+
+```ts
+/** A scrub window. `undefined` bounds mean "the full extent". */
+export interface TimeWindow {
+  from?: number
+  to?: number
+}
+
+/**
+ * Narrow or widen the window by `factor` around `centre`, clamped to the extent. Zooming out past
+ * the extent returns `{}` — the full range — so there is exactly one representation of "all of it"
+ * and the Full range button and a zoom-out converge on the same state.
+ */
+export function zoomWindow(
+  win: TimeWindow,
+  centre: number,
+  factor: number,
+  extentMin: number,
+  extentMax: number,
+): TimeWindow
+```
+
+Test it: zooming in halves the span and keeps `centre` inside; zooming out past the extent yields `{}`; clamping at either extent edge keeps the span rather than letting it shrink; a zero-width extent is a no-op.
+
+- [ ] **Step 6: Wire the bar**
+
+`timeline-bar.tsx` gains `window` state (initially `{}`) and passes it to `useTimeline`. Add three controls next to the presets: zoom in, zoom out, and — shown only when the window is narrowed — **Full range**. Centre each zoom on `asOf ?? data.to`. When `data.ticksTruncated`, the zoom-in control carries a title explaining that snapping is approximate until the window narrows.
+
+The track needs no change: it already renders `data.from`/`data.to`, which echo the requested window.
+
+- [ ] **Step 7: Verify and commit**
+
+`bun test packages/admin`, `bun run --filter '@graphx/admin' type-check`, root `bun run lint`, and `bun test --timeout 30000`.
+
+```bash
+git add packages/core/src/timeline.ts packages/core/test/timeline.test.ts packages/admin/src/lib/timeline-window.ts packages/admin/src/lib/timeline-window.test.ts packages/admin/src/components/timeline/timeline-bar.tsx
+git commit -m "feat: sample change points across the range and let the scrubber zoom"
+```
