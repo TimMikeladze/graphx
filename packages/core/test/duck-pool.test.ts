@@ -67,6 +67,32 @@ describe('DuckPool', () => {
 		await pool.close();
 	});
 
+	test('close settles callers parked in the queue instead of hanging them', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const parked = pool.acquire();
+		await new Promise((r) => setTimeout(r, 10));
+		await pool.close();
+		// Must settle one way or the other. Before this fix the promise never resolved.
+		await expect(parked).rejects.toThrow(/closed/);
+		held.release();
+	});
+
+	test('a connection from a superseded generation is discarded, not pooled', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const c = await pool.acquire();
+		// Simulate the FATAL path: the instance is replaced while this caller holds a
+		// connection from the old generation.
+		(pool as unknown as { rebuild(): void }).rebuild();
+		c.release();
+		// The corpse must not be handed to the next caller, and must not count toward max.
+		expect((pool as unknown as { idle: unknown[] }).idle).toHaveLength(0);
+		const fresh = await pool.acquire();
+		expect((await fresh.run('SELECT 1 AS a')).rows).toEqual([{ a: 1 }]);
+		fresh.release();
+		await pool.close();
+	});
+
 	test('isFatalInstanceError recognizes an invalidated database', () => {
 		expect(isFatalInstanceError(new Error('FATAL Error: database has been invalidated'))).toBe(
 			true,
