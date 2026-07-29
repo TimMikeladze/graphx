@@ -369,3 +369,42 @@ test('P6: asOfPredicate returns the half-open D3 form referencing the alias', as
 	expect(asOfPredicate('nv')).toBe('nv.valid_from <= ? AND ? < nv.valid_to');
 	expect(asOfPredicate('e')).toBe('e.valid_from <= ? AND ? < e.valid_to');
 });
+
+test('P6: getNode(asOf) reads the version live at that instant', async () => {
+	const { g } = await freshGraph();
+	const n = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.updateNode(n.id, { data: { type: 'switch' } });
+
+	// Live and an explicit "now" agree.
+	expect((await g.getNode(n.id))?.data.type).toBe('switch');
+	expect((await g.getNode(n.id, { asOf: FOREVER }))?.data.type).toBe('switch');
+	// The past sees the original.
+	expect((await g.getNode(n.id, { asOf: t0 }))?.data.type).toBe('router');
+	// Before the node existed there is nothing to see.
+	expect(await g.getNode(n.id, { asOf: 1 })).toBeNull();
+});
+
+test('P6: getNode(asOf) still finds a retracted node before its retraction', async () => {
+	const { g } = await freshGraph();
+	const n = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.deleteNode(n.id);
+
+	expect(await g.getNode(n.id)).toBeNull();
+	expect((await g.getNode(n.id, { asOf: t0 }))?.data.type).toBe('router');
+});
+
+test('P6: getNodeContent(asOf) reads that version body and provenance', async () => {
+	const { g } = await freshGraph();
+	const n = await g.addNode({ type: 'device', data: { type: 'router' }, body: 'first' });
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.updateNode(n.id, { body: 'second' });
+
+	expect((await g.getNodeContent(n.id))?.body).toBe('second');
+	expect((await g.getNodeContent(n.id, { asOf: t0 }))?.body).toBe('first');
+	expect(await g.getNodeContent(n.id, { asOf: 1 })).toBeNull();
+});

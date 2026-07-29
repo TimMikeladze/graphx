@@ -17,6 +17,7 @@ import {
 	type GraphEventSink,
 	NOOP_EVENTS,
 } from './events.ts';
+import { asOfPredicate } from './temporal.ts';
 import type { AnyNode, NodeType, NodeOf, Rel } from './define-graph-schema.ts';
 import {
 	applyLimit,
@@ -615,15 +616,21 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Read the LIVE version of a node through the `nodes` view (D3). Returns the
-	 * typed `{ id, type, data }` shape with data parsed back to an object, or
-	 * `null` if no live version exists.
+	 * Read a node's version through the live `nodes` view (D3), or — when `asOf` names a past
+	 * instant — the single `node_versions` row whose half-open interval contains it. Returns the
+	 * typed `{ id, type, data }` shape with data parsed back to an object, or `null` when no
+	 * version was live then.
 	 */
-	async getNode(id: string): Promise<AnyNode<S> | null> {
-		const r = await this.raw.execute({
-			sql: 'SELECT id, type, data FROM nodes WHERE id = ?',
-			args: [id],
-		});
+	async getNode(id: string, opts: { asOf?: number } = {}): Promise<AnyNode<S> | null> {
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const r = await this.raw.execute(
+			past
+				? {
+						sql: `SELECT id, type, data FROM node_versions nv WHERE nv.id = ? AND ${asOfPredicate('nv')}`,
+						args: [id, opts.asOf as number, opts.asOf as number],
+					}
+				: { sql: 'SELECT id, type, data FROM nodes WHERE id = ?', args: [id] },
+		);
 		const row = r.rows[0];
 		if (!row) return null;
 		return this.rowToNode(row);
@@ -633,12 +640,19 @@ export class Graph<S extends GraphSchema> {
 	 * The live version's content columns — the markdown/text `body` and its provenance. Separate
 	 * from {@link getNode} because `AnyNode` is the *typed* projection (`id`/`type`/`data`) that
 	 * SDK consumers destructure; content is a bulkier, rarely-needed payload fetched on demand.
+	 * Accepts the same `asOf` as {@link getNode} to read a past instant's body/provenance.
 	 */
-	async getNodeContent(id: string): Promise<NodeContent | null> {
-		const r = await this.raw.execute({
-			sql: 'SELECT body, uri, content_type, content_hash FROM nodes WHERE id = ?',
-			args: [id],
-		});
+	async getNodeContent(id: string, opts: { asOf?: number } = {}): Promise<NodeContent | null> {
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const cols = 'body, uri, content_type, content_hash';
+		const r = await this.raw.execute(
+			past
+				? {
+						sql: `SELECT ${cols} FROM node_versions nv WHERE nv.id = ? AND ${asOfPredicate('nv')}`,
+						args: [id, opts.asOf as number, opts.asOf as number],
+					}
+				: { sql: `SELECT ${cols} FROM nodes WHERE id = ?`, args: [id] },
+		);
 		const row = r.rows[0];
 		if (!row) return null;
 		return {
