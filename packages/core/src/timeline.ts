@@ -1,5 +1,5 @@
 import { FOREVER } from './db.ts';
-import type { DbClient } from './dialect.ts';
+import type { DbClient, SqlResult } from './dialect.ts';
 import { type QueryLimits, resolveLimits } from './governance.ts';
 
 /**
@@ -45,13 +45,14 @@ export interface Timeline {
 	/**
 	 * Distinct change instants in the window, ascending. Drives snap-to-change and step.
 	 *
-	 * On truncation this holds the MOST RECENT `maxRows` instants, not the earliest — change
-	 * density skews heavily toward now on real graphs, so recent instants are where snap
-	 * precision actually matters. The list is still returned ascending; only which end got cut
-	 * differs.
+	 * On truncation this is a SAMPLE spread evenly across the window — every k-th instant by
+	 * rank, always including both ends — not a contiguous slice from either end. A contiguous
+	 * slice is the wrong shape either way: earliest-N strands the newest changes past the cut,
+	 * and most-recent-N collapses onto the narrow high-density tail near "now" where real graphs
+	 * concentrate most of their changes.
 	 */
 	ticks: number[];
-	/** True when `ticks` hit the row cap — narrow the window for an exact list. */
+	/** True when `ticks` is a sample rather than the exact list — snapping is approximate; narrow the window (`from`/`to`) for exact precision. */
 	ticksTruncated: boolean;
 }
 
@@ -71,8 +72,9 @@ function num(row: Record<string, unknown> | undefined, key: string): number | nu
 /**
  * Aggregate the graph's change points into an extent, a density histogram and a snap-tick list.
  *
- * Three queries: the unwindowed extent (so a caller always knows the full range it is scrubbing
- * within), the windowed ticks, and the windowed histogram.
+ * The unwindowed extent (so a caller always knows the full range it is scrubbing within), a
+ * windowed distinct-instant count (to decide whether the tick list needs sampling and, if so,
+ * how coarse), the windowed ticks themselves, and the windowed histogram.
  */
 export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<Timeline> {
 	const buckets = Math.min(
@@ -104,20 +106,47 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	const from = opts.from ?? lo;
 	const to = opts.to ?? hi;
 
-	// Over-fetch one past the cap to detect truncation without a second query (the `feedStream`
-	// trick from temporal.ts). Ordered DESC so a truncated cap keeps the most recent instants —
-	// where change density concentrates on real graphs — rather than the earliest, then reversed
-	// back to the ascending order every consumer (nearestTick, stepTick, the histogram, playback)
-	// expects.
-	const tickRows = await raw.execute({
-		sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t DESC LIMIT ?`,
-		args: [from, to, cap + 1],
+	// Count first: below the cap, the plain distinct list stands. Above it, sample every k-th
+	// instant by rank so the tick list stays spread across the whole window instead of bunching
+	// at one end, always keeping rn=0 and rn=count-1 so both ends stay exact.
+	const countRow = await raw.execute({
+		sql: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d`,
+		args: [from, to],
 	});
-	const found = (tickRows.rows as unknown as Array<Record<string, unknown>>).map((r) =>
+	const distinctCount = num(countRow.rows[0] as unknown as Record<string, unknown>, 'n') ?? 0;
+
+	const ticksTruncated = distinctCount > cap;
+	let tickRows: SqlResult;
+	if (!ticksTruncated) {
+		tickRows = await raw.execute({
+			sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t`,
+			args: [from, to],
+		});
+	} else {
+		// k = ceil((count-1)/(cap-1)), NOT ceil(count/cap): sizing the stride against the number of
+		// GAPS between the two forced endpoints (cap-1) rather than the number of slots (cap) is
+		// what keeps the modulo selection plus the forced last element from ever exceeding cap. With
+		// ceil(count/cap), count=40/cap=8 gives k=5 — the modulo set (rn 0,5,...,35, eight elements)
+		// already fills the cap, so forcing the true last (rn=39, not a multiple of 5) makes nine.
+		// This formula both bounds the modulo set to at most cap-1 AND guarantees that whenever it
+		// would otherwise hit exactly cap-1, the endpoint is already a multiple of k — so the forced
+		// add is never a genuine extra. cap<=1 can't fit both endpoints; fall back to the coarsest
+		// possible stride (a governance-degenerate case no caller exercises — default maxRows is 10k).
+		const k = cap <= 1 ? distinctCount : Math.ceil((distinctCount - 1) / (cap - 1));
+		const lastRn = distinctCount - 1;
+		tickRows = await raw.execute({
+			sql: `SELECT t FROM (
+				SELECT t, row_number() OVER (ORDER BY t) - 1 AS rn
+				FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d
+			) r
+			WHERE rn % ? = 0 OR rn = ?
+			ORDER BY t`,
+			args: [from, to, k, lastRn],
+		});
+	}
+	const ticks = (tickRows.rows as unknown as Array<Record<string, unknown>>).map((r) =>
 		Number(r.t),
 	);
-	const ticksTruncated = found.length > cap;
-	const ticks = (ticksTruncated ? found.slice(0, cap) : found).reverse();
 
 	const counts = Array.from({ length: buckets }, () => 0);
 	const span = to - from;

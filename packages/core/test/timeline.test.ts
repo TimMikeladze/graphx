@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
 import { z } from 'zod';
+import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
@@ -136,7 +137,7 @@ test('timeline: a single-instant graph does not divide by zero', async () => {
 	expect(t.buckets.reduce((a, b) => a + b, 0)).toBe(4);
 });
 
-test('timeline: the tick list is capped and flags truncation, keeping the most recent instants', async () => {
+test('timeline: the tick list is capped and flags truncation, sampling every k-th instant', async () => {
 	const { client } = await freshGraph();
 	// valid_from at 1000, 1010, ..., 1050, plus every valid_to at 9_000_000 (deduped by DISTINCT
 	// to one instant) → seven distinct change points: 1000..1050 and 9_000_000.
@@ -144,10 +145,39 @@ test('timeline: the tick list is capped and flags truncation, keeping the most r
 	const t = await timeline(client, { limits: { maxRows: 3 } });
 	expect(t.ticks.length).toBe(3);
 	expect(t.ticksTruncated).toBe(true);
-	// Most recent 3 of {1000, 1010, 1020, 1030, 1040, 1050, 9_000_000}, ascending — NOT the
-	// earliest 3. A regression to earliest-N would yield [1000, 1010, 1020] here instead.
-	expect(t.ticks).toEqual([1040, 1050, 9_000_000]);
+	// count=7, cap=3 ⇒ k=ceil(7/3)=3: rn 0,3,6 of {1000,1010,1020,1030,1040,1050,9_000_000}, i.e.
+	// 1000, 1030, 9_000_000 — spread across the window, not the most recent 3.
+	expect(t.ticks).toEqual([1000, 1030, 9_000_000]);
 	expect(t.ticks).toEqual([...t.ticks].sort((a, b) => a - b));
+});
+
+test('timeline: a truncated tick list samples across the window rather than slicing one end', async () => {
+	const { client } = await freshGraph();
+	// 40 distinct instants spread evenly over [1000, 40000]. `to` is FOREVER (still open) so only
+	// the 40 valid_from values are change points — a shared non-FOREVER `to` would add one more,
+	// far outside this range, and skew the window this test is trying to measure.
+	for (let i = 0; i < 40; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 1000, FOREVER);
+	const t = await timeline(client, { limits: { maxRows: 8 } });
+
+	expect(t.ticksTruncated).toBe(true);
+	expect(t.ticks.length).toBeLessThanOrEqual(8);
+	// Both ends of the window are always reachable.
+	expect(t.ticks[0]).toBe(t.min);
+	expect(t.ticks[t.ticks.length - 1]).toBe(t.max);
+	// Ascending, and genuinely spread — not bunched into one end.
+	expect(t.ticks.every((v, i, a) => i === 0 || (a[i - 1] as number) <= v)).toBe(true);
+	const mid = t.ticks[Math.floor(t.ticks.length / 2)] as number;
+	const midPct = ((mid - (t.min as number)) / ((t.max as number) - (t.min as number))) * 100;
+	expect(midPct).toBeGreaterThan(25);
+	expect(midPct).toBeLessThan(75);
+});
+
+test('timeline: an untruncated tick list is still every distinct instant', async () => {
+	const { client } = await freshGraph();
+	for (let i = 0; i < 5; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 10, 9_000_000);
+	const t = await timeline(client);
+	expect(t.ticksTruncated).toBe(false);
+	expect(t.ticks).toEqual([1000, 1010, 1020, 1030, 1040, 9_000_000]);
 });
 
 test('timeline: buckets is clamped to the supported range', async () => {
