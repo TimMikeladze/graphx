@@ -484,6 +484,10 @@ test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async
 	expect(edgeRes.status).toBe(201);
 	const edge = (await edgeRes.json()) as { id: string };
 
+	// `Graph.now()` is a monotonic write clock — Math.max(Date.now(), lastTs + 1) — so a burst of
+	// writes in one wall-clock millisecond gets `valid_from` values AHEAD of real time. Snapshot
+	// `t0` only after a buffer, or the as-of reads below land before the writes they must see.
+	await new Promise((r) => setTimeout(r, 5));
 	const t0 = Date.now();
 	await new Promise((r) => setTimeout(r, 5));
 	await app.request(`${base}/nodes/${a.id}`, {
