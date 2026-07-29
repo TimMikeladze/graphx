@@ -112,19 +112,27 @@ namespace maps to a schema.
 
 The layout below describes the **Parquet files in the bucket**, not the local tables:
 
-| logical | physical | contents |
+| manifest key | files | contents |
 |---|---|---|
-| `node_versions` | `nv_live ∪ nv_history` | every version — the as-of read path |
-| `nodes` view | `nv_live` alone, **no predicate** | one row per id, `valid_to = FOREVER` |
+| `node_versions` | `[live, history…]` | live rows first, then closed versions |
+| `edge_versions` | `[live, history…]` | same |
 
-This is the load-bearing decision. Every index in the schema is a *partial* index whose
-predicate is `WHERE valid_to = 8640000000000000` — `nv_emb_idx`, `ux_single_<rel>`,
-`ux_<type>_<prop>` (`dialect-sql.ts:424-429`, `constraints.ts:60-91`) — and DuckDB has no
-partial indexes. Putting live rows in their own file makes the predicate physical instead of
-declarative: the index scope becomes the file, and what remains is a plain index on a small
-table.
+Locally both load into one table; `nodes` and `edges` are views filtered to
+`valid_to = FOREVER`, exactly as on Postgres.
 
-`nv_history` is Hive-partitioned `vt_year=/vt_month=` on `valid_to`, which is P10's key layout.
+Every index in graphx is a *partial* index whose predicate is `WHERE valid_to = 8640000000000000`
+— `nv_emb_idx`, `ux_single_<rel>`, `ux_<type>_<prop>` (`dialect-sql.ts:424-429`,
+`constraints.ts:60-91`) — and DuckDB has no partial indexes. None of the three survives as a SQL
+index here, and the file split does not rescue any of them:
+
+- `nv_emb_idx` has no DuckDB counterpart at all (§10.1). ANN is a brute-force scan filtered to
+  `valid_to = FOREVER`, and the live Parquet file is what keeps that scan small.
+- `ux_single_<rel>` and `ux_<type>_<prop>` become application-level checks under the serialized
+  writer (§11).
+
+What the file split buys is therefore about **fetching**, not indexing: a reader that only needs
+current state downloads the live file alone, and history stays partitioned by close time so P10
+tiering falls out of the layout rather than needing a separate subsystem.
 
 Everything else — `node_identity`, `edge_identity`, `graph_outbox`, `node_analytics`,
 `trigger_cursors`, `trigger_dead_letters`, `archival_state`, and the auth tables — is a plain
@@ -139,9 +147,10 @@ One immutable manifest per commit:
   "embDim": 768, "schemaHash": "…",
   "verHigh": 102253, "seqHigh": 90210,
   "tables": {
-    "nv_live":    { "files": ["sha256:ab12…", "sha256:cd34…"], "tombstones": "sha256:ef56…" },
-    "nv_history": { "files": [ … ], "partition": "vt_month" },
-    "graph_outbox": { "files": [ … ] }
+    // Live first, then history — a reader needing only current state takes files[0].
+    "node_versions": { "files": ["sha256:live…", "sha256:hist…"] },
+    "edge_versions": { "files": [ … ] },
+    "graph_outbox":  { "files": [ … ] }
   },
   "indexes": {
     "fts_live":   { "dict": …, "terms": …, "docs": …, "stats": … },
@@ -348,7 +357,7 @@ query carries a `WHERE` filter. Attaching a 931MB HNSW-indexed database over HTT
 932MB — it is "download the whole index into RAM, then query", not an object-storage-native
 index.
 
-Brute force over `nv_live` costs roughly 0.5s per million vectors at 384 dimensions on 8 cores;
+Brute force over the live rows costs roughly 0.5s per million vectors at 384 dimensions on 8 cores;
 20k×768 measured 21.8ms per query. The §8.1 local cache is what makes this viable: served
 purely remotely, every ANN query re-egresses the entire embedding column (1M×768 ≈ 3GB), and the
 in-memory cache does not survive a cold start.
@@ -390,8 +399,11 @@ written to restore on Postgres.
 
 ## 11. Constraints
 
-`declareSingleValuedRel` gets a real `UNIQUE(src, rel)` on `ev_live`. Those are plain columns, so
-the live/history split solves it completely.
+`declareSingleValuedRel` gets no index either. `src` and `rel` are plain columns, but the libSQL
+and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial index to scope
+with — an unconditional `UNIQUE(src, rel)` would silently make every rel single-valued. The
+declaration is recorded in `graph_meta` and the invariant is upheld by `addEdge`'s existing
+close-then-insert path.
 
 `declareUniqueNodeProp` cannot be backed by the store. DuckDB indexes no JSON extraction, either
 directly or through a generated column — verified on both 1.4.4 and 1.5.5. It is enforced in
