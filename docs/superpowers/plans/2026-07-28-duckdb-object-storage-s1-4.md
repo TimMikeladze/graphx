@@ -2341,6 +2341,54 @@ describe('DuckClient', () => {
 		await c.end();
 	});
 
+	test('splitStatements respects literals and comments', () => {
+		// Each of these would silently corrupt schema DDL if mis-split: a dropped
+		// statement, a merged one, or a literal cut in half.
+		expect(splitStatements('SELECT 1; SELECT 2')).toEqual(['SELECT 1', 'SELECT 2']);
+		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual([
+			"SELECT ';' AS a",
+			'SELECT 2',
+		]);
+		expect(splitStatements("SELECT 'a''b;c' AS a")).toEqual(["SELECT 'a''b;c' AS a"]);
+		expect(splitStatements('SELECT 1; -- trailing; comment\nSELECT 2')).toEqual([
+			'SELECT 1',
+			'SELECT 2',
+		]);
+		expect(splitStatements('-- lone; comment\nSELECT 1')).toEqual(['SELECT 1']);
+		expect(splitStatements('SELECT 1; /* block; comment */ SELECT 2')).toEqual([
+			'SELECT 1',
+			'SELECT 2',
+		]);
+		expect(splitStatements('  ;; \n')).toEqual([]);
+		expect(splitStatements('')).toEqual([]);
+	});
+
+	test('rollback discards the writes and closes the transaction', async () => {
+		const c = createDuckClient();
+		await c.execute('CREATE TABLE t(id INTEGER)');
+		const tx = await c.transaction('write');
+		await tx.execute({ sql: 'INSERT INTO t VALUES (?)', args: [1] });
+		await tx.rollback();
+		expect(tx.closed).toBe(true);
+		expect((await c.execute('SELECT count(*) AS n FROM t')).rows[0]?.n).toBe(0);
+		await c.end();
+	});
+
+	test('executeMultiple runs a script whose comments contain semicolons', async () => {
+		// The schema DDL this splits is full of comments; a semicolon in one must not
+		// truncate the script.
+		const c = createDuckClient();
+		await c.executeMultiple(`
+			-- first; with a semicolon in the comment
+			CREATE TABLE a(id INTEGER);
+			/* and a block; comment */
+			CREATE TABLE b(id INTEGER);
+		`);
+		expect((await c.execute('SELECT count(*) AS n FROM a')).rows[0]?.n).toBe(0);
+		expect((await c.execute('SELECT count(*) AS n FROM b')).rows[0]?.n).toBe(0);
+		await c.end();
+	});
+
 	test('the dialect tag is duckdb', () => {
 		const c = createDuckClient();
 		expect(c.dialect).toBe('duckdb');
@@ -2479,11 +2527,17 @@ class DuckTransaction implements DbTransaction {
 
 	async commit(): Promise<void> {
 		if (this.aborted) {
-			await this.rollback();
+			// Swallow a rollback failure: the caller needs to hear "aborted", which is the
+			// actionable fact, not whatever went wrong while cleaning up after it.
+			await this.rollback().catch(() => undefined);
 			throw new Error('duck transaction: aborted — commit would silently discard the writes');
 		}
-		await this.conn.run('COMMIT');
-		this.finish();
+		try {
+			await this.conn.run('COMMIT');
+		} finally {
+			// Release even if COMMIT itself throws, or the connection leaks from the pool.
+			this.finish();
+		}
 	}
 
 	async rollback(): Promise<void> {
@@ -2580,39 +2634,65 @@ export class DuckClient implements DbClient {
 }
 
 /**
- * Split a DDL script into statements on semicolons that are not inside a string literal
- * or a dollar-quoted block. The client's `extractStatements` would also work, but it
- * requires a live connection to call and this keeps the split testable in isolation.
+ * Split a DDL script into statements on semicolons that are genuinely statement
+ * boundaries — not ones inside a string literal or a comment. The client's
+ * `extractStatements` would also work, but it needs a live connection to call and this
+ * keeps the split testable in isolation.
+ *
+ * Comments must be skipped, not merely tolerated: the schema DDL this splits is full of
+ * them, and a semicolon inside one produces either a parse error (when the comment tail
+ * merges into the next statement) or, worse, a silently dropped statement (when the
+ * comment forms an isolated fragment between two semicolons).
  */
 export function splitStatements(sql: string): string[] {
 	const out: string[] = [];
 	let buf = '';
-	let inStr = false;
-	for (let i = 0; i < sql.length; i++) {
+	let i = 0;
+	const flush = (): void => {
+		if (buf.trim()) out.push(buf.trim());
+		buf = '';
+	};
+	while (i < sql.length) {
 		const ch = sql[i];
-		if (inStr) {
-			buf += ch;
-			if (ch === "'") {
-				if (sql[i + 1] === "'") {
-					buf += "'";
-					i++;
-				} else {
-					inStr = false;
-				}
-			}
+		if (ch === '-' && sql[i + 1] === '-') {
+			const nl = sql.indexOf('\n', i);
+			i = nl === -1 ? sql.length : nl + 1;
+			continue;
+		}
+		if (ch === '/' && sql[i + 1] === '*') {
+			const end = sql.indexOf('*/', i + 2);
+			i = end === -1 ? sql.length : end + 2;
 			continue;
 		}
 		if (ch === "'") {
-			inStr = true;
+			// Copy the literal verbatim, honouring the doubled '' escape. A semicolon in
+			// here is data, not a boundary.
 			buf += ch;
-		} else if (ch === ';') {
-			if (buf.trim()) out.push(buf.trim());
-			buf = '';
-		} else {
-			buf += ch;
+			i++;
+			while (i < sql.length) {
+				buf += sql[i];
+				if (sql[i] === "'") {
+					if (sql[i + 1] === "'") {
+						buf += sql[i + 1];
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			continue;
 		}
+		if (ch === ';') {
+			flush();
+			i++;
+			continue;
+		}
+		buf += ch;
+		i++;
 	}
-	if (buf.trim()) out.push(buf.trim());
+	flush();
 	return out;
 }
 
