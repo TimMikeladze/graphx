@@ -85,4 +85,35 @@ describe('SnapshotStore', () => {
 		).rejects.toThrow('build failed');
 		expect((await s.resolveHead())?.snapshot).toBe(0);
 	});
+
+	test('a build that ignores its base is rejected, not silently corrected', async () => {
+		const s = new SnapshotStore(new MemoryObjectStore());
+		await s.commit(null, async (b) => bump(b));
+		const base = await s.resolveHead();
+		// Right number, wrong parent — a lineage that never happened.
+		await expect(
+			s.commit(base, async (b) => ({ ...bump(b), parent: 99 })),
+		).rejects.toThrow(/ignored its base/);
+		// Wrong number.
+		await expect(
+			s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 })),
+		).rejects.toThrow(/ignored its base/);
+		expect((await s.resolveHead())?.snapshot).toBe(0);
+	});
+
+	test('a corrupt _head falls back to listing rather than throwing', async () => {
+		const store = new MemoryObjectStore();
+		const s = new SnapshotStore(store);
+		await s.commit(null, async (b) => bump(b));
+		await store.put('_head', new TextEncoder().encode('{not json'));
+		expect((await s.resolveHead())?.snapshot).toBe(0);
+	});
+
+	test('a _head pointing past the end falls back to listing', async () => {
+		const store = new MemoryObjectStore();
+		const s = new SnapshotStore(store);
+		await s.commit(null, async (b) => bump(b));
+		await store.put('_head', new TextEncoder().encode(JSON.stringify({ snapshot: 99 })));
+		expect((await s.resolveHead())?.snapshot).toBe(0);
+	});
 });

@@ -36,16 +36,14 @@ export class SnapshotStore {
 	async resolveHead(): Promise<Manifest | null> {
 		let n = await this.readHeadHint();
 		if (n === null) {
-			const keys = await this.store.list('snapshots/');
-			if (keys.length === 0) return null;
-			n = Number((keys[keys.length - 1] as string).slice('snapshots/'.length, -'.json'.length));
+			n = await this.latestListedSnapshot();
+			if (n === null) return null;
 		}
 		let current = await this.read(n);
 		if (current === null) {
 			// The hint pointed past the end (a torn or rolled-back write). Fall back to listing.
-			const keys = await this.store.list('snapshots/');
-			if (keys.length === 0) return null;
-			n = Number((keys[keys.length - 1] as string).slice('snapshots/'.length, -'.json'.length));
+			n = await this.latestListedSnapshot();
+			if (n === null) return null;
 			current = await this.read(n);
 			if (current === null) return null;
 		}
@@ -54,6 +52,13 @@ export class SnapshotStore {
 			if (next === null) return current;
 			current = next;
 		}
+	}
+
+	/** The highest snapshot number in the bucket, or null when there are none. */
+	private async latestListedSnapshot(): Promise<number | null> {
+		const keys = await this.store.list('snapshots/');
+		if (keys.length === 0) return null;
+		return Number((keys[keys.length - 1] as string).slice('snapshots/'.length, -'.json'.length));
 	}
 
 	private async readHeadHint(): Promise<number | null> {
@@ -87,9 +92,13 @@ export class SnapshotStore {
 		for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt++) {
 			const next = await build(current);
 			const expected = current === null ? 0 : current.snapshot + 1;
-			if (next.snapshot !== expected) {
+			const expectedParent = current === null ? null : current.snapshot;
+			// Both fields, not just the number. A manifest with the right number and a
+			// wrong parent records a lineage that never happened, and nothing downstream
+			// would notice — `resolveHead` navigates by number alone.
+			if (next.snapshot !== expected || next.parent !== expectedParent) {
 				throw new Error(
-					`commit: build produced snapshot ${next.snapshot}, expected ${expected} — the builder ignored its base`,
+					`commit: build produced snapshot ${next.snapshot} parent ${next.parent}, expected ${expected} parent ${expectedParent} — the builder ignored its base`,
 				);
 			}
 			try {
