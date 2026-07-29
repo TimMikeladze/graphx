@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, test } from 'bun:test';
@@ -81,3 +81,30 @@ for (const [name, make] of stores) {
 		});
 	});
 }
+
+// File-store specific tests: these catch defects that don't show up when
+// the writer is awaited before the reader. They must run *after* both
+// implementations exist, so they're outside the parameterized loop.
+
+describe('FileObjectStore: atomicity & error handling', () => {
+	test('a key is never observable half-written', async () => {
+		const s = new FileObjectStore(mkdtempSync(join(dir, 'fs-')));
+		const big = new Uint8Array(4 * 1024 * 1024).fill(7);
+		const writing = s.putIfAbsent('big', big);
+		// Race the write: every read must see either nothing or the whole object.
+		for (let i = 0; i < 50; i++) {
+			const seen = await s.get('big');
+			if (seen !== null) expect(seen.length).toBe(big.length);
+		}
+		await writing;
+		expect((await s.get('big'))?.length).toBe(big.length);
+	});
+
+	test('get surfaces a real I/O error instead of reporting absence', async () => {
+		const root = mkdtempSync(join(dir, 'fs-'));
+		const s = new FileObjectStore(root);
+		// A directory where an object should be: EISDIR, which is not "absent".
+		mkdirSync(join(root, 'collide'), { recursive: true });
+		await expect(s.get('collide')).rejects.toThrow();
+	});
+});
