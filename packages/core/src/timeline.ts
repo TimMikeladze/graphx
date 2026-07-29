@@ -42,7 +42,14 @@ export interface Timeline {
 	to: number;
 	/** Length is the resolved bucket count; each slot is a change-point count over the window. */
 	buckets: number[];
-	/** Distinct change instants in the window, ascending. Drives snap-to-change and step. */
+	/**
+	 * Distinct change instants in the window, ascending. Drives snap-to-change and step.
+	 *
+	 * On truncation this holds the MOST RECENT `maxRows` instants, not the earliest — change
+	 * density skews heavily toward now on real graphs, so recent instants are where snap
+	 * precision actually matters. The list is still returned ascending; only which end got cut
+	 * differs.
+	 */
 	ticks: number[];
 	/** True when `ticks` hit the row cap — narrow the window for an exact list. */
 	ticksTruncated: boolean;
@@ -98,16 +105,19 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	const to = opts.to ?? hi;
 
 	// Over-fetch one past the cap to detect truncation without a second query (the `feedStream`
-	// trick from temporal.ts).
+	// trick from temporal.ts). Ordered DESC so a truncated cap keeps the most recent instants —
+	// where change density concentrates on real graphs — rather than the earliest, then reversed
+	// back to the ascending order every consumer (nearestTick, stepTick, the histogram, playback)
+	// expects.
 	const tickRows = await raw.execute({
-		sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t LIMIT ?`,
+		sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t DESC LIMIT ?`,
 		args: [from, to, cap + 1],
 	});
 	const found = (tickRows.rows as unknown as Array<Record<string, unknown>>).map((r) =>
 		Number(r.t),
 	);
 	const ticksTruncated = found.length > cap;
-	const ticks = ticksTruncated ? found.slice(0, cap) : found;
+	const ticks = (ticksTruncated ? found.slice(0, cap) : found).reverse();
 
 	const counts = Array.from({ length: buckets }, () => 0);
 	const span = to - from;

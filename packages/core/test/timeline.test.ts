@@ -136,13 +136,18 @@ test('timeline: a single-instant graph does not divide by zero', async () => {
 	expect(t.buckets.reduce((a, b) => a + b, 0)).toBe(4);
 });
 
-test('timeline: the tick list is capped and flags truncation', async () => {
+test('timeline: the tick list is capped and flags truncation, keeping the most recent instants', async () => {
 	const { client } = await freshGraph();
+	// valid_from at 1000, 1010, ..., 1050, plus every valid_to at 9_000_000 (deduped by DISTINCT
+	// to one instant) → seven distinct change points: 1000..1050 and 9_000_000.
 	for (let i = 0; i < 6; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 10, 9_000_000);
 	const t = await timeline(client, { limits: { maxRows: 3 } });
 	expect(t.ticks.length).toBe(3);
 	expect(t.ticksTruncated).toBe(true);
-	expect(t.ticks).toEqual([1000, 1010, 1020]);
+	// Most recent 3 of {1000, 1010, 1020, 1030, 1040, 1050, 9_000_000}, ascending — NOT the
+	// earliest 3. A regression to earliest-N would yield [1000, 1010, 1020] here instead.
+	expect(t.ticks).toEqual([1040, 1050, 9_000_000]);
+	expect(t.ticks).toEqual([...t.ticks].sort((a, b) => a - b));
 });
 
 test('timeline: buckets is clamped to the supported range', async () => {
