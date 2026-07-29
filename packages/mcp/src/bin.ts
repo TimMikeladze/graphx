@@ -98,6 +98,13 @@ async function main(): Promise<void> {
 	} else {
 		const db = process.env.GRAPHX_DB;
 		if (!db) throw new Error('GRAPHX_MCP_MODE=local requires GRAPHX_DB');
+		// `createApp`'s dev bootstrap opens the project DB via `getDb(namespace)`, which resolves
+		// its backend off `GRAPHX_DB_DRIVER` — but the pg/duck adapters only register themselves as
+		// a side effect of importing their subpath (each an optional peer, so neither loads for
+		// consumers who never select it). Mirrors the config-driven import in `cli.ts`'s
+		// `loadConfig`, keyed off the env var here since local mode has no config file.
+		if (process.env.GRAPHX_DB_DRIVER === 'postgres') await import('@graphx/core/pg');
+		if (process.env.GRAPHX_DB_DRIVER === 'duckdb') await import('@graphx/core/duck');
 		const schemaPath = process.env.GRAPHX_SCHEMA;
 		schema = loadSchema(schemaPath);
 		const dev = await createApp({

@@ -729,8 +729,14 @@ function onError(err: Error, c: Context) {
 	// fault: a FK to a non-existent node (unconstrained rel skips the type check),
 	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
 	// `SQLITE_CONSTRAINT*`; Postgres uses SQLSTATE class 23 (integrity_constraint_violation).
+	// DuckDB has neither a `.code` nor a SQLSTATE — every UNIQUE/FK/CHECK violation is a
+	// plain Error whose message starts "Constraint Error:" (see duck.ts / dialect-sql.ts).
 	const dbCode = String((err as { code?: unknown }).code ?? '');
-	if (dbCode.startsWith('SQLITE_CONSTRAINT') || /^23\d{3}$/.test(dbCode)) {
+	if (
+		dbCode.startsWith('SQLITE_CONSTRAINT') ||
+		/^23\d{3}$/.test(dbCode) ||
+		err.message.startsWith('Constraint Error:')
+	) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
 	// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.

@@ -5,6 +5,7 @@ import { test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { type DbClient, type Dialect, dialectOf } from '../src/dialect.ts';
 import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../src/dialect-sql.ts';
+import { createDuckClient, type DuckClient } from '../src/duck.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -73,9 +74,15 @@ export function jsonFieldSql(client: DbClient, col: string, key: string): string
 
 /** Query that returns one row iff `table` exists in the client's schema (sqlite_master / information_schema). */
 export function tableExistsSql(client: DbClient, table: string): string {
-	return dialectOf(client) === 'postgres'
-		? `SELECT table_name AS name FROM information_schema.tables WHERE table_name = '${table}' AND table_schema = current_schema()`
-		: `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`;
+	switch (dialectOf(client)) {
+		case 'postgres':
+			return `SELECT table_name AS name FROM information_schema.tables WHERE table_name = '${table}' AND table_schema = current_schema()`;
+		case 'duckdb':
+			return `SELECT table_name AS name FROM duckdb_tables() WHERE table_name = '${table}'
+			        UNION ALL SELECT view_name AS name FROM duckdb_views() WHERE view_name = '${table}'`;
+		default:
+			return `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`;
+	}
 }
 
 /** Dialect-correct idempotent INSERT for raw-SQL fixtures (libSQL OR IGNORE / PG ON CONFLICT). */
@@ -98,9 +105,33 @@ if (DRIVER === 'postgres') {
 	process.env.GRAPHX_DB_DRIVER = 'postgres';
 	process.env.GRAPHX_PG_URL = PG_URL;
 }
+if (DRIVER === 'duckdb') {
+	process.env.GRAPHX_DB_DRIVER = 'duckdb';
+}
 
 /** Provision a fresh, isolated test database + its teardown. */
 export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
+	if (DRIVER === 'duckdb') {
+		// A temp file rather than :memory:, so `sibling()` can open a second connection to
+		// the same database — the concurrency suite needs two genuine connections, and an
+		// in-memory DuckDB is private to its instance.
+		const path = `test_${ulid()}.duckdb`;
+		const main = createDuckClient({ path });
+		const siblings: DuckClient[] = [];
+		return {
+			client: main,
+			sibling: () => {
+				const s = createDuckClient({ path });
+				siblings.push(s);
+				return s;
+			},
+			teardown: async () => {
+				for (const s of siblings) await s.end().catch(() => {});
+				await main.end().catch(() => {});
+				for (const sfx of ['', '.wal']) rmSync(`${path}${sfx}`, { force: true });
+			},
+		};
+	}
 	if (DRIVER === 'postgres') {
 		// Each test gets its own Postgres schema (the schema-per-tenant isolation model),
 		// dropped on teardown — the analog of a fresh libSQL file. `file` is irrelevant on

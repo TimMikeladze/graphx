@@ -84,3 +84,38 @@ jobs:
 
       - name: Run tests (Postgres)
         run: bun run test
+
+  # DuckDB backend — the same suite under GRAPHX_TEST_DRIVER=duckdb. No service container:
+  # DuckDB is an in-process/local-file engine.
+  test-duckdb:
+    name: Test (DuckDB)
+    runs-on: ubuntu-latest
+
+    env:
+      GRAPHX_TEST_DRIVER: duckdb
+
+    # Stages 5-7 close the remaining gaps (full-text/hybrid retrieval, the p14-concurrency
+    # rewrite); until then this job reports without blocking. Remove continue-on-error when
+    # docs/DUCKDB_SUPPORT.md reaches parity.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Required, not optional: every `@graphx/*` package resolves through `./dist` (see the
+      # `exports` map), so tests importing a workspace package by name — rather than by a
+      # relative `src/` path — fail with "Cannot find module '@graphx/core'" without this.
+      - name: Build
+        run: bun run build
+
+      - name: Run tests (DuckDB)
+        run: bun run test

@@ -24,6 +24,10 @@ yarn-error.log*
 *.db-wal
 *.db-shm
 
+# DuckDB test databases (tests open file: DBs per namespace)
+*.duckdb
+*.duckdb.wal
+
 # scripts/seed rebuild fingerprint for the admin dev server's demo databases
 .seed-cache.json
 

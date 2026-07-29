@@ -38,7 +38,12 @@ export async function annScored(
 	query: string,
 ): Promise<{ id: string; dist: number }[]> {
 	const d = dialectOf(raw);
-	const distExpr = d === 'postgres' ? 'emb <=> ?::vector' : 'vector_distance_cos(emb, vector(?))';
+	const distExpr =
+		d === 'postgres'
+			? 'emb <=> ?::vector'
+			: d === 'duckdb'
+				? `list_cosine_distance(emb, from_json(?, '["FLOAT"]'))`
+				: 'vector_distance_cos(emb, vector(?))';
 	const r = await raw.execute({
 		sql: `SELECT id, ${distExpr} AS dist FROM node_versions
 		      WHERE valid_to = ${FOREVER} AND emb IS NOT NULL ORDER BY dist`,

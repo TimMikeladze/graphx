@@ -11,9 +11,11 @@ import {
 	skipBreakdown,
 } from '../src/cli.ts';
 
-// The PG test leg sets GRAPHX_DB_DRIVER=postgres process-wide, which the dev `createApp` (via
-// getDb with no DbConfig) would inherit — so the libSQL-file serve test is pinned to that leg.
-const PG = process.env.GRAPHX_TEST_DRIVER === 'postgres';
+// A non-libSQL test leg (postgres/duckdb) sets GRAPHX_DB_DRIVER process-wide, which the dev
+// `createApp` (via getDb with no DbConfig) would inherit — so the libSQL-file serve test is
+// pinned to the libSQL leg. An ALLOWLIST, not a postgres denylist: `=== 'postgres'` alone let
+// this run (and blow up on "duck adapter is not registered") once a third driver existed.
+const NOT_LIBSQL = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') !== 'libsql';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Unit tests for parseIngestArgs
@@ -149,7 +151,7 @@ test('run: `new <dir>` refuses to overwrite an existing project', async () => {
 });
 
 // buildServeApp is the testable core of `graphx serve` (loads config → builds the app, no listener).
-test.skipIf(PG)('buildServeApp: loads a config and serves the seeded graph via /demo (libSQL)', async () => {
+test.skipIf(NOT_LIBSQL)('buildServeApp: loads a config and serves the seeded graph via /demo (libSQL)', async () => {
 	const ns = `cli-serve-${Date.now()}`;
 	const configPath = join(import.meta.dir, `${ns}.config.ts`);
 	await writeFile(

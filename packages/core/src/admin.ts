@@ -45,8 +45,14 @@ function adminError(err: Error, c: Context) {
 	if (err instanceof HTTPException) return err.getResponse();
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
 	// libSQL `SQLITE_CONSTRAINT*` or Postgres SQLSTATE class 23 (integrity constraints).
+	// DuckDB has neither a `.code` nor a SQLSTATE — every UNIQUE/FK/CHECK violation is a
+	// plain Error whose message starts "Constraint Error:" (see duck.ts / dialect-sql.ts).
 	const dbCode = String((err as { code?: unknown }).code ?? '');
-	if (dbCode.startsWith('SQLITE_CONSTRAINT') || /^23\d{3}$/.test(dbCode)) {
+	if (
+		dbCode.startsWith('SQLITE_CONSTRAINT') ||
+		/^23\d{3}$/.test(dbCode) ||
+		err.message.startsWith('Constraint Error:')
+	) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
 	return c.json({ error: 'internal' }, 500);

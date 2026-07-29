@@ -12,6 +12,7 @@ import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER } from './db.ts';
 import { assertUniqueProps } from './duck-constraints.ts';
+import { embParam } from './duck-value.ts';
 import {
 	type GraphEvent,
 	type GraphEventOptions,
@@ -1074,7 +1075,17 @@ export class Graph<S extends GraphSchema> {
 				JSON.stringify(data),
 			];
 			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
-			// (carries a real F32 vector, or NULL when there was none).
+			// (carries a real F32 vector, or NULL when there was none). DuckDB reads its
+			// FLOAT[] column back as a genuine JS array, not the JSON-array STRING
+			// embRebindExpr's from_json(?, …) expects (libSQL/Postgres rebind the driver's
+			// own raw/text form directly) — embParam() re-encodes it, mirroring the
+			// JSON.stringify a fresh patch.emb gets below.
+			const rebindEmb: SqlValue =
+				cur.emb == null
+					? null
+					: dialectOf(this.raw) === 'duckdb'
+						? embParam(cur.emb as number[])
+						: (cur.emb as SqlValue);
 			const successor: SqlStatement = patch.emb
 				? {
 						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
@@ -1084,7 +1095,7 @@ export class Graph<S extends GraphSchema> {
 				: {
 						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 							VALUES (?,?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
-						args: [...common, (cur.emb as SqlValue) ?? null, now],
+						args: [...common, rebindEmb, now],
 					};
 			await tx.execute(successor);
 			const ev: GraphEvent = {
