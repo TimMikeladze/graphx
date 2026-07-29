@@ -2313,11 +2313,16 @@ Append to `packages/core/test/timeline.test.ts`:
 ```ts
 test('timeline: a truncated tick list samples across the window rather than slicing one end', async () => {
 	const { client } = await freshGraph();
-	// 40 distinct instants spread evenly over [1000, 40000].
-	for (let i = 0; i < 40; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 1000, 9_000_000);
+	// 40 distinct instants spread evenly over [1000, 40000]. `valid_to` must be FOREVER: any
+	// smaller value is itself a change point, and one at 9_000_000 would stretch the extent 225x
+	// past where these 40 live, so the test would measure the fixture rather than the sampling.
+	for (let i = 0; i < 40; i++) await seedNodeVersion(client, `n${i}`, 1000 + i * 1000, FOREVER);
 	const t = await timeline(client, { limits: { maxRows: 8 } });
 
 	expect(t.ticksTruncated).toBe(true);
+	// Never exceed the caller's governance cap. A stride of ceil(count/cap) overshoots it, because
+	// it has no term for the forced endpoint: count=40, cap=8 gives k=5, eight modulo hits, and
+	// then rn=39 makes nine. The stride below is sized so the endpoint is free.
 	expect(t.ticks.length).toBeLessThanOrEqual(8);
 	// Both ends of the window are always reachable.
 	expect(t.ticks[0]).toBe(t.min);
@@ -2346,7 +2351,7 @@ Expected: FAIL — the current implementation returns the newest 8 instants, so 
 
 - [ ] **Step 3: Sample instead of slicing**
 
-In `timeline.ts`, replace the single tick query with: count the distinct instants in the window first; if that count is at or under the cap, keep today's simple `ORDER BY t` query. Otherwise select every k-th instant where `k = ceil(count / cap)`, always including the first and last so both ends stay exact:
+In `timeline.ts`, replace the single tick query with: count the distinct instants in the window first; if that count is at or under the cap, keep today's simple `ORDER BY t` query. Otherwise select every k-th instant, always including the first and last so both ends stay exact. Size the stride as `k = ceil((count - 1) / (cap - 1))`, **not** `ceil(count / cap)`: the modulo set then holds `floor((count-1)/k) + 1 <= cap` instants, and in the boundary case where that equals `cap` the endpoint is already a multiple of `k`, so forcing it in never pushes past the cap. Guard `cap <= 1` against the division.
 
 ```sql
 SELECT t FROM (
