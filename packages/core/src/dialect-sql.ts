@@ -246,6 +246,145 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
 
+/**
+ * Full DuckDB DDL — the third sibling of {@link schema} (libSQL) and {@link postgresSchema}.
+ *
+ * The structural difference from both: `node_versions` and `edge_versions` are **views**
+ * over a live table and a history table, rather than single tables. Every index in graphx
+ * is partial over `WHERE valid_to = FOREVER` (D5), and DuckDB has no partial indexes; the
+ * split makes that predicate physical, so the partial index becomes a plain index over a
+ * small table and `UNIQUE(id)` on the live table enforces the one-live-row-per-id
+ * invariant that libSQL and Postgres get from a partial unique index.
+ *
+ * Other differences, all forced:
+ *  - `ver`/`seq` come from explicit SEQUENCEs — no rowid alias, no AUTOINCREMENT, no
+ *    IDENTITY. The writer allocates from the manifest high-water marks rather than these
+ *    at commit time (sequences are non-transactional), but the DEFAULT keeps ad-hoc SQL
+ *    and the test suite working.
+ *  - Temporal columns are `BIGINT`: DuckDB's INTEGER is 32-bit and FOREVER is 8.64e15.
+ *  - `emb` is `FLOAT[]`, not a fixed-size `FLOAT[dim]`. Parquet cannot preserve
+ *    `FLOAT[N]` — even a pyarrow fixed_size_list reads back as a variable-length list —
+ *    so the storage type is the one that survives a round trip. `list_cosine_distance`
+ *    accepts it directly and measured faster than casting.
+ *  - No full-text objects and no ANN index: DuckDB has no triggers, its FTS extension
+ *    cannot index a view, and its HNSW index cannot be partial, cannot index Parquet, and
+ *    silently returns fewer rows than LIMIT under a WHERE filter. Both are built at commit
+ *    time and shipped as Parquet instead (spec §10).
+ */
+export function duckdbSchema(dim: number = 768): string {
+	const nodeCols = `
+  ver          BIGINT NOT NULL,
+  id           TEXT NOT NULL,
+  type         TEXT NOT NULL,
+  body         TEXT,
+  uri          TEXT,
+  content_hash TEXT,
+  embed_hash   TEXT,
+  content_type TEXT,
+  data         TEXT NOT NULL DEFAULT '{}',
+  emb          FLOAT[],
+  valid_from   BIGINT NOT NULL,
+  valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+	const edgeCols = `
+  ver        BIGINT NOT NULL,
+  id         TEXT NOT NULL,
+  src        TEXT NOT NULL,
+  dst        TEXT NOT NULL,
+  rel        TEXT NOT NULL,
+  weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
+  data       TEXT NOT NULL DEFAULT '{}',
+  source     TEXT,
+  valid_from BIGINT NOT NULL,
+  valid_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+	// The declared width is not enforceable on a FLOAT[] column, so it is recorded in a
+	// side table for readEmbDim — the manifest carries the same value in stage 4.
+	return `
+CREATE SEQUENCE IF NOT EXISTS seq_ver START 1;
+CREATE SEQUENCE IF NOT EXISTS seq_outbox START 1;
+
+CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);
+
+CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO graph_meta (key, value) VALUES ('emb_dim', '${dim}') ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS nv_live (${nodeCols},
+  PRIMARY KEY (id)
+);
+CREATE TABLE IF NOT EXISTS nv_history (${nodeCols},
+  PRIMARY KEY (ver)
+);
+CREATE INDEX IF NOT EXISTS nv_hist_asof ON nv_history(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_live_type ON nv_live(type);
+
+CREATE TABLE IF NOT EXISTS ev_live (${edgeCols},
+  PRIMARY KEY (id)
+);
+CREATE TABLE IF NOT EXISTS ev_history (${edgeCols},
+  PRIMARY KEY (ver)
+);
+CREATE INDEX IF NOT EXISTS ev_live_src ON ev_live(src);
+CREATE INDEX IF NOT EXISTS ev_live_dst ON ev_live(dst);
+CREATE INDEX IF NOT EXISTS ev_hist_src ON ev_history(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_hist_dst ON ev_history(dst, valid_from, valid_to);
+
+CREATE OR REPLACE VIEW node_versions AS
+  SELECT * FROM nv_live UNION ALL SELECT * FROM nv_history;
+CREATE OR REPLACE VIEW edge_versions AS
+  SELECT * FROM ev_live UNION ALL SELECT * FROM ev_history;
+
+CREATE OR REPLACE VIEW nodes AS
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb FROM nv_live;
+CREATE OR REPLACE VIEW edges AS
+  SELECT id, src, dst, rel, weight, data, source FROM ev_live;
+
+CREATE TABLE IF NOT EXISTS archival_state (
+  table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  seq    BIGINT PRIMARY KEY DEFAULT nextval('seq_outbox'),
+  op     TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  id     TEXT NOT NULL,
+  label  TEXT,
+  src    TEXT,
+  dst    TEXT,
+  shape  TEXT NOT NULL,
+  ts     BIGINT NOT NULL,
+  source TEXT
+);
+
+CREATE TABLE IF NOT EXISTS trigger_cursors (
+  name TEXT PRIMARY KEY, seq BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trigger_dead_letters (
+  id           TEXT PRIMARY KEY,
+  subscription TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  seq          BIGINT NOT NULL,
+  event        TEXT NOT NULL,
+  error        TEXT NOT NULL,
+  attempts     BIGINT NOT NULL,
+  created_at   BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
+  ON trigger_dead_letters(subscription, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS node_analytics (
+  id          TEXT PRIMARY KEY,
+  pagerank    REAL,
+  community   BIGINT,
+  degree      BIGINT,
+  computed_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
+CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
+`;
+}
+
 function notYet(fragment: string, dialect: Dialect): never {
 	throw new Error(`dialect-sql: ${fragment}(${dialect}) not implemented yet`);
 }

@@ -1,6 +1,7 @@
 import { applyConnPragmas } from './db.ts';
-import { type DbClient, dialectOf } from './dialect.ts';
+import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
 import {
+	duckdbSchema,
 	embColumnType,
 	ftsTableDDL,
 	ftsTriggerDDL,
@@ -178,8 +179,13 @@ export async function readEmbDim(client: DbClient): Promise<number | null> {
 			const m = typeof t === 'string' ? /vector\((\d+)\)/.exec(t) : null;
 			return m ? Number(m[1]) : null;
 		}
-		case 'duckdb':
-			throw new Error('schema.readEmbDim: duckdb not implemented yet');
+		case 'duckdb': {
+			const r = await client
+				.execute(`SELECT value FROM graph_meta WHERE key = 'emb_dim'`)
+				.catch(() => ({ rows: [] as SqlRow[] }));
+			const v = r.rows[0]?.value;
+			return typeof v === 'string' ? Number(v) : null;
+		}
 		default: {
 			const r = await client.execute(
 				`SELECT sql FROM sqlite_master WHERE type='table' AND name='node_versions'`,
@@ -211,7 +217,10 @@ export async function init(client: DbClient, dim?: number): Promise<void> {
 			await client.executeMultiple(postgresSchema(dim));
 			return;
 		case 'duckdb':
-			throw new Error('schema.init: duckdb not implemented yet');
+			// No pragmas: FKs are not declared, there is no WAL to set, and there is no
+			// lock-based contention to time out — the writer is serialized in-process.
+			await client.executeMultiple(duckdbSchema(dim));
+			return;
 		default:
 			await client.execute('PRAGMA journal_mode = WAL');
 			await applyConnPragmas(client);
