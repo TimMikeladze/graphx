@@ -4175,6 +4175,24 @@ describe('materialize', () => {
 		await c.end();
 	});
 
+	test('a manifest carrying graph_meta does not collide with the seeded row', async () => {
+		// duckdbSchema seeds graph_meta with emb_dim, and every real manifest also carries
+		// graph_meta because the constraint declarations live there. A plain INSERT throws
+		// `Constraint Error: Duplicate key "key: emb_dim"` and breaks the first round-trip.
+		const { cache } = ctx();
+		const producer = createDuckClient();
+		await producer.execute(`CREATE TABLE gm AS SELECT 'emb_dim' AS key, '4' AS value`);
+		const path = join(root, 'gm.parquet');
+		await producer.execute(`COPY gm TO '${path}' (FORMAT parquet)`);
+		await producer.end();
+		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
+
+		const c = createDuckClient();
+		await materialize(c, { ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } }, cache);
+		expect((await c.execute(`SELECT count(*) AS n FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.n).toBe(1);
+		await c.end();
+	});
+
 	test('the embedding dimension comes from the manifest', async () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
@@ -4270,8 +4288,12 @@ export async function materialize(
 		const paths = await cache.resolve(ref.files);
 		// Column-name matching rather than positional, so a manifest written by an older
 		// build with fewer columns still loads.
+		// OR REPLACE, not a bare INSERT: `duckdbSchema` seeds `graph_meta` with the
+		// `emb_dim` row, so a manifest that also carries `graph_meta` — and every manifest
+		// does, since Task 12 keeps the unique-prop and single-rel declarations there —
+		// collides on its primary key. The snapshot is authoritative, so it wins.
 		await client.execute(
-			`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+			`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 		);
 		if (ref.tombstones) {
 			const [tomb] = await cache.resolve([ref.tombstones]);
