@@ -142,3 +142,42 @@ test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async
 	evict(ns);
 	rmSync(`${ns}.db`, { force: true });
 });
+
+test('P12 (serve): GET /timeline returns the extent, histogram and ticks', async () => {
+	const control = makeTestDb().client;
+	await initControl(control);
+	const tenant = await createTenant(control, { name: 'Acme' });
+	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
+	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
+	const ns = `ns_${ulid().toLowerCase()}`;
+	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+
+	const app = createApp({ control, schema: SCHEMA, authenticate });
+	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
+	const base = `/t/${tenant}/p/${project}`;
+
+	await app.request(`${base}/nodes`, {
+		method: 'POST',
+		headers: hdr,
+		body: JSON.stringify({ type: 'device', data: { name: 'a', criticality: 1 } }),
+	});
+
+	const res = await app.request(`${base}/timeline?buckets=8`, { headers: hdr });
+	expect(res.status).toBe(200);
+	const t = (await res.json()) as {
+		min: number | null;
+		max: number | null;
+		total: number;
+		buckets: number[];
+		ticks: number[];
+		ticksTruncated: boolean;
+	};
+	expect(t.min).not.toBeNull();
+	expect(t.buckets.length).toBe(8);
+	expect(t.total).toBeGreaterThanOrEqual(1);
+	expect(t.ticks.length).toBeGreaterThanOrEqual(1);
+	expect(t.ticksTruncated).toBe(false);
+
+	evict(ns);
+	rmSync(`${ns}.db`, { force: true });
+});

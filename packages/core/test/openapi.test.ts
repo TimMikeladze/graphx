@@ -224,3 +224,10 @@ test('openapi: ops routes are not mirrored', async () => {
 	expect(d.paths['/health'].get.operationId).toBeUndefined();
 	expect(d.paths['/ready'].get.operationId).toBeUndefined();
 });
+
+test('openapi: the timeline route is documented as a read', async () => {
+	const d = await doc();
+	const op = d.paths[`${TENANT}/timeline`].get;
+	expect(op.operationId).toBe('timeline');
+	expect(op.tags).toContain('read');
+});

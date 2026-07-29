@@ -39,6 +39,7 @@ import { journey } from './journey.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
+import { timeline } from './timeline.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -416,6 +417,25 @@ const changesQuerySchema = z.object({
 const diffQuerySchema = z.object({
 	t1: numQuery.openapi({ param: { required: true } }),
 	t2: numQuery.openapi({ param: { required: true } }),
+});
+
+/** GET /timeline query — the window to bucket and how many slots to bucket it into. */
+const timelineQuerySchema = z.object({
+	from: numQuery.optional(),
+	to: numQuery.optional(),
+	buckets: posIntQuery.optional(),
+});
+
+/** GET /timeline response — change-point extent, density histogram, snap ticks. */
+const timelineSchema = z.object({
+	min: z.number().nullable(),
+	max: z.number().nullable(),
+	total: z.number(),
+	from: z.number(),
+	to: z.number(),
+	buckets: z.array(z.number()),
+	ticks: z.array(z.number()),
+	ticksTruncated: z.boolean(),
 });
 
 /**
@@ -1284,6 +1304,26 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			async (c) => {
 				const { t1, t2 } = c.req.valid('query');
 				return c.json(await diff(c.get('graph').raw, t1, t2), 200);
+			},
+		)
+		// The change-point timeline behind the admin scrubber. Sibling of /diff and /changes, but
+		// keyed on BOTH valid_from and non-FOREVER valid_to, so retractions are visible (A.3).
+		.openapi(
+			createRoute({
+				method: 'get',
+				path: '/t/{tenant}/p/{project}/timeline',
+				operationId: 'timeline',
+				tags: ['read'],
+				summary: 'Change-point timeline (extent, density, ticks)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: timelineQuerySchema },
+				responses: { 200: json('OK', timelineSchema), ...READ_ERRORS },
+			}),
+			async (c) => {
+				const { from, to, buckets } = c.req.valid('query');
+				const t = await timeline(c.get('graph').raw, { from, to, buckets, limits: cfg.limits });
+				return c.json(t, 200);
 			},
 		)
 		// Hybrid GraphRAG search (ANN + FTS5 → RRF → walk → MMR). Needs an embedder (501
