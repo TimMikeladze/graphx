@@ -1,12 +1,18 @@
 import { useState } from "react"
 import { HugeiconsIcon } from "@hugeicons/react"
-import { NextIcon, PreviousIcon } from "@hugeicons/core-free-icons"
+import {
+  NextIcon,
+  PreviousIcon,
+  ZoomInAreaIcon,
+  ZoomOutAreaIcon,
+} from "@hugeicons/core-free-icons"
 import { TimelineTrack } from "@/components/timeline/timeline-track"
 import { Button } from "@/components/ui/button"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useTimeline } from "@/hooks/use-graph"
 import { fmtTime } from "@/lib/format"
 import { PRESETS, presetTime, stepTick } from "@/lib/timeline"
+import { type TimeWindow, zoomWindow } from "@/lib/timeline-window"
 
 /**
  * The docked time-travel control. It owns no time state — `asOf` lives in the URL, so a
@@ -24,7 +30,10 @@ export function TimelineBar({
   asOf?: number
   onChange: (asOf: number | undefined) => void
 }) {
-  const timeline = useTimeline(tenant, project)
+  // The scrub window. `{}` is the full extent. Narrowing it makes the server return exact ticks
+  // for that span instead of a sample, which is the only way to snap precisely on a dense graph.
+  const [zoom, setZoom] = useState<TimeWindow>({})
+  const timeline = useTimeline(tenant, project, zoom)
   const isMobile = useIsMobile()
   const [preview, setPreview] = useState<number | undefined>(undefined)
 
@@ -35,12 +44,17 @@ export function TimelineBar({
   const ticks = data?.ticks ?? []
   const current = asOf ?? to
   const shown = preview ?? asOf
+  const zoomed = zoom.from !== undefined || zoom.to !== undefined
 
   const go = (t: number | undefined) => onChange(t)
   const step = (dir: -1 | 1) => {
     const next = stepTick(ticks, current, dir)
     if (next !== undefined) go(next)
   }
+  // Zoom around what is being viewed, clamped to the extent (`min`/`max`), not to the window —
+  // the window is what we are changing, and clamping to it would never let you widen.
+  const doZoom = (factor: number) =>
+    setZoom((w) => zoomWindow(w, current, factor, data?.min ?? 0, data?.max ?? 0))
 
   // A 32px scrub track on a phone is not usable and the canvas needs the height more, so the bar
   // collapses to what it is showing plus the way back to live.
@@ -101,7 +115,40 @@ export function TimelineBar({
         {empty ? "No history" : shown === undefined ? "Now" : fmtTime(shown)}
       </span>
 
+      {/*
+        The canvas toolbar already owns "Zoom in"/"Zoom out" for the viewport. These two act on the
+        time range instead, so they carry names a screen reader can tell apart from those.
+      */}
       <div className="flex shrink-0 items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Narrow the time range"
+          title={
+            data?.ticksTruncated
+              ? "Narrow the time range — it holds more changes than can be listed, so snapping is approximate until you zoom in"
+              : "Narrow the time range"
+          }
+          disabled={empty}
+          onClick={() => doZoom(0.5)}
+        >
+          <HugeiconsIcon icon={ZoomInAreaIcon} strokeWidth={2} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Widen the time range"
+          title="Widen the time range"
+          disabled={empty || !zoomed}
+          onClick={() => doZoom(2)}
+        >
+          <HugeiconsIcon icon={ZoomOutAreaIcon} strokeWidth={2} />
+        </Button>
+        {zoomed && (
+          <Button variant="ghost" size="xs" onClick={() => setZoom({})}>
+            Full range
+          </Button>
+        )}
         {PRESETS.map((p) => (
           <Button
             key={p}
