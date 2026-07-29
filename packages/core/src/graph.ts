@@ -106,6 +106,8 @@ export interface EdgeRef {
 export interface NeighborOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
+	/** As-of epoch ms (D3 half-open read). Omit ⇒ current (live) edges and nodes. */
+	asOf?: number;
 	/** §19.2 per-call governance caps; `maxRows` bounds the result (default 10k). */
 	limits?: Partial<QueryLimits>;
 }
@@ -675,19 +677,26 @@ export class Graph<S extends GraphSchema> {
 		const direction = opts.direction ?? 'forward';
 		const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 		const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
+		// Past reads walk the version table under the half-open predicate; live reads keep the
+		// `edges` view (D3). The predicate's two binds follow that side's rel binds.
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const from = past ? 'edge_versions e' : 'edges e';
+		const temporal = past ? ` AND ${asOfPredicate('e')}` : '';
+		const side = (t: number | undefined) =>
+			past ? [...(rels ?? []), t as number, t as number] : [...(rels ?? [])];
 		const args: (string | number)[] = [];
 		let sql: string;
 		if (direction === 'forward') {
-			sql = `SELECT e.dst AS nid FROM edges e WHERE e.src = ?${relClause}`;
-			args.push(id, ...(rels ?? []));
+			sql = `SELECT e.dst AS nid FROM ${from} WHERE e.src = ?${relClause}${temporal}`;
+			args.push(id, ...side(opts.asOf));
 		} else if (direction === 'reverse') {
-			sql = `SELECT e.src AS nid FROM edges e WHERE e.dst = ?${relClause}`;
-			args.push(id, ...(rels ?? []));
+			sql = `SELECT e.src AS nid FROM ${from} WHERE e.dst = ?${relClause}${temporal}`;
+			args.push(id, ...side(opts.asOf));
 		} else {
 			sql =
-				`SELECT e.dst AS nid FROM edges e WHERE e.src = ?${relClause} ` +
-				`UNION SELECT e.src AS nid FROM edges e WHERE e.dst = ?${relClause}`;
-			args.push(id, ...(rels ?? []), id, ...(rels ?? []));
+				`SELECT e.dst AS nid FROM ${from} WHERE e.src = ?${relClause}${temporal} ` +
+				`UNION SELECT e.src AS nid FROM ${from} WHERE e.dst = ?${relClause}${temporal}`;
+			args.push(id, ...side(opts.asOf), id, ...side(opts.asOf));
 		}
 		return { sql, args };
 	}
@@ -700,14 +709,19 @@ export class Graph<S extends GraphSchema> {
 	 */
 	async neighbors(id: string, opts: NeighborOpts = {}): Promise<AnyNode<S>[]> {
 		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const join = past
+			? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
+			: 'JOIN nodes n ON n.id = nb.nid';
+		const joinArgs = past ? [opts.asOf as number, opts.asOf as number] : [];
 		const sql = applyLimit(
 			`SELECT n.id AS id, n.type AS type, n.data AS data
 			FROM (${neighborSql}) nb
-			JOIN nodes n ON n.id = nb.nid
+			${join}
 			ORDER BY n.id`,
 			resolveLimits(opts.limits).maxRows,
 		);
-		const r = await this.raw.execute({ sql, args });
+		const r = await this.raw.execute({ sql, args: [...args, ...joinArgs] });
 		return r.rows.map((row) => this.rowToNode(row));
 	}
 
@@ -725,7 +739,12 @@ export class Graph<S extends GraphSchema> {
 		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
 		const maxRows = resolveLimits(opts.limits).maxRows;
 		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
-		const pageArgs = [...args];
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const join = past
+			? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
+			: 'JOIN nodes n ON n.id = nb.nid';
+		const pageArgs: (string | number)[] = [...args];
+		if (past) pageArgs.push(opts.asOf as number, opts.asOf as number);
 		let cursorClause = '';
 		if (opts.cursor) {
 			const [lastId] = decodeCursor(opts.cursor);
@@ -741,7 +760,7 @@ export class Graph<S extends GraphSchema> {
 		);
 		const sql = `${select}
 			FROM (${neighborSql}) nb
-			JOIN nodes n ON n.id = nb.nid${cursorClause}
+			${join}${cursorClause}
 			${group}
 			ORDER BY n.id
 			LIMIT ?`;

@@ -408,3 +408,78 @@ test('P6: getNodeContent(asOf) reads that version body and provenance', async ()
 	expect((await g.getNodeContent(n.id, { asOf: t0 }))?.body).toBe('first');
 	expect(await g.getNodeContent(n.id, { asOf: 1 })).toBeNull();
 });
+
+test('P6: neighbors(asOf) sees an edge that has since been deleted', async () => {
+	const { g } = await freshGraph();
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
+	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	// Graph.now() (the write clock) is monotonic — Math.max(Date.now(), lastTs + 1) — so a
+	// burst of writes landing in the same wall-clock ms can produce valid_from values ahead
+	// of real time. Buffer past the last write before snapshotting "now" for a past read.
+	await new Promise((r) => setTimeout(r, 5));
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.deleteEdge(e.id);
+
+	expect((await g.neighbors(p.id)).length).toBe(0);
+	const past = await g.neighbors(p.id, { asOf: t0 });
+	expect(past.map((n) => n.id)).toEqual([d.id]);
+});
+
+test('P6: neighbors(asOf) returns the neighbor version live at that instant', async () => {
+	const { g } = await freshGraph();
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
+	await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	// buffer past the monotonic write clock (see above)
+	await new Promise((r) => setTimeout(r, 5));
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.updateNode(d.id, { data: { type: 'switch' } });
+
+	expect((await g.neighbors(p.id))[0]?.data.type).toBe('switch');
+	expect((await g.neighbors(p.id, { asOf: t0 }))[0]?.data.type).toBe('router');
+});
+
+test('P6: neighbors(asOf) in both directions, and asOf=FOREVER matches the live read', async () => {
+	const { g } = await freshGraph();
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+	const d = await g.addNode({ type: 'device', data: { type: 'router' } });
+	await g.addEdge({ rel: 'owns', src: p.id, dst: d.id, data: { since: 1 } });
+	// buffer past the monotonic write clock (see above)
+	await new Promise((r) => setTimeout(r, 5));
+	const t = Date.now();
+
+	expect((await g.neighbors(d.id, { direction: 'reverse', asOf: t })).map((n) => n.id)).toEqual([
+		p.id,
+	]);
+	expect((await g.neighbors(p.id, { direction: 'both', asOf: t })).map((n) => n.id)).toEqual([d.id]);
+	expect((await g.neighbors(p.id, { asOf: FOREVER })).map((n) => n.id)).toEqual(
+		(await g.neighbors(p.id)).map((n) => n.id),
+	);
+});
+
+test('P6: neighborsPage(asOf) pages the as-of neighbor set', async () => {
+	const { g } = await freshGraph();
+	const p = await g.addNode({ type: 'person', data: { name: 'Ada' } });
+	const a = await g.addNode({ type: 'device', data: { type: 'a' } });
+	const b = await g.addNode({ type: 'device', data: { type: 'b' } });
+	await g.addEdge({ rel: 'owns', src: p.id, dst: a.id, data: { since: 1 } });
+	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: b.id, data: { since: 2 } });
+	// buffer past the monotonic write clock (see above)
+	await new Promise((r) => setTimeout(r, 5));
+	const t0 = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	await g.deleteEdge(e.id);
+
+	const live = await g.neighborsPage(p.id, { limit: 10 });
+	expect(live.rows.length).toBe(1);
+
+	const first = await g.neighborsPage(p.id, { asOf: t0, limit: 1 });
+	expect(first.rows.length).toBe(1);
+	expect(first.nextCursor).not.toBeNull();
+	const second = await g.neighborsPage(p.id, { asOf: t0, limit: 1, cursor: first.nextCursor! });
+	expect(second.rows.length).toBe(1);
+	expect([...first.rows, ...second.rows].map((n) => n.id).sort()).toEqual([a.id, b.id].sort());
+});
