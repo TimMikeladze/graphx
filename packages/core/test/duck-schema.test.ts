@@ -1,3 +1,4 @@
+import { createClient } from '@libsql/client';
 import { describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../src/duck.ts';
 import { init, readEmbDim } from '../src/schema.ts';
@@ -57,6 +58,38 @@ describe('duckdbSchema', () => {
 				args: [2, 'n1', 'Doc', 20, FOREVER],
 			}),
 		).rejects.toThrow();
+		await c.end();
+	});
+
+	test('the views expose exactly the columns libSQL exposes', async () => {
+		// Every query in the codebase reads these four. A column missing, renamed, or
+		// reordered would break them on this backend only, silently — and no other test
+		// here would notice, because they all query the schema they just created rather
+		// than comparing it against the reference. Comparing the two live backends keeps
+		// this self-maintaining: it fails if EITHER schema drifts.
+		const duck = createDuckClient();
+		await init(duck, 4);
+		const lib = createClient({ url: ':memory:' });
+		await init(lib, 4);
+		for (const view of ['nodes', 'edges', 'node_versions', 'edge_versions']) {
+			const d = await duck.execute(`SELECT * FROM ${view} LIMIT 0`);
+			const l = await lib.execute(`SELECT * FROM ${view} LIMIT 0`);
+			expect(d.columns).toEqual(l.columns);
+		}
+		lib.close();
+		await duck.end();
+	});
+
+	test('ver auto-populates from the sequence when a caller omits it', async () => {
+		const c = createDuckClient();
+		await init(c, 4);
+		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
+		await c.execute({
+			sql: `INSERT INTO nv_live (id, type, valid_from) VALUES (?, ?, ?)`,
+			args: ['n1', 'Doc', 1],
+		});
+		const r = await c.execute('SELECT ver FROM nv_live');
+		expect(Number(r.rows[0]?.ver)).toBeGreaterThan(0);
 		await c.end();
 	});
 

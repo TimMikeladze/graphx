@@ -273,7 +273,7 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  */
 export function duckdbSchema(dim: number = 768): string {
 	const nodeCols = `
-  ver          BIGINT NOT NULL,
+  ver          BIGINT NOT NULL DEFAULT nextval('seq_ver'),
   id           TEXT NOT NULL,
   type         TEXT NOT NULL,
   body         TEXT,
@@ -286,7 +286,7 @@ export function duckdbSchema(dim: number = 768): string {
   valid_from   BIGINT NOT NULL,
   valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
 	const edgeCols = `
-  ver        BIGINT NOT NULL,
+  ver        BIGINT NOT NULL DEFAULT nextval('seq_ver'),
   id         TEXT NOT NULL,
   src        TEXT NOT NULL,
   dst        TEXT NOT NULL,
