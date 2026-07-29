@@ -178,14 +178,19 @@ export function GraphCanvas({
   }, [setBusy])
 
   useEffect(() => {
-    if (data === shown) return
     // A fresh array whose contents match what is already drawn must NOT be handed over.
     // Cosmograph deep-compares `points`/`links` and skips the whole ingest when they are equal,
     // which means it never raises `onGraphRebuilt` — and this canvas waits on that callback, so
     // handing one over would hold the gate shut until the wedge-breaker fires. Query results are
     // re-fetched per as-of key and arrive with a new identity even when nothing about the graph
     // changed, so this is the common case, not the exotic one.
-    if (sameGraph(data, shown)) return
+    //
+    // Anything queued is superseded either way: leaving an older slice there would draw a graph
+    // the user has already scrubbed past, one ingest after the fact.
+    if (data === shown || sameGraph(data, shown)) {
+      pendingRef.current = undefined
+      return
+    }
     if (busyRef.current) {
       pendingRef.current = data
       return
@@ -281,6 +286,12 @@ export function GraphCanvas({
     }
     const g = cosmoRef.current
     if (!g) return
+    // Not while a slice is in flight. `customLabels` is one of Cosmograph's label keys, so a new
+    // array here is a config update that takes its label-only branch — `labels.update()`, which
+    // runs `SELECT … FROM cosmograph_points`. Issued mid-ingest that reads the points table while
+    // the upload is dropping and recreating it, which is the catalog error this canvas is built
+    // to avoid. `handleGraphRebuilt` refreshes the captions once the slice has landed.
+    if (busyRef.current) return
 
     const focus = selectedRef.current ?? hoverIdRef.current
     const links = shown.links
@@ -411,6 +422,9 @@ export function GraphCanvas({
     // The slice is in and drawn — release the handover gate first, so a slice that arrived while
     // this one was ingesting starts straight away, including on the pinned path below.
     absorbed()
+    // Captions were held back for the duration of the ingest; catch them up now. If `absorbed`
+    // started another handover this is a no-op and the next rebuild will do it.
+    rebuildEdgeLabels()
     if (pinnedRef.current) {
       // Playback pins the layout across every step's rebuilt slice. Cosmograph starts a fresh
       // simulation on each rebuild regardless of props, and no prop changes here (`pinned` was
@@ -427,7 +441,7 @@ export function GraphCanvas({
     onPausedChange(false)
     cosmoRef.current?.fitView(300)
     armSettle()
-  }, [absorbed, armSettle, onPausedChange])
+  }, [absorbed, armSettle, onPausedChange, rebuildEdgeLabels])
 
   const handleSimulationTick = useCallback(() => {
     if (

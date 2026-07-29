@@ -25,6 +25,8 @@ const handovers: string[][] = []
 let ingested: string | undefined
 let mounted = false
 let currentProps: { points: { id: string }[]; onGraphRebuilt?: () => void } | undefined
+/** Every props object the canvas has handed to `<Cosmograph>`, for the stability check below. */
+const propSnapshots: Record<string, unknown>[] = []
 
 /** Drive the callback the way the library would: only when the data really changed. */
 function rebuild() {
@@ -43,6 +45,7 @@ mock.module("@cosmograph/react", () => ({
   }) => {
     handovers.push(props.points.map((p) => p.id))
     currentProps = props
+    propSnapshots.push({ ...(props as Record<string, unknown>) })
     // The real wrapper constructs the graph once and hands the instance back on first mount only.
     if (!mounted) {
       mounted = true
@@ -86,6 +89,7 @@ function renderCanvas(s: GraphSlice, onBusyChange?: (busy: boolean) => void) {
 afterEach(() => {
   cleanup()
   handovers.length = 0
+  propSnapshots.length = 0
   ingested = undefined
   mounted = false
   currentProps = undefined
@@ -163,6 +167,44 @@ describe("GraphCanvas slice handover", () => {
 
     act(() => rebuild())
     expect(seen.at(-1)).toBe(false)
+  })
+
+  /**
+   * `Cosmograph` is `React.memo`-wrapped and its update effect keys on the props object, so ANY
+   * prop that takes a new identity issues another `setConfig` — and one landing mid-ingest is the
+   * re-entrancy that corrupts the library's DuckDB catalog. A re-render that changes nothing about
+   * the graph must therefore change nothing about the props. This is the guard on the hoisted
+   * literals and memoized callbacks in `graph-canvas.tsx`; an inline arrow or object literal
+   * reintroduced into that JSX fails here.
+   */
+  it("passes referentially identical props on a render that changes no graph data", () => {
+    // `labels` is state in GraphShell and `onPausedChange` is its `setPaused`, so both are stable
+    // across a parent render in the real app; `onSelect` is the one that genuinely is not.
+    const LABELS = { source: "off", edges: false, images: false, limit: 20 }
+    const onPausedChange = () => {}
+    const handleRef = { current: null }
+    const props = (s: GraphSlice, onSelect: (id: string | undefined) => void) =>
+      createElement(GraphCanvas, {
+        slice: s,
+        onSelect,
+        labels: LABELS,
+        paused: false,
+        onPausedChange,
+        handleRef,
+      } as never)
+
+    const same = slice("a", "b")
+    const { rerender } = render(props(same, () => {}))
+    act(() => rebuild())
+    const before = propSnapshots.at(-1) as Record<string, unknown>
+
+    // A fresh `onSelect` arrow is what `ExplorerPage` supplies on every one of its renders.
+    act(() => rerender(props(same, () => {})))
+    const after = propSnapshots.at(-1) as Record<string, unknown>
+
+    expect(after).not.toBe(before)
+    const unstable = Object.keys(after).filter((k) => !Object.is(after[k], before[k]))
+    expect(unstable).toEqual([])
   })
 
   /**
