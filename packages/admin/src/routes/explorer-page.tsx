@@ -175,7 +175,11 @@ export function ExplorerPage() {
                   asOf={filters.asOf}
                   onChange={(asOf) => setSearch({ asOf })}
                   onPlayingChange={setPlaying}
-                  rendererBusy={rendererBusy}
+                  // Fetching counts as busy too. While a step's slice is in flight the canvas
+                  // still holds the previous one (the placeholder keeps its identity), so it
+                  // reports idle — and playback would step straight past change points that were
+                  // never drawn.
+                  rendererBusy={rendererBusy || slice.isFetching}
                 />
               }
               pinSimulation={playing}

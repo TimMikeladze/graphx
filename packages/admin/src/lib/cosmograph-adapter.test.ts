@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test"
-import { LABEL_COLUMN, sliceHasImages, toCosmograph } from "./cosmograph-adapter"
+import {
+  dataHasImages,
+  LABEL_COLUMN,
+  sameGraph,
+  sliceHasImages,
+  toCosmograph,
+} from "./cosmograph-adapter"
 import { colorForType, legendOf } from "./graph-style"
 import type { GraphSlice } from "./types"
 
@@ -115,6 +121,60 @@ describe("sliceHasImages", () => {
         nodes: [{ id: "n1", type: "person" }, { id: "n2", type: "person", image: "https://x/a.png" }],
       }),
     ).toBe(true)
+  })
+})
+
+describe("dataHasImages", () => {
+  it("is false when every point has an empty image cell", () => {
+    expect(dataHasImages(toCosmograph(slice))).toBe(false)
+  })
+  it("is true when any point carries one", () => {
+    const withPicture = {
+      ...slice,
+      nodes: [{ id: "n1", type: "person", image: "https://x/a.png" }],
+    }
+    expect(dataHasImages(toCosmograph(withPicture))).toBe(true)
+  })
+})
+
+/**
+ * The canvas waits on Cosmograph's `onGraphRebuilt` before handing over the next slice, and the
+ * library only rebuilds when the data actually differs — so "same graph, new array" has to be
+ * recognised here or the canvas waits for a callback that never comes.
+ */
+describe("sameGraph", () => {
+  it("is true for a re-adapted identical slice, despite fresh array identity", () => {
+    const a = toCosmograph(slice)
+    const b = toCosmograph({ ...slice, nodes: [...slice.nodes], links: [...slice.links] })
+    expect(a.nodes).not.toBe(b.nodes)
+    expect(sameGraph(a, b)).toBe(true)
+  })
+
+  it("is false when a node is added or removed", () => {
+    const a = toCosmograph(slice)
+    const b = toCosmograph({ ...slice, nodes: slice.nodes.slice(0, 2), links: [] })
+    expect(sameGraph(a, b)).toBe(false)
+  })
+
+  it("is false when only the links differ", () => {
+    const a = toCosmograph(slice)
+    const b = toCosmograph({ ...slice, links: [] })
+    expect(sameGraph(a, b)).toBe(false)
+  })
+
+  it("is false when a node's label changes but its id does not", () => {
+    const a = toCosmograph(slice)
+    const b = toCosmograph({
+      ...slice,
+      nodes: [{ id: "n1", type: "person", label: "Ada" }, ...slice.nodes.slice(1)],
+    })
+    expect(sameGraph(a, b)).toBe(false)
+  })
+
+  it("is false when only the selection flag differs", () => {
+    const a = toCosmograph(slice)
+    const b = toCosmograph(slice, { selectedId: "n1" })
+    expect(sameGraph(a, b)).toBe(false)
   })
 })
 

@@ -3,9 +3,10 @@ import { Cosmograph, type CosmographRef } from "@cosmograph/react"
 import {
   type CosmoData,
   type CosmoNode,
+  dataHasImages,
   IMAGE_COLUMN,
   LABEL_COLUMN,
-  sliceHasImages,
+  sameGraph,
   toCosmograph,
 } from "@/lib/cosmograph-adapter"
 import { colorForType, type LabelSettings } from "@/lib/graph-style"
@@ -138,6 +139,10 @@ export function GraphCanvas({
    * drawing, and the ones it skipped were never on screen.
    */
   const [shown, setShown] = useState(data)
+  // `absorbed` runs from a Cosmograph callback and must keep a stable identity, so it reads the
+  // drawn slice through a ref rather than closing over it.
+  const shownRef = useRef(shown)
+  shownRef.current = shown
   const pendingRef = useRef<CosmoData | undefined>(undefined)
   // Starts busy: Cosmograph is constructed with the first slice and is ingesting it immediately.
   const busyRef = useRef(true)
@@ -165,13 +170,22 @@ export function GraphCanvas({
     clearTimeout(absorbTimer.current)
     const next = pendingRef.current
     pendingRef.current = undefined
-    // Staying busy across a back-to-back handover is deliberate — the next ingest starts here.
-    if (next !== undefined) setShown(next)
+    // A slice that draws the same graph is dropped rather than handed over — see the effect
+    // below for why waiting on one would hang.
+    if (next !== undefined && !sameGraph(next, shownRef.current)) setShown(next)
+    // Staying busy across a back-to-back handover is deliberate — the next ingest starts there.
     else setBusy(false)
   }, [setBusy])
 
   useEffect(() => {
     if (data === shown) return
+    // A fresh array whose contents match what is already drawn must NOT be handed over.
+    // Cosmograph deep-compares `points`/`links` and skips the whole ingest when they are equal,
+    // which means it never raises `onGraphRebuilt` — and this canvas waits on that callback, so
+    // handing one over would hold the gate shut until the wedge-breaker fires. Query results are
+    // re-fetched per as-of key and arrive with a new identity even when nothing about the graph
+    // changed, so this is the common case, not the exotic one.
+    if (sameGraph(data, shown)) return
     if (busyRef.current) {
       pendingRef.current = data
       return
@@ -203,7 +217,11 @@ export function GraphCanvas({
   const showEdgeLabels = labels.edges
   // Pointing `pointImageUrlBy` at a column of empty strings costs a pass over every point for
   // nothing, so it is only wired up when the slice actually carries pictures.
-  const hasImages = useMemo(() => sliceHasImages(slice), [slice])
+  // Derived from the slice on screen, not the incoming one. Every value fed to `<Cosmograph>`
+  // must come from `shown`: mixing the two emits a config carrying the new slice's image column
+  // against the old slice's points, and Cosmograph's image pass then sizes its buffers to a point
+  // count that is about to be replaced.
+  const hasImages = useMemo(() => dataHasImages(shown), [shown])
   const showImages = labels.images && hasImages
 
   // Read inside Cosmograph's callbacks, which are invoked at simulation-tick rate: reading refs
@@ -426,9 +444,16 @@ export function GraphCanvas({
     }
   }, [showEdgeLabels, rebuildEdgeLabels])
 
+  // `onSelect` is an inline arrow at the call site and changes identity on every render of the
+  // page, so it is read through a ref like the rest of the mutable state here. Depending on it
+  // directly would hand `<Cosmograph>` a new callback each render, defeating its `memo` and
+  // firing a `setConfig` mid-ingest — the very re-entrancy the handover gate exists to prevent.
+  const onSelectRef = useRef(onSelect)
+  onSelectRef.current = onSelect
   const handleClick = useCallback(
-    (index?: number) => onSelect(index === undefined ? undefined : pointsRef.current[index]?.id),
-    [onSelect],
+    (index?: number) =>
+      onSelectRef.current(index === undefined ? undefined : pointsRef.current[index]?.id),
+    [],
   )
 
   const handlePointMouseOver = useCallback((index: number, pointPosition?: [number, number]) => {

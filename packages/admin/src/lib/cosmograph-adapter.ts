@@ -121,3 +121,39 @@ export const IMAGE_COLUMN = "image"
 export function sliceHasImages(slice: GraphSlice): boolean {
   return slice.nodes.some((n) => n.image)
 }
+
+/** True when any point carries a picture. The {@link sliceHasImages} equivalent after adapting. */
+export function dataHasImages(data: CosmoData): boolean {
+  return data.nodes.some((n) => n.image !== "")
+}
+
+/** Row-wise equality for the flat records Cosmograph consumes. */
+function sameRows(a: readonly Record<string, unknown>[], b: readonly Record<string, unknown>[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (!x || !y) return false
+    const keys = Object.keys(x)
+    if (keys.length !== Object.keys(y).length) return false
+    for (const k of keys) if (x[k] !== y[k]) return false
+  }
+  return true
+}
+
+/**
+ * Whether two adapted slices would draw the same graph.
+ *
+ * This mirrors the test Cosmograph applies to decide whether new data is worth ingesting:
+ * `ConfigManager._detectPointsChanged` / `_detectLinksChanged` deep-compare the `points` and
+ * `links` arrays (`isEqual` in the library's `utils/utils.js`), so handing it a fresh array whose
+ * contents match does nothing at all — no upload, no rebuild, and crucially no `onGraphRebuilt`.
+ * The canvas needs to know that in advance, because it waits on that callback.
+ *
+ * Rows are flat records of primitives, so a per-key identity comparison is exactly the deep
+ * equality the library performs, at the same cost.
+ */
+export function sameGraph(a: CosmoData, b: CosmoData): boolean {
+  return sameRows(a.nodes, b.nodes) && sameRows(a.links, b.links)
+}

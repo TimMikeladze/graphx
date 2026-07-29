@@ -16,12 +16,45 @@ import type { GraphSlice } from "@/lib/types"
  * What this file pins is that we never issue that second handover while the first is in flight.
  */
 const handovers: string[][] = []
-let fireGraphRebuilt: (() => void) | undefined
+/**
+ * Signature of the data Cosmograph last actually ingested. The real library deep-compares the
+ * `points`/`links` it is handed against its current config and skips the entire ingest when they
+ * match — no upload, no rebuild, and no `onGraphRebuilt`. `rebuild()` below reproduces that, so a
+ * canvas that waits on the callback for a no-op handover fails here rather than in the browser.
+ */
+let ingested: string | undefined
+let mounted = false
+let currentProps: { points: { id: string }[]; onGraphRebuilt?: () => void } | undefined
+
+/** Drive the callback the way the library would: only when the data really changed. */
+function rebuild() {
+  if (!currentProps) return
+  const signature = JSON.stringify(currentProps.points.map((p) => p.id))
+  if (signature === ingested) return
+  ingested = signature
+  currentProps.onGraphRebuilt?.()
+}
 
 mock.module("@cosmograph/react", () => ({
-  Cosmograph: (props: { points: { id: string }[]; onGraphRebuilt?: () => void }) => {
+  Cosmograph: (props: {
+    points: { id: string }[]
+    onGraphRebuilt?: () => void
+    onMount?: (ref: unknown) => void
+  }) => {
     handovers.push(props.points.map((p) => p.id))
-    fireGraphRebuilt = props.onGraphRebuilt
+    currentProps = props
+    // The real wrapper constructs the graph once and hands the instance back on first mount only.
+    if (!mounted) {
+      mounted = true
+      props.onMount?.({
+        pause: () => {},
+        start: () => {},
+        fitView: () => {},
+        selectPoint: () => {},
+        selectPoints: () => {},
+        zoomToPoint: () => {},
+      })
+    }
     return createElement("div", { "data-testid": "cosmograph" })
   },
 }))
@@ -53,7 +86,9 @@ function renderCanvas(s: GraphSlice, onBusyChange?: (busy: boolean) => void) {
 afterEach(() => {
   cleanup()
   handovers.length = 0
-  fireGraphRebuilt = undefined
+  ingested = undefined
+  mounted = false
+  currentProps = undefined
 })
 
 describe("GraphCanvas slice handover", () => {
@@ -77,7 +112,7 @@ describe("GraphCanvas slice handover", () => {
     })
     expect(handovers.at(-1)).toEqual(["a"])
 
-    act(() => fireGraphRebuilt?.())
+    act(() => rebuild())
     expect(handovers.at(-1)).toEqual(["b"])
   })
 
@@ -99,7 +134,7 @@ describe("GraphCanvas slice handover", () => {
     expect(handovers.at(-1)).toEqual(["a"])
 
     // Only the last slice is worth drawing; b and c were never on screen and are skipped.
-    act(() => fireGraphRebuilt?.())
+    act(() => rebuild())
     expect(handovers.at(-1)).toEqual(["d"])
     expect(handovers.map((h) => h.join())).not.toContain("b")
     expect(handovers.map((h) => h.join())).not.toContain("c")
@@ -108,7 +143,7 @@ describe("GraphCanvas slice handover", () => {
   it("reports busy while a slice is in flight and idle once it lands", () => {
     const seen: boolean[] = []
     const { rerender } = renderCanvas(slice("a"), (b) => seen.push(b))
-    act(() => fireGraphRebuilt?.())
+    act(() => rebuild())
     expect(seen.at(-1)).toBe(false)
 
     act(() =>
@@ -126,7 +161,40 @@ describe("GraphCanvas slice handover", () => {
     )
     expect(seen.at(-1)).toBe(true)
 
-    act(() => fireGraphRebuilt?.())
+    act(() => rebuild())
     expect(seen.at(-1)).toBe(false)
+  })
+
+  /**
+   * Every as-of step re-fetches under a new query key, so an unchanged graph still arrives as a
+   * fresh array. Cosmograph deep-compares and skips such an update entirely — it never reports a
+   * rebuild — so a canvas that armed its gate on one would wait for a callback that never comes,
+   * and the next real slice would sit undrawn behind it.
+   */
+  it("does not wait on a slice that draws the same graph", () => {
+    const seen: boolean[] = []
+    const props = (s: GraphSlice) =>
+      createElement(GraphCanvas, {
+        slice: s,
+        onSelect: () => {},
+        labels: { source: "off", edges: false, images: false, limit: 20 },
+        paused: false,
+        onPausedChange: () => {},
+        onBusyChange: (b: boolean) => seen.push(b),
+        handleRef: { current: null },
+      } as never)
+
+    const { rerender } = renderCanvas(slice("a", "b"), (b) => seen.push(b))
+    act(() => rebuild())
+    expect(seen.at(-1)).toBe(false)
+
+    // Same graph, new arrays. Nothing to draw and nothing to wait for.
+    act(() => rerender(props(slice("a", "b"))))
+    expect(seen.at(-1)).toBe(false)
+
+    // The gate is still open, so a genuinely different slice goes over at once.
+    act(() => rerender(props(slice("a", "b", "c"))))
+    expect(handovers.at(-1)).toEqual(["a", "b", "c"])
+    expect(seen.at(-1)).toBe(true)
   })
 })
