@@ -7,13 +7,12 @@ import { Graph } from '../src/graph.ts';
 import { hybridRetrieve } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { libsqlOnly, makeTestDb } from './harness.ts';
 
 // These assert libSQL bulk-load INTERNALS — the deferred-index drop/rebuild via sqlite_master,
 // the FTS5 nodes_fts table, and the libSQL fsync speedup. Postgres bulk loads in one batch with
 // no index deferral (generated tsvector self-maintains), so the mechanics differ; the functional
 // contract (N rows loaded + queryable) is covered by the cross-backend tests.
-const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P13 — bulk ingestion (§19.8). dim 4.
 

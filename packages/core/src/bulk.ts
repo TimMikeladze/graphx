@@ -162,6 +162,10 @@ export async function bulkLoad<S extends GraphSchema>(
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
 	const d = dialectOf(raw);
+	// The index-deferral steps below (2–4) run inside a try/finally; a duckdb client must
+	// never reach a throw INSIDE that finally (it would mask whatever the try block threw),
+	// so it is rejected here, up front, by name.
+	if (d === 'duckdb') throw new Error('bulk.bulkLoad: duckdb not implemented yet');
 	const embExpr = embFreshExpr(d);
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
@@ -196,7 +200,7 @@ export async function bulkLoad<S extends GraphSchema>(
 
 	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger. libSQL only —
 	// on Postgres there is no FTS trigger (the generated `tsvector` self-maintains) and no HNSW
-	// index is created yet, so there is nothing to defer.
+	// index is created yet, so there is nothing to defer. (duckdb already rejected above.)
 	if (d !== 'postgres') {
 		await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
 		await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');

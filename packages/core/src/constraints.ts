@@ -59,24 +59,32 @@ export async function declareUniqueNodeProp(
 	// no-op and leave its uniqueness unenforced.
 	const idx = `ux_${type.length}_${type}_${prop}`;
 	const pred = `WHERE valid_to = ${FOREVER} AND type = ${sqlLiteral(type)}`;
-	if (dialectOf(client) === 'postgres') {
-		// Postgres has no VIRTUAL generated columns — use a partial UNIQUE EXPRESSION index
-		// over `data::jsonb ->> 'prop'` directly. NULLs (prop absent) are distinct, so nodes
-		// lacking the prop never collide, matching the libSQL generated-column behavior.
-		await client.execute(
-			`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions ((data::jsonb ->> '${prop}')) ${pred}`,
-		);
-		return;
+	switch (dialectOf(client)) {
+		case 'postgres':
+			// Postgres has no VIRTUAL generated columns — use a partial UNIQUE EXPRESSION index
+			// over `data::jsonb ->> 'prop'` directly. NULLs (prop absent) are distinct, so nodes
+			// lacking the prop never collide, matching the libSQL generated-column behavior.
+			await client.execute(
+				`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions ((data::jsonb ->> '${prop}')) ${pred}`,
+			);
+			return;
+		case 'duckdb':
+			throw new Error('constraints.declareUniqueNodeProp: duckdb not implemented yet');
+		default: {
+			// libSQL: a VIRTUAL generated column `gp_<prop>` + a partial UNIQUE index over it.
+			const col = `gp_${prop}`;
+			await ensureColumn(
+				client,
+				'node_versions',
+				col,
+				`ALTER TABLE node_versions ADD COLUMN ${col} TEXT GENERATED ALWAYS AS (json_extract(data, '$.${prop}')) VIRTUAL`,
+			);
+			await client.execute(
+				`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions(${col}) ${pred}`,
+			);
+			return;
+		}
 	}
-	// libSQL: a VIRTUAL generated column `gp_<prop>` + a partial UNIQUE index over it.
-	const col = `gp_${prop}`;
-	await ensureColumn(
-		client,
-		'node_versions',
-		col,
-		`ALTER TABLE node_versions ADD COLUMN ${col} TEXT GENERATED ALWAYS AS (json_extract(data, '$.${prop}')) VIRTUAL`,
-	);
-	await client.execute(`CREATE UNIQUE INDEX IF NOT EXISTS ${idx} ON node_versions(${col}) ${pred}`);
 }
 
 /**

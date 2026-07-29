@@ -7,12 +7,11 @@ import { Graph } from '../src/graph.ts';
 import { hybridRetrieve, sanitizeMatch } from '../src/hybrid.ts';
 import { type EmbedFn, retrieve } from '../src/retrieve.ts';
 import { init } from '../src/schema.ts';
-import { embSql, makeTestDb, TEST_DRIVER } from './harness.ts';
+import { embSql, libsqlOnly, makeTestDb } from './harness.ts';
 
 /** These probe libSQL's FTS5 internals (the `nodes_fts` table + sync trigger), which have no
  *  Postgres analog (FTS is a generated `body_tsv` column there). The user-facing hybrid-search
  *  contract is exercised by the retrieval tests below, which DO run on both backends. */
-const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR (§19.3–19.4). dim 4.
 

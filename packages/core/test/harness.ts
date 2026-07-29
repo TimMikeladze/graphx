@@ -1,8 +1,9 @@
 import { rmSync } from 'node:fs';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
+import { test } from 'bun:test';
 import { ulid } from 'ulidx';
-import { type DbClient, dialectOf } from '../src/dialect.ts';
+import { type DbClient, type Dialect, dialectOf } from '../src/dialect.ts';
 import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../src/dialect-sql.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
@@ -36,11 +37,20 @@ export interface MakeTestDbOpts {
 	file?: boolean;
 }
 
-/** Selected backend. `libsql` (default) preserves current behavior; `postgres` opt-in via env. */
-const DRIVER = process.env.GRAPHX_TEST_DRIVER ?? 'libsql';
+/** Selected backend. `libsql` (default) preserves current behavior; others opt in via env. */
+const DRIVER = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') as Dialect;
 
-/** The active test backend — for `test.skipIf(TEST_DRIVER === 'postgres')` on libSQL-only probes. */
-export const TEST_DRIVER = DRIVER;
+/** The active test backend. */
+export const TEST_DRIVER: Dialect = DRIVER;
+
+/**
+ * Gate for probes that assert libSQL INTERNALS — PRAGMA output, `sqlite_master` rows,
+ * `EXPLAIN QUERY PLAN` index selection, `vector_top_k`, FTS5 virtual-table mechanics.
+ * An ALLOWLIST, not a postgres denylist: the old `TEST_DRIVER === 'postgres' ? skip : test`
+ * form ran all 18 of these under any third driver, where they cannot pass. The
+ * user-facing contracts they cover are exercised by cross-backend tests.
+ */
+export const libsqlOnly = DRIVER === 'libsql' ? test : test.skip;
 
 /**
  * Dialect-correct embedding value expression for raw-SQL test fixtures that bind a JSON

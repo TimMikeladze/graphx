@@ -60,6 +60,9 @@ export interface JourneyRow {
 
 export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow[]> {
 	const d = dialectOf(raw);
+	// The recursive walk below is untested against DuckDB's recursive-CTE dialect; throw
+	// by name here rather than let it silently take the libSQL path.
+	if (d === 'duckdb') throw new Error('journey.journey: duckdb not implemented yet');
 	const dir = o.direction ?? 'forward';
 	const maxDepth = o.maxDepth ?? 6;
 	const rels = o.rels?.length ? o.rels : null;

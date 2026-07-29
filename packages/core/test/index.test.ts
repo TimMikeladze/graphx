@@ -1,13 +1,12 @@
 import { expect, test } from 'bun:test';
 import { applyConnPragmas } from '../src/db.ts';
 import type { DbClient } from '../src/dialect.ts';
-import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { libsqlOnly, makeTestDb } from './harness.ts';
 
 // P0 foundation + libSQL capability probe. Proves the engine features the whole
 // design rests on (native vectors, FTS5, generated columns) actually work on the
 // pinned @libsql/client before later phases build on them (§18, audit M16).
 // These probe libSQL-native capabilities and do not apply to the Postgres backend.
-const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 function mem(): DbClient {
 	return makeTestDb().client;

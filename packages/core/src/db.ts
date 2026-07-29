@@ -12,7 +12,10 @@ export const FOREVER = 8640000000000000;
  * so this is a no-op there.
  */
 export async function applyConnPragmas(client: DbClient): Promise<void> {
-	if (dialectOf(client) === 'postgres') return;
+	// libSQL only. Postgres has these inherently (FKs always enforced, MVCC,
+	// lock_timeout). DuckDB has no equivalent knobs and no lock-based contention —
+	// its writer is serialized in-process by the adapter's mutex instead.
+	if (dialectOf(client) !== 'libsql') return;
 	await client.execute('PRAGMA foreign_keys = ON');
 	await client.execute('PRAGMA busy_timeout = 5000');
 }

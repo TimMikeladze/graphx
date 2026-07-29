@@ -203,7 +203,11 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, No
 
 	/** The backend dialect; defaults to libSQL when built without a client (the SQL contract). */
 	private dialect(): Dialect {
-		return this.raw ? dialectOf(this.raw) : 'libsql';
+		const d = this.raw ? dialectOf(this.raw) : 'libsql';
+		// The compiled SQL below (recursive-CTE variable-length walk, JSON-prop filters) is
+		// untested against DuckDB's dialect; throw by name rather than compile silently.
+		if (d === 'duckdb') throw new Error('pattern.dialect: duckdb not implemented yet');
+		return d;
 	}
 
 	/** WHERE conds for one alias, appended to its source; pushes their args in order. */
