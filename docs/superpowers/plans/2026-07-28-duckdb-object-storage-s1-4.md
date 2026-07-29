@@ -1847,6 +1847,32 @@ describe('DuckPool', () => {
 		await pool.close();
 	});
 
+	test('close settles callers parked in the queue instead of hanging them', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const parked = pool.acquire();
+		await new Promise((r) => setTimeout(r, 10));
+		await pool.close();
+		// Must settle one way or the other. Before this fix the promise never resolved.
+		await expect(parked).rejects.toThrow(/closed/);
+		held.release();
+	});
+
+	test('a connection from a superseded generation is discarded, not pooled', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const c = await pool.acquire();
+		// Simulate the FATAL path: the instance is replaced while this caller holds a
+		// connection from the old generation.
+		(pool as unknown as { rebuild(): void }).rebuild();
+		c.release();
+		// The corpse must not be handed to the next caller, and must not count toward max.
+		expect((pool as unknown as { idle: unknown[] }).idle).toHaveLength(0);
+		const fresh = await pool.acquire();
+		expect((await fresh.run('SELECT 1 AS a')).rows).toEqual([{ a: 1 }]);
+		fresh.release();
+		await pool.close();
+	});
+
 	test('isFatalInstanceError recognizes an invalidated database', () => {
 		expect(isFatalInstanceError(new Error('FATAL Error: database has been invalidated'))).toBe(
 			true,
@@ -1899,11 +1925,26 @@ export function isFatalInstanceError(e: unknown): boolean {
 
 type RawConnection = Awaited<ReturnType<DuckDBInstance['connect']>>;
 
+/**
+ * A connection tagged with the instance generation it was created against. After a FATAL
+ * the instance is replaced, and every connection from the old generation is dead — but a
+ * caller may still be holding one and will hand it back through the normal release path.
+ * The tag is how `checkin` tells a live connection from a corpse.
+ */
+interface TaggedConnection {
+	raw: RawConnection;
+	generation: number;
+}
+
 export class DuckPool {
 	private instance?: Promise<DuckDBInstance>;
-	private readonly idle: RawConnection[] = [];
-	private readonly waiting: Array<(c: RawConnection) => void> = [];
+	private readonly idle: TaggedConnection[] = [];
+	/** Resumption callbacks, not connection callbacks: a woken waiter re-enters `checkout`
+	 *  and takes whatever is available then, which keeps the queue strictly FIFO. */
+	private readonly waiting: Array<() => void> = [];
+	/** Live connections of the CURRENT generation. Reset when the instance is replaced. */
 	private open = 0;
+	private generation = 0;
 	private readonly max: number;
 	private closed = false;
 
@@ -1921,7 +1962,8 @@ export class DuckPool {
 
 	async acquire(): Promise<PooledConnection> {
 		if (this.closed) throw new Error('duck pool: closed');
-		const raw = await this.checkout();
+		const conn = await this.checkout();
+		const raw = conn.raw;
 		let released = false;
 		return {
 			run: async (sql, values, types) => {
@@ -1943,14 +1985,14 @@ export class DuckPool {
 						columnNames: reader.columnNames(),
 					};
 				} catch (e) {
-					if (isFatalInstanceError(e)) await this.rebuild();
+					if (isFatalInstanceError(e)) this.rebuild();
 					throw e;
 				}
 			},
 			release: () => {
 				if (released) return;
 				released = true;
-				this.checkin(raw);
+				this.checkin(conn);
 			},
 		};
 	}
@@ -1965,59 +2007,80 @@ export class DuckPool {
 		}
 	}
 
-	private async checkout(): Promise<RawConnection> {
-		const spare = this.idle.pop();
-		if (spare) return spare;
-		if (this.open < this.max) {
-			this.open++;
-			try {
-				return await (await this.getInstance()).connect();
-			} catch (e) {
-				this.open--;
-				throw e;
+	private async checkout(): Promise<TaggedConnection> {
+		for (;;) {
+			if (this.closed) throw new Error('duck pool: closed');
+			const spare = this.idle.pop();
+			if (spare) return spare;
+			// Create only when nobody is queued ahead of us. Without that guard a late
+			// arrival takes the slot an earlier waiter has been parked on, and under a
+			// steady stream of arrivals the earlier waiter is never served.
+			if (this.open < this.max && this.waiting.length === 0) {
+				this.open++;
+				const generation = this.generation;
+				try {
+					return { raw: await (await this.getInstance()).connect(), generation };
+				} catch (e) {
+					this.open--;
+					// The slot we claimed is free again — offer it to whoever was queued
+					// rather than leaving them parked behind a connection that never opened.
+					this.wake();
+					throw e;
+				}
 			}
+			await new Promise<void>((resolve) => this.waiting.push(resolve));
 		}
-		return new Promise<RawConnection>((resolve) => this.waiting.push(resolve));
 	}
 
-	private checkin(raw: RawConnection): void {
-		const next = this.waiting.shift();
-		if (next) {
-			next(raw);
-			return;
+	/** Resume the longest-waiting caller, if any. */
+	private wake(): void {
+		this.waiting.shift()?.();
+	}
+
+	private checkin(c: TaggedConnection): void {
+		// A connection from a superseded generation is dead — the FATAL that replaced the
+		// instance killed it. Returning it to `idle` would hand a corpse to the next
+		// caller, and counting it would let the pool exceed `max`.
+		if (c.generation !== this.generation || this.closed) {
+			closeQuietly(c.raw);
+		} else {
+			this.idle.push(c);
 		}
-		this.idle.push(raw);
+		this.wake();
 	}
 
 	/**
 	 * Discard the instance and every connection on it. The only recovery from a FATAL —
 	 * a brand-new connection on the same instance is dead too.
+	 *
+	 * Connections currently checked out cannot be reclaimed here; they are neutralized by
+	 * the generation bump, which makes `checkin` close them instead of pooling them.
 	 */
-	private async rebuild(): Promise<void> {
-		for (const c of this.idle.splice(0)) {
-			try {
-				c.closeSync();
-			} catch {
-				/* the instance is already dead; closing is best-effort */
-			}
-		}
+	private rebuild(): void {
+		for (const c of this.idle.splice(0)) closeQuietly(c.raw);
+		this.generation++;
 		this.open = 0;
 		this.instance = undefined;
 	}
 
 	async close(): Promise<void> {
 		this.closed = true;
-		for (const c of this.idle.splice(0)) {
-			try {
-				c.closeSync();
-			} catch {
-				/* ignore */
-			}
-		}
+		for (const c of this.idle.splice(0)) closeQuietly(c.raw);
 		this.open = 0;
+		// Release everyone parked in the queue. Without this a caller waiting beyond `max`
+		// when the pool closes is never resumed and its promise never settles.
+		while (this.waiting.length > 0) this.wake();
 		const inst = this.instance;
 		this.instance = undefined;
 		if (inst) (await inst).closeSync();
+	}
+}
+
+function closeQuietly(raw: RawConnection): void {
+	try {
+		raw.closeSync();
+	} catch {
+		/* the instance may already be dead; closing is best-effort */
 	}
 }
 ```
