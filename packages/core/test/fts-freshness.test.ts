@@ -37,6 +37,12 @@ describe('full-text freshness on a local duckdb', () => {
 
 	test('a read-only workload does not rebuild', async () => {
 		// Staleness, not a rebuild per query: the second search must not re-run the build.
+		// Also pins a corollary of the signature design: the signature tracks node_versions,
+		// not the index tables themselves, so a corrupted or hand-emptied fts_terms is
+		// deliberately NOT self-healing — only a corpus change (or an explicit markFtsStale)
+		// triggers a rebuild. A real rebuild would repopulate fts_terms and fail this
+		// assertion, so the test still proves "no rebuild happened", not merely "nothing
+		// crashed".
 		const c = await local();
 		const g = new Graph(c, SCHEMA);
 		await g.addNode({ type: 'Doc', body: 'mercury', data: {} });
