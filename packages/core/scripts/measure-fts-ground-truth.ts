@@ -32,19 +32,28 @@ async function duckdbTruth() {
   for (const d of CORPUS) {
     await c.execute({ sql: 'INSERT INTO docs VALUES (?, ?)', args: [d.ver, d.body] });
   }
-  // stemmer = 'none' isolates the arithmetic from the stemmer, matching our v1 tokenizer.
+  // stemmer='none', stopwords='none' isolate the arithmetic from stemming and stopword
+  // removal so this fixture matches our v1 tokenizer (libSQL's unicode61: lowercase, split
+  // on non-alphanumerics, keep stopwords, keep digits — Scope decision 1). Without pinning
+  // `stopwords` and `ignore` explicitly, DuckDB defaults to stopwords='english' and an
+  // `ignore` pattern that strips digits, describing a tokenizer we are not building.
   // Named-parameter syntax must use `=`, not `:=`: on this DuckDB build (v1.5.5), `:=`
   // inside PRAGMA create_fts_index(...) is mis-parsed and DuckDB looks for a column
-  // literally named "none" instead of treating it as the stemmer argument's value.
-  await c.execute(`PRAGMA create_fts_index('docs', 'ver', 'body', stemmer = 'none')`);
+  // literally named "none" instead of treating it as the argument's value.
+  await c.execute(
+    `PRAGMA create_fts_index('docs', 'ver', 'body',
+       stemmer='none', stopwords='none', ignore='(\\.|[^a-z0-9])+')`,
+  );
 
   const rows = async (sql: string) => (await c.execute(sql)).rows;
   const dict = (await rows('SELECT term, df FROM fts_main_docs.dict ORDER BY term')).map((r) => ({
     term: String(r.term),
     df: Number(r.df),
   }));
-  const docs = (await rows('SELECT docid, len FROM fts_main_docs.docs ORDER BY docid')).map((r) => ({
-    docid: Number(r.docid),
+  // `docid` is a 0-based internal row number, not the `ver` we indexed on; `name` carries
+  // the value of the id column (`ver`) instead.
+  const docs = (await rows('SELECT name, len FROM fts_main_docs.docs ORDER BY len')).map((r) => ({
+    ver: Number(r.name),
     len: Number(r.len),
   }));
   const s = (await rows('SELECT num_docs, avgdl FROM fts_main_docs.stats'))[0];

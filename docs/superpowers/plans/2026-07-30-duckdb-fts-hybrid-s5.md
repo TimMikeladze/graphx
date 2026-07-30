@@ -66,7 +66,7 @@ Both references need extensions that the test suite must never require, so this 
     /** DuckDB fts tables, for structural comparison. */
     duckdb: {
       dict: { term: string; df: number }[];
-      docs: { docid: number; len: number }[];
+      docs: { ver: number; len: number }[];
       stats: { num_docs: number; avgdl: number };
       /** query -> [{ver, score}] from match_bm25, score DESC. */
       bm25: Record<string, { ver: number; score: number }[]>;
@@ -116,16 +116,27 @@ async function duckdbTruth() {
   for (const d of CORPUS) {
     await c.execute({ sql: 'INSERT INTO docs VALUES (?, ?)', args: [d.ver, d.body] });
   }
-  // stemmer := 'none' isolates the arithmetic from the stemmer, matching our v1 tokenizer.
-  await c.execute(`PRAGMA create_fts_index('docs', 'ver', 'body', stemmer := 'none')`);
+  // Every tokenizer knob is pinned, not just the stemmer. Measured the hard way: passing
+  // stemmer alone leaves `stopwords` defaulting to 'english' (8 of 28 corpus words vanish)
+  // and `ignore` defaulting to a pattern that strips digits ('bm25' becomes 'bm'). The
+  // fixture would then describe a DIFFERENT tokenizer than ours, and every downstream
+  // comparison against it would be measuring tokenization rather than arithmetic.
+  // Note the operator is `=`, not `:=` — this build rejects `:=` here.
+  await c.execute(
+    `PRAGMA create_fts_index('docs', 'ver', 'body',
+       stemmer='none', stopwords='none', ignore='(\\.|[^a-z0-9])+')`,
+  );
 
   const rows = async (sql: string) => (await c.execute(sql)).rows;
   const dict = (await rows('SELECT term, df FROM fts_main_docs.dict ORDER BY term')).map((r) => ({
     term: String(r.term),
     df: Number(r.df),
   }));
-  const docs = (await rows('SELECT docid, len FROM fts_main_docs.docs ORDER BY docid')).map((r) => ({
-    docid: Number(r.docid),
+  // Keyed by `ver`, not DuckDB's `docid`: docid is a 0-based internal row number, so a
+  // fixture keyed on it is off by one against the corpus and every consumer must remember
+  // to shift. `name` carries the value of the id column we indexed.
+  const docs = (await rows('SELECT name, len FROM fts_main_docs.docs ORDER BY len')).map((r) => ({
+    ver: Number(r.name),
     len: Number(r.len),
   }));
   const s = (await rows('SELECT num_docs, avgdl FROM fts_main_docs.stats'))[0];
@@ -188,9 +199,10 @@ Expected: the file is written. If `INSTALL fts` fails (no network), stop and rep
 
 Open the JSON and confirm three things by eye, because the next four tasks assume them:
 
-1. `duckdb.stats.avgdl` equals the mean token count over the corpus. If DuckDB counts tokens differently than a naive whitespace split (it lowercases and strips non-alphanumerics), the tokenizer in Task 2 must match whatever this shows.
-2. `duckdb.dict` contains lowercase terms only, and no stopwords were dropped (we passed no stopword list).
+1. `duckdb.stats.avgdl` equals the mean token count over the corpus under a naive lowercase-and-split-on-non-alphanumerics tokenization. If it does not, a tokenizer knob is still unpinned — find which one rather than adjusting the corpus until the number agrees.
+2. `duckdb.dict` contains lowercase terms only, retains stopwords (`a`, `and`, `in`, `with`, `here` all appear), and contains `bm25` as ONE term rather than `bm`. Each of those is a knob that silently defaulted the first time this was measured.
 3. `duckdb.bm25.missing` is an empty array — a query whose terms are absent scores nothing rather than erroring.
+4. `libsql` and `duckdb.bm25` now agree on rank order for every query, ties aside. They are two independent BM25 implementations over the same tokenization, so disagreement means a knob is still unpinned. This is the cross-check that the fixture is measuring arithmetic and not tokenization.
 
 Write what you found into the task report. Task 4 derives the BM25 constants from `duckdb.bm25` by fitting, so anything surprising here changes that task.
 
@@ -250,7 +262,7 @@ describe('tokenize', () => {
   test('agrees with DuckDB on every document length in the ground truth', () => {
     // avgdl and len come straight from token counts, so a tokenizer that disagrees
     // silently shifts every BM25 score. This pins it against a measured reference.
-    const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.docid, d.len]));
+    const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.ver, d.len]));
     for (const doc of truth.corpus) {
       expect(tokenize(doc.body).length).toBe(lenByVer.get(doc.ver) as number);
     }
