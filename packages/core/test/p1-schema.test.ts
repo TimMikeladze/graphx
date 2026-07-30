@@ -2,11 +2,10 @@ import { expect, test } from 'bun:test';
 import { FOREVER } from '../src/db.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { ensureColumn, init, schema } from '../src/schema.ts';
-import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { libsqlOnly, makeTestDb } from './harness.ts';
 
 // libSQL schema-MECHANICS probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, vector_top_k,
 // table_xinfo). The cross-backend schema contract is exercised by every other suite.
-const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P1 schema init (§4 + §4.1, D1/D5/B9). Proves the temporal schema, adjacency &
 // temporal indexes, the live-only views, the weight CHECK, and the vector index

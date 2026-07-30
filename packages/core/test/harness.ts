@@ -1,9 +1,11 @@
 import { rmSync } from 'node:fs';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
+import { test } from 'bun:test';
 import { ulid } from 'ulidx';
-import { type DbClient, dialectOf } from '../src/dialect.ts';
+import { type DbClient, type Dialect, dialectOf } from '../src/dialect.ts';
 import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../src/dialect-sql.ts';
+import { createDuckClient, type DuckClient } from '../src/duck.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -36,11 +38,35 @@ export interface MakeTestDbOpts {
 	file?: boolean;
 }
 
-/** Selected backend. `libsql` (default) preserves current behavior; `postgres` opt-in via env. */
-const DRIVER = process.env.GRAPHX_TEST_DRIVER ?? 'libsql';
+/** Selected backend. `libsql` (default) preserves current behavior; others opt in via env. */
+const DRIVER = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') as Dialect;
 
-/** The active test backend — for `test.skipIf(TEST_DRIVER === 'postgres')` on libSQL-only probes. */
-export const TEST_DRIVER = DRIVER;
+/** The active test backend. */
+export const TEST_DRIVER: Dialect = DRIVER;
+
+/**
+ * Gate for probes that assert libSQL INTERNALS — PRAGMA output, `sqlite_master` rows,
+ * `EXPLAIN QUERY PLAN` index selection, `vector_top_k`, FTS5 virtual-table mechanics.
+ * An ALLOWLIST, not a postgres denylist: the old `TEST_DRIVER === 'postgres' ? skip : test`
+ * form ran all 18 of these under any third driver, where they cannot pass. The
+ * user-facing contracts they cover are exercised by cross-backend tests.
+ */
+export const libsqlOnly = DRIVER === 'libsql' ? test : test.skip;
+
+/**
+ * Gate for probes that need TWO genuine writers against ONE database — write-lock
+ * contention, `SQLITE_BUSY`, a held transaction blocking another connection.
+ *
+ * DuckDB has no such configuration: `sibling()` opens a second `DuckDBInstance` on the same
+ * file, which does not share the first one's state, so a "concurrent writer" there writes
+ * into a database nobody else can see. Its writers are serialized in-process by the
+ * adapter's mutex and across processes by the manifest CAS, and the same invariants are
+ * asserted through those mechanisms instead — see the duckdb block in p14-concurrency.
+ */
+export const sharedWriterOnly = DRIVER === 'duckdb' ? test.skip : test;
+
+/** Runs only under DuckDB — the object-storage writer path. */
+export const duckdbOnly = DRIVER === 'duckdb' ? test : test.skip;
 
 /**
  * Dialect-correct embedding value expression for raw-SQL test fixtures that bind a JSON
@@ -63,9 +89,15 @@ export function jsonFieldSql(client: DbClient, col: string, key: string): string
 
 /** Query that returns one row iff `table` exists in the client's schema (sqlite_master / information_schema). */
 export function tableExistsSql(client: DbClient, table: string): string {
-	return dialectOf(client) === 'postgres'
-		? `SELECT table_name AS name FROM information_schema.tables WHERE table_name = '${table}' AND table_schema = current_schema()`
-		: `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`;
+	switch (dialectOf(client)) {
+		case 'postgres':
+			return `SELECT table_name AS name FROM information_schema.tables WHERE table_name = '${table}' AND table_schema = current_schema()`;
+		case 'duckdb':
+			return `SELECT table_name AS name FROM duckdb_tables() WHERE table_name = '${table}'
+			        UNION ALL SELECT view_name AS name FROM duckdb_views() WHERE view_name = '${table}'`;
+		default:
+			return `SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`;
+	}
 }
 
 /** Dialect-correct idempotent INSERT for raw-SQL fixtures (libSQL OR IGNORE / PG ON CONFLICT). */
@@ -88,9 +120,33 @@ if (DRIVER === 'postgres') {
 	process.env.GRAPHX_DB_DRIVER = 'postgres';
 	process.env.GRAPHX_PG_URL = PG_URL;
 }
+if (DRIVER === 'duckdb') {
+	process.env.GRAPHX_DB_DRIVER = 'duckdb';
+}
 
 /** Provision a fresh, isolated test database + its teardown. */
 export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
+	if (DRIVER === 'duckdb') {
+		// A temp file rather than :memory:, so `sibling()` can open a second connection to
+		// the same database — the concurrency suite needs two genuine connections, and an
+		// in-memory DuckDB is private to its instance.
+		const path = `test_${ulid()}.duckdb`;
+		const main = createDuckClient({ path });
+		const siblings: DuckClient[] = [];
+		return {
+			client: main,
+			sibling: () => {
+				const s = createDuckClient({ path });
+				siblings.push(s);
+				return s;
+			},
+			teardown: async () => {
+				for (const s of siblings) await s.end().catch(() => {});
+				await main.end().catch(() => {});
+				for (const sfx of ['', '.wal']) rmSync(`${path}${sfx}`, { force: true });
+			},
+		};
+	}
 	if (DRIVER === 'postgres') {
 		// Each test gets its own Postgres schema (the schema-per-tenant isolation model),
 		// dropped on teardown — the analog of a fresh libSQL file. `file` is irrelevant on

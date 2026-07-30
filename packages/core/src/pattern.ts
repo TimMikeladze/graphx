@@ -400,8 +400,9 @@ WHERE walk.depth >= ${v.min}`;
 				if (opts.cursor) {
 					const key = decodeCursor(opts.cursor);
 					if (key.length !== aliases.length) throw new Error('invalid cursor');
-					whereClause = ` WHERE (${keyCols.join(', ')}) > (${key.map(() => '?').join(', ')})`;
-					pageArgs.push(...key);
+					const d = dialectOf(raw);
+					whereClause = ` WHERE ${keysetPredicate(d, keyCols)}`;
+					pageArgs.push(...keysetArgs(d, key));
 				}
 				// Wrap the (unchanged) compiled pattern; dedup by the composite id tuple so
 				// each distinct selected tuple is one keyset row (no duplicate, no skip even
@@ -424,6 +425,48 @@ LIMIT ?`;
 			},
 		};
 	}
+}
+
+/**
+ * Row-value keyset predicate `(k0,…,kn-1) > (?,…,?)` for {@link PatternQuery.page}. `cols`
+ * is `keyCols` from `select()` — ONE column per `.select(...)` alias, so `n` varies per
+ * call (a 1-alias `.select('p')` page and a 2-alias `.select('a','b')` page both go through
+ * this same function).
+ *
+ * libSQL/Postgres take the row-value comparison directly: `n` columns, `n` placeholders.
+ * Row-value comparison with untyped parameters is unverified on DuckDB, so its arm takes
+ * the lexicographic OR-form already used at `temporal.ts`'s `(valid_from > ? OR (valid_from
+ * = ? AND ver > ?))` — generalized here to `n` columns instead of temporal.ts's fixed 2
+ * (`valid_from`, `ver`). Clause `i` ANDs strict equality on every column BEFORE it
+ * (`cols[0..i)`) with `>` on column `i`, e.g. for n=3 (`k0`,`k1`,`k2`):
+ *   (k0 > ?) OR (k0 = ? AND k1 > ?) OR (k0 = ? AND k1 = ? AND k2 > ?)
+ * Clause `i` alone needs `i+1` placeholders, so the WHOLE predicate needs
+ * `1 + 2 + … + n = n(n+1)/2` — NOT `n` — placeholders; a reader porting this who assumes
+ * one arg per column will under-bind and get a bind-arity error (loud) or, worse, silently
+ * misalign the args if two adjacent clauses happen to need the same count. {@link keysetArgs}
+ * produces the matching `n(n+1)/2`-length, correctly-ordered arg list — always call the two
+ * together.
+ */
+function keysetPredicate(dialect: Dialect, cols: string[]): string {
+	if (dialect !== 'duckdb') return `(${cols.join(', ')}) > (${cols.map(() => '?').join(', ')})`;
+	const clauses = cols.map((c, i) => {
+		const eq = cols.slice(0, i).map((p) => `${p} = ?`);
+		return `(${[...eq, `${c} > ?`].join(' AND ')})`;
+	});
+	return `(${clauses.join(' OR ')})`;
+}
+
+/**
+ * The bind args for {@link keysetPredicate}, in the same order as its placeholders.
+ * libSQL/Postgres bind `key` once (`n` args, matching the tuple form). DuckDB's OR-form
+ * repeats the leading key values once per clause — clause `i` needs `key[0..i]` — so the
+ * flattened total is `n(n+1)/2` args, e.g. for `key = [k0,k1,k2]`: `[k0, k0,k1, k0,k1,k2]`.
+ */
+function keysetArgs(dialect: Dialect, key: unknown[]): unknown[] {
+	if (dialect !== 'duckdb') return key;
+	const args: unknown[] = [];
+	for (let i = 0; i < key.length; i++) args.push(...key.slice(0, i + 1));
+	return args;
 }
 
 /**

@@ -290,7 +290,10 @@ export async function outboxTail(
 		conds.push(`op IN (${opts.ops.map(() => '?').join(',')})`);
 		args.push(...opts.ops);
 	}
-	// Postgres visibility watermark (see the doc comment). libSQL needs no gate.
+	// Postgres visibility watermark (see the doc comment). libSQL needs no gate, and
+	// neither does DuckDB — its writer is serialized by the adapter's mutex (no
+	// concurrent in-flight txns to hide), and it exposes no transaction/snapshot horizon
+	// to build a gate from even if it needed one.
 	if (dialectOf(raw) === 'postgres') {
 		conds.push(PG_OUTBOX_VISIBLE);
 	}
@@ -317,6 +320,8 @@ export async function outboxTail(
  * no gate (serialized writer ⇒ `seq` == commit order).
  */
 export async function outboxHead(raw: DbClient): Promise<number> {
+	// Same xmin visibility gate as outboxTail (see its comment), needed only on Postgres.
+	// libSQL and DuckDB both need no gate (serialized writer ⇒ seq == commit order).
 	const gate = dialectOf(raw) === 'postgres' ? ` WHERE ${PG_OUTBOX_VISIBLE}` : '';
 	const r = await raw.execute(`SELECT COALESCE(MAX(seq), 0) AS head FROM graph_outbox${gate}`);
 	return Number((r.rows[0] as { head: unknown }).head);

@@ -5,10 +5,9 @@ import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { Graph } from '../src/graph.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { libsqlOnly, makeTestDb } from './harness.ts';
 
 // The nv_emb_idx retrieval probe uses libSQL's vector_top_k; PG vector retrieval is covered by P4.
-const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;
 
 // P3 — data layer (§6, D1/D3/B5/M6). Round-trips nodes/edges through the
 // close-and-insert temporal store with ULID identity, exercising getNode (live

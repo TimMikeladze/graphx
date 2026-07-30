@@ -3,6 +3,13 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { createApp, defineGraphSchema, hashEmbed } from '@graphx/core';
+// `createApp`'s dev bootstrap opens the project DB via `getDb`, which resolves its backend off
+// `GRAPHX_DB_DRIVER` — set process-wide by whichever core test file first imports
+// `core/test/harness.ts` under a non-libSQL `GRAPHX_TEST_DRIVER` leg. Registering both adapters
+// here (side effect only) keeps this file driver-agnostic; each is an optional peer only pulled
+// in by consumers who import its subpath, and both are already dev deps of this workspace.
+import '@graphx/core/pg';
+import '@graphx/core/duck';
 import { localBackend } from '../src/backend.ts';
 import { createGraphxMcp } from '../src/server.ts';
 

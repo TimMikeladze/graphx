@@ -87,8 +87,13 @@ test('bin: graphx_context hands an agent the ids every other tool needs', async 
 		expect(projects.isError).toBeFalsy();
 		expect(projects.structuredContent.projects.map((p: any) => p.id)).toContain(project);
 
-		// GRAPHX_DB is a NAMESPACE: `mygraph` is the file `./mygraph.db`, not a URL.
-		expect(await readdir(cwd)).toContain('mygraph.db');
+		// GRAPHX_DB is a NAMESPACE, not a URL: libSQL writes `./mygraph.db`, DuckDB
+		// `./mygraph.duckdb` (this process inherits whatever GRAPHX_DB_DRIVER the test runner
+		// set); Postgres writes no local file at all.
+		const driver = process.env.GRAPHX_DB_DRIVER ?? 'libsql';
+		if (driver !== 'postgres') {
+			expect(await readdir(cwd)).toContain(driver === 'duckdb' ? 'mygraph.duckdb' : 'mygraph.db');
+		}
 
 		bin.stop();
 	} finally {

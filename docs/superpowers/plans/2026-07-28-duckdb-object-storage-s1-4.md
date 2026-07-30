@@ -631,9 +631,8 @@ export class MemoryObjectStore implements ObjectStore {
 - [ ] **Step 5: Write `file.ts`**
 
 ```ts
-import { createHash } from 'node:crypto';
-import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { link, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { ObjectExistsError, type ObjectStore } from './store.ts';
 
@@ -650,11 +649,19 @@ export class FileObjectStore implements ObjectStore {
 		return join(this.rootDir, ...key.split('/'));
 	}
 
+	/**
+	 * Absence is load-bearing in this protocol — `resolveHead` probes forward until a
+	 * snapshot is missing — so only a genuine "not there" may return null. A catch-all
+	 * would make a permission error or a path collision indistinguishable from absence,
+	 * and silently resolve an older snapshot as head.
+	 */
 	async get(key: string): Promise<Uint8Array | null> {
 		try {
 			return new Uint8Array(await readFile(this.path(key)));
-		} catch {
-			return null;
+		} catch (e) {
+			const code = (e as NodeJS.ErrnoException).code;
+			if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+			throw e;
 		}
 	}
 
@@ -669,23 +676,43 @@ export class FileObjectStore implements ObjectStore {
 	async put(key: string, body: Uint8Array): Promise<void> {
 		const p = this.path(key);
 		await mkdir(dirname(p), { recursive: true });
-		await writeFile(p, body);
+		await this.writeThenMove(p, body, rename);
 	}
 
+	/**
+	 * Create-only, and atomic in BOTH senses that matter: only one caller wins, and the
+	 * key never exists in a half-written state.
+	 *
+	 * `O_CREAT | O_EXCL` alone gives only the first: it makes the file exist at zero bytes
+	 * and the body lands in a second step, so a reader racing that window gets a truncated
+	 * object instead of `null` — and in this protocol that reader is `resolveHead` parsing
+	 * a manifest. Writing to a temp file first and `link()`ing it into place gives both:
+	 * `link` fails `EEXIST` atomically, and the name it publishes is already complete.
+	 */
 	async putIfAbsent(key: string, body: Uint8Array): Promise<void> {
 		const p = this.path(key);
 		await mkdir(dirname(p), { recursive: true });
-		let handle: Awaited<ReturnType<typeof open>>;
+		await this.writeThenMove(p, body, link, key);
+	}
+
+	/** Write to a sibling temp file, then publish it under `target` in one step. */
+	private async writeThenMove(
+		target: string,
+		body: Uint8Array,
+		publish: (from: string, to: string) => Promise<void>,
+		exclusiveKey?: string,
+	): Promise<void> {
+		const tmp = `${target}.${process.pid}.${randomUUID()}.tmp`;
+		await writeFile(tmp, body);
 		try {
-			handle = await open(p, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY);
+			await publish(tmp, target);
 		} catch (e) {
-			if ((e as NodeJS.ErrnoException).code === 'EEXIST') throw new ObjectExistsError(key);
+			if (exclusiveKey !== undefined && (e as NodeJS.ErrnoException).code === 'EEXIST') {
+				throw new ObjectExistsError(exclusiveKey);
+			}
 			throw e;
-		}
-		try {
-			await handle.writeFile(body);
 		} finally {
-			await handle.close();
+			await rm(tmp, { force: true });
 		}
 	}
 
@@ -714,7 +741,30 @@ export class FileObjectStore implements ObjectStore {
 }
 ```
 
-Note: `stat` is imported but unused above — delete that import before committing; `bun run lint` will flag it.
+Two assertions the eight shared tests do not cover, because they all await the writer before reading. Add them to `store.test.ts` for the file store specifically:
+
+```ts
+test('a key is never observable half-written', async () => {
+	const s = new FileObjectStore(mkdtempSync(join(dir, 'fs-')));
+	const big = new Uint8Array(4 * 1024 * 1024).fill(7);
+	const writing = s.putIfAbsent('big', big);
+	// Race the write: every read must see either nothing or the whole object.
+	for (let i = 0; i < 50; i++) {
+		const seen = await s.get('big');
+		if (seen !== null) expect(seen.length).toBe(big.length);
+	}
+	await writing;
+	expect((await s.get('big'))?.length).toBe(big.length);
+});
+
+test('get surfaces a real I/O error instead of reporting absence', async () => {
+	const root = mkdtempSync(join(dir, 'fs-'));
+	const s = new FileObjectStore(root);
+	// A directory where an object should be: EISDIR, which is not "absent".
+	mkdirSync(join(root, 'collide'), { recursive: true });
+	await expect(s.get('collide')).rejects.toThrow();
+});
+```
 
 - [ ] **Step 6: Run the tests**
 
@@ -1049,7 +1099,7 @@ Expected: prints `CAS enforced`. Create the bucket first via the MinIO console a
 
 Then tear down: `docker rm -f graphx-minio`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/s3.ts packages/core/test/objstore/s3.test.ts
@@ -1359,9 +1409,13 @@ export class SnapshotStore {
 		for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt++) {
 			const next = await build(current);
 			const expected = current === null ? 0 : current.snapshot + 1;
-			if (next.snapshot !== expected) {
+			const expectedParent = current === null ? null : current.snapshot;
+			// Both fields, not just the number. A manifest with the right number and a
+			// wrong parent records a lineage that never happened, and nothing downstream
+			// would notice — `resolveHead` navigates by number alone.
+			if (next.snapshot !== expected || next.parent !== expectedParent) {
 				throw new Error(
-					`commit: build produced snapshot ${next.snapshot}, expected ${expected} — the builder ignored its base`,
+					`commit: build produced snapshot ${next.snapshot} parent ${next.parent}, expected ${expected} parent ${expectedParent} — the builder ignored its base`,
 				);
 			}
 			try {
@@ -1383,12 +1437,49 @@ export class SnapshotStore {
 }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Cover the branches that only fire when something is wrong**
+
+The seven tests above all drive the happy path. These three cover the failure branches — the ones whose whole purpose is to turn a silent wrong answer into a loud one, and which are therefore never exercised by a passing protocol:
+
+```ts
+test('a build that ignores its base is rejected, not silently corrected', async () => {
+	const s = new SnapshotStore(new MemoryObjectStore());
+	await s.commit(null, async (b) => bump(b));
+	const base = await s.resolveHead();
+	// Right number, wrong parent — a lineage that never happened.
+	await expect(
+		s.commit(base, async (b) => ({ ...bump(b), parent: 99 })),
+	).rejects.toThrow(/ignored its base/);
+	// Wrong number.
+	await expect(
+		s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 })),
+	).rejects.toThrow(/ignored its base/);
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+
+test('a corrupt _head falls back to listing rather than throwing', async () => {
+	const store = new MemoryObjectStore();
+	const s = new SnapshotStore(store);
+	await s.commit(null, async (b) => bump(b));
+	await store.put('_head', new TextEncoder().encode('{not json'));
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+
+test('a _head pointing past the end falls back to listing', async () => {
+	const store = new MemoryObjectStore();
+	const s = new SnapshotStore(store);
+	await s.commit(null, async (b) => bump(b));
+	await store.put('_head', new TextEncoder().encode(JSON.stringify({ snapshot: 99 })));
+	expect((await s.resolveHead())?.snapshot).toBe(0);
+});
+```
+
+- [ ] **Step 6: Run the tests**
 
 Run: `bun test packages/core/test/objstore/snapshot.test.ts`
-Expected: PASS, 7 tests.
+Expected: PASS, 10 tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/manifest.ts packages/core/src/objstore/snapshot.ts packages/core/test/objstore/snapshot.test.ts
@@ -1462,33 +1553,51 @@ describe('FileCache', () => {
 		expect(await store.list('data/')).toHaveLength(1);
 	});
 
-	test('ensure downloads once and serves from disk afterward', async () => {
+	test('a writer can read back what it wrote without touching the store', async () => {
+		// putContent populates the local cache too — the bytes are already in hand, and
+		// re-downloading your own upload is pure waste. The store write happens first, so
+		// nothing uncommitted is ever cached.
 		const store = new MemoryObjectStore();
 		const cache = new FileCache(store, mkdtempSync(join(root, 'c-')));
 		const key = await cache.putContent(enc('body'));
-		expect(await cache.has(key)).toBe(false);
-
-		const path = await cache.ensure(key);
-		expect(readFileSync(path, 'utf8')).toBe('body');
 		expect(await cache.has(key)).toBe(true);
+		await store.delete(key);
+		expect(readFileSync(await cache.ensure(key), 'utf8')).toBe('body');
+	});
+
+	test('a reader downloads once and serves from disk afterward', async () => {
+		// The download path as it actually occurs: a process with its own cache directory
+		// that did not write the object.
+		const store = new MemoryObjectStore();
+		const writer = new FileCache(store, mkdtempSync(join(root, 'c-')));
+		const key = await writer.putContent(enc('body'));
+
+		const reader = new FileCache(store, mkdtempSync(join(root, 'c-')));
+		expect(await reader.has(key)).toBe(false);
+
+		const path = await reader.ensure(key);
+		expect(readFileSync(path, 'utf8')).toBe('body');
+		expect(await reader.has(key)).toBe(true);
 
 		// Delete from the store; a cached file must still resolve, because content-addressed
 		// objects never change and so never need revalidation.
 		await store.delete(key);
-		expect(await cache.ensure(key)).toBe(path);
+		expect(await reader.ensure(key)).toBe(path);
 	});
 
-	test('resolve returns local paths for cached keys and remote-safe keys otherwise', async () => {
+	test('resolve fetches whatever is missing and preserves input order', async () => {
 		const store = new MemoryObjectStore();
-		const cache = new FileCache(store, mkdtempSync(join(root, 'c-')));
-		const a = await cache.putContent(enc('one'));
-		const b = await cache.putContent(enc('two'));
-		await cache.ensure(a);
-		const paths = await cache.resolve([a, b]);
-		expect(paths[0]).toBe(cache.localPath(a));
-		expect(paths[1]).toBe(cache.localPath(b));
-		// resolve() fetches what is missing, so every returned path is local afterward.
-		expect(await cache.has(b)).toBe(true);
+		const writer = new FileCache(store, mkdtempSync(join(root, 'c-')));
+		const a = await writer.putContent(enc('one'));
+		const b = await writer.putContent(enc('two'));
+
+		const reader = new FileCache(store, mkdtempSync(join(root, 'c-')));
+		await reader.ensure(a);
+		expect(await reader.has(b)).toBe(false);
+
+		const paths = await reader.resolve([b, a]);
+		expect(paths).toEqual([reader.localPath(b), reader.localPath(a)]);
+		expect(await reader.has(b)).toBe(true);
 	});
 
 	test('ensure throws a named error for a key that is in neither place', async () => {
@@ -1595,14 +1704,14 @@ export class FileCache {
 - [ ] **Step 4: Run the tests**
 
 Run: `bun test packages/core/test/objstore/cache.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Run the whole suite and check types**
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: all green. Stage 2 adds only new modules that nothing imports yet, so nothing existing can regress.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/objstore/cache.ts packages/core/test/objstore/cache.test.ts
@@ -1637,20 +1746,11 @@ reader later."
   - `class DuckPool` with constructor `(path: string, opts?: { max?: number })` and methods `acquire(): Promise<PooledConnection>`, `withConnection<T>(fn: (c: PooledConnection) => Promise<T>): Promise<T>`, `close(): Promise<void>`
   - `function isFatalInstanceError(e: unknown): boolean`
 
-- [ ] **Step 1: Add the dependency and the subpath export**
+- [ ] **Step 1: Add the dependency**
 
-In `packages/core/package.json`, add to `exports` after the `./pg` entry:
+Only the dependency declarations land here. The `./duck` export map and the bunup entry point at `src/duck.ts`, which Task 8 creates — wiring them now would leave `bun run build` pointing at a file that does not exist, so they move to Task 8 with the file they describe.
 
-```json
-		"./duck": {
-			"import": {
-				"types": "./dist/duck.d.ts",
-				"default": "./dist/duck.js"
-			}
-		},
-```
-
-Add to `devDependencies`:
+In `packages/core/package.json`, add to `devDependencies`:
 
 ```json
 		"@duckdb/node-api": "1.5.5-r.2",
@@ -1668,22 +1768,6 @@ Add to `peerDependenciesMeta`:
 		"@duckdb/node-api": {
 			"optional": true
 		},
-```
-
-In `bunup.config.ts`, extend the core entry list and its comment:
-
-```ts
-	{
-		name: 'core',
-		root: 'packages/core',
-		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
-		// one registers that driver with `getDb` (side effect). They stay separate entries
-		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
-		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
-		config: {
-			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
-		},
-	},
 ```
 
 Run: `bun install`
@@ -1763,6 +1847,85 @@ describe('DuckPool', () => {
 		await pool.close();
 	});
 
+	test('close settles callers parked in the queue instead of hanging them', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const parked = pool.acquire();
+		await new Promise((r) => setTimeout(r, 10));
+		await pool.close();
+		// Must settle one way or the other. Before this fix the promise never resolved.
+		await expect(parked).rejects.toThrow(/closed/);
+		held.release();
+	});
+
+	test('a connection from a superseded generation is discarded, not pooled', async () => {
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const c = await pool.acquire();
+		// Simulate the FATAL path: the instance is replaced while this caller holds a
+		// connection from the old generation.
+		(pool as unknown as { rebuild(): void }).rebuild();
+		c.release();
+		// The corpse must not be handed to the next caller, and must not count toward max.
+		expect((pool as unknown as { idle: unknown[] }).idle).toHaveLength(0);
+		const fresh = await pool.acquire();
+		expect((await fresh.run('SELECT 1 AS a')).rows).toEqual([{ a: 1 }]);
+		fresh.release();
+		await pool.close();
+	});
+
+	test('a freed slot reaches a waiter even with others queued behind it', async () => {
+		// The slot-freeing paths — a stale-generation discard and a failed connect() —
+		// wake a waiter without pushing anything to `idle`. With more than one caller
+		// queued, a resumed waiter that deferred to the queue behind it would re-park and
+		// nobody would ever create: every caller hanging while `open < max`. One queued
+		// waiter is not enough to catch this; two are.
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const first = pool.acquire();
+		const second = pool.acquire();
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Simulate the FATAL path, then hand the corpse back: the slot frees with no
+		// connection pooled.
+		(pool as unknown as { rebuild(): void }).rebuild();
+		held.release();
+
+		const a = await first;
+		expect((await a.run('SELECT 1 AS n')).rows).toEqual([{ n: 1 }]);
+		a.release();
+		const b = await second;
+		expect((await b.run('SELECT 2 AS n')).rows).toEqual([{ n: 2 }]);
+		b.release();
+		await pool.close();
+	});
+
+	test('a same-tick arrival cannot jump a queued waiter', async () => {
+		// Pushing a released connection to `idle` and waking someone to go find it leaves a
+		// microtask-sized window in which a fresh acquire() takes it first. Sustained, that
+		// starves the queued waiter indefinitely — verified, not theoretical. Direct handoff
+		// closes the window.
+		const pool = new DuckPool(':memory:', { max: 1 });
+		const held = await pool.acquire();
+		const order: string[] = [];
+		const queued = pool.acquire().then((c) => {
+			order.push('queued');
+			return c;
+		});
+		await new Promise((r) => setTimeout(r, 10));
+
+		// Release and immediately race a fresh caller in the same tick.
+		held.release();
+		const fresh = pool.acquire().then((c) => {
+			order.push('fresh');
+			return c;
+		});
+
+		(await queued).release();
+		(await fresh).release();
+		expect(order).toEqual(['queued', 'fresh']);
+		await pool.close();
+	});
+
 	test('isFatalInstanceError recognizes an invalidated database', () => {
 		expect(isFatalInstanceError(new Error('FATAL Error: database has been invalidated'))).toBe(
 			true,
@@ -1815,11 +1978,32 @@ export function isFatalInstanceError(e: unknown): boolean {
 
 type RawConnection = Awaited<ReturnType<DuckDBInstance['connect']>>;
 
+/**
+ * A connection tagged with the instance generation it was created against. After a FATAL
+ * the instance is replaced, and every connection from the old generation is dead — but a
+ * caller may still be holding one and will hand it back through the normal release path.
+ * The tag is how `checkin` tells a live connection from a corpse.
+ */
+interface TaggedConnection {
+	raw: RawConnection;
+	generation: number;
+}
+
 export class DuckPool {
 	private instance?: Promise<DuckDBInstance>;
-	private readonly idle: RawConnection[] = [];
-	private readonly waiting: Array<(c: RawConnection) => void> = [];
+	private readonly idle: TaggedConnection[] = [];
+	/**
+	 * Parked callers, served by DIRECT HANDOFF. `checkin` passes a live connection straight
+	 * to the head of this queue rather than pushing it to `idle` and waking someone to go
+	 * find it — a wake only schedules a microtask, so a fresh `acquire()` in the same tick
+	 * would win the race to `idle.pop()` and could starve a queued waiter indefinitely.
+	 * Resolving with `null` means "a slot freed but there is nothing to hand you" (a
+	 * stale-generation discard, or a failed `connect()`), which grants the turn to create.
+	 */
+	private readonly waiting: Array<(c: TaggedConnection | null) => void> = [];
+	/** Live connections of the CURRENT generation. Reset when the instance is replaced. */
 	private open = 0;
+	private generation = 0;
 	private readonly max: number;
 	private closed = false;
 
@@ -1837,7 +2021,8 @@ export class DuckPool {
 
 	async acquire(): Promise<PooledConnection> {
 		if (this.closed) throw new Error('duck pool: closed');
-		const raw = await this.checkout();
+		const conn = await this.checkout();
+		const raw = conn.raw;
 		let released = false;
 		return {
 			run: async (sql, values, types) => {
@@ -1859,14 +2044,14 @@ export class DuckPool {
 						columnNames: reader.columnNames(),
 					};
 				} catch (e) {
-					if (isFatalInstanceError(e)) await this.rebuild();
+					if (isFatalInstanceError(e)) this.rebuild();
 					throw e;
 				}
 			},
 			release: () => {
 				if (released) return;
 				released = true;
-				this.checkin(raw);
+				this.checkin(conn);
 			},
 		};
 	}
@@ -1881,59 +2066,100 @@ export class DuckPool {
 		}
 	}
 
-	private async checkout(): Promise<RawConnection> {
-		const spare = this.idle.pop();
-		if (spare) return spare;
-		if (this.open < this.max) {
-			this.open++;
-			try {
-				return await (await this.getInstance()).connect();
-			} catch (e) {
-				this.open--;
-				throw e;
+	private async checkout(): Promise<TaggedConnection> {
+		for (;;) {
+			if (this.closed) throw new Error('duck pool: closed');
+			// Only a caller with nobody ahead of it may help itself. A queued waiter is
+			// served by direct handoff, so a fresh arrival must not be able to take what
+			// was freed for someone already in line.
+			if (this.waiting.length === 0) {
+				const spare = this.idle.pop();
+				if (spare) return spare;
+				if (this.open < this.max) return this.create();
 			}
+			const handed = await new Promise<TaggedConnection | null>((resolve) =>
+				this.waiting.push(resolve),
+			);
+			// A connection handed straight over — no window in which anyone could take it.
+			if (handed) return handed;
+			if (this.closed) throw new Error('duck pool: closed');
+			// Woken because a slot freed with nothing to pass on. We hold the turn, so we
+			// may create even though callers are queued behind us; deferring to them here
+			// would park us again with nobody left to act, and the pool would hang.
+			if (this.open < this.max) return this.create();
 		}
-		return new Promise<RawConnection>((resolve) => this.waiting.push(resolve));
 	}
 
-	private checkin(raw: RawConnection): void {
-		const next = this.waiting.shift();
-		if (next) {
-			next(raw);
+	private async create(): Promise<TaggedConnection> {
+		this.open++;
+		const generation = this.generation;
+		try {
+			return { raw: await (await this.getInstance()).connect(), generation };
+		} catch (e) {
+			this.open--;
+			// The slot we claimed is free again — pass the turn on rather than leaving the
+			// queue parked behind a connection that never opened.
+			this.grantTurn();
+			throw e;
+		}
+	}
+
+	/** Wake the longest-waiting caller with no connection: a slot is free, go make one. */
+	private grantTurn(): void {
+		this.waiting.shift()?.(null);
+	}
+
+	private checkin(c: TaggedConnection): void {
+		// A connection from a superseded generation is dead — the FATAL that replaced the
+		// instance killed it. Returning it to `idle` would hand a corpse to the next
+		// caller, and counting it would let the pool exceed `max`.
+		if (c.generation !== this.generation || this.closed) {
+			closeQuietly(c.raw);
+			this.grantTurn();
 			return;
 		}
-		this.idle.push(raw);
+		// Direct handoff: give it to whoever has been waiting longest. Going through
+		// `idle` would open a window for a same-tick arrival to take it first.
+		const next = this.waiting.shift();
+		if (next) {
+			next(c);
+			return;
+		}
+		this.idle.push(c);
 	}
 
 	/**
 	 * Discard the instance and every connection on it. The only recovery from a FATAL —
 	 * a brand-new connection on the same instance is dead too.
+	 *
+	 * Connections currently checked out cannot be reclaimed here; they are neutralized by
+	 * the generation bump, which makes `checkin` close them instead of pooling them.
 	 */
-	private async rebuild(): Promise<void> {
-		for (const c of this.idle.splice(0)) {
-			try {
-				c.closeSync();
-			} catch {
-				/* the instance is already dead; closing is best-effort */
-			}
-		}
+	private rebuild(): void {
+		for (const c of this.idle.splice(0)) closeQuietly(c.raw);
+		this.generation++;
 		this.open = 0;
 		this.instance = undefined;
 	}
 
 	async close(): Promise<void> {
 		this.closed = true;
-		for (const c of this.idle.splice(0)) {
-			try {
-				c.closeSync();
-			} catch {
-				/* ignore */
-			}
-		}
+		for (const c of this.idle.splice(0)) closeQuietly(c.raw);
 		this.open = 0;
+		// Release everyone parked in the queue. Without this a caller waiting beyond `max`
+		// when the pool closes is never resumed and its promise never settles.
+		while (this.waiting.length > 0) this.grantTurn();
 		const inst = this.instance;
 		this.instance = undefined;
 		if (inst) (await inst).closeSync();
+	}
+}
+
+function closeQuietly(raw: RawConnection): void {
+	try {
+		raw.closeSync();
+	} catch {
+		/* the instance may already be dead; closing is best-effort */
 	}
 }
 ```
@@ -1945,11 +2171,8 @@ Expected: PASS, 6 tests. The "two concurrent transactions do not merge" test is 
 
 - [ ] **Step 6: Verify the peer stays optional**
 
-Run: `bun run build`
-Expected: exit 0, and `packages/core/dist/duck.js` exists.
-
 Run: `grep -rn "duckdb" packages/core/src/index.ts packages/core/src/db.ts`
-Expected: no matches. Nothing on the default import path may reference the driver.
+Expected: no matches. Nothing on the default import path may reference the driver. (The `dist/duck.js` build check belongs to Task 8, which creates the file that entry points at.)
 
 Run: `bun run type-check && bun run lint`
 Expected: both exit 0.
@@ -2118,6 +2341,54 @@ describe('DuckClient', () => {
 		await c.end();
 	});
 
+	test('splitStatements respects literals and comments', () => {
+		// Each of these would silently corrupt schema DDL if mis-split: a dropped
+		// statement, a merged one, or a literal cut in half.
+		expect(splitStatements('SELECT 1; SELECT 2')).toEqual(['SELECT 1', 'SELECT 2']);
+		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual([
+			"SELECT ';' AS a",
+			'SELECT 2',
+		]);
+		expect(splitStatements("SELECT 'a''b;c' AS a")).toEqual(["SELECT 'a''b;c' AS a"]);
+		expect(splitStatements('SELECT 1; -- trailing; comment\nSELECT 2')).toEqual([
+			'SELECT 1',
+			'SELECT 2',
+		]);
+		expect(splitStatements('-- lone; comment\nSELECT 1')).toEqual(['SELECT 1']);
+		expect(splitStatements('SELECT 1; /* block; comment */ SELECT 2')).toEqual([
+			'SELECT 1',
+			'SELECT 2',
+		]);
+		expect(splitStatements('  ;; \n')).toEqual([]);
+		expect(splitStatements('')).toEqual([]);
+	});
+
+	test('rollback discards the writes and closes the transaction', async () => {
+		const c = createDuckClient();
+		await c.execute('CREATE TABLE t(id INTEGER)');
+		const tx = await c.transaction('write');
+		await tx.execute({ sql: 'INSERT INTO t VALUES (?)', args: [1] });
+		await tx.rollback();
+		expect(tx.closed).toBe(true);
+		expect((await c.execute('SELECT count(*) AS n FROM t')).rows[0]?.n).toBe(0);
+		await c.end();
+	});
+
+	test('executeMultiple runs a script whose comments contain semicolons', async () => {
+		// The schema DDL this splits is full of comments; a semicolon in one must not
+		// truncate the script.
+		const c = createDuckClient();
+		await c.executeMultiple(`
+			-- first; with a semicolon in the comment
+			CREATE TABLE a(id INTEGER);
+			/* and a block; comment */
+			CREATE TABLE b(id INTEGER);
+		`);
+		expect((await c.execute('SELECT count(*) AS n FROM a')).rows[0]?.n).toBe(0);
+		expect((await c.execute('SELECT count(*) AS n FROM b')).rows[0]?.n).toBe(0);
+		await c.end();
+	});
+
 	test('the dialect tag is duckdb', () => {
 		const c = createDuckClient();
 		expect(c.dialect).toBe('duckdb');
@@ -2256,11 +2527,17 @@ class DuckTransaction implements DbTransaction {
 
 	async commit(): Promise<void> {
 		if (this.aborted) {
-			await this.rollback();
+			// Swallow a rollback failure: the caller needs to hear "aborted", which is the
+			// actionable fact, not whatever went wrong while cleaning up after it.
+			await this.rollback().catch(() => undefined);
 			throw new Error('duck transaction: aborted — commit would silently discard the writes');
 		}
-		await this.conn.run('COMMIT');
-		this.finish();
+		try {
+			await this.conn.run('COMMIT');
+		} finally {
+			// Release even if COMMIT itself throws, or the connection leaks from the pool.
+			this.finish();
+		}
 	}
 
 	async rollback(): Promise<void> {
@@ -2357,39 +2634,65 @@ export class DuckClient implements DbClient {
 }
 
 /**
- * Split a DDL script into statements on semicolons that are not inside a string literal
- * or a dollar-quoted block. The client's `extractStatements` would also work, but it
- * requires a live connection to call and this keeps the split testable in isolation.
+ * Split a DDL script into statements on semicolons that are genuinely statement
+ * boundaries — not ones inside a string literal or a comment. The client's
+ * `extractStatements` would also work, but it needs a live connection to call and this
+ * keeps the split testable in isolation.
+ *
+ * Comments must be skipped, not merely tolerated: the schema DDL this splits is full of
+ * them, and a semicolon inside one produces either a parse error (when the comment tail
+ * merges into the next statement) or, worse, a silently dropped statement (when the
+ * comment forms an isolated fragment between two semicolons).
  */
 export function splitStatements(sql: string): string[] {
 	const out: string[] = [];
 	let buf = '';
-	let inStr = false;
-	for (let i = 0; i < sql.length; i++) {
+	let i = 0;
+	const flush = (): void => {
+		if (buf.trim()) out.push(buf.trim());
+		buf = '';
+	};
+	while (i < sql.length) {
 		const ch = sql[i];
-		if (inStr) {
-			buf += ch;
-			if (ch === "'") {
-				if (sql[i + 1] === "'") {
-					buf += "'";
-					i++;
-				} else {
-					inStr = false;
-				}
-			}
+		if (ch === '-' && sql[i + 1] === '-') {
+			const nl = sql.indexOf('\n', i);
+			i = nl === -1 ? sql.length : nl + 1;
+			continue;
+		}
+		if (ch === '/' && sql[i + 1] === '*') {
+			const end = sql.indexOf('*/', i + 2);
+			i = end === -1 ? sql.length : end + 2;
 			continue;
 		}
 		if (ch === "'") {
-			inStr = true;
+			// Copy the literal verbatim, honouring the doubled '' escape. A semicolon in
+			// here is data, not a boundary.
 			buf += ch;
-		} else if (ch === ';') {
-			if (buf.trim()) out.push(buf.trim());
-			buf = '';
-		} else {
-			buf += ch;
+			i++;
+			while (i < sql.length) {
+				buf += sql[i];
+				if (sql[i] === "'") {
+					if (sql[i + 1] === "'") {
+						buf += sql[i + 1];
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			continue;
 		}
+		if (ch === ';') {
+			flush();
+			i++;
+			continue;
+		}
+		buf += ch;
+		i++;
 	}
-	if (buf.trim()) out.push(buf.trim());
+	flush();
 	return out;
 }
 
@@ -2411,6 +2714,39 @@ registerDuckDriver(
 		}),
 );
 ```
+
+- [ ] **Step 4b: Wire the `./duck` subpath**
+
+Task 7 declared the dependency but deliberately left the export map alone, because it points at `src/duck.ts` — the file you just created. Wire it now that the target exists.
+
+In `packages/core/package.json`, add to `exports` after the `./pg` entry:
+
+```json
+		"./duck": {
+			"import": {
+				"types": "./dist/duck.d.ts",
+				"default": "./dist/duck.js"
+			}
+		},
+```
+
+In `bunup.config.ts`, extend the core entry list and its comment:
+
+```ts
+	{
+		name: 'core',
+		root: 'packages/core',
+		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
+		// one registers that driver with `getDb` (side effect). They stay separate entries
+		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
+		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
+		config: {
+			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
+		},
+	},
+```
+
+Verify: `bun run build` exits 0 and `packages/core/dist/duck.js` exists.
 
 - [ ] **Step 5: Register the third driver in `db.ts`**
 
@@ -2513,9 +2849,13 @@ first element alone and truncates floats without error."
 
 ## Task 9: `duckdbSchema(dim)` and the live/history split
 
-> **Deviation from the spec's staging, deliberate:** §15 assigns the live/history split to stage 4. It lands here instead, because it is pure DDL and writing the schema twice — once flat, then again split — would be waste. Nothing else moves.
+> **Correction, applied during execution (Task 11 found it).** An earlier version of this task made `node_versions` and `edge_versions` *views* over separate `nv_live` / `nv_history` tables. DuckDB refuses `INSERT` into a `UNION ALL` view, and every write path in the codebase — `Graph.addNode`/`addEdge`/`updateNode`/`deleteNode`/`deleteEdge`, `bulkLoad`, `bulkEdges`, and auth — writes to those names directly, because on libSQL and Postgres they are real tables. The split as a *local schema* broke the entire write path.
+>
+> The split now lives where it actually pays off: **in the Parquet layout**, not the local materialization. Task 15 exports `valid_to = FOREVER` rows to a live file and the rest to history files; Task 14 loads both back into one table. The local database keeps single tables and needs no write-path changes at all.
+>
+> What that costs: the one-live-row-per-id invariant is no longer backed by a primary key. It is enforced by the writer mutex (Task 16) and the same application-level checking Task 12 establishes for unique props — which was already the accepted model for constraints DuckDB cannot express.
 
-The split is what makes the schema expressible at all. Every index in graphx is *partial* over `WHERE valid_to = 8640000000000000`, and DuckDB has no partial indexes. Putting live rows in their own table makes the predicate physical: the index scope becomes the table, and what is left is a plain index.
+This schema is the third sibling of `schema()` (libSQL) and `postgresSchema()`, and deliberately mirrors the Postgres one: single version tables, `nodes`/`edges` as views filtered to `valid_to = FOREVER`.
 
 **Files:**
 - Modify: `packages/core/src/dialect-sql.ts` (add `duckdbSchema`)
@@ -2524,7 +2864,7 @@ The split is what makes the schema expressible at all. Every index in graphx is 
 
 **Interfaces:**
 - Consumes: `createDuckClient` from Task 8.
-- Produces: `function duckdbSchema(dim?: number): string` exported from `dialect-sql.ts`. Physical tables `nv_live`, `nv_history`, `ev_live`, `ev_history`; compatibility views `node_versions` (= `nv_live UNION ALL nv_history`), `edge_versions`, `nodes`, `edges`.
+- Produces: `function duckdbSchema(dim?: number): string` exported from `dialect-sql.ts`. Real tables `node_versions` and `edge_versions`; views `nodes` and `edges` filtered to `valid_to = FOREVER`. Same shape as `postgresSchema()`, so every existing write path works unchanged.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2538,7 +2878,7 @@ import { init, readEmbDim } from '../src/schema.ts';
 const FOREVER = 8640000000000000;
 
 describe('duckdbSchema', () => {
-	test('init creates the split tables and their compatibility views', async () => {
+	test('init creates the version tables and their views', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		const r = await c.execute(
@@ -2546,7 +2886,7 @@ describe('duckdbSchema', () => {
 			 WHERE view_name IN ('node_versions','edge_versions','nodes','edges')`,
 		);
 		const names = r.rows.map((x) => String(x.table_name ?? x.view_name));
-		for (const t of ['nv_live', 'nv_history', 'ev_live', 'ev_history']) {
+		for (const t of ['node_versions', 'edge_versions', 'node_identity', 'graph_outbox']) {
 			expect(names).toContain(t);
 		}
 		await c.end();
@@ -2559,16 +2899,16 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('node_versions unions live and history', async () => {
+	test('nodes shows only the live version, node_versions shows every one', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 10, FOREVER],
 		});
 		await c.execute({
-			sql: `INSERT INTO nv_history (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [2, 'n1', 'Doc', 1, 10],
 		});
 		expect((await c.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(2);
@@ -2576,20 +2916,53 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('the live table enforces one row per id without a partial index', async () => {
+	test('two live rows for one id are NOT rejected by the store — the writer must prevent them', async () => {
+		// On libSQL and Postgres a partial unique index makes this impossible. DuckDB has
+		// no partial indexes, so the invariant is upheld by the serialized writer (Task 16)
+		// and application-level checks (Task 12) instead. This test pins that the store
+		// gives no backstop, so nobody later mistakes silence for enforcement.
+		const c = createDuckClient();
+		await init(c, 4);
+		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
+		for (const ver of [1, 2]) {
+			await c.execute({
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+				args: [ver, 'n1', 'Doc', ver * 10, FOREVER],
+			});
+		}
+		expect((await c.execute('SELECT count(*) AS n FROM nodes')).rows[0]?.n).toBe(2);
+		await c.end();
+	});
+
+	test('the views expose exactly the columns libSQL exposes', async () => {
+		// Every query in the codebase reads these four. A column missing, renamed, or
+		// reordered would break them on this backend only, silently — and no other test
+		// here would notice, because they all query the schema they just created rather
+		// than comparing it against the reference. Comparing the two live backends keeps
+		// this self-maintaining: it fails if EITHER schema drifts.
+		const duck = createDuckClient();
+		await init(duck, 4);
+		const lib = createClient({ url: ':memory:' });
+		await init(lib, 4);
+		for (const view of ['nodes', 'edges', 'node_versions', 'edge_versions']) {
+			const d = await duck.execute(`SELECT * FROM ${view} LIMIT 0`);
+			const l = await lib.execute(`SELECT * FROM ${view} LIMIT 0`);
+			expect(d.columns).toEqual(l.columns);
+		}
+		lib.close();
+		await duck.end();
+	});
+
+	test('ver auto-populates from the sequence when a caller omits it', async () => {
 		const c = createDuckClient();
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-			args: [1, 'n1', 'Doc', 10, FOREVER],
+			sql: `INSERT INTO node_versions (id, type, valid_from) VALUES (?, ?, ?)`,
+			args: ['n1', 'Doc', 1],
 		});
-		await expect(
-			c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
-				args: [2, 'n1', 'Doc', 20, FOREVER],
-			}),
-		).rejects.toThrow();
+		const r = await c.execute('SELECT ver FROM node_versions');
+		expect(Number(r.rows[0]?.ver)).toBeGreaterThan(0);
 		await c.end();
 	});
 
@@ -2612,10 +2985,10 @@ describe('duckdbSchema', () => {
 		await init(c, 4);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
 			args: [1, 'n1', 'Doc', 1, FOREVER],
 		});
-		expect((await c.execute('SELECT valid_to FROM nv_live')).rows[0]?.valid_to).toBe(FOREVER);
+		expect((await c.execute('SELECT valid_to FROM node_versions')).rows[0]?.valid_to).toBe(FOREVER);
 		await c.end();
 	});
 });
@@ -2656,7 +3029,7 @@ Expected: FAIL — `init` throws `schema.init: duckdb not implemented yet` from 
  */
 export function duckdbSchema(dim: number = 768): string {
 	const nodeCols = `
-  ver          BIGINT NOT NULL,
+  ver          BIGINT NOT NULL DEFAULT nextval('seq_ver'),
   id           TEXT NOT NULL,
   type         TEXT NOT NULL,
   body         TEXT,
@@ -2669,7 +3042,7 @@ export function duckdbSchema(dim: number = 768): string {
   valid_from   BIGINT NOT NULL,
   valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
 	const edgeCols = `
-  ver        BIGINT NOT NULL,
+  ver        BIGINT NOT NULL DEFAULT nextval('seq_ver'),
   id         TEXT NOT NULL,
   src        TEXT NOT NULL,
   dst        TEXT NOT NULL,
@@ -2691,35 +3064,24 @@ CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 INSERT INTO graph_meta (key, value) VALUES ('emb_dim', '${dim}') ON CONFLICT DO NOTHING;
 
-CREATE TABLE IF NOT EXISTS nv_live (${nodeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS nv_history (${nodeCols},
+CREATE TABLE IF NOT EXISTS node_versions (${nodeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS nv_hist_asof ON nv_history(id, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS nv_live_type ON nv_live(type);
+CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 
-CREATE TABLE IF NOT EXISTS ev_live (${edgeCols},
-  PRIMARY KEY (id)
-);
-CREATE TABLE IF NOT EXISTS ev_history (${edgeCols},
+CREATE TABLE IF NOT EXISTS edge_versions (${edgeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS ev_live_src ON ev_live(src);
-CREATE INDEX IF NOT EXISTS ev_live_dst ON ev_live(dst);
-CREATE INDEX IF NOT EXISTS ev_hist_src ON ev_history(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_hist_dst ON ev_history(dst, valid_from, valid_to);
-
-CREATE OR REPLACE VIEW node_versions AS
-  SELECT * FROM nv_live UNION ALL SELECT * FROM nv_history;
-CREATE OR REPLACE VIEW edge_versions AS
-  SELECT * FROM ev_live UNION ALL SELECT * FROM ev_history;
+CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE OR REPLACE VIEW nodes AS
-  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb FROM nv_live;
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
+  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
 CREATE OR REPLACE VIEW edges AS
-  SELECT id, src, dst, rel, weight, data, source FROM ev_live;
+  SELECT id, src, dst, rel, weight, data, source
+  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
@@ -2804,7 +3166,7 @@ Expected: PASS, 7 tests.
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/dialect-sql.ts packages/core/src/schema.ts packages/core/test/duck-schema.test.ts
@@ -2845,6 +3207,7 @@ import { describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../src/duck.ts';
 import { embParam } from '../src/duck-value.ts';
 import {
+	annSeedsAsOf,
 	annSeedsLive,
 	jsonArrayRows,
 	jsonEqArg,
@@ -2901,6 +3264,33 @@ describe('duckdb fragments, executed', () => {
 		await c.end();
 	});
 
+	test('annSeedsAsOf excludes a candidate that is nearest but not yet valid at t', async () => {
+		// The highest-risk fragment here: it combines temporal filtering, true-cosine
+		// ranking, and two-phase truncation. A version of it that ignored the temporal
+		// filter would return a plausible, well-ordered, WRONG answer — so the case has to
+		// be built so the nearest vector is the one that must be excluded.
+		const c = createDuckClient();
+		await init(c, 3);
+		for (const [id, vec, from] of [
+			['near', [1, 0, 0], 100],
+			['far', [0, 0, 1], 1],
+		] as const) {
+			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
+			await c.execute({
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
+				      VALUES (nextval('seq_ver'), ?, 'Doc', ?, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
+				args: [id, from, embParam([...vec])],
+			});
+		}
+		// As of t=50, 'near' does not exist yet — even though it is the closest vector.
+		const r = await c.execute({
+			sql: `WITH seeds AS (${annSeedsAsOf('duckdb')}) SELECT id FROM seeds`,
+			args: [embParam([1, 0, 0]), 10, 50, 50, 5],
+		});
+		expect(r.rows.map((x) => x.id)).toEqual(['far']);
+		await c.end();
+	});
+
 	test('annSeedsLive returns live ids ordered by cosine distance', async () => {
 		const c = createDuckClient();
 		await init(c, 3);
@@ -2910,7 +3300,7 @@ describe('duckdb fragments, executed', () => {
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO nv_live (ver, id, type, valid_from, valid_to, emb)
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
 				      VALUES (nextval('seq_ver'), ?, 'Doc', 1, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
 				args: [id, embParam([...vec])],
 			});
@@ -3002,8 +3392,8 @@ case 'duckdb':
   SELECT unnest(ids) AS id
   FROM (
     SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   )`;
 
 // vecSeedLive — args: embedding JSON, k. Identical shape; the caller wants ids only.
@@ -3012,8 +3402,8 @@ case 'duckdb':
 SELECT unnest(ids) AS id
 FROM (
   SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
-  FROM nv_live
-  WHERE emb IS NOT NULL
+  FROM node_versions
+  WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
 )`;
 
 // annSeedsAsOf — args: embedding JSON, over-fetch k, t, t, final k. Ranks by true
@@ -3023,8 +3413,8 @@ case 'duckdb':
   SELECT live.id AS id, live.rk AS rk
   FROM (
     SELECT id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')) AS rk
-    FROM nv_live
-    WHERE emb IS NOT NULL
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
     ORDER BY rk
     LIMIT ?
   ) live
@@ -3041,7 +3431,7 @@ Leave `ftsWhere`, `ftsSeedLive`, and `ftsSeedAsOf` throwing `notYet`. They need 
 - [ ] **Step 4: Run the tests**
 
 Run: `bun test packages/core/test/duck-fragments.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green — the libSQL and Postgres arms are untouched.
@@ -3244,7 +3634,9 @@ is unverified on DuckDB."
 
 ## Task 12: Constraint enforcement without partial indexes
 
-`declareSingleValuedRel` is solved by the live/history split — a plain `UNIQUE(src, rel)` on `ev_live` is exactly the invariant. `declareUniqueNodeProp` is not: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. It is enforced in application code instead, which is exact because the writer is serialized.
+Neither constraint gets a store-level index on DuckDB, for two different reasons.
+
+`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns — but the libSQL and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on live edges would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
 
 **Files:**
 - Modify: `packages/core/src/constraints.ts:62-91`
@@ -3321,6 +3713,36 @@ describe('duckdb constraints', () => {
 		await client.end();
 	});
 
+	test('two concurrent updateNode calls do not deadlock the pool', async () => {
+		// The constraint check runs inside the conditional-close transaction. If it reaches
+		// for a second pooled connection instead of using the transaction's own, every
+		// connection ends up held by a writer waiting for one more, and the process hangs.
+		// Needs at least poolMax concurrent writers to show up — the default is 4.
+		const client = createDuckClient({ poolMax: 2 });
+		await init(client, 4);
+		const g = new Graph(client, schema);
+		await declareUniqueNodeProp(client, 'Doc', 'slug');
+		const a = await g.addNode({ type: 'Doc', data: { slug: 'a' } });
+		const b = await g.addNode({ type: 'Doc', data: { slug: 'b' } });
+		await Promise.all([
+			g.updateNode(a.id, { data: { slug: 'a', n: 1 } }),
+			g.updateNode(b.id, { data: { slug: 'b', n: 1 } }),
+		]);
+		await client.end();
+	}, 10000);
+
+	test('a declaration for one type does not leak to a type whose name it prefixes', async () => {
+		// `_` is a LIKE wildcard, and this codebase is full of snake_case type names.
+		const client = createDuckClient();
+		await init(client, 4);
+		const g = new Graph(client, schema);
+		await declareUniqueNodeProp(client, 'ab', 'x');
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
+		// 'a_' was never declared unique on anything, so this must be allowed.
+		await g.addNode({ type: 'a_', data: { x: 'dup' } });
+		await client.end();
+	});
+
 	test('a single-valued rel is enforced by the live table', async () => {
 		const { client, g } = await graph();
 		await g.declareSingleValuedRel('owner');
@@ -3345,7 +3767,17 @@ Expected: FAIL — `constraints.ts` throws `not implemented yet` for duckdb.
 - [ ] **Step 3: Write `duck-constraints.ts`**
 
 ```ts
-import type { DbClient } from './dialect.ts';
+import type { DbClient, SqlResult, SqlStatement } from './dialect.ts';
+
+/**
+ * The narrowest thing these checks need. Both `DbClient` and `DbTransaction` declare
+ * `execute` identically, and narrowing to it is what lets a check run ON the transaction
+ * that is about to write. Taking a `DbClient` instead would force a caller inside an open
+ * transaction to reach for a second pooled connection — which deadlocks the pool once
+ * enough writers are concurrently mid-transaction, since each holds one connection while
+ * waiting for another.
+ */
+type Executor = { execute(stmt: SqlStatement): Promise<SqlResult> };
 
 /**
  * Unique-prop enforcement for DuckDB.
@@ -3380,7 +3812,7 @@ export async function declareDuckUniqueProp(
 	// loudly, the way creating a unique index over duplicates would on the other backends.
 	const dupes = await client.execute({
 		sql: `SELECT json_extract_string(data, '$.${prop}') AS v, count(*) AS n
-		      FROM nv_live WHERE type = ? AND json_extract_string(data, '$.${prop}') IS NOT NULL
+		      FROM node_versions WHERE valid_to = 8640000000000000 AND type = ? AND json_extract_string(data, '$.${prop}') IS NOT NULL
 		      GROUP BY 1 HAVING count(*) > 1 LIMIT 1`,
 		args: [type],
 	});
@@ -3391,13 +3823,20 @@ export async function declareDuckUniqueProp(
 	}
 }
 
-/** Every prop declared unique for `type`. */
-async function declaredProps(client: DbClient, type: string): Promise<string[]> {
-	const r = await client.execute({
-		sql: `SELECT key FROM graph_meta WHERE key LIKE ?`,
-		args: [`${DECL_PREFIX}${type}:%`],
+/**
+ * Every prop declared unique for `type`.
+ *
+ * `starts_with` rather than `LIKE`: a type name containing `_` — and this codebase is full
+ * of snake_case — would otherwise match as a single-character wildcard, so declaring
+ * `ab.x` unique would silently start enforcing uniqueness for type `a_` as well.
+ */
+async function declaredProps(exec: Executor, type: string): Promise<string[]> {
+	const prefix = `${DECL_PREFIX}${type}:`;
+	const r = await exec.execute({
+		sql: `SELECT key FROM graph_meta WHERE starts_with(key, ?)`,
+		args: [prefix],
 	});
-	return r.rows.map((row) => String(row.key).slice(`${DECL_PREFIX}${type}:`.length));
+	return r.rows.map((row) => String(row.key).slice(prefix.length));
 }
 
 /**
@@ -3406,17 +3845,17 @@ async function declaredProps(client: DbClient, type: string): Promise<string[]> 
  * count against it.
  */
 export async function assertUniqueProps(
-	client: DbClient,
+	exec: Executor,
 	type: string,
 	data: Record<string, unknown>,
 	excludeId?: string,
 ): Promise<void> {
-	for (const prop of await declaredProps(client, type)) {
+	for (const prop of await declaredProps(exec, type)) {
 		const value = data[prop];
 		if (value === undefined || value === null) continue;
-		const r = await client.execute({
-			sql: `SELECT id FROM nv_live
-			      WHERE type = ? AND json_extract_string(data, '$.${prop}') = ?
+		const r = await exec.execute({
+			sql: `SELECT id FROM node_versions
+			      WHERE valid_to = ${FOREVER} AND type = ? AND json_extract_string(data, '$.${prop}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}
 			      LIMIT 1`,
 			args: excludeId
@@ -3443,7 +3882,7 @@ In `constraints.ts`, replace the `duckdb` throw in `declareUniqueNodeProp`:
 	}
 ```
 
-And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial* unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` on `ev_live` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
+And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial* unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
 
 ```ts
 	if (dialectOf(client) === 'duckdb') {
@@ -3461,23 +3900,38 @@ And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial*
 
 Before writing this, read `graph.ts:531-591`. If that path takes its set of single-valued rels from the in-memory `defineGraphSchema` output rather than from the database, the `graph_meta` row is purely for durability across restarts and nothing else needs to read it. If it queries the database, point that query at `graph_meta` on the duckdb arm.
 
-In `graph.ts`, call `assertUniqueProps` on the duckdb dialect only, inside `addNode` before its write batch and inside `updateNode` inside the conditional-close transaction:
+In `graph.ts`, call `assertUniqueProps` on the duckdb dialect only: in `addNode` before its
+write batch, and in `updateNode` **inside** the conditional-close callback.
+
+`addNode` has no transaction open, so it passes the client:
 
 ```ts
 if (dialectOf(this.raw) === 'duckdb') {
-	await assertUniqueProps(this.raw, type, data, /* excludeId */ undefined);
+	await assertUniqueProps(this.raw, type, data);
+}
+```
+
+`updateNode` must pass the transaction handle, **not** `this.raw`:
+
+```ts
+if (dialectOf(this.raw) === 'duckdb') {
+	// `tx`, not `this.raw`. Reaching for a second pooled connection here deadlocks: this
+	// callback already holds one, and once poolMax writers are concurrently mid-transaction
+	// every connection is held by someone waiting for one more. Reproduced at the default
+	// poolMax of 4.
+	await assertUniqueProps(tx, type, nextData, id);
 }
 ```
 
 - [ ] **Step 5: Run the tests**
 
 Run: `bun test packages/core/test/duck-constraints.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/duck-constraints.ts packages/core/src/constraints.ts packages/core/src/graph.ts packages/core/test/duck-constraints.test.ts
@@ -3490,8 +3944,8 @@ serialized - a read-then-write cannot be raced in-process, and another
 process cannot commit without winning the manifest CAS.
 
 declareSingleValuedRel needs no such treatment: src and rel are real
-columns and ev_live holds exactly the live rows, so the live/history
-split turns that partial index into an ordinary one."
+columns, but scoping a unique index to one rel needs a partial index,
+which DuckDB does not have."
 ```
 
 ---
@@ -3700,12 +4154,12 @@ describe('materialize', () => {
 		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
 		const manifest: Manifest = {
 			...emptyManifest(4, 'h'),
-			tables: { nv_live: { files: [key] } },
+			tables: { node_versions: { files: [key] } },
 		};
 
 		const c = createDuckClient();
 		await materialize(c, manifest, cache);
-		expect((await c.execute('SELECT count(*) AS n FROM nv_live')).rows[0]?.n).toBe(1);
+		expect((await c.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(1);
 		expect((await c.execute('SELECT count(*) AS n FROM nodes')).rows[0]?.n).toBe(1);
 		await c.end();
 	});
@@ -3718,6 +4172,24 @@ describe('materialize', () => {
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['stale'] });
 		await materialize(c, manifest, cache);
 		expect((await c.execute('SELECT count(*) AS n FROM node_identity')).rows[0]?.n).toBe(0);
+		await c.end();
+	});
+
+	test('a manifest carrying graph_meta does not collide with the seeded row', async () => {
+		// duckdbSchema seeds graph_meta with emb_dim, and every real manifest also carries
+		// graph_meta because the constraint declarations live there. A plain INSERT throws
+		// `Constraint Error: Duplicate key "key: emb_dim"` and breaks the first round-trip.
+		const { cache } = ctx();
+		const producer = createDuckClient();
+		await producer.execute(`CREATE TABLE gm AS SELECT 'emb_dim' AS key, '4' AS value`);
+		const path = join(root, 'gm.parquet');
+		await producer.execute(`COPY gm TO '${path}' (FORMAT parquet)`);
+		await producer.end();
+		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
+
+		const c = createDuckClient();
+		await materialize(c, { ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } }, cache);
+		expect((await c.execute(`SELECT count(*) AS n FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.n).toBe(1);
 		await c.end();
 	});
 
@@ -3753,19 +4225,17 @@ import type { Manifest } from './objstore/manifest.ts';
  * "publish this materialization".
  *
  * Files load into real TABLES rather than views over `read_parquet`, for two reasons. The
- * writer must mutate them, and views cannot be indexed or constrained — so `nv_live`'s
- * PRIMARY KEY, which is how the one-live-row-per-id invariant is enforced without a
- * partial index, would not exist.
+ * writer must mutate them, and a view cannot be inserted into — DuckDB rejects INSERT
+ * against a UNION ALL view, which is what broke the write path when the live/history
+ * split lived in the local schema instead of the Parquet layout.
  */
 
 /** Every table a manifest can carry. Order matters: identity tables load before referents. */
 export const SNAPSHOT_TABLES = [
 	'node_identity',
 	'edge_identity',
-	'nv_live',
-	'nv_history',
-	'ev_live',
-	'ev_history',
+	'node_versions',
+	'edge_versions',
 	'graph_outbox',
 	'node_analytics',
 	'trigger_cursors',
@@ -3818,8 +4288,12 @@ export async function materialize(
 		const paths = await cache.resolve(ref.files);
 		// Column-name matching rather than positional, so a manifest written by an older
 		// build with fewer columns still loads.
+		// OR REPLACE, not a bare INSERT: `duckdbSchema` seeds `graph_meta` with the
+		// `emb_dim` row, so a manifest that also carries `graph_meta` — and every manifest
+		// does, since Task 12 keeps the unique-prop and single-rel declarations there —
+		// collides on its primary key. The snapshot is authoritative, so it wins.
 		await client.execute(
-			`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+			`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 		);
 		if (ref.tombstones) {
 			const [tomb] = await cache.resolve([ref.tombstones]);
@@ -3849,8 +4323,7 @@ git add packages/core/src/duck-materialize.ts packages/core/test/duck-materializ
 git commit -m "feat(core): materialize a snapshot into a local DuckDB
 
 Parquet loads into real tables rather than views over read_parquet: the
-writer mutates them, and a view cannot carry nv_live's PRIMARY KEY, which
-is how one-live-row-per-id is enforced without a partial index.
+writer mutates them, and DuckDB rejects INSERT against a view.
 
 Sets validate_external_file_cache = NO_VALIDATION, which takes a warm
 repeat query from one HEAD request to zero requests. That setting serves
@@ -3873,7 +4346,7 @@ The write direction, and the point at which `DuckClient` stops being a local dat
 **Interfaces:**
 - Consumes: `SnapshotStore`, `Manifest` (Task 5); `FileCache` (Task 6); `materialize`, `SNAPSHOT_TABLES` (Task 14).
 - Produces:
-  - `async function exportTable(client: DbClient, table: string, cache: FileCache, tmpDir: string): Promise<string | null>` — writes a table to Parquet, uploads it, returns its content key (null when the table is empty)
+  - `async function exportTable(client, table, cache, tmpDir, where?, suffix?): Promise<string | null>` — writes a table (or the subset matching `where`) to Parquet, uploads it, returns its content key; null when empty
   - `async function buildManifest(client: DbClient, base: Manifest | null, cache: FileCache, tmpDir: string, dirty: Set<string>): Promise<Manifest>`
   - `async function commitSnapshot(client: DbClient, snapshots: SnapshotStore, cache: FileCache, tmpDir: string, base: Manifest | null, dirty: Set<string>): Promise<Manifest>`
   - `DuckClientOptions` gains `store?: ObjectStore`, `cacheDir?: string`; `DbConfig` gains `bucket`, `prefix`, `cacheDir`, `endpoint`, `region`, `snapshot`.
@@ -3982,10 +4455,10 @@ describe('snapshot commit', () => {
 		await c.open();
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
-			sql: `INSERT INTO nv_live (ver, id, type, valid_from) VALUES (?,?,?,?)`,
+			sql: `INSERT INTO node_versions (ver, id, type, valid_from) VALUES (?,?,?,?)`,
 			args: [17, 'n1', 'Doc', 1],
 		});
-		const m = await c.commit(new Set(['node_identity', 'nv_live']));
+		const m = await c.commit(new Set(['node_identity', 'node_versions']));
 		expect(m.verHigh).toBe(17);
 		await c.end();
 	});
@@ -4002,6 +4475,7 @@ Expected: FAIL — `DuckClient` has no `open`, `commit`, or `snapshot`.
 ```ts
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { FOREVER } from './db.ts';
 import type { DbClient } from './dialect.ts';
 import { SNAPSHOT_TABLES } from './duck-materialize.ts';
 import type { FileCache } from './objstore/cache.ts';
@@ -4030,14 +4504,17 @@ export async function exportTable(
 	table: string,
 	cache: FileCache,
 	tmpDir: string,
+	where?: string,
+	suffix?: string,
 ): Promise<string | null> {
-	const count = await client.execute(`SELECT count(*) AS n FROM ${table}`);
+	const filter = where ? ` WHERE ${where}` : '';
+	const count = await client.execute(`SELECT count(*) AS n FROM ${table}${filter}`);
 	if (Number(count.rows[0]?.n ?? 0) === 0) return null;
-	const path = join(tmpDir, `${table}.parquet`);
+	const path = join(tmpDir, `${table}${suffix ? `.${suffix}` : ''}.parquet`);
 	// zstd and a fixed row-group size so identical content yields identical bytes, which
 	// is what makes the content hash stable across writers and runs.
 	await client.execute(
-		`COPY (SELECT * FROM ${table} ORDER BY ALL) TO '${path.replace(/'/g, "''")}'
+		`COPY (SELECT * FROM ${table}${filter} ORDER BY ALL) TO '${path.replace(/'/g, "''")}'
 		 (FORMAT parquet, COMPRESSION zstd, ROW_GROUP_SIZE 122880)`,
 	);
 	try {
@@ -4046,6 +4523,21 @@ export async function exportTable(
 		await rm(path, { force: true });
 	}
 }
+
+/**
+ * Tables exported as two files — live rows and history rows — rather than one.
+ *
+ * This is where the live/history split lives. It was briefly a *local schema* split, with
+ * `node_versions` as a view over two tables, and that broke every write path: DuckDB
+ * rejects `INSERT` into a `UNION ALL` view while `graph.ts`, `bulk.ts`, and auth all write
+ * to `node_versions` by name. As a storage layout it costs nothing and still buys what the
+ * split was for — a reader that only needs current state fetches the live file alone, and
+ * history partitions by close time for tiering.
+ */
+const SPLIT_TABLES: Record<string, string> = {
+	node_versions: 'valid_to',
+	edge_versions: 'valid_to',
+};
 
 /** The next manifest: dirty tables re-exported, clean tables carried forward. */
 export async function buildManifest(
@@ -4059,6 +4551,22 @@ export async function buildManifest(
 	for (const table of SNAPSHOT_TABLES) {
 		if (!dirty.has(table) && base?.tables[table]) {
 			tables[table] = base.tables[table];
+			continue;
+		}
+		const splitOn = SPLIT_TABLES[table];
+		if (splitOn) {
+			// Live first, so a reader that wants only current state can take files[0].
+			const live = await exportTable(client, table, cache, tmpDir, `${splitOn} = ${FOREVER}`, 'live');
+			const history = await exportTable(
+				client,
+				table,
+				cache,
+				tmpDir,
+				`${splitOn} <> ${FOREVER}`,
+				'history',
+			);
+			const files = [live, history].filter((k): k is string => k !== null);
+			if (files.length > 0) tables[table] = { files };
 			continue;
 		}
 		const key = await exportTable(client, table, cache, tmpDir);
@@ -4205,12 +4713,12 @@ registerDuckDriver((namespace: string, cfg: DbConfig): DbClient => {
 - [ ] **Step 5: Run the tests**
 
 Run: `bun test packages/core/test/duck-commit.test.ts`
-Expected: PASS, 6 tests.
+Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/duck-commit.ts packages/core/src/duck.ts packages/core/src/db.ts packages/core/test/duck-commit.test.ts
@@ -4339,12 +4847,12 @@ describe('duckdb end to end', () => {
 			Array.from({ length: 8 }, (_, i) => g.updateNode(n.id, { data: { v: i + 1 } })),
 		);
 		const live = await c.execute({
-			sql: 'SELECT count(*) AS n FROM nv_live WHERE id = ?',
+			sql: 'SELECT count(*) AS n FROM node_versions WHERE id = ? AND valid_to = 8640000000000000',
 			args: [n.id],
 		});
 		expect(live.rows[0]?.n).toBe(1);
 		const history = await c.execute({
-			sql: 'SELECT valid_from, valid_to FROM nv_history WHERE id = ? ORDER BY valid_from',
+			sql: 'SELECT valid_from, valid_to FROM node_versions WHERE id = ? AND valid_to <> 8640000000000000 ORDER BY valid_from',
 			args: [n.id],
 		});
 		// Intervals must be contiguous and non-overlapping.
@@ -4440,7 +4948,7 @@ private async touched(...tables: string[]): Promise<void> {
 }
 ```
 
-Call `touched(...)` at the end of each mutation — `addNode` (`node_identity`, `nv_live`, `graph_outbox`), `addEdge` (`edge_identity`, `ev_live`, `ev_history`, `graph_outbox`), `updateNode` and `deleteNode` (`nv_live`, `nv_history`, `graph_outbox`), `deleteEdge` (`ev_live`, `ev_history`, `graph_outbox`), `bulkLoad` and `bulkEdges` (all six version tables plus identity).
+Call `touched(...)` at the end of each mutation — `addNode` (`node_identity`, `node_versions`, `graph_outbox`), `addEdge` (`edge_identity`, `edge_versions`, `graph_outbox`), `updateNode` and `deleteNode` (`node_versions`, `graph_outbox`), `deleteEdge` (`edge_versions`, `graph_outbox`), `bulkLoad` and `bulkEdges` (both version tables plus identity).
 
 Wrap the bodies of `runWriteBatch` and `runConditionalClose` in `this.serialize(...)`.
 
@@ -4483,7 +4991,10 @@ Its 5 tests open 8 connections to one file and rely on write-lock contention, wh
 - [ ] **Step 7: Run everything**
 
 Run: `bun test packages/core/test/duck-e2e.test.ts`
-Expected: PASS, 7 tests.
+Expected: PASS, 5 tests — the last two moved to `p14-concurrency.test.ts` in step 6.
+
+Run: `bun test packages/core/test/p14-concurrency.test.ts`
+Expected: PASS, including the two relocated invariant tests.
 
 Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 30000 2>&1 | tail -40`
 Expected: better than Task 13's number. Update `docs/DUCKDB_SUPPORT.md` with the new counts and re-triage. Every remaining failure must map to full-text (stage 5), events/auth (stage 6), or serving/tooling (stage 7).

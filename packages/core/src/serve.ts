@@ -719,6 +719,14 @@ function onError(err: Error, c: Context) {
 	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
+	// The §19.1 write-retry envelope and the snapshot commit protocol both give up with
+	// this message after exhausting their budget against a contended writer. A 500 would
+	// tell the caller the server is broken; 409 tells them to retry, which is what they
+	// should do. It is checked BEFORE the `addNode:`-prefix rule below, which would
+	// otherwise claim `addNode: too much contention` as a 400 client error.
+	if (err.message.endsWith(': too much contention')) {
+		return c.json({ error: err.message }, 409);
+	}
 	// Graph.addNode/addEdge (unknown type/rel, endpoint-type mismatch), bulkLoad (unknown
 	// type), and a malformed PatternBuilder program throw a prefixed `Error` on bad input —
 	// those are client errors.
@@ -729,8 +737,14 @@ function onError(err: Error, c: Context) {
 	// fault: a FK to a non-existent node (unconstrained rel skips the type check),
 	// CHECK(weight >= 0), or a UNIQUE clash. Map them to 400, not 500. libSQL reports
 	// `SQLITE_CONSTRAINT*`; Postgres uses SQLSTATE class 23 (integrity_constraint_violation).
+	// DuckDB has neither a `.code` nor a SQLSTATE — every UNIQUE/FK/CHECK violation is a
+	// plain Error whose message starts "Constraint Error:" (see duck.ts / dialect-sql.ts).
 	const dbCode = String((err as { code?: unknown }).code ?? '');
-	if (dbCode.startsWith('SQLITE_CONSTRAINT') || /^23\d{3}$/.test(dbCode)) {
+	if (
+		dbCode.startsWith('SQLITE_CONSTRAINT') ||
+		/^23\d{3}$/.test(dbCode) ||
+		err.message.startsWith('Constraint Error:')
+	) {
 		return c.json({ error: 'constraint violation' }, 400);
 	}
 	// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.

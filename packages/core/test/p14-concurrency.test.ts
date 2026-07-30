@@ -1,12 +1,17 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { materializeConstraints } from '../src/constraints.ts';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import type { DbClient } from '../src/dialect.ts';
+import { createDuckClient } from '../src/duck.ts';
 import { Graph } from '../src/graph.ts';
+import { MemoryObjectStore } from '../src/objstore/memory.ts';
 import { init } from '../src/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { duckdbOnly, makeTestDb, sharedWriterOnly } from './harness.ts';
 
 // P14 — the §19.1 write-correctness proof. The conditional-close + retry is ALREADY
 // implemented (P6); this proves the invariant under genuine contention: N racing
@@ -60,7 +65,7 @@ function assertNonOverlapping(rows: Interval[]): void {
 	}
 }
 
-test('P14 race: N concurrent updateNode never create overlapping intervals', async () => {
+sharedWriterOnly('P14 race: N concurrent updateNode never create overlapping intervals', async () => {
 	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
 	await init(setup, 4);
@@ -105,7 +110,7 @@ test('P14 race (F2): updateNode never creates an inverted/zero-width interval wh
 	expect((closed[0] as Interval).valid_to).toBeGreaterThan((closed[0] as Interval).valid_from);
 });
 
-test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry envelope', async () => {
+sharedWriterOnly('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry envelope', async () => {
 	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
 	await init(setup, 4);
@@ -133,7 +138,7 @@ test('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry
 	expect(r.rows.length).toBe(1); // it really persisted, not lost
 });
 
-test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-width/inverted closed interval', async () => {
+sharedWriterOnly('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-width/inverted closed interval', async () => {
 	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
 	await init(setup, 4);
@@ -165,7 +170,7 @@ test('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-wi
 	expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
 });
 
-test('P14 race: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
+sharedWriterOnly('P14 race: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
 	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
 	await init(setup, 4);
@@ -199,4 +204,85 @@ test('P14 race: N concurrent single-valued addEdge converge to exactly one live 
 		args: [src.id, 'best_friend'],
 	});
 	expect(Number(total.rows[0]?.c)).toBe(N);
+});
+
+// --- DuckDB on object storage -------------------------------------------------------
+// The four tests above prove the §19.1 invariants through write-lock contention, which
+// DuckDB does not have. It reaches the same invariants two other ways, and each gets a
+// test here: in-process, the client's write mutex serializes every mutation; across
+// processes, the manifest CAS decides who owns the next snapshot number.
+
+duckdbOnly('P14 duckdb: N concurrent updateNode serialize into one contiguous chain', async () => {
+	const store = new MemoryObjectStore();
+	const c = createDuckClient({ store, cacheDir: mkdtempSync(join(tmpdir(), 'graphx-p14-')) });
+	const g = new Graph(c, SCHEMA);
+	const seed = await g.addNode({ type: 'person', data: { name: 'race' } });
+
+	// One client, N concurrent writers — the mutex is what makes the conditional close a
+	// real compare-and-swap here, so every writer lands and none overlaps.
+	const N = 8;
+	const results = await Promise.allSettled(
+		Array.from({ length: N }, (_, i) => g.updateNode(seed.id, { data: { v: i } })),
+	);
+	for (const r of results) expect(r.status).toBe('fulfilled');
+
+	const rows = await intervals(c, seed.id);
+	expect(rows.length).toBe(N + 1); // original + one new version per writer
+	assertNonOverlapping(rows);
+	await c.end();
+});
+
+duckdbOnly('P14 duckdb: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
+	const store = new MemoryObjectStore();
+	const c = createDuckClient({ store, cacheDir: mkdtempSync(join(tmpdir(), 'graphx-p14-')) });
+	const g = new Graph(c, SCHEMA);
+	const src = await g.addNode({ type: 'person', data: { name: 'src' } });
+	const dsts = await Promise.all(
+		Array.from({ length: 8 }, (_, i) => g.addNode({ type: 'person', data: { name: `d${i}` } })),
+	);
+	const N = dsts.length;
+
+	const results = await Promise.allSettled(
+		dsts.map((d) => g.addEdge({ rel: 'best_friend', src: src.id, dst: d.id })),
+	);
+	for (const r of results) expect(r.status).toBe('fulfilled');
+
+	const rows = await c.execute({
+		sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
+		args: [src.id, 'best_friend'],
+	});
+	// Every version is a real, non-zero interval, and exactly one is still open — the same
+	// assertion the libSQL test makes, reached through the mutex instead of the write lock.
+	for (const row of rows.rows) {
+		expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
+	}
+	expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
+	expect(rows.rows.length).toBe(N);
+	await c.end();
+});
+
+duckdbOnly('P14 duckdb: two writers racing one snapshot number never both win', async () => {
+	const store = new MemoryObjectStore();
+	const dir = (): string => mkdtempSync(join(tmpdir(), 'graphx-p14-'));
+	const a = createDuckClient({ store, cacheDir: dir() });
+	const b = createDuckClient({ store, cacheDir: dir() });
+	const [ga, gb] = [new Graph(a, SCHEMA), new Graph(b, SCHEMA)];
+
+	const settled = await Promise.allSettled([
+		ga.addNode({ type: 'person', data: { name: 'a' } }),
+		gb.addNode({ type: 'person', data: { name: 'b' } }),
+	]);
+	// Separate clients are separate local databases, so the loser's rebase would replace the
+	// winner's rows rather than merge with them. It refuses instead — a lost write the
+	// caller is told about beats a silently discarded one.
+	expect(settled.filter((r) => r.status === 'fulfilled').length).toBe(1);
+	expect(settled.filter((r) => r.status === 'rejected').length).toBe(1);
+	expect((await store.list('snapshots/')).length).toBe(1);
+
+	const reader = createDuckClient({ store, cacheDir: dir() });
+	await reader.open();
+	expect((await reader.execute('SELECT count(*) AS n FROM node_identity')).rows[0]?.n).toBe(1);
+	await reader.end();
+	await a.end();
+	await b.end();
 });

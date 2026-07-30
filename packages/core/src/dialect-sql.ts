@@ -1,4 +1,4 @@
-import type { Dialect } from './dialect.ts';
+import { assertNever, type Dialect } from './dialect.ts';
 
 /**
  * Per-dialect SQL fragments. This is the home for every SQL string that genuinely
@@ -19,7 +19,17 @@ const FOREVER_LIT = '8640000000000000';
  * strictly an aggregate, so the scalar form is `GREATEST(a, b)`.
  */
 export function scalarMax(dialect: Dialect, a: string, b: string): string {
-	return dialect === 'postgres' ? `GREATEST(${a}, ${b})` : `MAX(${a}, ${b})`;
+	switch (dialect) {
+		case 'libsql':
+			return `MAX(${a}, ${b})`;
+		case 'postgres':
+			return `GREATEST(${a}, ${b})`;
+		// DuckDB's max() is aggregate-only, same as Postgres.
+		case 'duckdb':
+			return `GREATEST(${a}, ${b})`;
+		default:
+			return assertNever(dialect, 'scalarMax');
+	}
 }
 
 /**
@@ -28,7 +38,18 @@ export function scalarMax(dialect: Dialect, a: string, b: string): string {
  * column is cast first. Returns the field as text in both.
  */
 export function jsonField(dialect: Dialect, col: string, key: string): string {
-	return dialect === 'postgres' ? `(${col})::jsonb ->> '${key}'` : `${col} ->> '${key}'`;
+	switch (dialect) {
+		case 'libsql':
+			return `${col} ->> '${key}'`;
+		case 'postgres':
+			return `(${col})::jsonb ->> '${key}'`;
+		// DuckDB's ->> takes a JSONPath, not a bare key, and json_extract returns JSON.
+		// json_extract_string is the only form that yields an unquoted scalar.
+		case 'duckdb':
+			return `json_extract_string(${col}, '$.${key}')`;
+		default:
+			return assertNever(dialect, 'jsonField');
+	}
 }
 
 /**
@@ -37,7 +58,17 @@ export function jsonField(dialect: Dialect, col: string, key: string): string {
  * must be `BIGINT`.
  */
 export function epochIntType(dialect: Dialect): string {
-	return dialect === 'postgres' ? 'BIGINT' : 'INTEGER';
+	switch (dialect) {
+		case 'libsql':
+			return 'INTEGER';
+		case 'postgres':
+			return 'BIGINT';
+		// DuckDB's INTEGER is 32-bit, same trap as Postgres.
+		case 'duckdb':
+			return 'BIGINT';
+		default:
+			return assertNever(dialect, 'epochIntType');
+	}
 }
 
 /**
@@ -47,16 +78,37 @@ export function epochIntType(dialect: Dialect): string {
  * Postgres (text comparison) — see {@link jsonEqArg}.
  */
 export function jsonEqExpr(dialect: Dialect, col: string, key: string): string {
-	return dialect === 'postgres'
-		? `(${col})::jsonb ->> '${key}' = ?`
-		: `json_extract(${col}, '$.${key}') = ?`;
+	switch (dialect) {
+		case 'libsql':
+			return `json_extract(${col}, '$.${key}') = ?`;
+		case 'postgres':
+			return `(${col})::jsonb ->> '${key}' = ?`;
+		// Text comparison, so callers bind through jsonEqArg (below).
+		case 'duckdb':
+			return `json_extract_string(${col}, '$.${key}') = ?`;
+		default:
+			return assertNever(dialect, 'jsonEqExpr');
+	}
 }
 
 /** The bound value for a {@link jsonEqExpr} filter — text on Postgres (the `->>` is text). */
 export function jsonEqArg(dialect: Dialect, value: unknown): unknown {
-	if (dialect !== 'postgres') return value;
-	if (value === null || value === undefined) return value;
-	return typeof value === 'string' ? value : String(value);
+	switch (dialect) {
+		case 'libsql':
+			return value;
+		case 'postgres':
+			if (value === null || value === undefined) return value;
+			return typeof value === 'string' ? value : String(value);
+		// Same text coercion as Postgres, for the same reason.
+		case 'duckdb':
+			return value === null || value === undefined
+				? value
+				: typeof value === 'string'
+					? value
+					: String(value);
+		default:
+			return assertNever(dialect, 'jsonEqArg');
+	}
 }
 
 /**
@@ -71,9 +123,18 @@ export function distinctSelect(
 	keys: string,
 	cols: string,
 ): { select: string; group: string } {
-	return dialect === 'postgres'
-		? { select: `SELECT DISTINCT ON (${keys}) ${cols}`, group: '' }
-		: { select: `SELECT ${cols}`, group: `GROUP BY ${keys}` };
+	switch (dialect) {
+		case 'libsql':
+			return { select: `SELECT ${cols}`, group: `GROUP BY ${keys}` };
+		case 'postgres':
+			return { select: `SELECT DISTINCT ON (${keys}) ${cols}`, group: '' };
+		// DuckDB implements Postgres-compatible DISTINCT ON, and rejects SQLite's bare-column
+		// GROUP BY outright.
+		case 'duckdb':
+			return { select: `SELECT DISTINCT ON (${keys}) ${cols}`, group: '' };
+		default:
+			return assertNever(dialect, 'distinctSelect');
+	}
 }
 
 /**
@@ -197,16 +258,161 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
 
-function notYet(fragment: string): never {
-	throw new Error(
-		`dialect-sql: ${fragment}(postgres) not implemented yet — Postgres backend is a later phase`,
-	);
+/**
+ * Full DuckDB DDL — the third sibling of {@link schema} (libSQL) and {@link postgresSchema}.
+ *
+ * `node_versions`/`edge_versions` are REAL TABLES here, and `nodes`/`edges` are views
+ * filtered to `valid_to = ${FOREVER_LIT}` — structurally the same shape as
+ * {@link postgresSchema}. An earlier version of this function split `node_versions`/
+ * `edge_versions` into separate live/history TABLES with UNION ALL compatibility views
+ * standing in for the names every query uses, to route around DuckDB having no partial
+ * indexes. That broke every write path in the codebase: `Graph.addNode`/`addEdge`/etc.
+ * (graph.ts) and `bulkLoad`/`bulkEdges` (bulk.ts) all INSERT into `node_versions`/
+ * `edge_versions` directly, and DuckDB refuses INSERT into a UNION ALL view ("Catalog
+ * Error: node_versions is not an table"). The live/history split is real and valuable —
+ * it is what makes Task 15's Parquet export cheap — but it belongs in the PARQUET LAYOUT
+ * built at commit time, not in the local schema every write path targets directly.
+ *
+ * Other differences from libSQL, all forced:
+ *  - `ver`/`seq` come from explicit SEQUENCEs — no rowid alias, no AUTOINCREMENT, no
+ *    IDENTITY. The writer allocates from the manifest high-water marks rather than these
+ *    at commit time (sequences are non-transactional), but the DEFAULT keeps ad-hoc SQL
+ *    and the test suite working.
+ *  - Temporal columns are `BIGINT`: DuckDB's INTEGER is 32-bit and FOREVER is 8.64e15.
+ *  - `emb` is `FLOAT[]`, not a fixed-size `FLOAT[dim]`. Parquet cannot preserve
+ *    `FLOAT[N]` — even a pyarrow fixed_size_list reads back as a variable-length list —
+ *    so the storage type is the one that survives a round trip. `list_cosine_distance`
+ *    accepts it directly and measured faster than casting.
+ *  - No partial index: DuckDB has no partial indexes, so unlike libSQL/Postgres this
+ *    schema does NOT enforce "at most one live row per id" — that invariant is upheld by
+ *    the serialized writer (Task 16) and application-level checks (Task 12) instead. See
+ *    duck-schema.test.ts's "two live rows... are NOT rejected" test, which pins that this
+ *    schema gives no backstop so nobody later mistakes silence here for enforcement.
+ *  - No full-text objects and no ANN index: DuckDB has no triggers, its FTS extension
+ *    cannot index a view, and its HNSW index cannot be partial, cannot index Parquet, and
+ *    silently returns fewer rows than LIMIT under a WHERE filter. Both are built at commit
+ *    time and shipped as Parquet instead (spec §10).
+ */
+export function duckdbSchema(dim: number = 768): string {
+	const nodeCols = `
+  ver          BIGINT NOT NULL DEFAULT nextval('seq_ver'),
+  id           TEXT NOT NULL REFERENCES node_identity(id),
+  type         TEXT NOT NULL,
+  body         TEXT,
+  uri          TEXT,
+  content_hash TEXT,
+  embed_hash   TEXT,
+  content_type TEXT,
+  data         TEXT NOT NULL DEFAULT '{}',
+  emb          FLOAT[],
+  valid_from   BIGINT NOT NULL,
+  valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+	const edgeCols = `
+  ver        BIGINT NOT NULL DEFAULT nextval('seq_ver'),
+  id         TEXT NOT NULL REFERENCES edge_identity(id),
+  src        TEXT NOT NULL REFERENCES node_identity(id),
+  dst        TEXT NOT NULL REFERENCES node_identity(id),
+  rel        TEXT NOT NULL,
+  weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
+  data       TEXT NOT NULL DEFAULT '{}',
+  source     TEXT,
+  valid_from BIGINT NOT NULL,
+  valid_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+	// The declared width is not enforceable on a FLOAT[] column, so it is recorded in a
+	// side table for readEmbDim — the manifest carries the same value in stage 4.
+	return `
+CREATE SEQUENCE IF NOT EXISTS seq_ver START 1;
+CREATE SEQUENCE IF NOT EXISTS seq_outbox START 1;
+
+CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);
+
+CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+INSERT INTO graph_meta (key, value) VALUES ('emb_dim', '${dim}') ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS node_versions (${nodeCols},
+  PRIMARY KEY (ver)
+);
+CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
+
+CREATE TABLE IF NOT EXISTS edge_versions (${edgeCols},
+  PRIMARY KEY (ver)
+);
+CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
+
+CREATE OR REPLACE VIEW nodes AS
+  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
+  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
+CREATE OR REPLACE VIEW edges AS
+  SELECT id, src, dst, rel, weight, data, source
+  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
+
+CREATE TABLE IF NOT EXISTS archival_state (
+  table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  seq    BIGINT PRIMARY KEY DEFAULT nextval('seq_outbox'),
+  op     TEXT NOT NULL,
+  entity TEXT NOT NULL,
+  id     TEXT NOT NULL,
+  label  TEXT,
+  src    TEXT,
+  dst    TEXT,
+  shape  TEXT NOT NULL,
+  ts     BIGINT NOT NULL,
+  source TEXT
+);
+
+CREATE TABLE IF NOT EXISTS trigger_cursors (
+  name TEXT PRIMARY KEY, seq BIGINT NOT NULL, updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trigger_dead_letters (
+  id           TEXT PRIMARY KEY,
+  subscription TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  seq          BIGINT NOT NULL,
+  event        TEXT NOT NULL,
+  error        TEXT NOT NULL,
+  attempts     BIGINT NOT NULL,
+  created_at   BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
+  ON trigger_dead_letters(subscription, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS node_analytics (
+  id          TEXT PRIMARY KEY,
+  pagerank    REAL,
+  community   BIGINT,
+  degree      BIGINT,
+  computed_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
+CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
+`;
+}
+
+function notYet(fragment: string, dialect: Dialect): never {
+	throw new Error(`dialect-sql: ${fragment}(${dialect}) not implemented yet`);
 }
 
 /** The embedding column's type. libSQL: native `F32_BLOB(dim)`; Postgres: pgvector `vector(dim)`. */
 export function embColumnType(dialect: Dialect, dim: number): string {
-	if (dialect === 'postgres') notYet('embColumnType');
-	return `F32_BLOB(${dim})`;
+	switch (dialect) {
+		case 'libsql':
+			return `F32_BLOB(${dim})`;
+		case 'postgres':
+			return notYet('embColumnType', dialect);
+		// See duckdbSchema: Parquet cannot preserve FLOAT[N].
+		case 'duckdb':
+			return 'FLOAT[]';
+		default:
+			return assertNever(dialect, 'embColumnType');
+	}
 }
 
 /**
@@ -214,7 +420,17 @@ export function embColumnType(dialect: Dialect, dim: number): string {
  * libSQL parses it with `vector(?)`; pgvector casts the same text with `?::vector`.
  */
 export function embFreshExpr(dialect: Dialect): string {
-	return dialect === 'postgres' ? '?::vector' : 'vector(?)';
+	switch (dialect) {
+		case 'libsql':
+			return 'vector(?)';
+		case 'postgres':
+			return '?::vector';
+		// Binds the JSON array string from embParam().
+		case 'duckdb':
+			return `from_json(?, '["FLOAT"]')`;
+		default:
+			return assertNever(dialect, 'embFreshExpr');
+	}
 }
 
 /**
@@ -251,9 +467,16 @@ function tsQueryOr(): string {
  * before binding.
  */
 export function ftsWhere(dialect: Dialect, alias: string): string {
-	return dialect === 'postgres'
-		? `${alias}.body_tsv @@ ${tsQueryOr()}`
-		: `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
+	switch (dialect) {
+		case 'libsql':
+			return `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
+		case 'postgres':
+			return `${alias}.body_tsv @@ ${tsQueryOr()}`;
+		case 'duckdb':
+			return notYet('ftsWhere', dialect);
+		default:
+			return assertNever(dialect, 'ftsWhere');
+	}
 }
 
 /**
@@ -263,18 +486,34 @@ export function ftsWhere(dialect: Dialect, alias: string): string {
  * distance (`emb <=> $1::vector`). Both yield the top-k live node ids by ANN rank.
  */
 export function annSeedsLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `
+	switch (dialect) {
+		case 'libsql':
+			return `
+  SELECT n.id AS id
+  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+  JOIN node_versions n ON n.rowid = v.id`;
+		case 'postgres':
+			return `
   SELECT id
   FROM node_versions
   WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
   ORDER BY emb <=> ?::vector
   LIMIT ?`;
+		// Brute-force scan over the live scope (valid_to = FOREVER) — DuckDB has no ANN
+		// index (see duckdbSchema). min_by(id, dist, k) returns the same top-k as ORDER
+		// BY dist LIMIT k while reading a remote Parquet once instead of twice; unnest
+		// position supplies rank. Args: embedding JSON, k.
+		case 'duckdb':
+			return `
+  SELECT unnest(ids) AS id
+  FROM (
+    SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+  )`;
+		default:
+			return assertNever(dialect, 'annSeedsLive');
 	}
-	return `
-  SELECT n.id AS id
-  FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-  JOIN node_versions n ON n.rowid = v.id`;
 }
 
 /**
@@ -284,8 +523,24 @@ export function annSeedsLive(dialect: Dialect): string {
  * index rowid proxy (`MIN(v.id)`); pgvector ranks by real cosine distance.
  */
 export function annSeedsAsOf(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `
+	switch (dialect) {
+		case 'libsql':
+			return `
+  SELECT live.id AS id, live.rk AS rk
+  FROM (
+    SELECT n.id AS id, MIN(v.id) AS rk
+    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+    JOIN node_versions n ON n.rowid = v.id
+    GROUP BY n.id
+  ) live
+  WHERE EXISTS (
+    SELECT 1 FROM node_versions h
+    WHERE h.id = live.id AND h.valid_from <= ? AND ? < h.valid_to
+  )
+  ORDER BY rk
+  LIMIT ?`;
+		case 'postgres':
+			return `
   SELECT live.id AS id, live.rk AS rk
   FROM (
     SELECT id, MIN(emb <=> ?::vector) AS rk
@@ -301,14 +556,17 @@ export function annSeedsAsOf(dialect: Dialect): string {
   )
   ORDER BY rk
   LIMIT ?`;
-	}
-	return `
+		// Ranks by true cosine distance, which is strictly better than the libSQL arm's
+		// MIN(v.id) rowid proxy. Args: embedding JSON, over-fetch k, t, t, final k.
+		case 'duckdb':
+			return `
   SELECT live.id AS id, live.rk AS rk
   FROM (
-    SELECT n.id AS id, MIN(v.id) AS rk
-    FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-    JOIN node_versions n ON n.rowid = v.id
-    GROUP BY n.id
+    SELECT id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')) AS rk
+    FROM node_versions
+    WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+    ORDER BY rk
+    LIMIT ?
   ) live
   WHERE EXISTS (
     SELECT 1 FROM node_versions h
@@ -316,6 +574,9 @@ export function annSeedsAsOf(dialect: Dialect): string {
   )
   ORDER BY rk
   LIMIT ?`;
+		default:
+			return assertNever(dialect, 'annSeedsAsOf');
+	}
 }
 
 /**
@@ -323,17 +584,30 @@ export function annSeedsAsOf(dialect: Dialect): string {
  * libSQL: partial-live `vector_top_k`; Postgres: live rows ordered by cosine distance.
  */
 export function vecSeedLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `SELECT id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
+FROM vector_top_k('nv_emb_idx', vector(?), ?) v
+JOIN node_versions n ON n.rowid = v.id
+WHERE n.valid_to = ${FOREVER_LIT}`;
+		case 'postgres':
+			return `SELECT id
 FROM node_versions
 WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
 ORDER BY emb <=> ?::vector
 LIMIT ?`;
+		// Identical shape to annSeedsLive; the caller wants ids only.
+		case 'duckdb':
+			return `
+SELECT unnest(ids) AS id
+FROM (
+  SELECT min_by(id, list_cosine_distance(emb, from_json(?, '["FLOAT"]')), ?) AS ids
+  FROM node_versions
+  WHERE valid_to = ${FOREVER_LIT} AND emb IS NOT NULL
+)`;
+		default:
+			return assertNever(dialect, 'vecSeedLive');
 	}
-	return `SELECT n.id AS id
-FROM vector_top_k('nv_emb_idx', vector(?), ?) v
-JOIN node_versions n ON n.rowid = v.id
-WHERE n.valid_to = ${FOREVER_LIT}`;
 }
 
 /**
@@ -342,38 +616,50 @@ WHERE n.valid_to = ${FOREVER_LIT}`;
  * `tsquery` once via a CTE so the arg count matches libSQL's.
  */
 export function ftsSeedLive(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
-SELECT n.id AS id
-FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
-ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
-LIMIT ?`;
-	}
-	return `SELECT n.id AS id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
 WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER_LIT}
 ORDER BY rank
 LIMIT ?`;
+		case 'postgres':
+			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+		case 'duckdb':
+			return notYet('ftsSeedLive', dialect);
+		default:
+			return assertNever(dialect, 'ftsSeedLive');
+	}
 }
 
 /** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
 export function ftsSeedAsOf(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
-SELECT n.id AS id
-FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
-ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
-LIMIT ?`;
-	}
-	return `SELECT n.id AS id
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
 WHERE nodes_fts MATCH ? AND n.valid_from <= ? AND ? < n.valid_to
 ORDER BY rank
 LIMIT ?`;
+		case 'postgres':
+			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
+SELECT n.id AS id
+FROM node_versions n, q
+WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
+ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
+LIMIT ?`;
+		case 'duckdb':
+			return notYet('ftsSeedAsOf', dialect);
+		default:
+			return assertNever(dialect, 'ftsSeedAsOf');
+	}
 }
 
 /**
@@ -386,21 +672,49 @@ export function insertOrIgnore(
 	columns: string,
 	values: string,
 ): string {
-	return dialect === 'postgres'
-		? `INSERT INTO ${table} (${columns}) VALUES ${values} ON CONFLICT DO NOTHING`
-		: `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+	switch (dialect) {
+		case 'libsql':
+			return `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+		case 'postgres':
+			return `INSERT INTO ${table} (${columns}) VALUES ${values} ON CONFLICT DO NOTHING`;
+		// DuckDB accepts SQLite's OR IGNORE prefix verbatim.
+		case 'duckdb':
+			return `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
+		default:
+			return assertNever(dialect, 'insertOrIgnore');
+	}
 }
 
 /** Expand a JSON-array string param into a single `id` column of rows. libSQL `json_each`, PG `jsonb_array_elements_text`. */
 export function jsonArrayRows(dialect: Dialect): string {
-	return dialect === 'postgres'
-		? `SELECT jsonb_array_elements_text(?::jsonb) AS id`
-		: `SELECT value AS id FROM json_each(?)`;
+	switch (dialect) {
+		case 'libsql':
+			return `SELECT value AS id FROM json_each(?)`;
+		case 'postgres':
+			return `SELECT jsonb_array_elements_text(?::jsonb) AS id`;
+		// No json_each and no jsonb_array_elements_text. from_json with an explicit VARCHAR
+		// element type is what keeps the ids unquoted.
+		case 'duckdb':
+			return `SELECT unnest(from_json(?, '["VARCHAR"]')) AS id`;
+		default:
+			return assertNever(dialect, 'jsonArrayRows');
+	}
 }
 
 /** Read an embedding back as a JSON-array string. libSQL `vector_extract(emb)`; pgvector's text form IS `[..]`. */
 export function embExtract(dialect: Dialect): string {
-	return dialect === 'postgres' ? 'emb' : 'vector_extract(emb)';
+	switch (dialect) {
+		case 'libsql':
+			return 'vector_extract(emb)';
+		case 'postgres':
+			return 'emb';
+		// to_json renders a parseable array. A bare ::VARCHAR cast would emit `nan`/`inf`
+		// for non-finite floats and break JSON.parse at hybrid.ts:318.
+		case 'duckdb':
+			return 'to_json(emb)';
+		default:
+			return assertNever(dialect, 'embExtract');
+	}
 }
 
 /**
@@ -409,7 +723,17 @@ export function embExtract(dialect: Dialect): string {
  * `emb` back as its text form `[1,2,3]`, so it re-casts with `?::vector`.
  */
 export function embRebindExpr(dialect: Dialect): string {
-	return dialect === 'postgres' ? '?::vector' : '?';
+	switch (dialect) {
+		case 'libsql':
+			return '?';
+		case 'postgres':
+			return '?::vector';
+		// Binds the JSON array string from embParam().
+		case 'duckdb':
+			return `from_json(?, '["FLOAT"]')`;
+		default:
+			return assertNever(dialect, 'embRebindExpr');
+	}
 }
 
 /**
@@ -422,10 +746,17 @@ export function embRebindExpr(dialect: Dialect): string {
  * the test/dev scale, tunable at scale.
  */
 export function vectorIndexDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') {
-		return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions USING hnsw (emb vector_cosine_ops) WHERE valid_to = ${FOREVER_LIT};`;
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = ${FOREVER_LIT};`;
+		case 'postgres':
+			return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions USING hnsw (emb vector_cosine_ops) WHERE valid_to = ${FOREVER_LIT};`;
+		// No ANN index: built at commit time and shipped as Parquet (spec §10).
+		case 'duckdb':
+			return '';
+		default:
+			return assertNever(dialect, 'vectorIndexDDL');
 	}
-	return `CREATE INDEX IF NOT EXISTS nv_emb_idx ON node_versions(libsql_vector_idx(emb, 'metric=cosine')) WHERE valid_to = ${FOREVER_LIT};`;
 }
 
 /**
@@ -434,8 +765,18 @@ export function vectorIndexDDL(dialect: Dialect): string {
  * GIN index (no virtual table), added when the Postgres adapter lands.
  */
 export function ftsTableDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') notYet('ftsTableDDL');
-	return `CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');`;
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');`;
+		case 'postgres':
+			return notYet('ftsTableDDL', dialect);
+		// No FTS objects: no triggers, and the FTS extension cannot index a view. Built at
+		// commit time and shipped as Parquet (spec §10).
+		case 'duckdb':
+			return '';
+		default:
+			return assertNever(dialect, 'ftsTableDDL');
+	}
 }
 
 /**
@@ -445,8 +786,17 @@ export function ftsTableDDL(dialect: Dialect): string {
  * so this becomes an empty string there when the adapter lands.
  */
 export function ftsTriggerDDL(dialect: Dialect): string {
-	if (dialect === 'postgres') notYet('ftsTriggerDDL');
-	return `CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
+	switch (dialect) {
+		case 'libsql':
+			return `CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
   INSERT INTO nodes_fts(rowid, body) VALUES (new.ver, new.body);
 END;`;
+		case 'postgres':
+			return notYet('ftsTriggerDDL', dialect);
+		// No triggers in DuckDB. See ftsTableDDL.
+		case 'duckdb':
+			return '';
+		default:
+			return assertNever(dialect, 'ftsTriggerDDL');
+	}
 }

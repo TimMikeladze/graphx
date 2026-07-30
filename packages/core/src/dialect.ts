@@ -13,7 +13,7 @@ import type { InStatement, InValue } from '@libsql/client';
  */
 
 /** Which SQL backend a client speaks. Absent ⇒ libSQL (the original / default). */
-export type Dialect = 'libsql' | 'postgres';
+export type Dialect = 'libsql' | 'postgres' | 'duckdb';
 
 /** Transaction mode for {@link DbClient.batch} / {@link DbClient.transaction}. */
 export type TransactionMode = 'write' | 'read' | 'deferred';
@@ -60,4 +60,15 @@ export interface DbClient {
 /** Resolve a client's dialect; an untagged client is libSQL (the original backend). */
 export function dialectOf(client: { dialect?: Dialect }): Dialect {
 	return client.dialect ?? 'libsql';
+}
+
+/**
+ * Exhaustiveness guard for dialect switches. Every `switch (dialect)` in the codebase
+ * ends in `default: return assertNever(dialect, '<fragmentName>')`, so adding a fourth
+ * backend surfaces as a compile error at every branch that has not been taught about it
+ * — rather than as a silent fall-through to the libSQL arm, which is what the two-way
+ * ternaries this replaced would have done.
+ */
+export function assertNever(x: never, ctx: string): never {
+	throw new Error(`${ctx}: unhandled dialect ${JSON.stringify(x)}`);
 }

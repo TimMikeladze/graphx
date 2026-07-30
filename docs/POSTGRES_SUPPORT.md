@@ -28,6 +28,13 @@
 
 ## ✅ COMPLETE — full dual-backend parity
 
+> **Correction, 2026-07-29.** This section overstated its own scope until the DuckDB branch.
+> `packages/mcp` never registered the `pg` (or `duck`) adapter at all, so 13 of its tests
+> failed under `GRAPHX_TEST_DRIVER=postgres` — the parity claim below was measured on
+> `packages/core` and `packages/auth` only. Fixed on the DuckDB branch; a verified run on a
+> dedicated container now reports **1052 pass / 19 skip / 0 fail** across all packages.
+> See `docs/DUCKDB_SUPPORT.md`.
+
 **libSQL 362/362 · Postgres 344 pass + 18 skip + 0 fail · lint+type green.** Every Postgres-applicable test passes. The 18 skips are libSQL-native capability/mechanics probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, F32_BLOB/vector_top_k, FTS5 virtual table, deferred-index speedup) with no Postgres analog — the user-facing contracts they cover are exercised by cross-backend tests. The user-facing API is unchanged; backend is selected by config (`DbConfig.driver` / `GRAPHX_DB_DRIVER`) only.
 
 **Phase 6 — polish (NOT parity-blocking):**

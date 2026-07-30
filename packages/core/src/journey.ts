@@ -60,6 +60,11 @@ export interface JourneyRow {
 
 export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow[]> {
 	const d = dialectOf(raw);
+	// DuckDB has nothing to infer a type from for a bare `?` that is only ever PROJECTED
+	// (never compared against a column), so the two id placeholders in the anchor term
+	// below carry an explicit cast. The `from` timestamp is already `CAST(... AS ...)`,
+	// and the `node <> ?` placeholder in `reached` takes its type from the `node` column.
+	const idCast = d === 'duckdb' ? '?::VARCHAR' : '?';
 	const dir = o.direction ?? 'forward';
 	const maxDepth = o.maxDepth ?? 6;
 	const rels = o.rels?.length ? o.rels : null;
@@ -101,7 +106,7 @@ WITH RECURSIVE deg(node, c) AS (
   ${degBody}
 ),
 journey(node, t_arrive, depth, path) AS (
-  SELECT ?, CAST(? AS ${epochIntType(d)}), 0, ',' || ? || ','
+  SELECT ${idCast}, CAST(? AS ${epochIntType(d)}), 0, ',' || ${idCast} || ','
   UNION ALL
   SELECT ${nextExpr}, ${scalarMax(d, 'j.t_arrive', 'e.valid_from')}, j.depth+1, j.path || ${nextExpr} || ','
   FROM journey j

@@ -12,7 +12,10 @@ export const FOREVER = 8640000000000000;
  * so this is a no-op there.
  */
 export async function applyConnPragmas(client: DbClient): Promise<void> {
-	if (dialectOf(client) === 'postgres') return;
+	// libSQL only. Postgres has these inherently (FKs always enforced, MVCC,
+	// lock_timeout). DuckDB has no equivalent knobs and no lock-based contention —
+	// its writer is serialized in-process by the adapter's mutex instead.
+	if (dialectOf(client) !== 'libsql') return;
 	await client.execute('PRAGMA foreign_keys = ON');
 	await client.execute('PRAGMA busy_timeout = 5000');
 }
@@ -35,6 +38,43 @@ export interface DbConfig {
 	authToken?: string;
 	syncUrl?: string;
 	syncInterval?: number;
+	// DuckDB
+	/** Local database path. Defaults to `<namespace>.duckdb`, or `:memory:` when `bucket`
+	 *  is set — a bucket-backed local database is a disposable materialization. */
+	duckPath?: string;
+	/** Object-storage bucket. When set, the namespace becomes a key prefix beneath it. */
+	bucket?: string;
+	prefix?: string;
+	cacheDir?: string;
+	endpoint?: string;
+	region?: string;
+	/** Pin reads to one snapshot instead of following head. */
+	snapshot?: number;
+}
+
+/**
+ * A client that manages its own writer serialization, and whose durable state may live
+ * outside the local database. Only the DuckDB adapter implements it.
+ *
+ * Declared here and probed structurally so that `graph.ts` and `bulk.ts` — which both have
+ * to honor it — never import `duck.ts`, keeping `@duckdb/node-api` (~123MB) off the import
+ * path of every consumer who did not opt into that backend.
+ */
+export interface ManagedWriter {
+	/** True when `commit` publishes to a snapshot chain. False for a plain local DuckDB. */
+	readonly durable: boolean;
+	/** Run `fn` with every other write on this client held back. */
+	serializeWrite<T>(fn: () => Promise<T>): Promise<T>;
+	/** Publish the local state as the next snapshot. `dirty` names the tables that changed. */
+	commit(dirty: Set<string>): Promise<unknown>;
+	/** Discard local state and re-materialize the current snapshot — the rollback path. */
+	reload(): Promise<void>;
+}
+
+/** `raw` as a {@link ManagedWriter}, or null when the backend manages neither concern. */
+export function managedWriter(raw: DbClient): ManagedWriter | null {
+	const c = raw as Partial<ManagedWriter>;
+	return typeof c.serializeWrite === 'function' ? (c as ManagedWriter) : null;
 }
 
 /** Builds a Postgres {@link DbClient} for a namespace. Registered by `core/pg` on import. */
@@ -50,9 +90,24 @@ export function registerPgDriver(factory: PgDriverFactory): void {
 	pgFactory = factory;
 }
 
+/** Builds a DuckDB {@link DbClient} for a namespace. Registered by `core/duck` on import. */
+export type DuckDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
+let duckFactory: DuckDriverFactory | undefined;
+
+/**
+ * Register the DuckDB adapter factory. Called as a side effect of importing the
+ * `core/duck` subpath, so `@duckdb/node-api` stays an OPTIONAL peer — it is ~123MB
+ * installed and is never loaded for consumers who do not opt in.
+ */
+export function registerDuckDriver(factory: DuckDriverFactory): void {
+	duckFactory = factory;
+}
+
 function resolveDriver(cfg: DbConfig): Dialect {
 	if (cfg.driver) return cfg.driver;
-	return process.env.GRAPHX_DB_DRIVER === 'postgres' ? 'postgres' : 'libsql';
+	const env = process.env.GRAPHX_DB_DRIVER;
+	if (env === 'postgres' || env === 'duckdb') return env;
+	return 'libsql';
 }
 
 const clients = new Map<string, DbClient>();
@@ -69,14 +124,22 @@ const clients = new Map<string, DbClient>();
 export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	const existing = clients.get(namespace);
 	if (existing) return existing;
+	const driver = resolveDriver(cfg);
 	let client: DbClient;
-	if (resolveDriver(cfg) === 'postgres') {
+	if (driver === 'postgres') {
 		if (!pgFactory) {
 			throw new Error(
 				"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
 			);
 		}
 		client = pgFactory(namespace, cfg);
+	} else if (driver === 'duckdb') {
+		if (!duckFactory) {
+			throw new Error(
+				"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
+			);
+		}
+		client = duckFactory(namespace, cfg);
 	} else {
 		const base = cfg.syncUrl ?? process.env.SQLD_URL;
 		const syncUrl = base ? `${base}/${namespace}` : undefined;

@@ -335,14 +335,17 @@ async function sqlShortestPath(
 	const depthClause = maxDepth !== undefined ? '\n    AND w.depth < ?' : '';
 	// Priority-queue recursive CTE: ORDER BY cumulative cost pulls the cheapest frontier
 	// first; the path-LIKE guard keeps it cycle-safe (simple paths only — the optimum for
-	// non-negative weights, B9). Postgres forbids ORDER BY in a recursive term, so it is
-	// omitted there: the CTE then fully enumerates simple paths and the OUTER
-	// `ORDER BY cost LIMIT 1` still selects the optimum (no pruning, fine for small graphs).
-	const isPg = dialectOf(raw) === 'postgres';
-	const orderClause = isPg ? '' : `\n  ORDER BY w.cost + ${costExpr}`;
-	// Postgres requires the recursive column types to match the non-recursive term; the
-	// running cost is `double precision` (weight is `real`), so the anchor's 0 is cast.
-	const zeroCost = isPg ? 'CAST(0.0 AS double precision)' : '0.0';
+	// non-negative weights, B9). ORDER BY inside a recursive term is a SQLite-only
+	// extension — Postgres and DuckDB both reject it ("ORDER BY in a recursive query is
+	// not allowed"), so it is omitted there: the CTE then fully enumerates simple paths and
+	// the OUTER `ORDER BY cost LIMIT 1` still selects the optimum (no pruning, fine for
+	// small graphs).
+	const d = dialectOf(raw);
+	const orderClause = d === 'libsql' ? `\n  ORDER BY w.cost + ${costExpr}` : '';
+	// Postgres and DuckDB both require the recursive column types to match the
+	// non-recursive term; the running cost is `double precision` (weight is `real`), so
+	// the anchor's 0 is cast.
+	const zeroCost = d === 'libsql' ? '0.0' : 'CAST(0.0 AS double precision)';
 	const sql = `
 WITH RECURSIVE walk(node, cost, path, depth) AS (
   SELECT ?, ${zeroCost}, ',' || ? || ',', 0

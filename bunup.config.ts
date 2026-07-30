@@ -6,11 +6,12 @@ export default defineWorkspace([
 	{
 		name: 'core',
 		root: 'packages/core',
-		// `pg.ts` ships as the `core/pg` subpath: importing it once registers the
-		// Postgres driver with `getDb` (side effect). It stays a separate entry so the
-		// optional `pg` peer is only pulled in by consumers that opt into Postgres.
+		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
+		// one registers that driver with `getDb` (side effect). They stay separate entries
+		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
+		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
 		config: {
-			entry: ['src/index.ts', 'src/pg.ts', 'src/blob.ts'],
+			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
 		},
 	},
 	{

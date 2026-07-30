@@ -1,6 +1,7 @@
 import { applyConnPragmas } from './db.ts';
-import { type DbClient, dialectOf } from './dialect.ts';
+import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
 import {
+	duckdbSchema,
 	embColumnType,
 	ftsTableDDL,
 	ftsTriggerDDL,
@@ -164,25 +165,36 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  * libSQL, `vector(<dim>)` on Postgres) — used by {@link init} to reject a conflicting dim.
  */
 export async function readEmbDim(client: DbClient): Promise<number | null> {
-	if (dialectOf(client) === 'postgres') {
-		const r = await client.execute(
-			`SELECT format_type(a.atttypid, a.atttypmod) AS t
-			 FROM pg_attribute a
-			 JOIN pg_class c ON a.attrelid = c.oid
-			 JOIN pg_namespace n ON c.relnamespace = n.oid
-			 WHERE c.relname = 'node_versions' AND a.attname = 'emb'
-			   AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped`,
-		);
-		const t = r.rows[0]?.t;
-		const m = typeof t === 'string' ? /vector\((\d+)\)/.exec(t) : null;
-		return m ? Number(m[1]) : null;
+	switch (dialectOf(client)) {
+		case 'postgres': {
+			const r = await client.execute(
+				`SELECT format_type(a.atttypid, a.atttypmod) AS t
+				 FROM pg_attribute a
+				 JOIN pg_class c ON a.attrelid = c.oid
+				 JOIN pg_namespace n ON c.relnamespace = n.oid
+				 WHERE c.relname = 'node_versions' AND a.attname = 'emb'
+				   AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped`,
+			);
+			const t = r.rows[0]?.t;
+			const m = typeof t === 'string' ? /vector\((\d+)\)/.exec(t) : null;
+			return m ? Number(m[1]) : null;
+		}
+		case 'duckdb': {
+			const r = await client
+				.execute(`SELECT value FROM graph_meta WHERE key = 'emb_dim'`)
+				.catch(() => ({ rows: [] as SqlRow[] }));
+			const v = r.rows[0]?.value;
+			return typeof v === 'string' ? Number(v) : null;
+		}
+		default: {
+			const r = await client.execute(
+				`SELECT sql FROM sqlite_master WHERE type='table' AND name='node_versions'`,
+			);
+			const sql = r.rows[0]?.sql;
+			const m = typeof sql === 'string' ? /emb\s+F32_BLOB\((\d+)\)/i.exec(sql) : null;
+			return m ? Number(m[1]) : null;
+		}
 	}
-	const r = await client.execute(
-		`SELECT sql FROM sqlite_master WHERE type='table' AND name='node_versions'`,
-	);
-	const sql = r.rows[0]?.sql;
-	const m = typeof sql === 'string' ? /emb\s+F32_BLOB\((\d+)\)/i.exec(sql) : null;
-	return m ? Number(m[1]) : null;
 }
 
 export async function init(client: DbClient, dim?: number): Promise<void> {
@@ -198,23 +210,31 @@ export async function init(client: DbClient, dim?: number): Promise<void> {
 			);
 		}
 	}
-	if (dialectOf(client) === 'postgres') {
-		// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
-		// `vector` extension is expected to exist in `public` (on the search_path).
-		await client.executeMultiple(postgresSchema(dim));
-		return;
+	switch (dialectOf(client)) {
+		case 'postgres':
+			// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
+			// `vector` extension is expected to exist in `public` (on the search_path).
+			await client.executeMultiple(postgresSchema(dim));
+			return;
+		case 'duckdb':
+			// No pragmas: FKs are not declared, there is no WAL to set, and there is no
+			// lock-based contention to time out — the writer is serialized in-process.
+			await client.executeMultiple(duckdbSchema(dim));
+			return;
+		default:
+			await client.execute('PRAGMA journal_mode = WAL');
+			await applyConnPragmas(client);
+			await client.executeMultiple(schema(dim));
+			// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
+			// add it, and without it every outbox INSERT fails on the unknown column.
+			await ensureColumn(
+				client,
+				'graph_outbox',
+				'source',
+				'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
+			);
+			return;
 	}
-	await client.execute('PRAGMA journal_mode = WAL');
-	await applyConnPragmas(client);
-	await client.executeMultiple(schema(dim));
-	// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
-	// add it, and without it every outbox INSERT fails on the unknown column.
-	await ensureColumn(
-		client,
-		'graph_outbox',
-		'source',
-		'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
-	);
 }
 
 /**
@@ -230,6 +250,12 @@ export async function ensureColumn(
 	col: string,
 	ddl: string,
 ): Promise<void> {
+	// DuckDB has ADD COLUMN IF NOT EXISTS, so the probe is unnecessary; PRAGMA table_xinfo
+	// does not exist there at all.
+	if (dialectOf(client) === 'duckdb') {
+		await client.execute(ddl.replace(/ADD COLUMN /i, 'ADD COLUMN IF NOT EXISTS '));
+		return;
+	}
 	const info = await client.execute(`PRAGMA table_xinfo(${table})`);
 	if (!info.rows.some((r) => String(r.name) === col)) {
 		await client.execute(ddl);

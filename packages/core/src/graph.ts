@@ -10,7 +10,9 @@ import {
 import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
-import { FOREVER } from './db.ts';
+import { FOREVER, type ManagedWriter, managedWriter } from './db.ts';
+import { assertUniqueProps } from './duck-constraints.ts';
+import { embParam } from './duck-value.ts';
 import {
 	type GraphEvent,
 	type GraphEventOptions,
@@ -294,7 +296,13 @@ const WRITE_MAX_RETRIES = 50;
 /**
  * Transient write contention — safe to roll back + retry. libSQL: `SQLITE_BUSY`/`LOCKED`.
  * Postgres: SQLSTATE 40001 (serialization_failure, raised by SERIALIZABLE conflicts),
- * 40P01 (deadlock_detected), 55P03 (lock_not_available).
+ * 40P01 (deadlock_detected), 55P03 (lock_not_available). DuckDB has neither a `.code` nor
+ * a SQLSTATE: a write-write conflict is a plain `TransactionContext Error`. Without that,
+ * every DuckDB conflict fell straight through the retry envelope to the caller.
+ *
+ * A lost commit race is deliberately NOT here. `SnapshotStore.commit` already absorbs it
+ * by rebasing, and what escapes that loop — exhausted attempts, or a conflicting concurrent
+ * writer — is not fixed by re-running the local write, which has already been applied.
  */
 function isRetryableContention(e: unknown): boolean {
 	const code = (e as { code?: unknown } | null)?.code;
@@ -309,7 +317,7 @@ function isRetryableContention(e: unknown): boolean {
 		return true;
 	}
 	const msg = String((e as { message?: unknown } | null)?.message ?? '');
-	return /database (?:table )?is locked|SQLITE_BUSY|could not serialize|deadlock detected/i.test(
+	return /database (?:table )?is locked|SQLITE_BUSY|could not serialize|deadlock detected|Conflict on|transaction is aborted|TransactionContext Error/i.test(
 		msg,
 	);
 }
@@ -337,6 +345,10 @@ export class Graph<S extends GraphSchema> {
 	private readonly eventSource: string | undefined;
 	/** Retained verbatim so {@link withEventSource} inherits the sink and outbox setting. */
 	private readonly eventOpts: GraphEventOptions | undefined;
+	/** The backend's writer serialization + snapshot publishing, when it has any. */
+	private readonly writer: ManagedWriter | null;
+	/** Tables the open {@link write} session has touched, or undefined when none is open. */
+	private session?: Set<string>;
 
 	constructor(
 		public raw: DbClient,
@@ -350,6 +362,59 @@ export class Graph<S extends GraphSchema> {
 		this.outbox = events?.outbox ?? false;
 		this.eventSource = events?.source;
 		this.eventOpts = events;
+		this.writer = managedWriter(raw);
+	}
+
+	/**
+	 * Group every mutation in `fn` into ONE snapshot commit.
+	 *
+	 * A commit is a set of object PUTs plus a manifest CAS, so committing per mutation is
+	 * untenable for anything but a single write. A bare `addNode()` outside a session still
+	 * commits on its own — the API is unchanged — but a batch of work belongs in here.
+	 *
+	 * A nested call joins the enclosing session, so the outermost one owns the commit. A
+	 * body that throws commits nothing: the local database is a materialization of the last
+	 * snapshot, so discarding it and reloading is the rollback.
+	 *
+	 * On libSQL and Postgres there is no snapshot chain to batch into, so this just runs
+	 * `fn` — the durable state is already the database.
+	 */
+	async write<T>(fn: (g: Graph<S>) => Promise<T>): Promise<T> {
+		if (this.session || !this.writer?.durable) return fn(this);
+		const dirty = new Set<string>();
+		this.session = dirty;
+		try {
+			const out = await fn(this);
+			this.session = undefined;
+			await this.writer.commit(dirty);
+			return out;
+		} catch (e) {
+			this.session = undefined;
+			await this.writer.reload();
+			throw e;
+		}
+	}
+
+	/**
+	 * Record a mutation's tables as changed — into the open session, or, when there is
+	 * none, as its own commit. A no-op on a backend whose durable state IS the database.
+	 */
+	private async touched(...tables: string[]): Promise<void> {
+		if (this.session) {
+			for (const t of tables) this.session.add(t);
+			return;
+		}
+		if (this.writer?.durable) await this.writer.commit(new Set(tables));
+	}
+
+	/**
+	 * Run a write with every other write on this client held back. See
+	 * {@link ManagedWriter.serializeWrite} for why DuckDB needs it and the other two
+	 * backends do not: they reserve the writer in the database, so serializing here would
+	 * only remove the contention their retry envelope exists to prove correct under.
+	 */
+	private serialize<T>(fn: () => Promise<T>): Promise<T> {
+		return this.writer ? this.writer.serializeWrite(fn) : fn();
 	}
 
 	/**
@@ -471,7 +536,13 @@ export class Graph<S extends GraphSchema> {
 		];
 		const ob = this.outboxStmt(event);
 		if (ob) stmts.push(ob); // co-write the event row in the same atomic batch (Layer 2)
+		// DuckDB has no store-level backing for declared-unique props (see
+		// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
+		if (dialectOf(this.raw) === 'duckdb') {
+			await assertUniqueProps(this.raw, n.type, parsed as Record<string, unknown>);
+		}
 		await this.runWriteBatch('addNode', () => this.raw.batch(stmts, 'write'));
+		await this.touched('node_identity', 'node_versions', 'graph_outbox');
 
 		this.typeCache.set(id, n.type);
 		this.emit(event); // post-commit
@@ -591,6 +662,7 @@ export class Graph<S extends GraphSchema> {
 				events = evs;
 				return 'committed';
 			});
+			await this.touched('edge_identity', 'edge_versions', 'graph_outbox');
 			for (const ev of events) this.emit(ev); // post-commit
 			return { id, rel: e.rel, src: e.src, dst: e.dst };
 		}
@@ -613,6 +685,7 @@ export class Graph<S extends GraphSchema> {
 		const ob = this.outboxStmt(event);
 		if (ob) stmts.push(ob);
 		await this.runWriteBatch('addEdge', () => this.raw.batch(stmts, 'write'));
+		await this.touched('edge_identity', 'edge_versions', 'graph_outbox');
 		this.emit(event); // post-commit
 		return { id, rel: e.rel, src: e.src, dst: e.dst };
 	}
@@ -926,16 +999,18 @@ export class Graph<S extends GraphSchema> {
 	 * than surfacing as a lost write. Other errors (constraint, etc.) propagate.
 	 */
 	private async runWriteBatch(label: string, run: () => Promise<unknown>): Promise<void> {
-		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
-			try {
-				await run();
-				return;
-			} catch (e) {
-				if (!isRetryableContention(e)) throw e;
+		await this.serialize(async () => {
+			for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
+				try {
+					await run();
+					return;
+				} catch (e) {
+					if (!isRetryableContention(e)) throw e;
+				}
+				await backoff(attempt);
 			}
-			await backoff(attempt);
-		}
-		throw new Error(`${label}: too much contention`);
+			throw new Error(`${label}: too much contention`);
+		});
 	}
 
 	/**
@@ -953,21 +1028,23 @@ export class Graph<S extends GraphSchema> {
 		label: string,
 		body: (tx: DbTransaction, now: number) => Promise<'committed' | 'superseded'>,
 	): Promise<void> {
-		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
-			let tx: DbTransaction | undefined;
-			try {
-				tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE (may throw SQLITE_BUSY)
-				const result = await body(tx, this.now());
-				if (result === 'committed') return;
-				if (!tx.closed) await tx.rollback(); // superseded → retry
-			} catch (e) {
-				// Guard: don't roll back a committed/closed tx (would throw).
-				if (tx && !tx.closed) await tx.rollback();
-				if (!isRetryableContention(e)) throw e; // permanent error → propagate
+		await this.serialize(async () => {
+			for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
+				let tx: DbTransaction | undefined;
+				try {
+					tx = await this.raw.transaction('write'); // BEGIN IMMEDIATE (may throw SQLITE_BUSY)
+					const result = await body(tx, this.now());
+					if (result === 'committed') return;
+					if (!tx.closed) await tx.rollback(); // superseded → retry
+				} catch (e) {
+					// Guard: don't roll back a committed/closed tx (would throw).
+					if (tx && !tx.closed) await tx.rollback();
+					if (!isRetryableContention(e)) throw e; // permanent error → propagate
+				}
+				await backoff(attempt);
 			}
-			await backoff(attempt);
-		}
-		throw new Error(`${label}: too much contention`);
+			throw new Error(`${label}: too much contention`);
+		});
 	}
 
 	/**
@@ -1045,6 +1122,15 @@ export class Graph<S extends GraphSchema> {
 				const merged = { ...this.upcaster.apply(String(cur.type), curRaw), ...patch.data };
 				data = this.upcaster.stamp(successorType, merged);
 			}
+			// DuckDB has no store-level backing for declared-unique props (see
+			// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
+			// `id` is excluded so a node updated to its own current value is never rejected.
+			// `tx`, not `this.raw`: this callback already holds a pooled connection, and
+			// reaching for a second one here deadlocks the pool once enough writers are
+			// concurrently mid-transaction (reproduced at the default poolMax of 4).
+			if (dialectOf(this.raw) === 'duckdb') {
+				await assertUniqueProps(tx, successorType, data, id);
+			}
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
 			// Carried forward: type, body, uri, content_hash, embed_hash, content_type, data, emb.
@@ -1059,7 +1145,17 @@ export class Graph<S extends GraphSchema> {
 				JSON.stringify(data),
 			];
 			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
-			// (carries a real F32 vector, or NULL when there was none).
+			// (carries a real F32 vector, or NULL when there was none). DuckDB reads its
+			// FLOAT[] column back as a genuine JS array, not the JSON-array STRING
+			// embRebindExpr's from_json(?, …) expects (libSQL/Postgres rebind the driver's
+			// own raw/text form directly) — embParam() re-encodes it, mirroring the
+			// JSON.stringify a fresh patch.emb gets below.
+			const rebindEmb: SqlValue =
+				cur.emb == null
+					? null
+					: dialectOf(this.raw) === 'duckdb'
+						? embParam(cur.emb as number[])
+						: (cur.emb as SqlValue);
 			const successor: SqlStatement = patch.emb
 				? {
 						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
@@ -1069,7 +1165,7 @@ export class Graph<S extends GraphSchema> {
 				: {
 						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
 							VALUES (?,?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
-						args: [...common, (cur.emb as SqlValue) ?? null, now],
+						args: [...common, rebindEmb, now],
 					};
 			await tx.execute(successor);
 			const ev: GraphEvent = {
@@ -1086,6 +1182,7 @@ export class Graph<S extends GraphSchema> {
 			event = ev;
 			return 'committed';
 		});
+		await this.touched('node_versions', 'graph_outbox');
 		if (event) this.emit(event); // post-commit
 	}
 
@@ -1137,6 +1234,7 @@ export class Graph<S extends GraphSchema> {
 			event = ev;
 			return 'committed';
 		});
+		await this.touched('node_versions', 'graph_outbox');
 		// A retracted id no longer resolves to a live type; drop any cached entry so a later
 		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
 		this.typeCache.delete(id);
@@ -1186,6 +1284,7 @@ export class Graph<S extends GraphSchema> {
 			event = ev;
 			return 'committed';
 		});
+		await this.touched('edge_versions', 'graph_outbox');
 		if (event) this.emit(event); // post-commit
 	}
 

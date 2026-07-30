@@ -1,4 +1,4 @@
-import { FOREVER } from './db.ts';
+import { FOREVER, managedWriter } from './db.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embFreshExpr, insertOrIgnore } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
@@ -162,6 +162,10 @@ export async function bulkLoad<S extends GraphSchema>(
 	const chunkSize = opts.chunkSize ?? 100;
 	const loadTs = opts.loadTs ?? Date.now();
 	const d = dialectOf(raw);
+	// libSQL defers the ANN index and FTS trigger across a bulk load and rebuilds after.
+	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
+	// index-free and its FTS index is built at commit time — so the whole bracket is skipped.
+	const deferIndexes = d === 'libsql';
 	const embExpr = embFreshExpr(d);
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
@@ -195,9 +199,8 @@ export async function bulkLoad<S extends GraphSchema>(
 	);
 
 	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger. libSQL only —
-	// on Postgres there is no FTS trigger (the generated `tsvector` self-maintains) and no HNSW
-	// index is created yet, so there is nothing to defer.
-	if (d !== 'postgres') {
+	// see deferIndexes above for why Postgres and DuckDB both skip this.
+	if (deferIndexes) {
 		await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
 		await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');
 	}
@@ -235,7 +238,7 @@ export async function bulkLoad<S extends GraphSchema>(
 	} finally {
 		// 3. Always restore queryability — recreate the ANN index and the FTS trigger,
 		// even if the load threw (a failed batch is atomic, so no rows leak). libSQL only.
-		if (d !== 'postgres') {
+		if (deferIndexes) {
 			await raw.execute(NV_EMB_IDX_DDL);
 			await raw.execute(NODES_FTS_TRIGGER_DDL);
 		}
@@ -243,12 +246,29 @@ export async function bulkLoad<S extends GraphSchema>(
 
 	// 4. Rebuild the FTS index from the content table (libSQL only — PG's generated tsvector
 	// is already current), then refresh planner stats.
-	if (d !== 'postgres') {
+	if (deferIndexes) {
 		await raw.execute(`INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')`);
 	}
+	// Runs on all three dialects, incl. DuckDB, which has no ANN or FTS index for it to
+	// inform (see deferIndexes above) — it still refreshes DuckDB's own planner
+	// statistics for the tables just loaded, so it is a no-op only w.r.t. those two
+	// indexes, not a dead call.
 	await raw.execute('ANALYZE');
+	// A bulk load is one logical write, so it publishes once — the whole point of routing
+	// an import through here rather than N addNode calls.
+	await publish(raw, 'node_identity', 'node_versions');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };
+}
+
+/**
+ * Publish `tables` when the client's durable state is a snapshot chain (DuckDB on object
+ * storage); a no-op everywhere else. `Graph` does this through its write session; these
+ * two functions take a raw client and have no session to join, so they publish directly.
+ */
+async function publish(raw: DbClient, ...tables: string[]): Promise<void> {
+	const writer = managedWriter(raw);
+	if (writer?.durable) await writer.commit(new Set(tables));
 }
 
 /** One row to bulk-insert as an edge version. `data` is validated against the schema. */
@@ -403,6 +423,7 @@ export async function bulkEdges<S extends GraphSchema>(
 		});
 	}
 	if (stmts.length > 0) await raw.batch(stmts, 'write');
+	await publish(raw, 'edge_identity', 'edge_versions');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };
 }
