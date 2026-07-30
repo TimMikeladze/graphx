@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { type DbConfig, registerDuckDriver } from './db.ts';
 import type {
 	DbClient,
@@ -6,8 +8,14 @@ import type {
 	SqlStatement,
 	TransactionMode,
 } from './dialect.ts';
+import { commitSnapshot, type ExportSource } from './duck-commit.ts';
+import { type LoadTarget, materialize } from './duck-materialize.ts';
 import { DuckPool, type PooledConnection } from './duck-pool.ts';
 import { normalizeRow } from './duck-value.ts';
+import { FileCache } from './objstore/cache.ts';
+import type { Manifest } from './objstore/manifest.ts';
+import { SnapshotStore } from './objstore/snapshot.ts';
+import type { ObjectStore } from './objstore/store.ts';
 
 /**
  * DuckDB adapter — implements the driver-neutral {@link DbClient} over a local DuckDB.
@@ -24,10 +32,21 @@ import { normalizeRow } from './duck-value.ts';
  */
 
 export interface DuckClientOptions {
-	/** Database path. Default `:memory:`. */
+	/** Database path. Default `:memory:` — the whole point is that it is disposable. */
 	path?: string;
 	/** Max pooled connections (default 4). */
 	poolMax?: number;
+	/**
+	 * Durable backing. Without it the client is a plain local DuckDB (stage 3 behavior).
+	 * A promise is accepted so the registered factory can construct an `S3ObjectStore` by
+	 * dynamic import, keeping `@aws-sdk/client-s3` off the `core/duck` import path for
+	 * consumers who only want a local database.
+	 */
+	store?: ObjectStore | Promise<ObjectStore>;
+	/** Where cached data objects live. Required when `store` is set. */
+	cacheDir?: string;
+	/** Pin to a specific snapshot instead of following head. */
+	snapshot?: number;
 }
 
 function normalize(stmt: SqlStatement): { sql: string; args: unknown[] } {
@@ -109,17 +128,98 @@ export class DuckClient implements DbClient {
 	readonly dialect = 'duckdb' as const;
 	private readonly pool: DuckPool;
 	private ended = false;
+	/**
+	 * The one-shot bootstrap, started in the constructor when the client is bucket-backed.
+	 * `getDb` is synchronous and cannot await an open, so every entry point awaits this
+	 * instead — the same pattern as `PgClient.ready`. Undefined for a local-only client,
+	 * which is usable immediately.
+	 */
+	private readonly opened?: Promise<void>;
+	private snapshots?: SnapshotStore;
+	private cache?: FileCache;
+	private current: Manifest | null = null;
+	private tmpDir?: string;
 
 	constructor(opts: DuckClientOptions = {}) {
 		this.pool = new DuckPool(opts.path ?? ':memory:', { max: opts.poolMax ?? 4 });
+		if (opts.store) {
+			if (!opts.cacheDir) {
+				throw new Error('duck client: a store needs a cacheDir to hold its data objects');
+			}
+			this.tmpDir = join(opts.cacheDir, 'tmp');
+			mkdirSync(this.tmpDir, { recursive: true });
+			this.opened = this.load(opts.store, opts.cacheDir, opts.snapshot);
+		}
+	}
+
+	/**
+	 * Resolve the snapshot this client reads and materialize it locally.
+	 *
+	 * Runs against {@link raw}, not `this`: it IS the bootstrap, so going through the
+	 * gated entry points would await the promise it is in the middle of resolving.
+	 */
+	private async load(
+		store: ObjectStore | Promise<ObjectStore>,
+		cacheDir: string,
+		pinned?: number,
+	): Promise<void> {
+		const resolved = await store;
+		this.snapshots = new SnapshotStore(resolved);
+		this.cache = new FileCache(resolved, cacheDir);
+		this.current =
+			pinned === undefined ? await this.snapshots.resolveHead() : await this.snapshots.read(pinned);
+		await materialize(this.raw, this.current, this.cache);
+	}
+
+	/** An ungated view of this client, for the bootstrap and the commit path. */
+	private get raw(): LoadTarget & ExportSource {
+		return {
+			execute: (stmt) => this.pool.withConnection((c) => runOne(c, stmt)),
+			executeMultiple: (sql) => this.runScript(sql),
+		};
+	}
+
+	/**
+	 * Await the snapshot load. Every entry point calls this first, so a caller that never
+	 * awaits `open()` still cannot observe an unmaterialized database.
+	 */
+	async open(): Promise<void> {
+		if (this.opened) await this.opened;
+	}
+
+	/** The snapshot this client is reading, or null on an empty bucket. */
+	snapshot(): Manifest | null {
+		return this.current;
+	}
+
+	/**
+	 * Publish the local state as the next snapshot. `dirty` names the tables that changed;
+	 * every other table carries its refs forward, so an unchanged graph costs no uploads.
+	 */
+	async commit(dirty: Set<string>): Promise<Manifest> {
+		await this.open();
+		if (!this.snapshots || !this.cache || !this.tmpDir) {
+			throw new Error('duck client: commit requires a store — construct with { store, cacheDir }');
+		}
+		this.current = await commitSnapshot(
+			this.raw,
+			this.snapshots,
+			this.cache,
+			this.tmpDir,
+			this.current,
+			dirty,
+		);
+		return this.current;
 	}
 
 	async execute(stmt: SqlStatement): Promise<SqlResult> {
+		await this.open();
 		return this.pool.withConnection((c) => runOne(c, stmt));
 	}
 
 	/** Atomic batch — every statement in one transaction (mirrors libSQL `batch(_, 'write')`). */
 	async batch(stmts: SqlStatement[], _mode?: TransactionMode): Promise<SqlResult[]> {
+		await this.open();
 		return this.pool.withConnection(async (c) => {
 			await c.run('BEGIN');
 			try {
@@ -144,6 +244,7 @@ export class DuckClient implements DbClient {
 	 * SERIALIZABLE.
 	 */
 	async transaction(_mode?: TransactionMode): Promise<DbTransaction> {
+		await this.open();
 		const conn = await this.pool.acquire();
 		try {
 			await conn.run('BEGIN');
@@ -161,6 +262,11 @@ export class DuckClient implements DbClient {
 	 * statement's otherwise), scrambling `rowsChanged`.
 	 */
 	async executeMultiple(sql: string): Promise<void> {
+		await this.open();
+		await this.runScript(sql);
+	}
+
+	private async runScript(sql: string): Promise<void> {
 		await this.pool.withConnection(async (c) => {
 			for (const stmt of splitStatements(sql)) {
 				await c.run(stmt);
@@ -251,13 +357,33 @@ export function createDuckClient(opts: DuckClientOptions = {}): DuckClient {
 
 /**
  * Register the DuckDB backend with {@link getDb} as a side effect of importing this
- * module (the `core/duck` subpath). One database file per namespace, mirroring the
- * libSQL file-per-namespace model; stage 4 replaces the path with a bucket prefix.
+ * module (the `core/duck` subpath).
+ *
+ * With `bucket`, the namespace becomes a key prefix — the way it becomes a schema on
+ * Postgres and a file on libSQL — so one bucket holds every tenant, and the local database
+ * is a disposable materialization of that tenant's head snapshot. Without it, the stage-3
+ * behavior stands: one local database file per namespace.
+ *
+ * The `S3ObjectStore` is loaded by dynamic import rather than a top-level one so that
+ * `@aws-sdk/client-s3` — an optional peer — stays off the import path of consumers who
+ * only want a local DuckDB.
  */
-registerDuckDriver(
-	(namespace: string, cfg: DbConfig): DbClient =>
-		new DuckClient({
-			path: cfg.duckPath ?? `${namespace}.duckdb`,
-			...(cfg.poolMax !== undefined ? { poolMax: cfg.poolMax } : {}),
-		}),
-);
+registerDuckDriver((namespace: string, cfg: DbConfig): DbClient => {
+	const store = cfg.bucket
+		? import('./objstore/s3.ts').then(
+				({ S3ObjectStore }) =>
+					new S3ObjectStore({
+						bucket: cfg.bucket as string,
+						prefix: `${cfg.prefix ? `${cfg.prefix}/` : ''}${namespace}`,
+						...(cfg.region ? { region: cfg.region } : {}),
+						...(cfg.endpoint ? { endpoint: cfg.endpoint, forcePathStyle: true } : {}),
+					}),
+			)
+		: undefined;
+	return new DuckClient({
+		path: cfg.duckPath ?? (store ? ':memory:' : `${namespace}.duckdb`),
+		...(store ? { store, cacheDir: cfg.cacheDir ?? `.graphx-cache/${namespace}` } : {}),
+		...(cfg.snapshot !== undefined ? { snapshot: cfg.snapshot } : {}),
+		...(cfg.poolMax !== undefined ? { poolMax: cfg.poolMax } : {}),
+	});
+});

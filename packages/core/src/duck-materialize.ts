@@ -35,6 +35,16 @@ export const SNAPSHOT_TABLES = [
 ] as const;
 
 /**
+ * The subset of {@link DbClient} a load needs.
+ *
+ * Narrowed rather than taking a whole `DbClient` so a client that gates its public
+ * `execute` behind a one-shot open can hand in an UNGATED facade of itself — `materialize`
+ * runs INSIDE that open, so awaiting the gate from here would deadlock on a promise this
+ * very call has to resolve.
+ */
+export type LoadTarget = Pick<DbClient, 'execute' | 'executeMultiple'>;
+
+/**
  * Reader-side DuckDB settings.
  *
  * `NO_VALIDATION` is the one that matters: it takes a warm repeat query from one HEAD
@@ -42,7 +52,7 @@ export const SNAPSHOT_TABLES = [
  * stale bytes when a URL's content changes — and it is sound here for exactly one reason:
  * every data object is content-addressed, so a key's bytes never change.
  */
-export async function applyReaderSettings(client: DbClient): Promise<void> {
+export async function applyReaderSettings(client: LoadTarget): Promise<void> {
 	await client.execute(`SET validate_external_file_cache = 'NO_VALIDATION'`);
 	await client.execute('SET enable_http_metadata_cache = true');
 	await client.execute('SET parquet_metadata_cache = true');
@@ -58,7 +68,7 @@ function pathList(paths: string[]): string {
  * empty schema — a brand-new namespace.
  */
 export async function materialize(
-	client: DbClient,
+	client: LoadTarget,
 	manifest: Manifest | null,
 	cache: FileCache,
 ): Promise<void> {

@@ -39,8 +39,17 @@ export interface DbConfig {
 	syncUrl?: string;
 	syncInterval?: number;
 	// DuckDB
-	/** Local database path. Default `<namespace>.duckdb`. Stage 4 adds the bucket fields. */
+	/** Local database path. Defaults to `<namespace>.duckdb`, or `:memory:` when `bucket`
+	 *  is set — a bucket-backed local database is a disposable materialization. */
 	duckPath?: string;
+	/** Object-storage bucket. When set, the namespace becomes a key prefix beneath it. */
+	bucket?: string;
+	prefix?: string;
+	cacheDir?: string;
+	endpoint?: string;
+	region?: string;
+	/** Pin reads to one snapshot instead of following head. */
+	snapshot?: number;
 }
 
 /** Builds a Postgres {@link DbClient} for a namespace. Registered by `core/pg` on import. */
