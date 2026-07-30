@@ -16,7 +16,11 @@ import type { Manifest } from './objstore/manifest.ts';
  * split lived in the local schema instead of the Parquet layout.
  */
 
-/** Every table a manifest can carry. Order matters: identity tables load before referents. */
+/**
+ * Every table a manifest can carry. Order matters in both directions: the load loop walks
+ * it forward, so identity tables land before their referents; the drop loop walks it
+ * reversed, so children drop before parents. A reorder has to satisfy both at once.
+ */
 export const SNAPSHOT_TABLES = [
 	'node_identity',
 	'edge_identity',
@@ -73,9 +77,13 @@ export async function materialize(
 		if (!ref || ref.files.length === 0) continue;
 		const paths = await cache.resolve(ref.files);
 		// Column-name matching rather than positional, so a manifest written by an older
-		// build with fewer columns still loads.
+		// build with fewer columns still loads. OR REPLACE, not a bare INSERT:
+		// `duckdbSchema` seeds `graph_meta` with the `emb_dim` row, so a manifest that also
+		// carries `graph_meta` — and every manifest does, since Task 12 keeps the
+		// unique-prop and single-rel declarations there — collides on its primary key. The
+		// snapshot is authoritative, so it wins.
 		await client.execute(
-			`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+			`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 		);
 		if (ref.tombstones) {
 			const [tomb] = await cache.resolve([ref.tombstones]);

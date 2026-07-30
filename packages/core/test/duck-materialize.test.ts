@@ -75,6 +75,30 @@ describe('materialize', () => {
 		await c.end();
 	});
 
+	test('a manifest carrying graph_meta does not collide with the seeded row', async () => {
+		// duckdbSchema seeds graph_meta with emb_dim, and every real manifest also carries
+		// graph_meta because the constraint declarations live there. A plain INSERT throws
+		// `Constraint Error: Duplicate key "key: emb_dim"` and breaks the first round-trip.
+		const { cache } = ctx();
+		const producer = createDuckClient();
+		await producer.execute(`CREATE TABLE gm AS SELECT 'emb_dim' AS key, '4' AS value`);
+		const path = join(root, 'gm.parquet');
+		await producer.execute(`COPY gm TO '${path}' (FORMAT parquet)`);
+		await producer.end();
+		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
+
+		const c = createDuckClient();
+		await materialize(
+			c,
+			{ ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } },
+			cache,
+		);
+		expect(
+			(await c.execute(`SELECT count(*) AS n FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.n,
+		).toBe(1);
+		await c.end();
+	});
+
 	test('the embedding dimension comes from the manifest', async () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
