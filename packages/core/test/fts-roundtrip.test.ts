@@ -74,18 +74,31 @@ describe('full-text round trip', () => {
 	});
 
 	test('a commit that does not touch node_versions leaves the index files alone', async () => {
+		// `dirty` is the CALLER's assertion about what changed, and the index deliberately
+		// follows it rather than re-deriving it from the database — that contract is what
+		// makes an incremental commit cheap. To prove the gate actually consults `dirty`
+		// (rather than, say, always rebuilding into byte-identical content-addressed files, or
+		// always carrying forward), this test mutates `node_versions` directly with raw SQL —
+		// bypassing the write path that would normally mark it dirty — then commits while
+		// naming only `archival_state` as dirty. A real rebuild would see the new body and
+		// mint different keys; the old keys surviving is what proves the commit trusted the
+		// (deliberately wrong) dirty set instead of reinspecting the table itself.
 		const store = new MemoryObjectStore();
 		const c = client(store);
-		await c.open();
-		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
-		const first = await c.commit(new Set(['node_identity']));
+		const g = new Graph(c, SCHEMA);
+		await g.addNode({ type: 'Doc', body: 'original words here', data: {} });
+		const first = c.snapshot();
+		// Otherwise the rest of this test proves nothing.
+		expect(first?.indexes.fts_global?.fts_dict?.length ?? 0).toBeGreaterThan(0);
+
+		await c.execute({ sql: `UPDATE node_versions SET body = 'entirely different words'` });
 		await c.execute({
 			sql: 'INSERT INTO archival_state VALUES (?,?,?)',
 			args: ['node_versions', 1, 1],
 		});
 		const second = await c.commit(new Set(['archival_state']));
 		// Rebuilding an index nobody invalidated would make every commit cost the whole corpus.
-		expect(second.indexes).toEqual(first.indexes);
+		expect(second.indexes).toEqual(first?.indexes);
 		await c.end();
 	});
 
