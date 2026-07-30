@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
-import { evict } from '../src/db.ts';
+import { evict, getDb } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { createApp } from '../src/serve.ts';
 
@@ -91,4 +91,29 @@ test('createApp logger:true — logs requests without altering the response', as
 		console.log = original;
 	}
 	expect(lines).toBeGreaterThan(0); // logger emitted (in + out lines)
+});
+
+test('a write that exhausts its contention budget -> 409, not 500', async () => {
+	const db = `dev_${ulid().toLowerCase()}`;
+	const { app, control, tenant, project } = await createApp({ schema: SCHEMA, db });
+
+	// Both the §19.1 retry envelope and the snapshot commit protocol give up with this
+	// message. Raised straight from the client so the mapping is tested without waiting out
+	// 50 backoffs — what onError sees is identical either way.
+	const client = getDb(db);
+	const batch = client.batch.bind(client);
+	client.batch = async () => {
+		throw new Error('addNode: too much contention');
+	};
+
+	const res = await app.request(`/t/${tenant}/p/${project}/nodes`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ type: 'person', data: { name: 'contended' } }),
+	});
+	expect(res.status).toBe(409);
+	expect((await res.json()).error).toMatch(/too much contention/);
+
+	client.batch = batch;
+	cleanup(control, db);
 });

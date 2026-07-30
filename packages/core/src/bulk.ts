@@ -1,4 +1,4 @@
-import { FOREVER } from './db.ts';
+import { FOREVER, managedWriter } from './db.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embFreshExpr, insertOrIgnore } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
@@ -254,8 +254,21 @@ export async function bulkLoad<S extends GraphSchema>(
 	// statistics for the tables just loaded, so it is a no-op only w.r.t. those two
 	// indexes, not a dead call.
 	await raw.execute('ANALYZE');
+	// A bulk load is one logical write, so it publishes once — the whole point of routing
+	// an import through here rather than N addNode calls.
+	await publish(raw, 'node_identity', 'node_versions');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };
+}
+
+/**
+ * Publish `tables` when the client's durable state is a snapshot chain (DuckDB on object
+ * storage); a no-op everywhere else. `Graph` does this through its write session; these
+ * two functions take a raw client and have no session to join, so they publish directly.
+ */
+async function publish(raw: DbClient, ...tables: string[]): Promise<void> {
+	const writer = managedWriter(raw);
+	if (writer?.durable) await writer.commit(new Set(tables));
 }
 
 /** One row to bulk-insert as an edge version. `data` is validated against the schema. */
@@ -410,6 +423,7 @@ export async function bulkEdges<S extends GraphSchema>(
 		});
 	}
 	if (stmts.length > 0) await raw.batch(stmts, 'write');
+	await publish(raw, 'edge_identity', 'edge_versions');
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };
 }

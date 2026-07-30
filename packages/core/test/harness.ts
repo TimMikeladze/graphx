@@ -54,6 +54,21 @@ export const TEST_DRIVER: Dialect = DRIVER;
 export const libsqlOnly = DRIVER === 'libsql' ? test : test.skip;
 
 /**
+ * Gate for probes that need TWO genuine writers against ONE database — write-lock
+ * contention, `SQLITE_BUSY`, a held transaction blocking another connection.
+ *
+ * DuckDB has no such configuration: `sibling()` opens a second `DuckDBInstance` on the same
+ * file, which does not share the first one's state, so a "concurrent writer" there writes
+ * into a database nobody else can see. Its writers are serialized in-process by the
+ * adapter's mutex and across processes by the manifest CAS, and the same invariants are
+ * asserted through those mechanisms instead — see the duckdb block in p14-concurrency.
+ */
+export const sharedWriterOnly = DRIVER === 'duckdb' ? test.skip : test;
+
+/** Runs only under DuckDB — the object-storage writer path. */
+export const duckdbOnly = DRIVER === 'duckdb' ? test : test.skip;
+
+/**
  * Dialect-correct embedding value expression for raw-SQL test fixtures that bind a JSON
  * embedding (e.g. `INSERT ... VALUES (..., ${embSql(client)}, ...)`). libSQL → `vector(?)`,
  * Postgres → `?::vector`.

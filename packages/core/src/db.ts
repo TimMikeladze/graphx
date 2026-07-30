@@ -52,6 +52,31 @@ export interface DbConfig {
 	snapshot?: number;
 }
 
+/**
+ * A client that manages its own writer serialization, and whose durable state may live
+ * outside the local database. Only the DuckDB adapter implements it.
+ *
+ * Declared here and probed structurally so that `graph.ts` and `bulk.ts` — which both have
+ * to honor it — never import `duck.ts`, keeping `@duckdb/node-api` (~123MB) off the import
+ * path of every consumer who did not opt into that backend.
+ */
+export interface ManagedWriter {
+	/** True when `commit` publishes to a snapshot chain. False for a plain local DuckDB. */
+	readonly durable: boolean;
+	/** Run `fn` with every other write on this client held back. */
+	serializeWrite<T>(fn: () => Promise<T>): Promise<T>;
+	/** Publish the local state as the next snapshot. `dirty` names the tables that changed. */
+	commit(dirty: Set<string>): Promise<unknown>;
+	/** Discard local state and re-materialize the current snapshot — the rollback path. */
+	reload(): Promise<void>;
+}
+
+/** `raw` as a {@link ManagedWriter}, or null when the backend manages neither concern. */
+export function managedWriter(raw: DbClient): ManagedWriter | null {
+	const c = raw as Partial<ManagedWriter>;
+	return typeof c.serializeWrite === 'function' ? (c as ManagedWriter) : null;
+}
+
 /** Builds a Postgres {@link DbClient} for a namespace. Registered by `core/pg` on import. */
 export type PgDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
 let pgFactory: PgDriverFactory | undefined;

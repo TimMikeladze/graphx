@@ -15,7 +15,10 @@ import { normalizeRow } from './duck-value.ts';
 import { FileCache } from './objstore/cache.ts';
 import type { Manifest } from './objstore/manifest.ts';
 import { SnapshotStore } from './objstore/snapshot.ts';
-import type { ObjectStore } from './objstore/store.ts';
+import { type ObjectStore, probeConditionalWrite } from './objstore/store.ts';
+
+/** Stores whose create-if-absent has already been proven this process. */
+const PROBED = new WeakSet<ObjectStore>();
 
 /**
  * DuckDB adapter — implements the driver-neutral {@link DbClient} over a local DuckDB.
@@ -139,9 +142,21 @@ export class DuckClient implements DbClient {
 	private cache?: FileCache;
 	private current: Manifest | null = null;
 	private tmpDir?: string;
+	/** True when this client publishes to a snapshot chain — see {@link ManagedWriter}. */
+	readonly durable: boolean;
+	/**
+	 * The writer serialization chain. libSQL reserves the writer with `BEGIN IMMEDIATE` and
+	 * Postgres with `SERIALIZABLE`; DuckDB has neither, so without this two writers both
+	 * see `rowsAffected === 1` from a conditional close and both insert a successor,
+	 * leaving two rows with `valid_to = FOREVER`. It lives on the CLIENT rather than on
+	 * `Graph` so that every `Graph` over one client — including the siblings
+	 * `withEventSource` mints — shares the same chain.
+	 */
+	private writeChain: Promise<unknown> = Promise.resolve();
 
 	constructor(opts: DuckClientOptions = {}) {
 		this.pool = new DuckPool(opts.path ?? ':memory:', { max: opts.poolMax ?? 4 });
+		this.durable = opts.store !== undefined;
 		if (opts.store) {
 			if (!opts.cacheDir) {
 				throw new Error('duck client: a store needs a cacheDir to hold its data objects');
@@ -164,6 +179,13 @@ export class DuckClient implements DbClient {
 		pinned?: number,
 	): Promise<void> {
 		const resolved = await store;
+		// §13: prove the store really enforces create-if-absent before trusting it to
+		// serialize writers. Once per store instance — it costs three object operations,
+		// and a bucket does not change its mind mid-process.
+		if (!PROBED.has(resolved)) {
+			PROBED.add(resolved);
+			await probeConditionalWrite(resolved);
+		}
 		this.snapshots = new SnapshotStore(resolved);
 		this.cache = new FileCache(resolved, cacheDir);
 		this.current =
@@ -192,6 +214,26 @@ export class DuckClient implements DbClient {
 		return this.current;
 	}
 
+	/** Run `fn` with every other write on this client held back. */
+	serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
+		const next = this.writeChain.then(fn, fn);
+		// Keep the chain alive after a rejection, or one failed write wedges every later one.
+		this.writeChain = next.catch(() => undefined);
+		return next;
+	}
+
+	/**
+	 * Discard local state and re-materialize the current snapshot.
+	 *
+	 * This is the rollback: the local database is a materialization of one immutable
+	 * snapshot, so reloading it is exactly "forget everything since the last commit".
+	 * A no-op on a local-only client, which has no snapshot to fall back to.
+	 */
+	async reload(): Promise<void> {
+		await this.open();
+		if (this.cache) await materialize(this.raw, this.current, this.cache);
+	}
+
 	/**
 	 * Publish the local state as the next snapshot. `dirty` names the tables that changed;
 	 * every other table carries its refs forward, so an unchanged graph costs no uploads.
@@ -201,15 +243,21 @@ export class DuckClient implements DbClient {
 		if (!this.snapshots || !this.cache || !this.tmpDir) {
 			throw new Error('duck client: commit requires a store — construct with { store, cacheDir }');
 		}
-		this.current = await commitSnapshot(
-			this.raw,
-			this.snapshots,
-			this.cache,
-			this.tmpDir,
-			this.current,
-			dirty,
-		);
-		return this.current;
+		const { snapshots, cache, tmpDir } = this;
+		// Serialized on the same chain as the writes themselves. Two commits from ONE client
+		// share a local database, so the second must build on the first's manifest rather
+		// than race it — overlapping them would make a client conflict with itself.
+		return this.serializeWrite(async () => {
+			this.current = await commitSnapshot(
+				this.raw,
+				snapshots,
+				cache,
+				tmpDir,
+				this.current,
+				dirty,
+			);
+			return this.current;
+		});
 	}
 
 	async execute(stmt: SqlStatement): Promise<SqlResult> {

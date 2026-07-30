@@ -139,9 +139,37 @@ export async function buildManifest(
 }
 
 /**
+ * A concurrent writer published changes to a table this commit is also rewriting, so
+ * rebasing onto it would replace the winner's rows with this writer's local ones.
+ */
+export class SnapshotConflictError extends Error {
+	constructor(readonly tables: string[]) {
+		super(
+			`commit: a concurrent writer changed ${tables.join(', ')} — this commit would discard ` +
+				'their rows. Reload the head snapshot and re-apply the write.',
+		);
+		this.name = 'SnapshotConflictError';
+	}
+}
+
+/** Tables whose file refs differ between two manifests, restricted to `of`. */
+function changedAmong(a: Manifest | null, b: Manifest | null, of: Set<string>): string[] {
+	const refs = (m: Manifest | null, t: string): string => JSON.stringify(m?.tables[t] ?? null);
+	return [...of].filter((t) => refs(a, t) !== refs(b, t));
+}
+
+/**
  * Export, upload, and claim the next snapshot number. On a lost race the whole build
  * re-runs against the winner — including the exports, which is cheap because the uploads
  * deduplicate on content.
+ *
+ * A rebase is only safe for tables this commit is NOT rewriting: those carry the winner's
+ * refs forward untouched. For a table in `dirty`, the export comes from a local database
+ * that never saw the winner's rows, so rebasing would silently delete them. The whole point
+ * of the CAS is that a writer cannot clobber another, so that case stops here instead.
+ *
+ * Cross-process concurrent writers to one namespace therefore need to reload and re-apply.
+ * In-process they are already serialized by the client's write mutex, so this never fires.
  */
 export async function commitSnapshot(
 	client: ExportSource,
@@ -151,5 +179,9 @@ export async function commitSnapshot(
 	base: Manifest | null,
 	dirty: Set<string>,
 ): Promise<Manifest> {
-	return snapshots.commit(base, (b) => buildManifest(client, b, cache, tmpDir, dirty));
+	return snapshots.commit(base, (b) => {
+		const clashed = b === base ? [] : changedAmong(base, b, dirty);
+		if (clashed.length > 0) throw new SnapshotConflictError(clashed);
+		return buildManifest(client, b, cache, tmpDir, dirty);
+	});
 }

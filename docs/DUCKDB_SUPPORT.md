@@ -11,24 +11,30 @@
   enforcement (`duck-constraints.ts`) standing in for the partial UNIQUE indexes libSQL/Postgres
   use (DuckDB has none). Graph mutations (`addNode`/`updateNode`/`addEdge`/`deleteEdge`/bulk
   load) work end to end.
-- **Stage 4 (this task) — third harness arm + first parity measurement: DONE.**
+- **Stage 4 — third harness arm and the first parity measurement: DONE.**
   `packages/core/test/harness.ts` gained a `duckdb` branch in `makeTestDb()` (a temp
-  `test_<ulid>.duckdb` file, never `:memory:`, so `sibling()` can open a genuine second
-  connection) and a `duckdb` arm in `tableExistsSql` (`duckdb_tables()`/`duckdb_views()`). The
-  whole ~1071-test suite then ran under `GRAPHX_TEST_DRIVER=duckdb` for the first time.
-- **Verification:** libSQL **1068 pass / 3 skip / 0 fail** (unchanged from before this task —
-  the duckdb branch is additive and sits ahead of the postgres/libsql branches in the
-  if-chain). DuckDB: **1022 pass / 22 skip / 27 fail**. The 22 skips are the 18
-  `libsqlOnly`-gated libSQL-internals probes, the 3 `outbox.test.ts` tests already gated
-  `skipIf(TEST_DRIVER !== 'postgres')`, and 1 `cli.test.ts` test now gated to libSQL only (see
-  below) — none of which have a DuckDB analog to run. The 27 failures triage exactly to the
-  rows below; nothing was left uncategorized.
+  `test_<ulid>.duckdb` file, never `:memory:`) and a `duckdb` arm in `tableExistsSql`
+  (`duckdb_tables()`/`duckdb_views()`). The whole suite then ran under
+  `GRAPHX_TEST_DRIVER=duckdb` for the first time.
+- **Stage 4 — object storage round trip (Tasks 14–16): DONE.** `materialize()`
+  (`duck-materialize.ts`) loads a snapshot's Parquet files into real local tables;
+  `commitSnapshot()` (`duck-commit.ts`) exports the dirty ones back, keyed by content hash,
+  and claims the next snapshot number with a create-if-absent PUT. `DuckClient` opens on its
+  head snapshot lazily (`getDb` is synchronous, so this mirrors `PgClient.ready`), serializes
+  every write on one chain, and `Graph.write(fn)` groups a body into a single commit. A bare
+  mutation still commits on its own, so the API is unchanged on every backend.
+
+- **Verification:** libSQL **1091 pass / 6 skip / 0 fail**, Postgres **1075 / 22 / 0**
+  (dedicated fresh container), DuckDB **1048 / 26 / 23**. The 23 failures triage exactly to
+  the rows below; nothing is left uncategorized. `duck-e2e.test.ts` also passes against a real
+  MinIO bucket (`GRAPHX_TEST_S3_ENDPOINT=...`), which is the only configuration that exercises
+  the genuine create-if-absent CAS the commit protocol is built on.
 
 | category | count | resolved by |
 |---|---|---|
 | full-text: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf` throw `notYet`, and hybrid retrieval (which fuses a lexical leg) inherits the same gap | 21 | stage 5 |
 | constraint enforcement is application code, not a DB index — a raw-SQL insert that bypasses `Graph.addNode`/`addEdge` is not rejected (see the parity note below) | 2 | N/A — design, not a gap |
-| `p14-concurrency` — asserts lock contention that does not exist on this backend | 4 | Task 16 rewrite |
+| `p14-concurrency` — asserted lock contention that does not exist on this backend | 0 | Task 16: gated `sharedWriterOnly`, and the same invariants re-asserted through the write mutex and the manifest CAS in a `duckdbOnly` block |
 | outbox ordering and trigger-runner cursors | 0 | already gated `postgres`-only; none ran or failed under duckdb |
 | auth package read-modify-write idempotency | 0 | `packages/auth` does not import the harness; unaffected by this arm |
 | multi-tenant `getDb` suites needing a bucket per namespace | 0 | already pass — `getDb`'s duckdb factory falls back to one local file per namespace, which is sufficient until stage 4/Task 15 moves it to object storage |
@@ -133,6 +139,39 @@ Both failures are the intended, already-documented behavior (flagged during Task
 carried here explicitly) — not bugs, and not something stage 5–7 changes. Every `Graph`-mediated
 write path is still protected; only a raw-SQL bypass of `Graph` differs from libSQL/Postgres.
 
+## The writer model, and the one thing it does not do
+
+DuckDB has neither libSQL's `BEGIN IMMEDIATE` nor Postgres's `SERIALIZABLE`, so nothing in the
+database serializes two writers. Two mechanisms stand in:
+
+1. **In-process: a write mutex on the client.** `DuckClient.serializeWrite` chains every
+   mutation and every commit. It lives on the *client*, not on `Graph`, so all `Graph`
+   instances over one client — including the siblings `withEventSource` mints — share it.
+   Without it, two concurrent conditional closes both see `rowsAffected === 1` and both insert
+   a successor, leaving two rows with `valid_to = FOREVER`.
+2. **Across processes: the manifest CAS.** A commit claims `snapshots/<n+1>.json` with a
+   create-only PUT. One writer wins the number; the loser rebases onto the winner and rebuilds.
+
+`Graph.write(fn)` groups a body into one snapshot commit — a commit is a set of object PUTs
+plus that CAS, so committing per mutation is untenable for anything but a single write. A bare
+`addNode()` still commits on its own, so the API is identical on all three backends. A body that
+throws commits nothing: the local database is a materialization of the last snapshot, so
+`DuckClient.reload()` (discard and re-materialize) is the rollback.
+
+**The limitation:** two writers in *different processes* mutating the *same table* of one
+namespace cannot merge. The loser's rebase would export a local database that never saw the
+winner's rows, silently deleting them. `commitSnapshot` detects exactly that case — a rebase
+where the winner changed a table this commit is also rewriting — and raises
+`SnapshotConflictError` instead. The write does not land, and the caller is told so; reload the
+head snapshot and re-apply. Writers touching *disjoint* tables rebase cleanly and both land.
+Retrying inside `isRetryableContention` would not help, because the local mutation has already
+been applied — which is why a lost commit race is deliberately not in that predicate. At the
+HTTP layer, `serve.ts` maps an exhausted contention budget (`…: too much contention`) to **409**
+rather than 500.
+
+The practical shape: **one writer process per namespace**, with readers unbounded. That is what
+the snapshot chain is designed around.
+
 ## Files changed
 
 - `packages/core/test/harness.ts` — third `makeTestDb()` arm, `tableExistsSql` duckdb case,
@@ -149,6 +188,20 @@ write path is still protected; only a raw-SQL bypass of `Graph` differs from lib
 - `packages/mcp/src/bin.ts`, `packages/mcp/test/server.test.ts`,
   `packages/mcp/test/bin.test.ts` — register the pg/duck adapters; driver-aware filename
   assertion (bug #6).
+- `packages/core/src/duck-materialize.ts`, `duck-commit.ts` — snapshot load and publish
+  (Tasks 14–15).
+- `packages/core/src/duck.ts` — bucket-backed lifecycle: lazy `open()`, `snapshot()`,
+  `commit()`, `reload()`, the write mutex, and an `S3ObjectStore` built by dynamic import so
+  `@aws-sdk/client-s3` stays off the `core/duck` import path.
+- `packages/core/src/db.ts` — the `ManagedWriter` structural seam plus the DuckDB bucket
+  fields on `DbConfig`.
+- `packages/core/src/graph.ts` — `Graph.write(fn)` write sessions, per-mutation `touched()`
+  publishing, the serialize wrapper on both write envelopes, and DuckDB's conflict signals in
+  `isRetryableContention`.
+- `packages/core/src/bulk.ts` — one publish per bulk load rather than one per row.
+- `packages/core/src/serve.ts` — `…: too much contention` → 409.
+- `packages/core/test/duck-e2e.test.ts`, `duck-commit.test.ts` — the round trip, against
+  memory or a real bucket via `GRAPHX_TEST_S3_ENDPOINT`.
 - `.gitignore` — `*.duckdb`/`*.duckdb.wal`.
 - `.github/workflows/ci.yml` — new `test-duckdb` job (`continue-on-error: true` until stage 5–7
   close the full-text gap; see the job's comment for the exact removal condition).
@@ -157,13 +210,14 @@ write path is still protected; only a raw-SQL bypass of `Graph` differs from lib
 
 - **Stage 5** builds the DuckDB full-text path (an inverted index built at commit time — the
   design note in `dialect-sql.ts` explains why DuckDB's FTS extension and HNSW index can't be
-  used directly: neither can index a view, and HNSW can't be partial). This closes 21 of the 27
+  used directly: neither can index a view, and HNSW can't be partial). This closes 21 of the 23
   failures: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, hybrid retrieval, and everything that depends
   on them (`eval-parity`, `eval-golden`, `admin-list`'s full-text filters, `p14-limits`'s
   hybrid-fanout/cap tests, the React `useHybrid` FTS test).
-- **Task 16** rewrites `p14-concurrency.test.ts` to assert what DuckDB actually guarantees (a
-  serialized single writer via Task 16's write-session mutex) instead of lock-contention retry
-  behavior that has no DuckDB analog. Closes 4 failures.
+- **Task 16 — done.** `p14-concurrency.test.ts` now asserts what DuckDB actually guarantees
+  (a serialized single writer via the client's write mutex, and the manifest CAS across
+  processes) instead of lock-contention retry behavior that has no DuckDB analog. Closed 4
+  failures.
 - The 2 raw-SQL-bypass constraint tests are not expected to close — they pin a real,
   permanent difference between DuckDB's application-level enforcement and libSQL/Postgres's
   DB-level partial indexes (see above).

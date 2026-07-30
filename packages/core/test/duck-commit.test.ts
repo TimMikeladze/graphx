@@ -129,7 +129,7 @@ describe('snapshot commit', () => {
 		await c.end();
 	});
 
-	test('a second writer racing the same snapshot number rebases and retries', async () => {
+	test('a lost race on a table both writers changed fails loudly, not silently', async () => {
 		const store = new MemoryObjectStore();
 		const a = createDuckClient({ store, cacheDir: cacheDir() });
 		const b = createDuckClient({ store, cacheDir: cacheDir() });
@@ -137,12 +137,47 @@ describe('snapshot commit', () => {
 		await b.open();
 		await a.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['a'] });
 		await b.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['b'] });
-		const [ma, mb] = await Promise.all([
+		const settled = await Promise.allSettled([
 			a.commit(new Set(['node_identity'])),
 			b.commit(new Set(['node_identity'])),
 		]);
+		const won = settled.filter((r) => r.status === 'fulfilled');
+		const lost = settled.filter((r) => r.status === 'rejected');
+		expect(won.length).toBe(1);
+		expect(lost.length).toBe(1);
+		expect(String((lost[0] as PromiseRejectedResult).reason)).toMatch(/would discard/);
+
+		// The winner's row is intact — the loser did not overwrite it on its way out.
+		const head = await new SnapshotStore(store).resolveHead();
+		expect(head?.snapshot).toBe(0);
+		const reader = createDuckClient({ store, cacheDir: cacheDir() });
+		await reader.open();
+		expect((await reader.execute('SELECT count(*) AS n FROM node_identity')).rows[0]?.n).toBe(1);
+		await reader.end();
+		await a.end();
+		await b.end();
+	});
+
+	test('a lost race on disjoint tables rebases cleanly and both land', async () => {
+		const store = new MemoryObjectStore();
+		const a = createDuckClient({ store, cacheDir: cacheDir() });
+		const b = createDuckClient({ store, cacheDir: cacheDir() });
+		await a.open();
+		await b.open();
+		await a.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['a'] });
+		await b.execute({
+			sql: 'INSERT INTO archival_state VALUES (?, ?, ?)',
+			args: ['node_versions', 1, 1],
+		});
+		const [ma, mb] = await Promise.all([
+			a.commit(new Set(['node_identity'])),
+			b.commit(new Set(['archival_state'])),
+		]);
 		expect([ma.snapshot, mb.snapshot].sort()).toEqual([0, 1]);
-		expect(await new SnapshotStore(store).resolveHead()).not.toBeNull();
+		// Whichever rebased carried the winner's table forward rather than dropping it.
+		const head = await new SnapshotStore(store).resolveHead();
+		expect(head?.tables.node_identity).toBeDefined();
+		expect(head?.tables.archival_state).toBeDefined();
 		await a.end();
 		await b.end();
 	});

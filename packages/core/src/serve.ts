@@ -719,6 +719,14 @@ function onError(err: Error, c: Context) {
 	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
 	}
+	// The §19.1 write-retry envelope and the snapshot commit protocol both give up with
+	// this message after exhausting their budget against a contended writer. A 500 would
+	// tell the caller the server is broken; 409 tells them to retry, which is what they
+	// should do. It is checked BEFORE the `addNode:`-prefix rule below, which would
+	// otherwise claim `addNode: too much contention` as a 400 client error.
+	if (/: too much contention$/.test(err.message)) {
+		return c.json({ error: err.message }, 409);
+	}
 	// Graph.addNode/addEdge (unknown type/rel, endpoint-type mismatch), bulkLoad (unknown
 	// type), and a malformed PatternBuilder program throw a prefixed `Error` on bad input —
 	// those are client errors.
