@@ -280,10 +280,12 @@ set for the current head and a `fts_*_history` set for everything before it, mir
 commit's dirty-table set includes `node_versions`; if `node_versions` was not touched, the
 existing index is carried forward unchanged rather than rebuilt. This is a full rebuild rather
 than an incremental update — acceptable because DuckDB commits are already whole-snapshot
-exports, and it avoids the bookkeeping an incremental postings-list update would need. Because
-the rebuild runs inside the same transaction as the rest of the commit, readers never observe a
-half-built index: they see either the previous complete index or the new complete one, never an
-in-between state.
+exports, and it avoids the bookkeeping an incremental postings-list update would need. The
+rebuild runs inside a transaction of its own, opened and committed by `rebuildIndex` — not the
+commit's transaction, since a DuckDB commit is Parquet exports plus a manifest CAS, not a
+transaction at all. Readers never observe a half-built index: a reader on another connection
+sees the previous complete index until `rebuildIndex`'s transaction commits, and the new
+complete one after — never an in-between state.
 
 **Local (non-bucket) clients.** A client with no bucket configured never calls `commitSnapshot`,
 so it needs its own way to notice when the index has gone stale relative to writes. It keeps a
@@ -293,5 +295,5 @@ the same coverage as libSQL's `AFTER INSERT` trigger (every write that changes t
 eventually reflected) without needing a trigger DuckDB doesn't have.
 
 **Readers need no `fts` extension, no `ATTACH`, and no `USE`.** The index lives in ordinary
-tables queried with plain SQL (`bm25Cte` in `dialect-sql.ts`), so any DuckDB connection that can
+tables queried with plain SQL (`bm25Cte` in `fts/index-tables.ts`), so any DuckDB connection that can
 read `node_versions` can read the full-text index too.
