@@ -1045,8 +1045,13 @@ In `packages/core/src/duck-materialize.ts`, after the `manifest.tables` loop and
 		for (const [table, files] of Object.entries(group)) {
 			if (files.length === 0) continue;
 			const paths = await cache.resolve(files);
+			// Plain INSERT, not OR REPLACE. `fts_terms` is a posting list with no primary
+			// key, and DuckDB rejects `INSERT OR REPLACE` against a table with no unique
+			// constraint to conflict on ("There are no UNIQUE/PRIMARY KEY constraints that
+			// refer to this table"). It is also unnecessary: the drop loop below recreates
+			// every index table empty before this runs, so there is nothing to replace.
 			await client.execute(
-				`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+				`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 			);
 		}
 	}
