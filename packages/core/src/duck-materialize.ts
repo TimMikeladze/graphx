@@ -111,6 +111,13 @@ export async function materialize(
 	// to target in the first place.
 	for (const group of Object.values(manifest.indexes)) {
 		for (const [table, files] of Object.entries(group)) {
+			// The data-table loop above iterates the hardcoded SNAPSHOT_TABLES; this table
+			// name comes from JSON fetched from the object store, a trust boundary shared
+			// between writers, so it must be checked against a fixed allowlist before it
+			// reaches SQL. This also lets a reader tolerate a future index group (e.g.
+			// `ann_live`, already anticipated in objstore/manifest.ts) it doesn't know how
+			// to load, instead of failing on it.
+			if (!FTS_TABLES.includes(table as (typeof FTS_TABLES)[number])) continue;
 			if (files.length === 0) continue;
 			const paths = await cache.resolve(files);
 			await client.execute(

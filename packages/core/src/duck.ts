@@ -113,6 +113,7 @@ class DuckTransaction implements DbTransaction {
 	}
 
 	async rollback(): Promise<void> {
+		if (this.closed) return; // the connection is back in the pool; ROLLBACK would hit a stranger
 		try {
 			await this.conn.run('ROLLBACK');
 		} finally {
@@ -352,6 +353,12 @@ export class DuckClient implements DbClient {
 		// share a local database, so the second must build on the first's manifest rather
 		// than race it — overlapping them would make a client conflict with itself.
 		return this.serializeWrite(async () => {
+			// Captured BEFORE commitSnapshot's rebuild reads node_versions, for the same reason
+			// ensureFtsFresh captures first: a write landing during the rebuild must cost a
+			// redundant rebuild, never a permanently missing document.
+			const rebuilds = dirty.has('node_versions');
+			const signature = rebuilds ? await this.ftsCorpusSignature() : undefined;
+			if (rebuilds) this.ftsStale = false;
 			this.current = await commitSnapshot(
 				this.raw,
 				snapshots,
@@ -360,12 +367,7 @@ export class DuckClient implements DbClient {
 				this.current,
 				dirty,
 			);
-			// This commit already rebuilt the index when node_versions was dirty — leaving
-			// either marker unset would cost a redundant rebuild on the next search.
-			if (dirty.has('node_versions')) {
-				this.ftsStale = false;
-				this.ftsSignature = await this.ftsCorpusSignature();
-			}
+			if (signature !== undefined) this.ftsSignature = signature;
 			return this.current;
 		});
 	}

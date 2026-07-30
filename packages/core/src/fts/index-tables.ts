@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS fts_stats (
  * There is no separate as-of scope because there is nothing for it to do here — the index
  * covers every version, so restricting it by time is the caller's temporal predicate against
  * `node_versions`, applied outside this CTE.
+ *
+ * Any `LIMIT` on a query built from this CTE must stay OUTSIDE it, applied after the join
+ * back to `node_versions`. The corpus signature (`duck.ts`'s `ftsCorpusSignature`) does not
+ * track the index's `live` flags, so a stale flag can only over-produce rows here — the
+ * outer temporal predicate and `LIMIT` are what keep that harmless. Limiting inside this CTE
+ * would let a stale `live` flag silently drop rows the outer query should have seen.
  */
 export function bm25Cte(scope: 'live' | 'all'): string {
 	const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';

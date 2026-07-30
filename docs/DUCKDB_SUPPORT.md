@@ -213,7 +213,10 @@ the snapshot chain is designed around.
   `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, hybrid retrieval, and everything that depends on them
   (`eval-golden`, `admin-list`'s full-text filters, `p14-limits`'s hybrid-fanout/cap tests, the
   React `useHybrid` FTS test) now pass. **The index is unstemmed by design** — its tokenizer
-  matches libSQL's default FTS5 `unicode61` tokenizer, which also does not stem. Postgres's
+  matches libSQL's default FTS5 `unicode61` tokenizer, which also does not stem. That match is
+  exact for stopwords and digits but not for diacritics: our `[^\p{L}\p{N}]+` tokenizer KEEPS
+  them, while `unicode61` strips them by default — a genuine, currently untested difference,
+  since no corpus body in the ground-truth fixture contains one. Postgres's
   `tsvector`/`tsquery` path does stem and drop stopwords, so Postgres's lexical recall on
   inflected queries (e.g. a query for "running" matching a document that only says "runs") is
   genuinely higher than either DuckDB's or libSQL's. Nothing here forecloses adding a stemmer

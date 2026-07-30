@@ -197,6 +197,41 @@ describe('full-text freshness on a local duckdb', () => {
 		await c.end();
 	});
 
+	test('a raw write landing during a commit-time rebuild is still found by a later search', async () => {
+		// Regression for the lost-update race on the commit() path, distinct from the
+		// ensureFtsFresh regression above: the old code captured the corpus signature and
+		// cleared ftsStale AFTER commitSnapshot's rebuildIndex had already read node_versions.
+		// A raw write landing in that window — widened by the six Parquet exports commitSnapshot
+		// runs after the rebuild — is counted in the recorded signature (taken later) but was
+		// never seen by the rebuild it's credited to, so the client reports "fresh" forever and
+		// the row is permanently unsearchable. The fix captures the signature and clears the
+		// flag BEFORE commitSnapshot runs. Swept across several delays, mirroring the reviewer's
+		// repro, and run on a bucket-backed client since only commit() (not ensureFtsFresh) is
+		// on this path.
+		const store = new MemoryObjectStore();
+		const c = bucketBacked(store);
+		const g = new Graph(c, SCHEMA);
+		const delays = [0, 1, 3, 6, 10, 20, 30];
+		for (const [i, delay] of delays.entries()) {
+			const id = `raw-commit-race-${i}`;
+			const term = `narwhal${i}`;
+			const commitPromise = g.write(async (s) => {
+				await s.addNode({ type: 'Doc', body: `alpha${i}`, data: {} }); // dirties node_versions
+			});
+			const rawInsert = (async () => {
+				if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+				await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
+				await c.execute({
+					sql: 'INSERT INTO node_versions (id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?)',
+					args: [id, 'Doc', term, 0, FOREVER],
+				});
+			})();
+			await Promise.all([commitPromise, rawInsert]);
+			expect((await g.listNodes({ q: term })).nodes.length).toBe(1);
+		}
+		await c.end();
+	});
+
 	test('a concurrent reader never sees a half-built index during a bucket-backed commit', async () => {
 		// Same half-built-index race as above, but through duck-commit.ts's commit-time
 		// rebuild rather than ensureFtsFresh — the second of the two call sites rebuildIndex
