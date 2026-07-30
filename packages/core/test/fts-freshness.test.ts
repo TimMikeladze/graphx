@@ -14,6 +14,39 @@ async function local() {
 	return c;
 }
 
+/**
+ * Count how many times `rebuildIndex` actually runs, by intercepting the one
+ * `DELETE FROM fts_terms` it issues per rebuild at the connection level — below both
+ * `DuckClient.execute` and the interactive transaction `ensureFtsFresh` now runs the
+ * rebuild inside, so it catches the DELETE regardless of which path issued it. Reaches
+ * into the private pool because there is no public rebuild-count seam, and none should
+ * exist just for this test.
+ */
+function countRebuilds(c: ReturnType<typeof createDuckClient>): () => number {
+	let rebuilds = 0;
+	const pool = (
+		c as unknown as {
+			pool: {
+				acquire: () => Promise<{
+					run: (sql: unknown, ...rest: unknown[]) => Promise<unknown>;
+					release: () => void;
+				}>;
+			};
+		}
+	).pool;
+	const origAcquire = pool.acquire.bind(pool);
+	pool.acquire = async () => {
+		const conn = await origAcquire();
+		const origRun = conn.run.bind(conn);
+		conn.run = async (sql: unknown, ...rest: unknown[]) => {
+			if (typeof sql === 'string' && sql.includes('DELETE FROM fts_terms')) rebuilds++;
+			return origRun(sql, ...rest);
+		};
+		return conn;
+	};
+	return () => rebuilds;
+}
+
 describe('full-text freshness on a local duckdb', () => {
 	test('a node written through Graph is findable by full text', async () => {
 		// The whole gap: rebuildIndex only ran inside commit(), and a local client never commits.
@@ -74,7 +107,12 @@ describe('full-text freshness on a local duckdb', () => {
 	});
 
 	test('concurrent searches after a write rebuild once, not once each', async () => {
+		// Counting rows per page alone does not pin this: a rebuild-per-query implementation
+		// (i.e. one with no re-check inside serializeWrite) satisfies "each page has 1 row"
+		// exactly as well. Count the rebuilds themselves instead — rebuildIndex issues exactly
+		// one `DELETE FROM fts_terms` per rebuild.
 		const c = await local();
+		const rebuildCount = countRebuilds(c);
 		const g = new Graph(c, SCHEMA);
 		await g.addNode({ type: 'Doc', body: 'mercury venus', data: {} });
 		const pages = await Promise.all([
@@ -83,6 +121,67 @@ describe('full-text freshness on a local duckdb', () => {
 			g.listNodes({ q: 'mercury' }),
 		]);
 		for (const p of pages) expect(p.nodes.length).toBe(1);
+		expect(rebuildCount()).toBe(1);
+		await c.end();
+	});
+
+	test('a raw write landing during a rebuild is still found by a later search', async () => {
+		// Regression for the lost-update race: the old code wrote both freshness markers
+		// AFTER rebuildIndex finished reading node_versions, so a raw write landing in that
+		// window was erased twice over — its (nonexistent, for a raw writer) markFtsStale()
+		// overwritten back to false, and the recorded signature counting a row the rebuild
+		// never read. The fix captures the corpus signature and clears the flag BEFORE the
+		// rebuild starts, so such a write costs at worst one extra rebuild rather than being
+		// lost forever. Swept across several delays, mirroring the reviewer's repro.
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		const delays = [0, 1, 3, 6, 10, 20, 30];
+		for (const [i, delay] of delays.entries()) {
+			// A fresh doc marks the index stale and forces a real rebuild each iteration.
+			await g.addNode({ type: 'Doc', body: `alpha${i}`, data: {} });
+			const id = `raw-race-${i}`;
+			const term = `narwhal${i}`;
+			const rebuildQuery = g.listNodes({ q: 'alpha' });
+			const rawInsert = (async () => {
+				if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+				await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
+				await c.execute({
+					sql: 'INSERT INTO node_versions (id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?)',
+					args: [id, 'Doc', term, 0, FOREVER],
+				});
+			})();
+			await Promise.all([rebuildQuery, rawInsert]);
+			expect((await g.listNodes({ q: term })).nodes.length).toBe(1);
+		}
+		await c.end();
+	});
+
+	test('a concurrent reader never sees a half-built index mid-rebuild', async () => {
+		// Regression for the half-built-index race: rebuildIndex issues four DELETEs and
+		// chunked INSERTs as separate autocommit statements, and readers deliberately do not
+		// join the write chain, so a query could land between them and see the emptied index —
+		// silently zero results rather than an error. The fix runs the rebuild inside one
+		// interactive transaction; DuckDB's MVCC keeps a reader on a different connection
+		// pinned to the pre-rebuild snapshot until the transaction commits, so it sees either
+		// the full old index or the full new one, never an emptied one in between.
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		const N = 50;
+		for (let i = 0; i < N; i++) {
+			await g.addNode({ type: 'Doc', body: 'alpha', data: {} });
+		}
+		await g.listNodes({ q: 'alpha' }); // warm: the index now holds all N docs
+		await g.addNode({ type: 'Doc', body: 'alpha', data: {} }); // marks it stale again
+
+		const rebuildQuery = g.listNodes({ q: 'alpha' }); // triggers the rebuild
+		const delays = [0, 1, 3, 6, 10];
+		const reads = delays.map(async (delay) => {
+			if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+			const r = await c.execute('SELECT count(*) AS n FROM fts_docs');
+			return Number(r.rows[0]?.n ?? 0);
+		});
+		const [, ...counts] = await Promise.all([rebuildQuery, ...reads]);
+		for (const n of counts) expect(n).toBeGreaterThan(0);
 		await c.end();
 	});
 });

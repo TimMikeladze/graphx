@@ -197,10 +197,19 @@ export class DuckClient implements DbClient {
 		this.current =
 			pinned === undefined ? await this.snapshots.resolveHead() : await this.snapshots.read(pinned);
 		await materialize(this.raw, this.current, this.cache);
-		// This client just loaded a snapshot, so its index — built from exactly those rows —
-		// is already fresh; recording the signature now avoids a pointless rebuild on the
-		// first search.
-		this.ftsSignature = await this.ftsCorpusSignature();
+		// This client just loaded a snapshot, so ITS INDEX — if the snapshot carries one — was
+		// built from exactly those rows; recording the signature now avoids a pointless
+		// rebuild on the first search. But `buildFtsIndexes` carries the PREVIOUS manifest's
+		// `indexes` forward untouched whenever a commit's dirty set omits `node_versions`
+		// (duck-commit.ts), so a manifest can hold rows with no index behind them at all — e.g.
+		// a first commit made right after rows were inserted by raw SQL, which never dirties
+		// `node_versions` through `Graph`/`bulk`. Recording a signature for a snapshot with no
+		// index would mark it "fresh" and never rebuild, so only record when the manifest
+		// actually carries fts groups; otherwise `ftsSignature` stays unset and the corpus
+		// mismatch on the first search will always trigger the missing rebuild.
+		if (this.current && Object.keys(this.current.indexes).length > 0) {
+			this.ftsSignature = await this.ftsCorpusSignature();
+		}
 	}
 
 	/** An ungated view of this client, for the bootstrap and the commit path. */
@@ -252,6 +261,24 @@ export class DuckClient implements DbClient {
 	}
 
 	/**
+	 * An ungated interactive transaction — the same connection-owning transaction as the
+	 * public {@link transaction}, but skipping its `open()` gate (every caller here has
+	 * already awaited `open()` itself) and kept separate from it so the public
+	 * `DbTransaction` surface — tunable independently for external callers — never becomes
+	 * plumbing the FTS rebuild secretly depends on.
+	 */
+	private async rawTransaction(): Promise<DbTransaction> {
+		const conn = await this.pool.acquire();
+		try {
+			await conn.run('BEGIN');
+		} catch (e) {
+			conn.release();
+			throw e;
+		}
+		return new DuckTransaction(conn);
+	}
+
+	/**
 	 * Rebuild the full-text index if the corpus changed since the last build.
 	 *
 	 * The flag is the fast path; the corpus signature (count/max(ver) over indexed rows) is
@@ -263,6 +290,24 @@ export class DuckClient implements DbClient {
 	 * can discover staleness at once, and without the second check each would rebuild the
 	 * same corpus in turn. The first through the gate does the work; the rest see a clean
 	 * flag and a matching signature, and return.
+	 *
+	 * Both markers are captured BEFORE the rebuild reads `node_versions`, not after: a write
+	 * landing during the rebuild would otherwise be erased twice over — its `markFtsStale()`
+	 * overwritten back to `false`, and the recorded signature counting rows the rebuild never
+	 * read, leaving the index silently and permanently stale. Capturing first means such a
+	 * write costs at worst one redundant rebuild, which is the safe direction.
+	 *
+	 * The rebuild itself runs inside ONE interactive transaction on its own connection, not
+	 * `this.raw` (which spreads its DELETEs and chunked INSERTs across separate autocommit
+	 * statements on a pooled connection). Readers never join the write chain, so without a
+	 * single transaction a concurrent query could land between the DELETEs and the INSERTs
+	 * and see an emptied index. DuckDB's MVCC keeps every write here invisible to other
+	 * connections until `commit()`, so a concurrent reader sees the previous index intact
+	 * right up to the atomic swap. A failed rebuild rolls back, leaving that previous index
+	 * in place rather than an emptied one.
+	 *
+	 * Never call this from inside {@link serializeWrite} — it calls `serializeWrite` itself,
+	 * a plain non-reentrant chain with no timeout, so nesting hangs forever with no error.
 	 */
 	async ensureFtsFresh(): Promise<void> {
 		await this.open();
@@ -273,9 +318,16 @@ export class DuckClient implements DbClient {
 			// and without this each would rebuild the same corpus in turn.
 			const current = await this.ftsCorpusSignature();
 			if (!this.ftsStale && current === this.ftsSignature) return;
-			await rebuildIndex(this.raw);
 			this.ftsStale = false;
-			this.ftsSignature = await this.ftsCorpusSignature();
+			const tx = await this.rawTransaction();
+			try {
+				await rebuildIndex(tx);
+				await tx.commit();
+			} catch (e) {
+				await tx.rollback().catch(() => {});
+				throw e;
+			}
+			this.ftsSignature = current;
 		});
 	}
 
