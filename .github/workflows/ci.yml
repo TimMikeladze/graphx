@@ -94,9 +94,13 @@ jobs:
     env:
       GRAPHX_TEST_DRIVER: duckdb
 
-    # Stages 5-7 close the remaining gaps (full-text/hybrid retrieval, the p14-concurrency
-    # rewrite); until then this job reports without blocking. Remove continue-on-error when
-    # docs/DUCKDB_SUPPORT.md reaches parity.
+    # Full-text/hybrid retrieval and p14-concurrency are closed (see docs/DUCKDB_SUPPORT.md).
+    # Two failures remain permanently by design (raw-SQL constraint-enforcement bypasses that
+    # only libSQL/Postgres reject via a partial index DuckDB has no equivalent of), and two
+    # more are blocked on a human ruling about ranking-golden.json's `shared` section (see
+    # "Golden-file regeneration" in docs/DUCKDB_SUPPORT.md). `bun run test` has no mechanism to
+    # exclude specific tests, so this job cannot go green without either such a filter or all
+    # four resolving. Remove continue-on-error only once the job would genuinely pass.
     continue-on-error: true
 
     steps:

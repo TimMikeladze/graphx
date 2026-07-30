@@ -24,15 +24,16 @@
   every write on one chain, and `Graph.write(fn)` groups a body into a single commit. A bare
   mutation still commits on its own, so the API is unchanged on every backend.
 
-- **Verification:** libSQL **1091 pass / 6 skip / 0 fail**, Postgres **1075 / 22 / 0**
-  (dedicated fresh container), DuckDB **1048 / 26 / 23**. The 23 failures triage exactly to
+- **Verification:** libSQL **1178 pass / 6 skip / 0 fail**, Postgres **1162 / 22 / 0**
+  (dedicated fresh container), DuckDB **1154 / 26 / 4**. The 4 failures triage exactly to
   the rows below; nothing is left uncategorized. `duck-e2e.test.ts` also passes against a real
   MinIO bucket (`GRAPHX_TEST_S3_ENDPOINT=...`), which is the only configuration that exercises
   the genuine create-if-absent CAS the commit protocol is built on.
 
 | category | count | resolved by |
 |---|---|---|
-| full-text: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf` throw `notYet`, and hybrid retrieval (which fuses a lexical leg) inherits the same gap | 21 | stage 5 |
+| full-text: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, and hybrid retrieval (which fuses a lexical leg) | 0 | stage 5 — done |
+| `ranking-golden.json` has no `duckdb` entry in `byDialect`, so the two golden-coverage tests in `eval-parity.test.ts` fail | 2 | **BLOCKED** — see "Golden-file regeneration" below |
 | constraint enforcement is application code, not a DB index — a raw-SQL insert that bypasses `Graph.addNode`/`addEdge` is not rejected (see the parity note below) | 2 | N/A — design, not a gap |
 | `p14-concurrency` — asserted lock contention that does not exist on this backend | 0 | Task 16: gated `sharedWriterOnly`, and the same invariants re-asserted through the write mutex and the manifest CAS in a `duckdbOnly` block |
 | outbox ordering and trigger-runner cursors | 0 | already gated `postgres`-only; none ran or failed under duckdb |
@@ -208,12 +209,21 @@ the snapshot chain is designed around.
 
 ## What's left before the CI gate can go green (`continue-on-error: true` comes off)
 
-- **Stage 5** builds the DuckDB full-text path (an inverted index built at commit time — the
-  design note in `dialect-sql.ts` explains why DuckDB's FTS extension and HNSW index can't be
-  used directly: neither can index a view, and HNSW can't be partial). This closes 21 of the 23
-  failures: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, hybrid retrieval, and everything that depends
-  on them (`eval-parity`, `eval-golden`, `admin-list`'s full-text filters, `p14-limits`'s
-  hybrid-fanout/cap tests, the React `useHybrid` FTS test).
+- **Stage 5 — done.** DuckDB now has its own full-text index (see "Full-text index" below), built
+  and rebuilt in application code at commit time rather than via DuckDB's `fts` extension.
+  `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, hybrid retrieval, and everything that depends on them
+  (`eval-golden`, `admin-list`'s full-text filters, `p14-limits`'s hybrid-fanout/cap tests, the
+  React `useHybrid` FTS test) now pass. **The index is unstemmed by design** — its tokenizer
+  matches libSQL's default FTS5 `unicode61` tokenizer, which also does not stem. Postgres's
+  `tsvector`/`tsquery` path does stem and drop stopwords, so Postgres's lexical recall on
+  inflected queries (e.g. a query for "running" matching a document that only says "runs") is
+  genuinely higher than either DuckDB's or libSQL's. Nothing here forecloses adding a stemmer
+  later — the index is rebuilt from scratch on every dirty commit, so a tokenizer change is
+  additive, not a migration.
+- **Golden-file regeneration is BLOCKED**, not closed — see "Golden-file regeneration" below.
+  Two `eval-parity.test.ts` tests fail under DuckDB only because `ranking-golden.json` has no
+  `duckdb` entry; regenerating it surfaced a cross-dialect disagreement in the `shared` section
+  that needs a human ruling before it can be committed.
 - **Task 16 — done.** `p14-concurrency.test.ts` now asserts what DuckDB actually guarantees
   (a serialized single writer via the client's write mutex, and the manifest CAS across
   processes) instead of lock-contention retry behavior that has no DuckDB analog. Closed 4
@@ -221,3 +231,69 @@ the snapshot chain is designed around.
 - The 2 raw-SQL-bypass constraint tests are not expected to close — they pin a real,
   permanent difference between DuckDB's application-level enforcement and libSQL/Postgres's
   DB-level partial indexes (see above).
+
+## Golden-file regeneration (BLOCKED)
+
+`packages/core/test/fixtures/ranking-golden.json` has a `shared` section (dialect-independent
+cosine distances, asserted against every driver) and a per-driver `byDialect` section. Before
+this task, `shared` had no data measured under DuckDB, and `byDialect` had no `duckdb` key —
+regenerating it is documented in `eval-parity.test.ts` as running the eval suite with
+`UPDATE_RANKING_GOLDEN=1 GRAPHX_TEST_DRIVER=duckdb`.
+
+Running that regeneration produced a `byDialect.duckdb` section as expected, but it **also
+rewrote `shared`**, and 44 of its distance values changed from what was committed, all by
+roughly `1e-8` (for example, the `colossus` distance for "who designed the analytical engine"
+went from `0.692206494` to `0.692206502` — the exact pair of numbers used as the illustrative
+example in the test file's own doc comment about cross-kernel float drift). `shared` is computed
+via each dialect's own SQL distance function
+(`list_cosine_distance` for DuckDB vs. `vector_distance_cos` for libSQL), so this is DuckDB's
+kernel producing float32-level rounding differences from whatever driver last wrote `shared`,
+not a DuckDB code bug.
+
+The magnitude (~`1e-8`) is three orders of magnitude below the test's own tolerance
+(`DIST_PLACES = 5`, i.e. `1e-5`, via `expect.closeTo`), and matches the drift the test's authors
+already anticipated in writing that tolerance. That said, the task instructions for this branch
+treat any change to `shared` as a hard stop requiring a human ruling rather than something to
+normalize away, so **the regenerated file was not committed**; the repository still has the
+original `ranking-golden.json` with no `duckdb` `byDialect` entry, and the two golden-coverage
+tests in `eval-parity.test.ts` fail under `GRAPHX_TEST_DRIVER=duckdb` as a result. Regenerating
+and committing the golden file is the last step needed to close DuckDB's remaining 2 test
+failures beyond the 2 permanent constraint-bypass tests.
+
+## Full-text index
+
+DuckDB has no queryable-view-compatible FTS extension (see the design note in `dialect-sql.ts`
+for why `fts`/HNSW were ruled out), so full-text is a small inverted index built and maintained
+in application code, in four tables:
+
+- **`fts_dict`** — the term vocabulary: `term → docFreq`.
+- **`fts_docs`** — per-document stats needed for BM25: `docId → length` (token count).
+- **`fts_terms`** — the postings list: `term, docId → termFreq`.
+- **`fts_stats`** — corpus-wide scalars BM25 needs: document count and average document length.
+
+`fts_dict` and `fts_stats` span **live and history together** — a term's document frequency and
+the corpus average are computed over every version ever committed, matching how libSQL's FTS5
+virtual table and Postgres's `tsvector` column are never pruned when a row's `valid_to` closes.
+The **exported Parquet file sets are split** the same way every other table is: a `fts_*_live`
+set for the current head and a `fts_*_history` set for everything before it, mirroring
+`node_versions`/`edge_versions`.
+
+**Build/rebuild timing.** The index is rebuilt from scratch, in one transaction, whenever a
+commit's dirty-table set includes `node_versions`; if `node_versions` was not touched, the
+existing index is carried forward unchanged rather than rebuilt. This is a full rebuild rather
+than an incremental update — acceptable because DuckDB commits are already whole-snapshot
+exports, and it avoids the bookkeeping an incremental postings-list update would need. Because
+the rebuild runs inside the same transaction as the rest of the commit, readers never observe a
+half-built index: they see either the previous complete index or the new complete one, never an
+in-between state.
+
+**Local (non-bucket) clients.** A client with no bucket configured never calls `commitSnapshot`,
+so it needs its own way to notice when the index has gone stale relative to writes. It keeps a
+staleness flag backed by a corpus signature — `count(*)` and `max(ver)` over `node_versions` —
+and rebuilds when the signature no longer matches what the index was built against. This gives
+the same coverage as libSQL's `AFTER INSERT` trigger (every write that changes the corpus is
+eventually reflected) without needing a trigger DuckDB doesn't have.
+
+**Readers need no `fts` extension, no `ATTACH`, and no `USE`.** The index lives in ordinary
+tables queried with plain SQL (`bm25Cte` in `dialect-sql.ts`), so any DuckDB connection that can
+read `node_versions` can read the full-text index too.
