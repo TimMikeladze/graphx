@@ -7,6 +7,10 @@
  * across catalogs at all.
  */
 
+import type { DbClient } from '../dialect.ts';
+import { buildIndex } from './build.ts';
+import { FOREVER } from '../db.ts';
+
 /** Every table the index occupies. Load order is irrelevant — no foreign keys between them. */
 export const FTS_TABLES = ['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats'] as const;
 
@@ -53,8 +57,8 @@ CREATE TABLE IF NOT EXISTS fts_stats (
  * `node_versions`, applied outside this CTE.
  */
 export function bm25Cte(scope: 'live' | 'all'): string {
-  const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
-  return `
+	const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
+	return `
   SELECT t.ver AS ver,
          sum(
            log(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
@@ -68,4 +72,58 @@ export function bm25Cte(scope: 'live' | 'all'): string {
   CROSS JOIN fts_stats s
   WHERE TRUE ${liveFilter}
   GROUP BY t.ver`;
+}
+
+/**
+ * Rebuild the whole index from the local `node_versions`.
+ *
+ * A full rebuild, not an incremental update. The index is a derived artifact republished on
+ * every commit that touches `node_versions`, so an incremental path would buy nothing but a
+ * second code path that can disagree with the first — and the disagreement would surface as
+ * silently missing search results. When corpus size makes this cost real, the fix is a
+ * per-file delta in the manifest (`TableRef.files` is already a list), not incremental
+ * mutation of a local table.
+ */
+export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<void> {
+	const r = await client.execute(
+		`SELECT ver, body, valid_to FROM node_versions WHERE body IS NOT NULL`,
+	);
+	const ix = buildIndex(
+		r.rows.map((row) => ({
+			ver: Number(row.ver),
+			body: row.body === null ? null : String(row.body),
+			live: Number(row.valid_to) === FOREVER,
+		})),
+	);
+
+	for (const t of FTS_TABLES) await client.execute(`DELETE FROM ${t}`);
+	if (ix.docs.length === 0) return; // nothing indexable; leave the tables empty
+
+	// Chunked multi-row inserts: a statement per posting is thousands of round trips on a
+	// corpus of any size.
+	const chunk = <T>(xs: T[], n: number): T[][] =>
+		Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+
+	for (const part of chunk(ix.docs, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_docs (ver, len, live) VALUES ${part.map(() => '(?,?,?)').join(',')}`,
+			args: part.flatMap((d) => [d.ver, d.len, d.live]),
+		});
+	}
+	for (const part of chunk(ix.terms, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_terms (ver, term, tf, live) VALUES ${part.map(() => '(?,?,?,?)').join(',')}`,
+			args: part.flatMap((t) => [t.ver, t.term, t.tf, t.live]),
+		});
+	}
+	for (const part of chunk(ix.dict, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_dict (term, df) VALUES ${part.map(() => '(?,?)').join(',')}`,
+			args: part.flatMap((d) => [d.term, d.df]),
+		});
+	}
+	await client.execute({
+		sql: `INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)`,
+		args: [ix.stats.num_docs, ix.stats.avgdl],
+	});
 }

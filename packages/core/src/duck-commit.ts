@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { FOREVER } from './db.ts';
 import type { DbClient } from './dialect.ts';
 import { SNAPSHOT_TABLES } from './duck-materialize.ts';
+import { rebuildIndex } from './fts/index-tables.ts';
 import type { FileCache } from './objstore/cache.ts';
 import type { Manifest, TableRef } from './objstore/manifest.ts';
 import type { SnapshotStore } from './objstore/snapshot.ts';
@@ -75,6 +76,43 @@ const SPLIT_TABLES: Record<string, string> = {
 	edge_versions: 'valid_to',
 };
 
+/**
+ * Rebuild and export the full-text index. Runs only when `node_versions` changed — the index
+ * is derived from it and from nothing else, so a commit that did not touch it carries the
+ * previous index files forward untouched. Without that gate every commit would cost the whole
+ * corpus regardless of what changed.
+ */
+async function buildFtsIndexes(
+	client: ExportSource,
+	base: Manifest | null,
+	cache: FileCache,
+	tmpDir: string,
+	dirty: Set<string>,
+): Promise<Manifest['indexes']> {
+	if (!dirty.has('node_versions')) return base?.indexes ?? {};
+	await rebuildIndex(client);
+
+	const group = async (
+		where: string | undefined,
+		suffix: string,
+		tables: readonly string[],
+	): Promise<Record<string, string[]>> => {
+		const out: Record<string, string[]> = {};
+		for (const t of tables) {
+			const key = await exportTable(client, t, cache, tmpDir, where, suffix);
+			out[t] = key === null ? [] : [key];
+		}
+		return out;
+	};
+
+	return {
+		fts_live: await group('live', 'live', ['fts_docs', 'fts_terms']),
+		fts_history: await group('NOT live', 'history', ['fts_docs', 'fts_terms']),
+		// dict and stats span both scopes — see buildIndex on why avgdl is not per-scope.
+		fts_global: await group(undefined, 'global', ['fts_dict', 'fts_stats']),
+	};
+}
+
 /** The next manifest: dirty tables re-exported, clean tables carried forward. */
 export async function buildManifest(
 	client: ExportSource,
@@ -116,6 +154,7 @@ export async function buildManifest(
 		const key = await exportTable(client, table, cache, tmpDir);
 		if (key) tables[table] = { files: [key] };
 	}
+	const indexes = await buildFtsIndexes(client, base, cache, tmpDir, dirty);
 	const high = await client.execute(
 		`SELECT
 		   coalesce((SELECT max(ver) FROM node_versions), 0) AS nv,
@@ -134,7 +173,7 @@ export async function buildManifest(
 		verHigh: Math.max(Number(row.nv ?? 0), Number(row.ev ?? 0)),
 		seqHigh: Number(row.sq ?? 0),
 		tables,
-		indexes: base?.indexes ?? {},
+		indexes,
 	};
 }
 

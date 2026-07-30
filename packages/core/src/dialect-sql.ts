@@ -1,4 +1,5 @@
 import { assertNever, type Dialect } from './dialect.ts';
+import { FTS_DDL } from './fts/index-tables.ts';
 
 /**
  * Per-dialect SQL fragments. This is the home for every SQL string that genuinely
@@ -393,6 +394,7 @@ CREATE TABLE IF NOT EXISTS node_analytics (
 CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
 CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
 CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
+${FTS_DDL}
 `;
 }
 

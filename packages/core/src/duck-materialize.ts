@@ -1,5 +1,6 @@
 import { duckdbSchema } from './dialect-sql.ts';
 import type { DbClient } from './dialect.ts';
+import { FTS_TABLES } from './fts/index-tables.ts';
 import type { FileCache } from './objstore/cache.ts';
 import type { Manifest } from './objstore/manifest.ts';
 
@@ -75,7 +76,7 @@ export async function materialize(
 	const dim = manifest?.embDim ?? 768;
 	// Drop first: materialize is a load, not a merge. A stale row surviving a snapshot
 	// swap would be invisible corruption.
-	for (const t of [...SNAPSHOT_TABLES].reverse()) {
+	for (const t of [...SNAPSHOT_TABLES, ...FTS_TABLES].reverse()) {
 		await client.execute(`DROP TABLE IF EXISTS ${t}`);
 	}
 	await client.executeMultiple(duckdbSchema(dim));
@@ -99,6 +100,21 @@ export async function materialize(
 			const [tomb] = await cache.resolve([ref.tombstones]);
 			await client.execute(
 				`DELETE FROM ${table} WHERE id IN (SELECT id FROM read_parquet('${tomb}'))`,
+			);
+		}
+	}
+	// The index groups are flat table->files maps, loaded exactly like the data tables. Live
+	// and history are separate file sets so a remote live-only query need not fetch history
+	// terms; locally they land in one table, distinguished by the `live` column. A plain
+	// INSERT, not OR REPLACE: the tables were just dropped and recreated empty above, so
+	// there is nothing to conflict with — and `fts_terms` has no PRIMARY KEY for OR REPLACE
+	// to target in the first place.
+	for (const group of Object.values(manifest.indexes)) {
+		for (const [table, files] of Object.entries(group)) {
+			if (files.length === 0) continue;
+			const paths = await cache.resolve(files);
+			await client.execute(
+				`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 			);
 		}
 	}
