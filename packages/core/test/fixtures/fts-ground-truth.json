@@ -1,0 +1,255 @@
+{
+  "corpus": [
+    {
+      "ver": 1,
+      "body": "graph database with temporal edges"
+    },
+    {
+      "ver": 2,
+      "body": "temporal graph query language"
+    },
+    {
+      "ver": 3,
+      "body": "vector search over a graph"
+    },
+    {
+      "ver": 4,
+      "body": "full text search with bm25 ranking"
+    },
+    {
+      "ver": 5,
+      "body": "graph graph graph repeated term document"
+    },
+    {
+      "ver": 6,
+      "body": "a document about storage and object storage"
+    },
+    {
+      "ver": 7,
+      "body": "edges connect nodes in a graph database"
+    },
+    {
+      "ver": 8,
+      "body": "nothing in common here"
+    }
+  ],
+  "duckdb": {
+    "dict": [
+      {
+        "term": "bm",
+        "df": 1
+      },
+      {
+        "term": "common",
+        "df": 1
+      },
+      {
+        "term": "connect",
+        "df": 1
+      },
+      {
+        "term": "database",
+        "df": 2
+      },
+      {
+        "term": "document",
+        "df": 2
+      },
+      {
+        "term": "edges",
+        "df": 2
+      },
+      {
+        "term": "full",
+        "df": 1
+      },
+      {
+        "term": "graph",
+        "df": 5
+      },
+      {
+        "term": "language",
+        "df": 1
+      },
+      {
+        "term": "nodes",
+        "df": 1
+      },
+      {
+        "term": "object",
+        "df": 1
+      },
+      {
+        "term": "query",
+        "df": 1
+      },
+      {
+        "term": "ranking",
+        "df": 1
+      },
+      {
+        "term": "repeated",
+        "df": 1
+      },
+      {
+        "term": "search",
+        "df": 2
+      },
+      {
+        "term": "storage",
+        "df": 1
+      },
+      {
+        "term": "temporal",
+        "df": 2
+      },
+      {
+        "term": "term",
+        "df": 1
+      },
+      {
+        "term": "text",
+        "df": 1
+      },
+      {
+        "term": "vector",
+        "df": 1
+      }
+    ],
+    "docs": [
+      {
+        "docid": 0,
+        "len": 4
+      },
+      {
+        "docid": 1,
+        "len": 4
+      },
+      {
+        "docid": 2,
+        "len": 3
+      },
+      {
+        "docid": 3,
+        "len": 5
+      },
+      {
+        "docid": 4,
+        "len": 6
+      },
+      {
+        "docid": 5,
+        "len": 4
+      },
+      {
+        "docid": 6,
+        "len": 5
+      },
+      {
+        "docid": 7,
+        "len": 1
+      }
+    ],
+    "stats": {
+      "num_docs": 8,
+      "avgdl": 4
+    },
+    "bm25": {
+      "graph": [
+        {
+          "ver": 5,
+          "score": 0.3035713573414052
+        },
+        {
+          "ver": 3,
+          "score": 0.23824587538186234
+        },
+        {
+          "ver": 1,
+          "score": 0.21387981994508098
+        },
+        {
+          "ver": 2,
+          "score": 0.21387981994508098
+        },
+        {
+          "ver": 7,
+          "score": 0.19403530056873328
+        }
+      ],
+      "graph database": [
+        {
+          "ver": 1,
+          "score": 0.7701823207123683
+        },
+        {
+          "ver": 7,
+          "score": 0.6987221053885404
+        },
+        {
+          "ver": 5,
+          "score": 0.3035713573414052
+        },
+        {
+          "ver": 3,
+          "score": 0.23824587538186234
+        },
+        {
+          "ver": 2,
+          "score": 0.21387981994508098
+        }
+      ],
+      "temporal search": [
+        {
+          "ver": 3,
+          "score": 0.619678735031915
+        },
+        {
+          "ver": 1,
+          "score": 0.5563025007672873
+        },
+        {
+          "ver": 2,
+          "score": 0.5563025007672873
+        },
+        {
+          "ver": 4,
+          "score": 0.5046868048198071
+        }
+      ],
+      "storage": [
+        {
+          "ver": 6,
+          "score": 1.06995796927751
+        }
+      ],
+      "missing": []
+    }
+  },
+  "libsql": {
+    "graph": [
+      5,
+      2,
+      1,
+      3,
+      7
+    ],
+    "graph database": [
+      1,
+      7,
+      5,
+      2,
+      3
+    ],
+    "temporal search": [
+      2,
+      1,
+      3,
+      4
+    ],
+    "storage": [
+      6
+    ],
+    "missing": []
+  }
+}
