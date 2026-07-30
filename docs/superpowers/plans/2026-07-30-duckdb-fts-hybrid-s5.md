@@ -551,7 +551,7 @@ The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. 
 - Produces:
   - `export const FTS_TABLES: readonly string[]` — `['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats']`.
   - `export const FTS_DDL: string` — the four `CREATE TABLE IF NOT EXISTS` statements.
-  - `export function bm25Cte(scope: 'live' | 'asof' | 'any'): string` — a `scored(ver, score)` CTE body.
+  - `export function bm25Cte(scope: 'live' | 'all'): string` — a `scored(ver, score)` CTE body.
   - `export const BM25_K1 = 1.2`, `export const BM25_B = 0.75`.
 
 - [ ] **Step 1: Write the failing test**
@@ -591,7 +591,7 @@ async function indexed() {
 
 async function score(c: Awaited<ReturnType<typeof indexed>>, query: string) {
   const r = await c.execute({
-    sql: `WITH scored AS (${bm25Cte('any')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
+    sql: `WITH scored AS (${bm25Cte('all')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
     args: [JSON.stringify(tokenize(query))],
   });
   return r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
@@ -622,7 +622,7 @@ describe('bm25', () => {
     // blow up if it is ever reached with an empty array.
     const c = await indexed();
     const r = await c.execute({
-      sql: `WITH scored AS (${bm25Cte('any')}) SELECT count(*) AS n FROM scored`,
+      sql: `WITH scored AS (${bm25Cte('all')}) SELECT count(*) AS n FROM scored`,
       args: ['[]'],
     });
     expect(r.rows[0]?.n).toBe(0);
@@ -700,11 +700,12 @@ CREATE TABLE IF NOT EXISTS fts_stats (num_docs BIGINT NOT NULL, avgdl DOUBLE NOT
  * exactly one argument on the query. A variable placeholder count here would force every
  * caller to branch on dialect just to count arguments.
  *
- * `scope` picks the document set: `live` for current-time queries, `asof`/`any` for the rest.
- * As-of filtering happens in the caller against `node_versions`, not here — the index covers
- * every version, so restricting it by time is the caller's temporal predicate to apply.
+ * `scope` picks the document set: `live` for current-time queries, `all` for as-of ones.
+ * There is no separate as-of scope because there is nothing for it to do here — the index
+ * covers every version, so restricting it by time is the caller's temporal predicate against
+ * `node_versions`, applied outside this CTE.
  */
-export function bm25Cte(scope: 'live' | 'asof' | 'any'): string {
+export function bm25Cte(scope: 'live' | 'all'): string {
   const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
   return `
   SELECT t.ver AS ver,
@@ -1226,7 +1227,7 @@ LIMIT ?`;
 		// The index covers every version, so the as-of match is exact rather than the
 		// over-fetch-and-filter the live-only ANN index forces. Args: terms JSON, t, t, k.
 		case 'duckdb':
-			return `WITH scored AS (${bm25Cte('any')})
+			return `WITH scored AS (${bm25Cte('all')})
 SELECT n.id AS id
 FROM scored
 JOIN node_versions n ON n.ver = scored.ver
@@ -1528,7 +1529,7 @@ that difference is recorded rather than hidden."
 
 **Placeholder scan:** No `TBD`, no "add error handling", no "similar to Task N". Every code step carries the code. Task 8's step 4 is conditional rather than vague — it states the condition and what to do when it does not hold.
 
-**Type consistency:** `FtsIndex`/`FtsDoc`/`FtsTerm`/`FtsDictEntry`/`FtsStats` are defined in Task 3 and used unchanged in Tasks 4 and 5. `buildIndex` returns them; `rebuildIndex` consumes them. `bm25Cte(scope)` is defined in Task 4 with the exact `'live' | 'asof' | 'any'` union used in Task 6. `ftsArg(dialect, query)` is defined in Task 7 and used at all four call sites named there. `FTS_TABLES` is defined in Task 4 and consumed by Task 5's drop loop and export.
+**Type consistency:** `FtsIndex`/`FtsDoc`/`FtsTerm`/`FtsDictEntry`/`FtsStats` are defined in Task 3 and used unchanged in Tasks 4 and 5. `buildIndex` returns them; `rebuildIndex` consumes them. `bm25Cte(scope)` is defined in Task 4 with the exact `'live' | 'all'` union used in Task 6; both members are used. `ftsArg(dialect, query)` is defined in Task 7 and used at all four call sites named there. `FTS_TABLES` is defined in Task 4 and consumed by Task 5's drop loop and export.
 
 **Two risks the implementer should know going in.** First, Task 1 needs network for `INSTALL fts`; if it fails, stop rather than hand-writing the fixture — every downstream verification depends on it being measured. Second, Task 7 edits the code path all three dialects share, so a libSQL regression is the real hazard there; its step 5 runs the full libSQL suite for exactly that reason.
 
