@@ -24,9 +24,8 @@ describe('dialect seam exhaustiveness', () => {
 		expect(epochIntType('duckdb')).toBe('BIGINT');
 	});
 
-	test('an unimplemented duckdb fragment throws a named error', () => {
-		// Full-text is the one family Task 10 left unimplemented — see dialect-sql.ts.
-		expect(() => ftsWhere('duckdb', 'n')).toThrow(/ftsWhere\(duckdb\)/);
+	test('ftsWhere has a duckdb arm now that the index exists', () => {
+		expect(ftsWhere('duckdb', 'n')).toContain('fts_terms');
 	});
 
 	test('assertNever reports the offending value', () => {
