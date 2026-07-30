@@ -175,6 +175,7 @@ export {
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR
 export {
+	ftsArg,
 	type HybridRetrieveOpts,
 	hybridRetrieve,
 	type MmrOpts,

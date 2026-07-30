@@ -1,7 +1,7 @@
-import { FOREVER } from '../src/db.ts';
+import { FOREVER, ftsIndexOwner } from '../src/db.ts';
 import { dialectOf, type DbClient } from '../src/dialect.ts';
 import { ftsSeedLive, vecSeedLive } from '../src/dialect-sql.ts';
-import { hybridRetrieve, rrf, sanitizeMatch } from '../src/hybrid.ts';
+import { ftsArg, hybridRetrieve, rrf } from '../src/hybrid.ts';
 import { retrieve, type EmbedFn } from '../src/retrieve.ts';
 
 /**
@@ -108,12 +108,10 @@ export async function annSeeds(
 /** Full-text seed list, best-first. The lexical leg on its own. */
 export async function ftsSeeds(raw: DbClient, query: string, k: number): Promise<string[]> {
 	const d = dialectOf(raw);
-	const match = sanitizeMatch(query);
-	if (match === null) return [];
-	const r = await raw.execute({
-		sql: ftsSeedLive(d),
-		args: [d === 'postgres' ? query : match, k],
-	});
+	const arg = ftsArg(d, query);
+	if (arg === null) return [];
+	await ftsIndexOwner(raw)?.ensureFtsFresh();
+	const r = await raw.execute({ sql: ftsSeedLive(d), args: [arg, k] });
 	return r.rows.map((row) => String(row.id));
 }
 

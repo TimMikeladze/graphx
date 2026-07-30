@@ -66,7 +66,7 @@ Both references need extensions that the test suite must never require, so this 
     /** DuckDB fts tables, for structural comparison. */
     duckdb: {
       dict: { term: string; df: number }[];
-      docs: { docid: number; len: number }[];
+      docs: { ver: number; len: number }[];
       stats: { num_docs: number; avgdl: number };
       /** query -> [{ver, score}] from match_bm25, score DESC. */
       bm25: Record<string, { ver: number; score: number }[]>;
@@ -116,16 +116,27 @@ async function duckdbTruth() {
   for (const d of CORPUS) {
     await c.execute({ sql: 'INSERT INTO docs VALUES (?, ?)', args: [d.ver, d.body] });
   }
-  // stemmer := 'none' isolates the arithmetic from the stemmer, matching our v1 tokenizer.
-  await c.execute(`PRAGMA create_fts_index('docs', 'ver', 'body', stemmer := 'none')`);
+  // Every tokenizer knob is pinned, not just the stemmer. Measured the hard way: passing
+  // stemmer alone leaves `stopwords` defaulting to 'english' (8 of 28 corpus words vanish)
+  // and `ignore` defaulting to a pattern that strips digits ('bm25' becomes 'bm'). The
+  // fixture would then describe a DIFFERENT tokenizer than ours, and every downstream
+  // comparison against it would be measuring tokenization rather than arithmetic.
+  // Note the operator is `=`, not `:=` — this build rejects `:=` here.
+  await c.execute(
+    `PRAGMA create_fts_index('docs', 'ver', 'body',
+       stemmer='none', stopwords='none', ignore='(\\.|[^a-z0-9])+')`,
+  );
 
   const rows = async (sql: string) => (await c.execute(sql)).rows;
   const dict = (await rows('SELECT term, df FROM fts_main_docs.dict ORDER BY term')).map((r) => ({
     term: String(r.term),
     df: Number(r.df),
   }));
-  const docs = (await rows('SELECT docid, len FROM fts_main_docs.docs ORDER BY docid')).map((r) => ({
-    docid: Number(r.docid),
+  // Keyed by `ver`, not DuckDB's `docid`: docid is a 0-based internal row number, so a
+  // fixture keyed on it is off by one against the corpus and every consumer must remember
+  // to shift. `name` carries the value of the id column we indexed.
+  const docs = (await rows('SELECT name, len FROM fts_main_docs.docs ORDER BY len')).map((r) => ({
+    ver: Number(r.name),
     len: Number(r.len),
   }));
   const s = (await rows('SELECT num_docs, avgdl FROM fts_main_docs.stats'))[0];
@@ -188,9 +199,10 @@ Expected: the file is written. If `INSTALL fts` fails (no network), stop and rep
 
 Open the JSON and confirm three things by eye, because the next four tasks assume them:
 
-1. `duckdb.stats.avgdl` equals the mean token count over the corpus. If DuckDB counts tokens differently than a naive whitespace split (it lowercases and strips non-alphanumerics), the tokenizer in Task 2 must match whatever this shows.
-2. `duckdb.dict` contains lowercase terms only, and no stopwords were dropped (we passed no stopword list).
+1. `duckdb.stats.avgdl` equals the mean token count over the corpus under a naive lowercase-and-split-on-non-alphanumerics tokenization. If it does not, a tokenizer knob is still unpinned — find which one rather than adjusting the corpus until the number agrees.
+2. `duckdb.dict` contains lowercase terms only, retains stopwords (`a`, `and`, `in`, `with`, `here` all appear), and contains `bm25` as ONE term rather than `bm`. Each of those is a knob that silently defaulted the first time this was measured.
 3. `duckdb.bm25.missing` is an empty array — a query whose terms are absent scores nothing rather than erroring.
+4. `libsql` and `duckdb.bm25` now agree on rank order for every query, ties aside. They are two independent BM25 implementations over the same tokenization, so disagreement means a knob is still unpinned. This is the cross-check that the fixture is measuring arithmetic and not tokenization.
 
 Write what you found into the task report. Task 4 derives the BM25 constants from `duckdb.bm25` by fitting, so anything surprising here changes that task.
 
@@ -250,7 +262,7 @@ describe('tokenize', () => {
   test('agrees with DuckDB on every document length in the ground truth', () => {
     // avgdl and len come straight from token counts, so a tokenizer that disagrees
     // silently shifts every BM25 score. This pins it against a measured reference.
-    const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.docid, d.len]));
+    const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.ver, d.len]));
     for (const doc of truth.corpus) {
       expect(tokenize(doc.body).length).toBe(lenByVer.get(doc.ver) as number);
     }
@@ -551,7 +563,7 @@ The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. 
 - Produces:
   - `export const FTS_TABLES: readonly string[]` — `['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats']`.
   - `export const FTS_DDL: string` — the four `CREATE TABLE IF NOT EXISTS` statements.
-  - `export function bm25Cte(scope: 'live' | 'asof' | 'any'): string` — a `scored(ver, score)` CTE body.
+  - `export function bm25Cte(scope: 'live' | 'all'): string` — a `scored(ver, score)` CTE body.
   - `export const BM25_K1 = 1.2`, `export const BM25_B = 0.75`.
 
 - [ ] **Step 1: Write the failing test**
@@ -591,7 +603,7 @@ async function indexed() {
 
 async function score(c: Awaited<ReturnType<typeof indexed>>, query: string) {
   const r = await c.execute({
-    sql: `WITH scored AS (${bm25Cte('any')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
+    sql: `WITH scored AS (${bm25Cte('all')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
     args: [JSON.stringify(tokenize(query))],
   });
   return r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
@@ -622,7 +634,7 @@ describe('bm25', () => {
     // blow up if it is ever reached with an empty array.
     const c = await indexed();
     const r = await c.execute({
-      sql: `WITH scored AS (${bm25Cte('any')}) SELECT count(*) AS n FROM scored`,
+      sql: `WITH scored AS (${bm25Cte('all')}) SELECT count(*) AS n FROM scored`,
       args: ['[]'],
     });
     expect(r.rows[0]?.n).toBe(0);
@@ -675,6 +687,12 @@ export const FTS_TABLES = ['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats'] as 
 /**
  * BM25 saturation and length-normalization constants. These are DuckDB's `match_bm25`
  * defaults, pinned by the ground-truth comparison in fts-bm25.test.ts rather than by faith.
+ *
+ * The IDF below uses `log` — base 10, DuckDB's default — not the natural log the textbook
+ * formula specifies. Measured, not assumed: backing IDF out of the fixture for three
+ * (tf, df, len) combinations gives log10 to ten decimal places and ln at none of them.
+ * Base is a uniform scale factor, so it cannot change rank order; it matters only because
+ * matching `match_bm25` exactly is what makes the golden comparison worth running.
  */
 export const BM25_K1 = 1.2;
 export const BM25_B = 0.75;
@@ -700,16 +718,17 @@ CREATE TABLE IF NOT EXISTS fts_stats (num_docs BIGINT NOT NULL, avgdl DOUBLE NOT
  * exactly one argument on the query. A variable placeholder count here would force every
  * caller to branch on dialect just to count arguments.
  *
- * `scope` picks the document set: `live` for current-time queries, `asof`/`any` for the rest.
- * As-of filtering happens in the caller against `node_versions`, not here — the index covers
- * every version, so restricting it by time is the caller's temporal predicate to apply.
+ * `scope` picks the document set: `live` for current-time queries, `all` for as-of ones.
+ * There is no separate as-of scope because there is nothing for it to do here — the index
+ * covers every version, so restricting it by time is the caller's temporal predicate against
+ * `node_versions`, applied outside this CTE.
  */
-export function bm25Cte(scope: 'live' | 'asof' | 'any'): string {
+export function bm25Cte(scope: 'live' | 'all'): string {
   const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
   return `
   SELECT t.ver AS ver,
          sum(
-           ln(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
+           log(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
            * (t.tf * (${BM25_K1} + 1))
            / (t.tf + ${BM25_K1} * (1 - ${BM25_B} + ${BM25_B} * d.len / s.avgdl))
          ) AS score
@@ -1026,8 +1045,13 @@ In `packages/core/src/duck-materialize.ts`, after the `manifest.tables` loop and
 		for (const [table, files] of Object.entries(group)) {
 			if (files.length === 0) continue;
 			const paths = await cache.resolve(files);
+			// Plain INSERT, not OR REPLACE. `fts_terms` is a posting list with no primary
+			// key, and DuckDB rejects `INSERT OR REPLACE` against a table with no unique
+			// constraint to conflict on ("There are no UNIQUE/PRIMARY KEY constraints that
+			// refer to this table"). It is also unnecessary: the drop loop below recreates
+			// every index table empty before this runs, so there is nothing to replace.
 			await client.execute(
-				`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+				`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 			);
 		}
 	}
@@ -1226,7 +1250,7 @@ LIMIT ?`;
 		// The index covers every version, so the as-of match is exact rather than the
 		// over-fetch-and-filter the live-only ANN index forces. Args: terms JSON, t, t, k.
 		case 'duckdb':
-			return `WITH scored AS (${bm25Cte('any')})
+			return `WITH scored AS (${bm25Cte('all')})
 SELECT n.id AS id
 FROM scored
 JOIN node_versions n ON n.ver = scored.ver
@@ -1350,8 +1374,11 @@ export function ftsArg(dialect: Dialect, query: string): string | null {
 			return sanitizeMatch(query);
 		case 'postgres':
 			// tsQueryOr parses the raw text itself; pre-tokenizing would double the work and
-			// throw away the dictionary's own stopword handling.
-			return sanitizeMatch(query) === null ? null : query;
+			// throw away the dictionary's own stopword handling. The emptiness GATE is still
+			// `tokenize`, not `sanitizeMatch`: sanitizeMatch only treats whitespace-only input
+			// as empty, so a punctuation-only query like `!!! ---` would slip through as a
+			// non-null arg and run a lexical leg guaranteed to match nothing.
+			return tokenize(query).length === 0 ? null : query;
 		case 'duckdb': {
 			// No grammar to inject into: operators tokenize to ordinary terms.
 			const terms = tokenize(query);
@@ -1436,6 +1463,292 @@ The call sites spelled this as 'd === postgres ? query : match', which
 handed an FTS5 expression to DuckDB the moment a third dialect existed.
 ftsArg makes the three-way explicit and exhaustive, and graph.ts's
 duplicated ftsMatch goes away with it."
+```
+
+---
+
+### Task 7b: Keep the index fresh on a local DuckDB
+
+The index is built inside `commit()`, and `touched()` only commits when the client is
+bucket-backed. A plain local DuckDB therefore never builds it, and every full-text query
+silently returns nothing. Reproduced directly: after one `addNode` on a local client,
+`fts_terms` holds 0 rows.
+
+This is not a defect in any earlier task. Spec §10.2 says the index is built "at commit
+time", which is right for the object-storage design — but local-only DuckDB is a supported
+mode, and it is what the entire test harness uses (`makeTestDb` → `createDuckClient({path})`),
+so every remaining full-text failure is downstream of it.
+
+The fix is a staleness flag, not a rebuild per write. Mutations mark the index stale; the
+next full-text query rebuilds it and clears the flag. A write burst of any size costs one
+rebuild, and a read-only workload costs none.
+
+The flag alone is not sufficient, though, and the reason is a parity one. libSQL keeps its
+index current with an `AFTER INSERT` trigger on `node_versions`, which fires for ANY writer —
+raw SQL, a migration, an external ETL — not only for writes that went through `Graph`. A flag
+set only by `Graph` and `bulk` would leave DuckDB silently stale for exactly those writers.
+So the flag is the fast path, and a corpus SIGNATURE is the backstop: `count(*)` and
+`max(ver)` over the indexed rows, compared against the values the index was last built from.
+
+That pairing gives coverage equivalent to libSQL rather than merely similar. libSQL's trigger
+is `AFTER INSERT` only, so it too misses an in-place `UPDATE` to a body — and `count`/`max(ver)`
+misses exactly the same case. graphx never updates a body in place; it close-and-inserts, which
+both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
+
+**Files:**
+- Modify: `packages/core/src/db.ts` (the `FtsIndexOwner` seam)
+- Modify: `packages/core/src/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
+- Modify: `packages/core/src/graph.ts` (mark on mutation, ensure before an FTS read)
+- Modify: `packages/core/src/hybrid.ts`, `packages/core/test/retrieval-legs.ts` (ensure before the lexical leg)
+- Modify: `packages/core/src/bulk.ts` (mark after a bulk load)
+- Test: `packages/core/test/fts-freshness.test.ts`
+
+**Interfaces:**
+- Consumes: `rebuildIndex` (Task 5); `managedWriter`'s structural-probe pattern (stage 4, `db.ts`).
+- Produces:
+  - `export interface FtsIndexOwner { markFtsStale(): void; ensureFtsFresh(): Promise<void> }`
+  - `export function ftsIndexOwner(raw: DbClient): FtsIndexOwner | null`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// packages/core/test/fts-freshness.test.ts
+import { describe, expect, test } from 'bun:test';
+import { z } from 'zod';
+import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import { duckdbSchema } from '../src/dialect-sql.ts';
+import { createDuckClient } from '../src/duck.ts';
+import { Graph } from '../src/graph.ts';
+
+const SCHEMA = defineGraphSchema({ nodes: { Doc: z.object({}) }, edges: {} });
+
+async function local() {
+  const c = createDuckClient();
+  await c.executeMultiple(duckdbSchema(4));
+  return c;
+}
+
+describe('full-text freshness on a local duckdb', () => {
+  test('a node written through Graph is findable by full text', async () => {
+    // The whole gap: rebuildIndex only ran inside commit(), and a local client never commits.
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury venus earth', data: {} });
+    const page = await g.listNodes({ q: 'mercury' });
+    expect(page.rows.length).toBe(1);
+    await c.end();
+  });
+
+  test('an updated body stops matching its old text and starts matching its new', async () => {
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
+    await g.updateNode(n.id, { body: 'griffin' });
+    expect((await g.listNodes({ q: 'griffin' })).rows.length).toBe(1);
+    expect((await g.listNodes({ q: 'sphinx' })).rows.length).toBe(0);
+    await c.end();
+  });
+
+  test('a read-only workload does not rebuild', async () => {
+    // Staleness, not a rebuild per query: the second search must not re-run the build.
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury', data: {} });
+    await g.listNodes({ q: 'mercury' });
+    const before = (await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n;
+    await c.execute(`DELETE FROM fts_terms`); // sabotage: a rebuild would restore these rows
+    await g.listNodes({ q: 'mercury' });
+    expect((await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n).toBe(0);
+    expect(before).toBeGreaterThan(0);
+    await c.end();
+  });
+
+  test('concurrent searches after a write rebuild once, not once each', async () => {
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury venus', data: {} });
+    const pages = await Promise.all([
+      g.listNodes({ q: 'mercury' }),
+      g.listNodes({ q: 'venus' }),
+      g.listNodes({ q: 'mercury' }),
+    ]);
+    for (const p of pages) expect(p.rows.length).toBe(1);
+    await c.end();
+  });
+});
+```
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+Run: `bun test packages/core/test/fts-freshness.test.ts`
+Expected: FAIL — the first test returns 0 rows, because nothing ever built the index.
+
+- [ ] **Step 3: Add the seam to `db.ts`**
+
+```ts
+/**
+ * A client whose full-text index is a derived artifact it maintains itself.
+ *
+ * Declared here and probed structurally for the same reason as {@link ManagedWriter}:
+ * `graph.ts`, `hybrid.ts`, and `bulk.ts` all have to honor it, and none of them may import
+ * `duck.ts` and drag the optional `@duckdb/node-api` peer onto every consumer's path.
+ */
+export interface FtsIndexOwner {
+	/** Note that the indexed corpus changed. Cheap — no work happens here. */
+	markFtsStale(): void;
+	/** Rebuild if stale, then return. Called before anything reads the index. */
+	ensureFtsFresh(): Promise<void>;
+}
+
+/** `raw` as an {@link FtsIndexOwner}, or null when the backend maintains no such index. */
+export function ftsIndexOwner(raw: DbClient): FtsIndexOwner | null {
+	const c = raw as Partial<FtsIndexOwner>;
+	return typeof c.ensureFtsFresh === 'function' ? (c as FtsIndexOwner) : null;
+}
+```
+
+- [ ] **Step 4: Implement it on `DuckClient`**
+
+Add the flag and the two methods, and clear the flag in `commit()` when that commit rebuilt
+the index:
+
+```ts
+	/** Set when the indexed corpus changes; cleared by a rebuild. The fast path. */
+	private ftsStale = false;
+	/** The corpus signature the index was last built from; the backstop for writers that
+	 *  never went through `Graph` — see the note above on matching libSQL's trigger. */
+	private ftsSignature?: string;
+
+	markFtsStale(): void {
+		this.ftsStale = true;
+	}
+
+	/**
+	 * A cheap fingerprint of the indexed corpus: how many rows carry text, and the highest
+	 * version among them. Deliberately NOT a content hash — that would scan every body on
+	 * every search to detect a case (an in-place body UPDATE) that libSQL's own `AFTER INSERT`
+	 * trigger does not detect either, and that graphx never produces, because a body change is
+	 * a close-and-insert rather than a mutation.
+	 */
+	private async ftsCorpusSignature(): Promise<string> {
+		const r = await this.raw.execute(
+			`SELECT count(*) AS n, coalesce(max(ver), 0) AS mx FROM node_versions WHERE body IS NOT NULL`,
+		);
+		const row = r.rows[0] ?? {};
+		return `${row.n}:${row.mx}`;
+	}
+
+	/**
+	 * Rebuild the full-text index if the corpus changed since the last build.
+	 *
+	 * Serialized on the write chain, and the flag is re-checked INSIDE it: several queries
+	 * can discover staleness at once, and without the second check each would rebuild the
+	 * same corpus in turn. The first through the gate does the work; the rest see a clean
+	 * flag and return.
+	 */
+	async ensureFtsFresh(): Promise<void> {
+		await this.open();
+		const signature = this.ftsStale ? null : await this.ftsCorpusSignature();
+		if (signature !== null && signature === this.ftsSignature) return;
+		await this.serializeWrite(async () => {
+			// Re-checked inside the chain: several queries can discover staleness at once,
+			// and without this each would rebuild the same corpus in turn.
+			const current = await this.ftsCorpusSignature();
+			if (!this.ftsStale && current === this.ftsSignature) return;
+			await rebuildIndex(this.raw);
+			this.ftsStale = false;
+			this.ftsSignature = await this.ftsCorpusSignature();
+		});
+	}
+```
+
+In `commit()`, after `commitSnapshot` resolves, add — for a commit that rebuilt the index —
+`this.ftsStale = false; this.ftsSignature = await this.ftsCorpusSignature();`, guarded on
+`dirty.has('node_versions')`. That commit already rebuilt, so leaving either marker unset
+would cost a redundant rebuild on the next search.
+
+Do the same at the end of `load()`, after `materialize` completes: a client that just loaded a
+snapshot holds an index built from exactly that snapshot's rows, so recording the signature
+there avoids a pointless rebuild on its first search.
+
+Import `rebuildIndex` from `./fts/index-tables.ts`.
+
+- [ ] **Step 5: Mark on write, ensure on read**
+
+In `graph.ts`, resolve the owner once in the constructor beside the existing
+`managedWriter(raw)` call:
+
+```ts
+	private readonly fts: FtsIndexOwner | null;
+```
+```ts
+		this.fts = ftsIndexOwner(raw);
+```
+
+In `touched(...)`, mark whenever the indexed table changed — before the durable-commit branch,
+so it happens on both local and bucket-backed clients:
+
+```ts
+	private async touched(...tables: string[]): Promise<void> {
+		if (tables.includes('node_versions')) this.fts?.markFtsStale();
+		if (this.session) {
+			for (const t of tables) this.session.add(t);
+			return;
+		}
+		if (this.writer?.durable) await this.writer.commit(new Set(tables));
+	}
+```
+
+Then ensure freshness before every read that binds a full-text fragment. In `graph.ts` those
+are `listNodes` and `graphSlice`, guarded on the query being present:
+
+```ts
+		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
+```
+
+In `hybrid.ts`'s `hybridRetrieve`, after computing `arg` and before fetching seeds:
+
+```ts
+	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
+```
+
+In `packages/core/test/retrieval-legs.ts`'s `ftsSeeds`, the same, after the null check.
+
+In `bulk.ts`'s `publish` helper, mark stale when `node_versions` is among the tables — a bulk
+load changes the corpus exactly as individual writes do.
+
+Every path that binds an FTS fragment must ensure freshness first. If you find one this list
+missed, add it and say so in your report.
+
+- [ ] **Step 6: Run the tests**
+
+Run: `bun test packages/core/test/fts-freshness.test.ts`
+Expected: PASS, 4 tests.
+
+Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 60000`
+Expected: a large drop in full-text failures. Report the actual count.
+
+Run: `bun test --timeout 30000` and `bun run type-check && bun run lint`
+Expected: libSQL unchanged, both commands exit 0. This task touches `graph.ts`, `hybrid.ts`,
+and `bulk.ts`, which all three backends share, so the libSQL run is the regression check.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/core/src/db.ts packages/core/src/duck.ts packages/core/src/graph.ts \
+  packages/core/src/hybrid.ts packages/core/src/bulk.ts \
+  packages/core/test/retrieval-legs.ts packages/core/test/fts-freshness.test.ts
+git commit -m "feat(core): keep the local duckdb full-text index fresh
+
+The index was built only inside commit(), and touched() only commits when
+the client is bucket-backed - so a plain local DuckDB never built one and
+every full-text query silently returned nothing.
+
+Mutations now mark the index stale and the next search rebuilds it, so a
+write burst of any size costs one rebuild and a read-only workload costs
+none. The staleness check is repeated inside the write chain: several
+queries can discover staleness at once, and without it each would rebuild
+the same corpus in turn."
 ```
 
 ---
@@ -1528,7 +1841,7 @@ that difference is recorded rather than hidden."
 
 **Placeholder scan:** No `TBD`, no "add error handling", no "similar to Task N". Every code step carries the code. Task 8's step 4 is conditional rather than vague — it states the condition and what to do when it does not hold.
 
-**Type consistency:** `FtsIndex`/`FtsDoc`/`FtsTerm`/`FtsDictEntry`/`FtsStats` are defined in Task 3 and used unchanged in Tasks 4 and 5. `buildIndex` returns them; `rebuildIndex` consumes them. `bm25Cte(scope)` is defined in Task 4 with the exact `'live' | 'asof' | 'any'` union used in Task 6. `ftsArg(dialect, query)` is defined in Task 7 and used at all four call sites named there. `FTS_TABLES` is defined in Task 4 and consumed by Task 5's drop loop and export.
+**Type consistency:** `FtsIndex`/`FtsDoc`/`FtsTerm`/`FtsDictEntry`/`FtsStats` are defined in Task 3 and used unchanged in Tasks 4 and 5. `buildIndex` returns them; `rebuildIndex` consumes them. `bm25Cte(scope)` is defined in Task 4 with the exact `'live' | 'all'` union used in Task 6; both members are used. `ftsArg(dialect, query)` is defined in Task 7 and used at all four call sites named there. `FTS_TABLES` is defined in Task 4 and consumed by Task 5's drop loop and export.
 
 **Two risks the implementer should know going in.** First, Task 1 needs network for `INSTALL fts`; if it fails, stop rather than hand-writing the fixture — every downstream verification depends on it being measured. Second, Task 7 edits the code path all three dialects share, so a libSQL regression is the real hazard there; its step 5 runs the full libSQL suite for exactly that reason.
 

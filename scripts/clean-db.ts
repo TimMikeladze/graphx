@@ -15,7 +15,7 @@ const SCRATCH_PREFIXES = ['ns_', 'mcp_test_', 'mcp_mount_', 'iot_test_', 'test_'
 /** Named dev databases — removed only with `--all`. */
 const NAMED_PREFIXES = ['dev_admin'];
 
-const SUFFIXES = ['.db', '.db-wal', '.db-shm'];
+const SUFFIXES = ['.db', '.db-wal', '.db-shm', '.duckdb', '.duckdb.wal'];
 
 const all = process.argv.includes('--all');
 const dryRun = process.argv.includes('--dry-run');

@@ -1,4 +1,4 @@
-import { type DbClient, dialectOf } from './dialect.ts';
+import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
 import {
 	annSeedsAsOf,
 	embExtract,
@@ -7,7 +7,8 @@ import {
 	jsonArrayRows,
 	vecSeedLive,
 } from './dialect-sql.ts';
-import { FOREVER } from './db.ts';
+import { FOREVER, ftsIndexOwner } from './db.ts';
+import { tokenize } from './fts/tokenize.ts';
 import {
 	applyLimit,
 	FANOUT_DEG_CTE,
@@ -102,6 +103,38 @@ export function sanitizeMatch(query: string): string | null {
 }
 
 /**
+ * The bound argument every full-text fragment expects, for the dialect in hand. `null` when
+ * the query has no usable tokens — the caller skips the lexical leg rather than running a
+ * match guaranteed to return nothing.
+ *
+ * This exists because the three dialects want three different things from the same user text:
+ * libSQL an FTS5 expression, Postgres the raw text (its `tsquery` is built in SQL), DuckDB a
+ * JSON array of tokens. The call sites used to spell that as `d === 'postgres' ? query :
+ * match`, which quietly handed an FTS5 expression to DuckDB the moment a third dialect
+ * existed.
+ *
+ * "Has usable tokens" is judged by the shared {@link tokenize} — the same test every dialect's
+ * index is built with — so all three dialects agree on which inputs are empty, even though
+ * only DuckDB's argument is literally the token list.
+ */
+export function ftsArg(dialect: Dialect, query: string): string | null {
+	if (tokenize(query).length === 0) return null;
+	switch (dialect) {
+		case 'libsql':
+			return sanitizeMatch(query);
+		case 'postgres':
+			// tsQueryOr parses the raw text itself; pre-tokenizing would double the work and
+			// throw away the dictionary's own stopword handling.
+			return query;
+		case 'duckdb':
+			// No grammar to inject into: operators tokenize to ordinary terms.
+			return JSON.stringify(tokenize(query));
+		default:
+			return assertNever(dialect, 'ftsArg');
+	}
+}
+
+/**
  * Reciprocal Rank Fusion over ranked id lists (M5). Each list is already in rank
  * order; the FIRST occurrence of an id in a list is its best (lowest) rank. Fused
  * score = Σ 1/(rrfK + rank_i). Returns ids ordered by fused score descending.
@@ -142,8 +175,7 @@ function adjCte(direction: 'forward' | 'reverse' | 'both', edgePred: string): st
 async function seedsCurrent(
 	raw: DbClient,
 	qEmbJson: string,
-	query: string,
-	match: string | null,
+	arg: string | null,
 	fetchK: number,
 ): Promise<string[][]> {
 	const d = dialectOf(raw);
@@ -151,11 +183,8 @@ async function seedsCurrent(
 	const vecIds = vec.rows.map((r) => String(r.id));
 
 	let ftsIds: string[] = [];
-	if (match !== null) {
-		const fts = await raw.execute({
-			sql: ftsSeedLive(d),
-			args: [d === 'postgres' ? query : match, fetchK],
-		});
+	if (arg !== null) {
+		const fts = await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
 		ftsIds = fts.rows.map((r) => String(r.id));
 	}
 	return [vecIds, ftsIds];
@@ -165,8 +194,7 @@ async function seedsCurrent(
 async function seedsAsOf(
 	raw: DbClient,
 	qEmbJson: string,
-	query: string,
-	match: string | null,
+	arg: string | null,
 	fetchK: number,
 	t: number,
 ): Promise<string[][]> {
@@ -180,12 +208,12 @@ async function seedsAsOf(
 	const vecIds = vec.rows.map((r) => String(r.id));
 
 	let ftsIds: string[] = [];
-	if (match !== null) {
+	if (arg !== null) {
 		// Lexical: match the version actually valid at :t (the FTS index covers every
 		// version, so this is exact — not best-effort like the live-only ANN leg).
 		const fts = await raw.execute({
 			sql: ftsSeedAsOf(d),
-			args: [d === 'postgres' ? query : match, t, t, fetchK],
+			args: [arg, t, t, fetchK],
 		});
 		ftsIds = fts.rows.map((r) => String(r.id));
 	}
@@ -383,14 +411,15 @@ export async function hybridRetrieve(
 
 	const qEmb = await embed(opts.query);
 	const qEmbJson = JSON.stringify(qEmb);
-	const match = sanitizeMatch(opts.query);
+	const arg = ftsArg(dialectOf(raw), opts.query);
+	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
 
 	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
 	const t = isPast ? (opts.asOf as number) : FOREVER;
 
 	const lists = isPast
-		? await seedsAsOf(raw, qEmbJson, opts.query, match, fetchK, t)
-		: await seedsCurrent(raw, qEmbJson, opts.query, match, fetchK);
+		? await seedsAsOf(raw, qEmbJson, arg, fetchK, t)
+		: await seedsCurrent(raw, qEmbJson, arg, fetchK);
 
 	const seedIds = rrf(lists, rrfK).slice(0, k);
 	if (seedIds.length === 0) return [];

@@ -12,6 +12,7 @@ import { commitSnapshot, type ExportSource } from './duck-commit.ts';
 import { type LoadTarget, materialize } from './duck-materialize.ts';
 import { DuckPool, type PooledConnection } from './duck-pool.ts';
 import { normalizeRow } from './duck-value.ts';
+import { rebuildIndex } from './fts/index-tables.ts';
 import { FileCache } from './objstore/cache.ts';
 import type { Manifest } from './objstore/manifest.ts';
 import { SnapshotStore } from './objstore/snapshot.ts';
@@ -112,6 +113,7 @@ class DuckTransaction implements DbTransaction {
 	}
 
 	async rollback(): Promise<void> {
+		if (this.closed) return; // the connection is back in the pool; ROLLBACK would hit a stranger
 		try {
 			await this.conn.run('ROLLBACK');
 		} finally {
@@ -153,6 +155,11 @@ export class DuckClient implements DbClient {
 	 * `withEventSource` mints — shares the same chain.
 	 */
 	private writeChain: Promise<unknown> = Promise.resolve();
+	/** Set when the indexed corpus changes; cleared by a rebuild. The fast path. */
+	private ftsStale = false;
+	/** The corpus signature the index was last built from; the backstop for writers that
+	 *  never went through `Graph` — see the note above on matching libSQL's trigger. */
+	private ftsSignature?: string;
 
 	constructor(opts: DuckClientOptions = {}) {
 		this.pool = new DuckPool(opts.path ?? ':memory:', { max: opts.poolMax ?? 4 });
@@ -191,13 +198,33 @@ export class DuckClient implements DbClient {
 		this.current =
 			pinned === undefined ? await this.snapshots.resolveHead() : await this.snapshots.read(pinned);
 		await materialize(this.raw, this.current, this.cache);
+		// This client just loaded a snapshot, so ITS INDEX — if the snapshot carries one — was
+		// built from exactly those rows; recording the signature now avoids a pointless
+		// rebuild on the first search. But `buildFtsIndexes` carries the PREVIOUS manifest's
+		// `indexes` forward untouched whenever a commit's dirty set omits `node_versions`
+		// (duck-commit.ts), so a manifest can hold rows with no index behind them at all — e.g.
+		// a first commit made right after rows were inserted by raw SQL, which never dirties
+		// `node_versions` through `Graph`/`bulk`. Recording a signature for a snapshot with no
+		// index would mark it "fresh" and never rebuild, so only record when the manifest
+		// actually carries fts groups; otherwise `ftsSignature` stays unset and the corpus
+		// mismatch on the first search will always trigger the missing rebuild.
+		if (this.current && Object.keys(this.current.indexes).length > 0) {
+			this.ftsSignature = await this.ftsCorpusSignature();
+		}
 	}
 
-	/** An ungated view of this client, for the bootstrap and the commit path. */
+	/**
+	 * An ungated view of this client, for the bootstrap, the commit path, and `rebuildIndex`
+	 * (both the one `ensureFtsFresh` runs and the one `buildFtsIndexes` runs at commit time).
+	 * `transaction` is {@link rawTransaction}, not the public {@link transaction} — the same
+	 * connection-owning transaction, but skipping the public method's redundant `open()` gate
+	 * and kept off the public `DbClient` surface that callers outside this file see.
+	 */
 	private get raw(): LoadTarget & ExportSource {
 		return {
 			execute: (stmt) => this.pool.withConnection((c) => runOne(c, stmt)),
 			executeMultiple: (sql) => this.runScript(sql),
+			transaction: () => this.rawTransaction(),
 		};
 	}
 
@@ -220,6 +247,84 @@ export class DuckClient implements DbClient {
 		// Keep the chain alive after a rejection, or one failed write wedges every later one.
 		this.writeChain = next.catch(() => undefined);
 		return next;
+	}
+
+	markFtsStale(): void {
+		this.ftsStale = true;
+	}
+
+	/**
+	 * A cheap fingerprint of the indexed corpus: how many rows carry text, and the highest
+	 * version among them. Deliberately NOT a content hash — that would scan every body on
+	 * every search to detect a case (an in-place body UPDATE) that libSQL's own `AFTER INSERT`
+	 * trigger does not detect either, and that graphx never produces, because a body change is
+	 * a close-and-insert rather than a mutation.
+	 */
+	private async ftsCorpusSignature(): Promise<string> {
+		const r = await this.raw.execute(
+			`SELECT count(*) AS n, coalesce(max(ver), 0) AS mx FROM node_versions WHERE body IS NOT NULL`,
+		);
+		const row = r.rows[0] ?? {};
+		return `${row.n}:${row.mx}`;
+	}
+
+	/**
+	 * An ungated interactive transaction — the same connection-owning transaction as the
+	 * public {@link transaction}, but skipping its `open()` gate (every caller here has
+	 * already awaited `open()` itself) and kept separate from it so the public
+	 * `DbTransaction` surface — tunable independently for external callers — never becomes
+	 * plumbing the FTS rebuild secretly depends on.
+	 */
+	private async rawTransaction(): Promise<DbTransaction> {
+		const conn = await this.pool.acquire();
+		try {
+			await conn.run('BEGIN');
+		} catch (e) {
+			conn.release();
+			throw e;
+		}
+		return new DuckTransaction(conn);
+	}
+
+	/**
+	 * Rebuild the full-text index if the corpus changed since the last build.
+	 *
+	 * The flag is the fast path; the corpus signature (count/max(ver) over indexed rows) is
+	 * the backstop for writers that never went through `Graph`/`bulk` — a raw `execute` never
+	 * marks the flag, so without the signature such a write would leave the index silently
+	 * stale forever. Matches libSQL's own `AFTER INSERT` trigger, which fires for any writer.
+	 *
+	 * Serialized on the write chain, and both checks are repeated INSIDE it: several queries
+	 * can discover staleness at once, and without the second check each would rebuild the
+	 * same corpus in turn. The first through the gate does the work; the rest see a clean
+	 * flag and a matching signature, and return.
+	 *
+	 * Both markers are captured BEFORE the rebuild reads `node_versions`, not after: a write
+	 * landing during the rebuild would otherwise be erased twice over — its `markFtsStale()`
+	 * overwritten back to `false`, and the recorded signature counting rows the rebuild never
+	 * read, leaving the index silently and permanently stale. Capturing first means such a
+	 * write costs at worst one redundant rebuild, which is the safe direction.
+	 *
+	 * `rebuildIndex` itself owns making the swap atomic — see its doc comment — so this just
+	 * calls it; there is exactly one place that opens the transaction, and no possibility of
+	 * this call nesting one transaction inside another.
+	 *
+	 * Never call this from inside {@link serializeWrite} — it calls `serializeWrite` itself,
+	 * a plain non-reentrant chain with no timeout, so nesting hangs forever with no error.
+	 */
+	async ensureFtsFresh(): Promise<void> {
+		await this.open();
+		const signature = this.ftsStale ? null : await this.ftsCorpusSignature();
+		if (signature !== null && signature === this.ftsSignature) return;
+		await this.serializeWrite(async () => {
+			// Re-checked inside the chain: several queries can discover staleness at once,
+			// and without this each would rebuild the same corpus in turn.
+			const current = await this.ftsCorpusSignature();
+			if (!this.ftsStale && current === this.ftsSignature) return;
+			this.ftsStale = false;
+			await rebuildIndex(this.raw);
+			this.ftsSignature = current;
+		});
 	}
 
 	/**
@@ -248,6 +353,12 @@ export class DuckClient implements DbClient {
 		// share a local database, so the second must build on the first's manifest rather
 		// than race it — overlapping them would make a client conflict with itself.
 		return this.serializeWrite(async () => {
+			// Captured BEFORE commitSnapshot's rebuild reads node_versions, for the same reason
+			// ensureFtsFresh captures first: a write landing during the rebuild must cost a
+			// redundant rebuild, never a permanently missing document.
+			const rebuilds = dirty.has('node_versions');
+			const signature = rebuilds ? await this.ftsCorpusSignature() : undefined;
+			if (rebuilds) this.ftsStale = false;
 			this.current = await commitSnapshot(
 				this.raw,
 				snapshots,
@@ -256,6 +367,7 @@ export class DuckClient implements DbClient {
 				this.current,
 				dirty,
 			);
+			if (signature !== undefined) this.ftsSignature = signature;
 			return this.current;
 		});
 	}

@@ -1,4 +1,5 @@
 import { assertNever, type Dialect } from './dialect.ts';
+import { bm25Cte, FTS_DDL } from './fts/index-tables.ts';
 
 /**
  * Per-dialect SQL fragments. This is the home for every SQL string that genuinely
@@ -393,6 +394,7 @@ CREATE TABLE IF NOT EXISTS node_analytics (
 CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
 CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
 CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
+${FTS_DDL}
 `;
 }
 
@@ -472,8 +474,13 @@ export function ftsWhere(dialect: Dialect, alias: string): string {
 			return `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
 		case 'postgres':
 			return `${alias}.body_tsv @@ ${tsQueryOr()}`;
+		// Membership only — no scoring. This is a filter on a scan the caller already
+		// orders, so computing BM25 here would be work whose result is discarded.
 		case 'duckdb':
-			return notYet('ftsWhere', dialect);
+			return `${alias}.ver IN (
+				SELECT t.ver FROM fts_terms t
+				WHERE t.term IN (SELECT unnest(from_json(?, '["VARCHAR"]')))
+			)`;
 		default:
 			return assertNever(dialect, 'ftsWhere');
 	}
@@ -631,8 +638,15 @@ FROM node_versions n, q
 WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
 ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
 LIMIT ?`;
+		// BM25 over the live index, joined back to logical ids. Args: terms JSON, k.
 		case 'duckdb':
-			return notYet('ftsSeedLive', dialect);
+			return `WITH scored AS (${bm25Cte('live')})
+SELECT n.id AS id
+FROM scored
+JOIN node_versions n ON n.ver = scored.ver
+WHERE n.valid_to = ${FOREVER_LIT}
+ORDER BY scored.score DESC, n.id
+LIMIT ?`;
 		default:
 			return assertNever(dialect, 'ftsSeedLive');
 	}
@@ -655,8 +669,16 @@ FROM node_versions n, q
 WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
 ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
 LIMIT ?`;
+		// The index covers every version, so the as-of match is exact rather than the
+		// over-fetch-and-filter the live-only ANN index forces. Args: terms JSON, t, t, k.
 		case 'duckdb':
-			return notYet('ftsSeedAsOf', dialect);
+			return `WITH scored AS (${bm25Cte('all')})
+SELECT n.id AS id
+FROM scored
+JOIN node_versions n ON n.ver = scored.ver
+WHERE n.valid_from <= ? AND ? < n.valid_to
+ORDER BY scored.score DESC, n.id
+LIMIT ?`;
 		default:
 			return assertNever(dialect, 'ftsSeedAsOf');
 	}

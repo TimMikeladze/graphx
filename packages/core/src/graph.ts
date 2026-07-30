@@ -8,9 +8,10 @@ import {
 	type SqlValue,
 } from './dialect.ts';
 import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect-sql.ts';
+import { ftsArg } from './hybrid.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
-import { FOREVER, type ManagedWriter, managedWriter } from './db.ts';
+import { FOREVER, type FtsIndexOwner, ftsIndexOwner, type ManagedWriter, managedWriter } from './db.ts';
 import { assertUniqueProps } from './duck-constraints.ts';
 import { embParam } from './duck-value.ts';
 import {
@@ -347,6 +348,8 @@ export class Graph<S extends GraphSchema> {
 	private readonly eventOpts: GraphEventOptions | undefined;
 	/** The backend's writer serialization + snapshot publishing, when it has any. */
 	private readonly writer: ManagedWriter | null;
+	/** The backend's self-maintained full-text index, when it has any. */
+	private readonly fts: FtsIndexOwner | null;
 	/** Tables the open {@link write} session has touched, or undefined when none is open. */
 	private session?: Set<string>;
 
@@ -363,6 +366,7 @@ export class Graph<S extends GraphSchema> {
 		this.eventSource = events?.source;
 		this.eventOpts = events;
 		this.writer = managedWriter(raw);
+		this.fts = ftsIndexOwner(raw);
 	}
 
 	/**
@@ -400,6 +404,7 @@ export class Graph<S extends GraphSchema> {
 	 * none, as its own commit. A no-op on a backend whose durable state IS the database.
 	 */
 	private async touched(...tables: string[]): Promise<void> {
+		if (tables.includes('node_versions')) this.fts?.markFtsStale();
 		if (this.session) {
 			for (const t of tables) this.session.add(t);
 			return;
@@ -848,19 +853,6 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * FTS5 MATCH expression from a free-text query: each whitespace token quoted (quotes
-	 * doubled) and OR-joined. Mirrors `sanitizeMatch` in hybrid.ts — inlined here to avoid an
-	 * import cycle (hybrid → retrieve → graph). `null` when the query has no usable tokens.
-	 */
-	private ftsMatch(query: string): string | null {
-		const tokens = query
-			.split(/\s+/)
-			.filter((t) => t.length > 0)
-			.map((t) => `"${t.replace(/"/g, '""')}"`);
-		return tokens.length > 0 ? tokens.join(' OR ') : null;
-	}
-
-	/**
 	 * Build the node-filter WHERE for {@link listNodes}/{@link graphSlice} over `node_versions`
 	 * aliased `nv`: a temporal predicate (live via the FOREVER sentinel, or as-of half-open),
 	 * an optional `type`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
@@ -885,11 +877,11 @@ export class Graph<S extends GraphSchema> {
 			args.push(opts.type);
 		}
 		if (opts.q !== undefined) {
-			const match = this.ftsMatch(opts.q);
-			if (match === null) return null;
 			const d = dialectOf(this.raw);
+			const arg = ftsArg(d, opts.q);
+			if (arg === null) return null;
 			where.push(ftsWhere(d, 'nv'));
-			args.push(d === 'postgres' ? opts.q : match);
+			args.push(arg);
 		}
 		return { where: where.join(' AND '), args };
 	}
@@ -904,6 +896,7 @@ export class Graph<S extends GraphSchema> {
 		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
 			throw new Error(`listNodes: limit must be a positive integer, got ${opts.limit}`);
 		}
+		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
 		const filter = this.nodeFilter(opts);
 		if (filter === null) return { nodes: [], nextCursor: null };
 		const maxRows = resolveLimits(opts.limits).maxRows;
@@ -938,6 +931,7 @@ export class Graph<S extends GraphSchema> {
 	 * signals the node set hit the cap so the UI can prompt to narrow filters.
 	 */
 	async graphSlice(opts: GraphSliceOpts = {}): Promise<GraphSlice> {
+		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
 		const filter = this.nodeFilter(opts);
 		if (filter === null) return { nodes: [], links: [], truncated: false };
 		const maxRows = resolveLimits(opts.limits).maxRows;
