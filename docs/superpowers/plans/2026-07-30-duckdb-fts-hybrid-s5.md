@@ -1483,6 +1483,18 @@ The fix is a staleness flag, not a rebuild per write. Mutations mark the index s
 next full-text query rebuilds it and clears the flag. A write burst of any size costs one
 rebuild, and a read-only workload costs none.
 
+The flag alone is not sufficient, though, and the reason is a parity one. libSQL keeps its
+index current with an `AFTER INSERT` trigger on `node_versions`, which fires for ANY writer —
+raw SQL, a migration, an external ETL — not only for writes that went through `Graph`. A flag
+set only by `Graph` and `bulk` would leave DuckDB silently stale for exactly those writers.
+So the flag is the fast path, and a corpus SIGNATURE is the backstop: `count(*)` and
+`max(ver)` over the indexed rows, compared against the values the index was last built from.
+
+That pairing gives coverage equivalent to libSQL rather than merely similar. libSQL's trigger
+is `AFTER INSERT` only, so it too misses an in-place `UPDATE` to a body — and `count`/`max(ver)`
+misses exactly the same case. graphx never updates a body in place; it close-and-inserts, which
+both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
+
 **Files:**
 - Modify: `packages/core/src/db.ts` (the `FtsIndexOwner` seam)
 - Modify: `packages/core/src/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
@@ -1601,11 +1613,29 @@ Add the flag and the two methods, and clear the flag in `commit()` when that com
 the index:
 
 ```ts
-	/** Set when the indexed corpus changes; cleared by a rebuild. */
+	/** Set when the indexed corpus changes; cleared by a rebuild. The fast path. */
 	private ftsStale = false;
+	/** The corpus signature the index was last built from; the backstop for writers that
+	 *  never went through `Graph` — see the note above on matching libSQL's trigger. */
+	private ftsSignature?: string;
 
 	markFtsStale(): void {
 		this.ftsStale = true;
+	}
+
+	/**
+	 * A cheap fingerprint of the indexed corpus: how many rows carry text, and the highest
+	 * version among them. Deliberately NOT a content hash — that would scan every body on
+	 * every search to detect a case (an in-place body UPDATE) that libSQL's own `AFTER INSERT`
+	 * trigger does not detect either, and that graphx never produces, because a body change is
+	 * a close-and-insert rather than a mutation.
+	 */
+	private async ftsCorpusSignature(): Promise<string> {
+		const r = await this.raw.execute(
+			`SELECT count(*) AS n, coalesce(max(ver), 0) AS mx FROM node_versions WHERE body IS NOT NULL`,
+		);
+		const row = r.rows[0] ?? {};
+		return `${row.n}:${row.mx}`;
 	}
 
 	/**
@@ -1618,16 +1648,28 @@ the index:
 	 */
 	async ensureFtsFresh(): Promise<void> {
 		await this.open();
-		if (!this.ftsStale) return;
+		const signature = this.ftsStale ? null : await this.ftsCorpusSignature();
+		if (signature !== null && signature === this.ftsSignature) return;
 		await this.serializeWrite(async () => {
-			if (!this.ftsStale) return;
+			// Re-checked inside the chain: several queries can discover staleness at once,
+			// and without this each would rebuild the same corpus in turn.
+			const current = await this.ftsCorpusSignature();
+			if (!this.ftsStale && current === this.ftsSignature) return;
 			await rebuildIndex(this.raw);
 			this.ftsStale = false;
+			this.ftsSignature = await this.ftsCorpusSignature();
 		});
 	}
 ```
 
-In `commit()`, after `commitSnapshot` resolves, add `if (dirty.has('node_versions')) this.ftsStale = false;` — that commit already rebuilt the index, so leaving the flag set would cost a redundant rebuild on the next search.
+In `commit()`, after `commitSnapshot` resolves, add — for a commit that rebuilt the index —
+`this.ftsStale = false; this.ftsSignature = await this.ftsCorpusSignature();`, guarded on
+`dirty.has('node_versions')`. That commit already rebuilt, so leaving either marker unset
+would cost a redundant rebuild on the next search.
+
+Do the same at the end of `load()`, after `materialize` completes: a client that just loaded a
+snapshot holds an index built from exactly that snapshot's rows, so recording the signature
+there avoids a pointless rebuild on its first search.
 
 Import `rebuildIndex` from `./fts/index-tables.ts`.
 
