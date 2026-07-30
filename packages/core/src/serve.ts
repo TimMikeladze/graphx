@@ -724,7 +724,7 @@ function onError(err: Error, c: Context) {
 	// tell the caller the server is broken; 409 tells them to retry, which is what they
 	// should do. It is checked BEFORE the `addNode:`-prefix rule below, which would
 	// otherwise claim `addNode: too much contention` as a 400 client error.
-	if (/: too much contention$/.test(err.message)) {
+	if (err.message.endsWith(': too much contention')) {
 		return c.json({ error: err.message }, 409);
 	}
 	// Graph.addNode/addEdge (unknown type/rel, endpoint-type mismatch), bulkLoad (unknown
