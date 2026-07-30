@@ -1374,8 +1374,11 @@ export function ftsArg(dialect: Dialect, query: string): string | null {
 			return sanitizeMatch(query);
 		case 'postgres':
 			// tsQueryOr parses the raw text itself; pre-tokenizing would double the work and
-			// throw away the dictionary's own stopword handling.
-			return sanitizeMatch(query) === null ? null : query;
+			// throw away the dictionary's own stopword handling. The emptiness GATE is still
+			// `tokenize`, not `sanitizeMatch`: sanitizeMatch only treats whitespace-only input
+			// as empty, so a punctuation-only query like `!!! ---` would slip through as a
+			// non-null arg and run a lexical leg guaranteed to match nothing.
+			return tokenize(query).length === 0 ? null : query;
 		case 'duckdb': {
 			// No grammar to inject into: operators tokenize to ordinary terms.
 			const terms = tokenize(query);
@@ -1460,6 +1463,250 @@ The call sites spelled this as 'd === postgres ? query : match', which
 handed an FTS5 expression to DuckDB the moment a third dialect existed.
 ftsArg makes the three-way explicit and exhaustive, and graph.ts's
 duplicated ftsMatch goes away with it."
+```
+
+---
+
+### Task 7b: Keep the index fresh on a local DuckDB
+
+The index is built inside `commit()`, and `touched()` only commits when the client is
+bucket-backed. A plain local DuckDB therefore never builds it, and every full-text query
+silently returns nothing. Reproduced directly: after one `addNode` on a local client,
+`fts_terms` holds 0 rows.
+
+This is not a defect in any earlier task. Spec §10.2 says the index is built "at commit
+time", which is right for the object-storage design — but local-only DuckDB is a supported
+mode, and it is what the entire test harness uses (`makeTestDb` → `createDuckClient({path})`),
+so every remaining full-text failure is downstream of it.
+
+The fix is a staleness flag, not a rebuild per write. Mutations mark the index stale; the
+next full-text query rebuilds it and clears the flag. A write burst of any size costs one
+rebuild, and a read-only workload costs none.
+
+**Files:**
+- Modify: `packages/core/src/db.ts` (the `FtsIndexOwner` seam)
+- Modify: `packages/core/src/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
+- Modify: `packages/core/src/graph.ts` (mark on mutation, ensure before an FTS read)
+- Modify: `packages/core/src/hybrid.ts`, `packages/core/test/retrieval-legs.ts` (ensure before the lexical leg)
+- Modify: `packages/core/src/bulk.ts` (mark after a bulk load)
+- Test: `packages/core/test/fts-freshness.test.ts`
+
+**Interfaces:**
+- Consumes: `rebuildIndex` (Task 5); `managedWriter`'s structural-probe pattern (stage 4, `db.ts`).
+- Produces:
+  - `export interface FtsIndexOwner { markFtsStale(): void; ensureFtsFresh(): Promise<void> }`
+  - `export function ftsIndexOwner(raw: DbClient): FtsIndexOwner | null`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// packages/core/test/fts-freshness.test.ts
+import { describe, expect, test } from 'bun:test';
+import { z } from 'zod';
+import { defineGraphSchema } from '../src/define-graph-schema.ts';
+import { duckdbSchema } from '../src/dialect-sql.ts';
+import { createDuckClient } from '../src/duck.ts';
+import { Graph } from '../src/graph.ts';
+
+const SCHEMA = defineGraphSchema({ nodes: { Doc: z.object({}) }, edges: {} });
+
+async function local() {
+  const c = createDuckClient();
+  await c.executeMultiple(duckdbSchema(4));
+  return c;
+}
+
+describe('full-text freshness on a local duckdb', () => {
+  test('a node written through Graph is findable by full text', async () => {
+    // The whole gap: rebuildIndex only ran inside commit(), and a local client never commits.
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury venus earth', data: {} });
+    const page = await g.listNodes({ q: 'mercury' });
+    expect(page.rows.length).toBe(1);
+    await c.end();
+  });
+
+  test('an updated body stops matching its old text and starts matching its new', async () => {
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
+    await g.updateNode(n.id, { body: 'griffin' });
+    expect((await g.listNodes({ q: 'griffin' })).rows.length).toBe(1);
+    expect((await g.listNodes({ q: 'sphinx' })).rows.length).toBe(0);
+    await c.end();
+  });
+
+  test('a read-only workload does not rebuild', async () => {
+    // Staleness, not a rebuild per query: the second search must not re-run the build.
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury', data: {} });
+    await g.listNodes({ q: 'mercury' });
+    const before = (await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n;
+    await c.execute(`DELETE FROM fts_terms`); // sabotage: a rebuild would restore these rows
+    await g.listNodes({ q: 'mercury' });
+    expect((await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n).toBe(0);
+    expect(before).toBeGreaterThan(0);
+    await c.end();
+  });
+
+  test('concurrent searches after a write rebuild once, not once each', async () => {
+    const c = await local();
+    const g = new Graph(c, SCHEMA);
+    await g.addNode({ type: 'Doc', body: 'mercury venus', data: {} });
+    const pages = await Promise.all([
+      g.listNodes({ q: 'mercury' }),
+      g.listNodes({ q: 'venus' }),
+      g.listNodes({ q: 'mercury' }),
+    ]);
+    for (const p of pages) expect(p.rows.length).toBe(1);
+    await c.end();
+  });
+});
+```
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+Run: `bun test packages/core/test/fts-freshness.test.ts`
+Expected: FAIL — the first test returns 0 rows, because nothing ever built the index.
+
+- [ ] **Step 3: Add the seam to `db.ts`**
+
+```ts
+/**
+ * A client whose full-text index is a derived artifact it maintains itself.
+ *
+ * Declared here and probed structurally for the same reason as {@link ManagedWriter}:
+ * `graph.ts`, `hybrid.ts`, and `bulk.ts` all have to honor it, and none of them may import
+ * `duck.ts` and drag the optional `@duckdb/node-api` peer onto every consumer's path.
+ */
+export interface FtsIndexOwner {
+	/** Note that the indexed corpus changed. Cheap — no work happens here. */
+	markFtsStale(): void;
+	/** Rebuild if stale, then return. Called before anything reads the index. */
+	ensureFtsFresh(): Promise<void>;
+}
+
+/** `raw` as an {@link FtsIndexOwner}, or null when the backend maintains no such index. */
+export function ftsIndexOwner(raw: DbClient): FtsIndexOwner | null {
+	const c = raw as Partial<FtsIndexOwner>;
+	return typeof c.ensureFtsFresh === 'function' ? (c as FtsIndexOwner) : null;
+}
+```
+
+- [ ] **Step 4: Implement it on `DuckClient`**
+
+Add the flag and the two methods, and clear the flag in `commit()` when that commit rebuilt
+the index:
+
+```ts
+	/** Set when the indexed corpus changes; cleared by a rebuild. */
+	private ftsStale = false;
+
+	markFtsStale(): void {
+		this.ftsStale = true;
+	}
+
+	/**
+	 * Rebuild the full-text index if the corpus changed since the last build.
+	 *
+	 * Serialized on the write chain, and the flag is re-checked INSIDE it: several queries
+	 * can discover staleness at once, and without the second check each would rebuild the
+	 * same corpus in turn. The first through the gate does the work; the rest see a clean
+	 * flag and return.
+	 */
+	async ensureFtsFresh(): Promise<void> {
+		await this.open();
+		if (!this.ftsStale) return;
+		await this.serializeWrite(async () => {
+			if (!this.ftsStale) return;
+			await rebuildIndex(this.raw);
+			this.ftsStale = false;
+		});
+	}
+```
+
+In `commit()`, after `commitSnapshot` resolves, add `if (dirty.has('node_versions')) this.ftsStale = false;` — that commit already rebuilt the index, so leaving the flag set would cost a redundant rebuild on the next search.
+
+Import `rebuildIndex` from `./fts/index-tables.ts`.
+
+- [ ] **Step 5: Mark on write, ensure on read**
+
+In `graph.ts`, resolve the owner once in the constructor beside the existing
+`managedWriter(raw)` call:
+
+```ts
+	private readonly fts: FtsIndexOwner | null;
+```
+```ts
+		this.fts = ftsIndexOwner(raw);
+```
+
+In `touched(...)`, mark whenever the indexed table changed — before the durable-commit branch,
+so it happens on both local and bucket-backed clients:
+
+```ts
+	private async touched(...tables: string[]): Promise<void> {
+		if (tables.includes('node_versions')) this.fts?.markFtsStale();
+		if (this.session) {
+			for (const t of tables) this.session.add(t);
+			return;
+		}
+		if (this.writer?.durable) await this.writer.commit(new Set(tables));
+	}
+```
+
+Then ensure freshness before every read that binds a full-text fragment. In `graph.ts` those
+are `listNodes` and `graphSlice`, guarded on the query being present:
+
+```ts
+		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
+```
+
+In `hybrid.ts`'s `hybridRetrieve`, after computing `arg` and before fetching seeds:
+
+```ts
+	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
+```
+
+In `packages/core/test/retrieval-legs.ts`'s `ftsSeeds`, the same, after the null check.
+
+In `bulk.ts`'s `publish` helper, mark stale when `node_versions` is among the tables — a bulk
+load changes the corpus exactly as individual writes do.
+
+Every path that binds an FTS fragment must ensure freshness first. If you find one this list
+missed, add it and say so in your report.
+
+- [ ] **Step 6: Run the tests**
+
+Run: `bun test packages/core/test/fts-freshness.test.ts`
+Expected: PASS, 4 tests.
+
+Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 60000`
+Expected: a large drop in full-text failures. Report the actual count.
+
+Run: `bun test --timeout 30000` and `bun run type-check && bun run lint`
+Expected: libSQL unchanged, both commands exit 0. This task touches `graph.ts`, `hybrid.ts`,
+and `bulk.ts`, which all three backends share, so the libSQL run is the regression check.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/core/src/db.ts packages/core/src/duck.ts packages/core/src/graph.ts \
+  packages/core/src/hybrid.ts packages/core/src/bulk.ts \
+  packages/core/test/retrieval-legs.ts packages/core/test/fts-freshness.test.ts
+git commit -m "feat(core): keep the local duckdb full-text index fresh
+
+The index was built only inside commit(), and touched() only commits when
+the client is bucket-backed - so a plain local DuckDB never built one and
+every full-text query silently returned nothing.
+
+Mutations now mark the index stale and the next search rebuilds it, so a
+write burst of any size costs one rebuild and a read-only workload costs
+none. The staleness check is repeated inside the write chain: several
+queries can discover staleness at once, and without it each would rebuild
+the same corpus in turn."
 ```
 
 ---
