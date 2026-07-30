@@ -8,6 +8,7 @@ import {
 	type SqlValue,
 } from './dialect.ts';
 import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect-sql.ts';
+import { ftsArg } from './hybrid.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import { FOREVER, type ManagedWriter, managedWriter } from './db.ts';
@@ -848,19 +849,6 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * FTS5 MATCH expression from a free-text query: each whitespace token quoted (quotes
-	 * doubled) and OR-joined. Mirrors `sanitizeMatch` in hybrid.ts — inlined here to avoid an
-	 * import cycle (hybrid → retrieve → graph). `null` when the query has no usable tokens.
-	 */
-	private ftsMatch(query: string): string | null {
-		const tokens = query
-			.split(/\s+/)
-			.filter((t) => t.length > 0)
-			.map((t) => `"${t.replace(/"/g, '""')}"`);
-		return tokens.length > 0 ? tokens.join(' OR ') : null;
-	}
-
-	/**
 	 * Build the node-filter WHERE for {@link listNodes}/{@link graphSlice} over `node_versions`
 	 * aliased `nv`: a temporal predicate (live via the FOREVER sentinel, or as-of half-open),
 	 * an optional `type`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
@@ -885,11 +873,11 @@ export class Graph<S extends GraphSchema> {
 			args.push(opts.type);
 		}
 		if (opts.q !== undefined) {
-			const match = this.ftsMatch(opts.q);
-			if (match === null) return null;
 			const d = dialectOf(this.raw);
+			const arg = ftsArg(d, opts.q);
+			if (arg === null) return null;
 			where.push(ftsWhere(d, 'nv'));
-			args.push(d === 'postgres' ? opts.q : match);
+			args.push(arg);
 		}
 		return { where: where.join(' AND '), args };
 	}
