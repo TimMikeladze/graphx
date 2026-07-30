@@ -23,7 +23,7 @@ async function indexed() {
     await c.execute({ sql: 'INSERT INTO fts_dict VALUES (?,?)', args: [d.term, d.df] });
   }
   await c.execute({
-    sql: 'INSERT INTO fts_stats VALUES (?,?)',
+    sql: 'INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)',
     args: [ix.stats.num_docs, ix.stats.avgdl],
   });
   return c;
@@ -85,7 +85,21 @@ describe('bm25', () => {
       sql: `WITH scored AS (${bm25Cte('live')}) SELECT ver FROM scored ORDER BY score DESC`,
       args: [JSON.stringify(tokenize('graph'))],
     });
-    expect(r.rows.map((row) => Number(row.ver))).not.toContain(5);
+    const vers = r.rows.map((row) => Number(row.ver));
+    expect(vers).not.toContain(5);
+    // 'graph' also appears in vers 1, 2, 3, and 7 - they must still come back live.
+    expect(vers.sort()).toEqual([1, 2, 3, 7]);
+    await c.end();
+  });
+
+  test('a second row in fts_stats is rejected rather than silently doubling every score', async () => {
+    const c = await indexed();
+    await expect(
+      c.execute({
+        sql: 'INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)',
+        args: [9, 6.0],
+      })
+    ).rejects.toThrow();
     await c.end();
   });
 });

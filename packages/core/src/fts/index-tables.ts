@@ -22,12 +22,21 @@ export const BM25_B = 0.75;
  * joins the two just to filter, and so the export can split each into live and history file
  * sets without a second pass.
  */
+/**
+ * `fts_stats` holds one row. Its primary key is a boolean pinned to `true` rather than an
+ * aggregate over a query, so a stray second row fails loudly on insert instead of silently
+ * doubling every score via `CROSS JOIN fts_stats` in bm25Cte.
+ */
 export const FTS_DDL = `
 CREATE TABLE IF NOT EXISTS fts_dict (term VARCHAR PRIMARY KEY, df BIGINT NOT NULL);
 CREATE TABLE IF NOT EXISTS fts_docs (ver BIGINT PRIMARY KEY, len BIGINT NOT NULL, live BOOLEAN NOT NULL);
 CREATE TABLE IF NOT EXISTS fts_terms (ver BIGINT NOT NULL, term VARCHAR NOT NULL, tf BIGINT NOT NULL, live BOOLEAN NOT NULL);
 CREATE INDEX IF NOT EXISTS fts_terms_term ON fts_terms(term);
-CREATE TABLE IF NOT EXISTS fts_stats (num_docs BIGINT NOT NULL, avgdl DOUBLE NOT NULL);
+CREATE TABLE IF NOT EXISTS fts_stats (
+  singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
+  num_docs BIGINT NOT NULL,
+  avgdl DOUBLE NOT NULL
+);
 `;
 
 /**
