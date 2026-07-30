@@ -12,6 +12,7 @@ import { commitSnapshot, type ExportSource } from './duck-commit.ts';
 import { type LoadTarget, materialize } from './duck-materialize.ts';
 import { DuckPool, type PooledConnection } from './duck-pool.ts';
 import { normalizeRow } from './duck-value.ts';
+import { rebuildIndex } from './fts/index-tables.ts';
 import { FileCache } from './objstore/cache.ts';
 import type { Manifest } from './objstore/manifest.ts';
 import { SnapshotStore } from './objstore/snapshot.ts';
@@ -153,6 +154,8 @@ export class DuckClient implements DbClient {
 	 * `withEventSource` mints — shares the same chain.
 	 */
 	private writeChain: Promise<unknown> = Promise.resolve();
+	/** Set when the indexed corpus changes; cleared by a rebuild. */
+	private ftsStale = false;
 
 	constructor(opts: DuckClientOptions = {}) {
 		this.pool = new DuckPool(opts.path ?? ':memory:', { max: opts.poolMax ?? 4 });
@@ -222,6 +225,28 @@ export class DuckClient implements DbClient {
 		return next;
 	}
 
+	markFtsStale(): void {
+		this.ftsStale = true;
+	}
+
+	/**
+	 * Rebuild the full-text index if the corpus changed since the last build.
+	 *
+	 * Serialized on the write chain, and the flag is re-checked INSIDE it: several queries
+	 * can discover staleness at once, and without the second check each would rebuild the
+	 * same corpus in turn. The first through the gate does the work; the rest see a clean
+	 * flag and return.
+	 */
+	async ensureFtsFresh(): Promise<void> {
+		await this.open();
+		if (!this.ftsStale) return;
+		await this.serializeWrite(async () => {
+			if (!this.ftsStale) return;
+			await rebuildIndex(this.raw);
+			this.ftsStale = false;
+		});
+	}
+
 	/**
 	 * Discard local state and re-materialize the current snapshot.
 	 *
@@ -256,6 +281,9 @@ export class DuckClient implements DbClient {
 				this.current,
 				dirty,
 			);
+			// This commit already rebuilt the index when node_versions was dirty — leaving the
+			// flag set would cost a redundant rebuild on the next search.
+			if (dirty.has('node_versions')) this.ftsStale = false;
 			return this.current;
 		});
 	}

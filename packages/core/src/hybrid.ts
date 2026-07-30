@@ -7,7 +7,7 @@ import {
 	jsonArrayRows,
 	vecSeedLive,
 } from './dialect-sql.ts';
-import { FOREVER } from './db.ts';
+import { FOREVER, ftsIndexOwner } from './db.ts';
 import { tokenize } from './fts/tokenize.ts';
 import {
 	applyLimit,
@@ -412,6 +412,7 @@ export async function hybridRetrieve(
 	const qEmb = await embed(opts.query);
 	const qEmbJson = JSON.stringify(qEmb);
 	const arg = ftsArg(dialectOf(raw), opts.query);
+	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
 
 	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
 	const t = isPast ? (opts.asOf as number) : FOREVER;

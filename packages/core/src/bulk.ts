@@ -1,4 +1,4 @@
-import { FOREVER, managedWriter } from './db.ts';
+import { FOREVER, ftsIndexOwner, managedWriter } from './db.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embFreshExpr, insertOrIgnore } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
@@ -267,6 +267,7 @@ export async function bulkLoad<S extends GraphSchema>(
  * two functions take a raw client and have no session to join, so they publish directly.
  */
 async function publish(raw: DbClient, ...tables: string[]): Promise<void> {
+	if (tables.includes('node_versions')) ftsIndexOwner(raw)?.markFtsStale();
 	const writer = managedWriter(raw);
 	if (writer?.durable) await writer.commit(new Set(tables));
 }
