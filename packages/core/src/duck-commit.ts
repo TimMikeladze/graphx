@@ -29,8 +29,11 @@ import type { SnapshotStore } from './objstore/snapshot.ts';
  * gated client from inside its own open/commit path would await a promise that only
  * resolves once that path finishes — the same class of self-deadlock the pool-reentrancy
  * fix in `duck-constraints.ts` was narrowed to avoid.
+ *
+ * Carries `transaction` (not just `execute`) because `buildFtsIndexes` below hands this
+ * straight to `rebuildIndex`, which needs it to swap the index tables atomically.
  */
-export type ExportSource = Pick<DbClient, 'execute'>;
+export type ExportSource = Pick<DbClient, 'execute' | 'transaction'>;
 
 /**
  * Write one table to Parquet, upload it, and return its content key. Returns null for an

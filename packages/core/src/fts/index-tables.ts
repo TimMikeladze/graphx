@@ -75,6 +75,14 @@ export function bm25Cte(scope: 'live' | 'all'): string {
 }
 
 /**
+ * The subset of {@link DbClient} a rebuild needs: read access to `node_versions`, plus the
+ * ability to open an interactive transaction to swap the index tables atomically. Narrowed
+ * for the same reason as `duck-commit.ts`'s `ExportSource` — so a client that gates its
+ * public methods behind a one-shot open can hand in an ungated facade of itself.
+ */
+export type IndexRebuildTarget = Pick<DbClient, 'execute' | 'transaction'>;
+
+/**
  * Rebuild the whole index from the local `node_versions`.
  *
  * A full rebuild, not an incremental update. The index is a derived artifact republished on
@@ -83,8 +91,20 @@ export function bm25Cte(scope: 'live' | 'all'): string {
  * silently missing search results. When corpus size makes this cost real, the fix is a
  * per-file delta in the manifest (`TableRef.files` is already a list), not incremental
  * mutation of a local table.
+ *
+ * The swap itself — the four `DELETE FROM`s and the chunked inserts that follow — runs
+ * inside ONE interactive transaction, committed here before this function returns (or rolled
+ * back on error, leaving the previous index intact). This is deliberately owned by
+ * `rebuildIndex` rather than by each caller: the bug this closes was exactly a caller
+ * forgetting to wrap its own call, and there are two call sites (`duck.ts`'s freshness check
+ * and `duck-commit.ts`'s commit-time rebuild) that would each need to remember it separately.
+ * Readers never join the write chain, so without this a query could land between the
+ * DELETEs and the INSERTs and see the index emptied — silently zero results, not an error.
+ * DuckDB's MVCC keeps every write inside the transaction invisible to other connections
+ * until it commits, so a concurrent reader sees either the full old index or the full new
+ * one, never a partial one.
  */
-export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<void> {
+export async function rebuildIndex(client: IndexRebuildTarget): Promise<void> {
 	const r = await client.execute(
 		`SELECT ver, body, valid_to FROM node_versions WHERE body IS NOT NULL`,
 	);
@@ -96,34 +116,43 @@ export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<v
 		})),
 	);
 
-	for (const t of FTS_TABLES) await client.execute(`DELETE FROM ${t}`);
-	if (ix.docs.length === 0) return; // nothing indexable; leave the tables empty
-
 	// Chunked multi-row inserts: a statement per posting is thousands of round trips on a
 	// corpus of any size.
 	const chunk = <T>(xs: T[], n: number): T[][] =>
 		Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
-	for (const part of chunk(ix.docs, 500)) {
-		await client.execute({
-			sql: `INSERT INTO fts_docs (ver, len, live) VALUES ${part.map(() => '(?,?,?)').join(',')}`,
-			args: part.flatMap((d) => [d.ver, d.len, d.live]),
+	const tx = await client.transaction();
+	try {
+		for (const t of FTS_TABLES) await tx.execute(`DELETE FROM ${t}`);
+		if (ix.docs.length === 0) {
+			await tx.commit(); // nothing indexable; leave the tables empty
+			return;
+		}
+		for (const part of chunk(ix.docs, 500)) {
+			await tx.execute({
+				sql: `INSERT INTO fts_docs (ver, len, live) VALUES ${part.map(() => '(?,?,?)').join(',')}`,
+				args: part.flatMap((d) => [d.ver, d.len, d.live]),
+			});
+		}
+		for (const part of chunk(ix.terms, 500)) {
+			await tx.execute({
+				sql: `INSERT INTO fts_terms (ver, term, tf, live) VALUES ${part.map(() => '(?,?,?,?)').join(',')}`,
+				args: part.flatMap((t) => [t.ver, t.term, t.tf, t.live]),
+			});
+		}
+		for (const part of chunk(ix.dict, 500)) {
+			await tx.execute({
+				sql: `INSERT INTO fts_dict (term, df) VALUES ${part.map(() => '(?,?)').join(',')}`,
+				args: part.flatMap((d) => [d.term, d.df]),
+			});
+		}
+		await tx.execute({
+			sql: `INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)`,
+			args: [ix.stats.num_docs, ix.stats.avgdl],
 		});
+		await tx.commit();
+	} catch (e) {
+		await tx.rollback().catch(() => {});
+		throw e;
 	}
-	for (const part of chunk(ix.terms, 500)) {
-		await client.execute({
-			sql: `INSERT INTO fts_terms (ver, term, tf, live) VALUES ${part.map(() => '(?,?,?,?)').join(',')}`,
-			args: part.flatMap((t) => [t.ver, t.term, t.tf, t.live]),
-		});
-	}
-	for (const part of chunk(ix.dict, 500)) {
-		await client.execute({
-			sql: `INSERT INTO fts_dict (term, df) VALUES ${part.map(() => '(?,?)').join(',')}`,
-			args: part.flatMap((d) => [d.term, d.df]),
-		});
-	}
-	await client.execute({
-		sql: `INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)`,
-		args: [ix.stats.num_docs, ix.stats.avgdl],
-	});
 }

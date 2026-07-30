@@ -212,11 +212,18 @@ export class DuckClient implements DbClient {
 		}
 	}
 
-	/** An ungated view of this client, for the bootstrap and the commit path. */
+	/**
+	 * An ungated view of this client, for the bootstrap, the commit path, and `rebuildIndex`
+	 * (both the one `ensureFtsFresh` runs and the one `buildFtsIndexes` runs at commit time).
+	 * `transaction` is {@link rawTransaction}, not the public {@link transaction} — the same
+	 * connection-owning transaction, but skipping the public method's redundant `open()` gate
+	 * and kept off the public `DbClient` surface that callers outside this file see.
+	 */
 	private get raw(): LoadTarget & ExportSource {
 		return {
 			execute: (stmt) => this.pool.withConnection((c) => runOne(c, stmt)),
 			executeMultiple: (sql) => this.runScript(sql),
+			transaction: () => this.rawTransaction(),
 		};
 	}
 
@@ -297,14 +304,9 @@ export class DuckClient implements DbClient {
 	 * read, leaving the index silently and permanently stale. Capturing first means such a
 	 * write costs at worst one redundant rebuild, which is the safe direction.
 	 *
-	 * The rebuild itself runs inside ONE interactive transaction on its own connection, not
-	 * `this.raw` (which spreads its DELETEs and chunked INSERTs across separate autocommit
-	 * statements on a pooled connection). Readers never join the write chain, so without a
-	 * single transaction a concurrent query could land between the DELETEs and the INSERTs
-	 * and see an emptied index. DuckDB's MVCC keeps every write here invisible to other
-	 * connections until `commit()`, so a concurrent reader sees the previous index intact
-	 * right up to the atomic swap. A failed rebuild rolls back, leaving that previous index
-	 * in place rather than an emptied one.
+	 * `rebuildIndex` itself owns making the swap atomic — see its doc comment — so this just
+	 * calls it; there is exactly one place that opens the transaction, and no possibility of
+	 * this call nesting one transaction inside another.
 	 *
 	 * Never call this from inside {@link serializeWrite} — it calls `serializeWrite` itself,
 	 * a plain non-reentrant chain with no timeout, so nesting hangs forever with no error.
@@ -319,14 +321,7 @@ export class DuckClient implements DbClient {
 			const current = await this.ftsCorpusSignature();
 			if (!this.ftsStale && current === this.ftsSignature) return;
 			this.ftsStale = false;
-			const tx = await this.rawTransaction();
-			try {
-				await rebuildIndex(tx);
-				await tx.commit();
-			} catch (e) {
-				await tx.rollback().catch(() => {});
-				throw e;
-			}
+			await rebuildIndex(this.raw);
 			this.ftsSignature = current;
 		});
 	}

@@ -1,10 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { duckdbSchema } from '../src/dialect-sql.ts';
 import { createDuckClient } from '../src/duck.ts';
 import { Graph } from '../src/graph.ts';
+import { MemoryObjectStore } from '../src/objstore/memory.ts';
 
 const SCHEMA = defineGraphSchema({ nodes: { Doc: z.object({}) }, edges: {} });
 
@@ -12,6 +16,14 @@ async function local() {
 	const c = createDuckClient();
 	await c.executeMultiple(duckdbSchema(4));
 	return c;
+}
+
+const root = mkdtempSync(join(tmpdir(), 'graphx-fts-freshness-'));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+/** A bucket-backed client — exercises `duck-commit.ts`'s commit-time rebuild path. */
+function bucketBacked(store: MemoryObjectStore) {
+	return createDuckClient({ store, cacheDir: mkdtempSync(join(root, 'c-')) });
 }
 
 /**
@@ -182,6 +194,44 @@ describe('full-text freshness on a local duckdb', () => {
 		});
 		const [, ...counts] = await Promise.all([rebuildQuery, ...reads]);
 		for (const n of counts) expect(n).toBeGreaterThan(0);
+		await c.end();
+	});
+
+	test('a concurrent reader never sees a half-built index during a bucket-backed commit', async () => {
+		// Same half-built-index race as above, but through duck-commit.ts's commit-time
+		// rebuild rather than ensureFtsFresh — the second of the two call sites rebuildIndex
+		// now owns its own atomicity for, rather than each caller wrapping its own call.
+		//
+		// A commit does substantially more work before it reaches the FTS rebuild (exporting
+		// every other dirty snapshot table first), so a handful of fixed delays is not
+		// reliable — unlike the ensureFtsFresh path, there is no way to know in advance when
+		// the vulnerable window opens. Poll continuously for the whole commit instead of
+		// guessing a delay, so every sample across the commit's whole duration is checked.
+		const store = new MemoryObjectStore();
+		const c = bucketBacked(store);
+		const g = new Graph(c, SCHEMA);
+		const N = 50;
+		await g.write(async (s) => {
+			for (let i = 0; i < N; i++) await s.addNode({ type: 'Doc', body: 'alpha', data: {} });
+		});
+
+		let polling = true;
+		const observed: number[] = [];
+		const poll = (async () => {
+			while (polling) {
+				const r = await c.execute('SELECT count(*) AS n FROM fts_docs');
+				observed.push(Number(r.rows[0]?.n ?? 0));
+			}
+		})();
+
+		await g.write(async (s) => {
+			await s.addNode({ type: 'Doc', body: 'alpha', data: {} }); // dirties node_versions
+		});
+		polling = false;
+		await poll;
+
+		expect(observed.length).toBeGreaterThan(0); // the poll must have actually sampled something
+		for (const n of observed) expect(n).toBeGreaterThan(0);
 		await c.end();
 	});
 });
