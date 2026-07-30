@@ -154,8 +154,11 @@ export class DuckClient implements DbClient {
 	 * `withEventSource` mints — shares the same chain.
 	 */
 	private writeChain: Promise<unknown> = Promise.resolve();
-	/** Set when the indexed corpus changes; cleared by a rebuild. */
+	/** Set when the indexed corpus changes; cleared by a rebuild. The fast path. */
 	private ftsStale = false;
+	/** The corpus signature the index was last built from; the backstop for writers that
+	 *  never went through `Graph` — see the note above on matching libSQL's trigger. */
+	private ftsSignature?: string;
 
 	constructor(opts: DuckClientOptions = {}) {
 		this.pool = new DuckPool(opts.path ?? ':memory:', { max: opts.poolMax ?? 4 });
@@ -194,6 +197,10 @@ export class DuckClient implements DbClient {
 		this.current =
 			pinned === undefined ? await this.snapshots.resolveHead() : await this.snapshots.read(pinned);
 		await materialize(this.raw, this.current, this.cache);
+		// This client just loaded a snapshot, so its index — built from exactly those rows —
+		// is already fresh; recording the signature now avoids a pointless rebuild on the
+		// first search.
+		this.ftsSignature = await this.ftsCorpusSignature();
 	}
 
 	/** An ungated view of this client, for the bootstrap and the commit path. */
@@ -230,20 +237,45 @@ export class DuckClient implements DbClient {
 	}
 
 	/**
+	 * A cheap fingerprint of the indexed corpus: how many rows carry text, and the highest
+	 * version among them. Deliberately NOT a content hash — that would scan every body on
+	 * every search to detect a case (an in-place body UPDATE) that libSQL's own `AFTER INSERT`
+	 * trigger does not detect either, and that graphx never produces, because a body change is
+	 * a close-and-insert rather than a mutation.
+	 */
+	private async ftsCorpusSignature(): Promise<string> {
+		const r = await this.raw.execute(
+			`SELECT count(*) AS n, coalesce(max(ver), 0) AS mx FROM node_versions WHERE body IS NOT NULL`,
+		);
+		const row = r.rows[0] ?? {};
+		return `${row.n}:${row.mx}`;
+	}
+
+	/**
 	 * Rebuild the full-text index if the corpus changed since the last build.
 	 *
-	 * Serialized on the write chain, and the flag is re-checked INSIDE it: several queries
+	 * The flag is the fast path; the corpus signature (count/max(ver) over indexed rows) is
+	 * the backstop for writers that never went through `Graph`/`bulk` — a raw `execute` never
+	 * marks the flag, so without the signature such a write would leave the index silently
+	 * stale forever. Matches libSQL's own `AFTER INSERT` trigger, which fires for any writer.
+	 *
+	 * Serialized on the write chain, and both checks are repeated INSIDE it: several queries
 	 * can discover staleness at once, and without the second check each would rebuild the
 	 * same corpus in turn. The first through the gate does the work; the rest see a clean
-	 * flag and return.
+	 * flag and a matching signature, and return.
 	 */
 	async ensureFtsFresh(): Promise<void> {
 		await this.open();
-		if (!this.ftsStale) return;
+		const signature = this.ftsStale ? null : await this.ftsCorpusSignature();
+		if (signature !== null && signature === this.ftsSignature) return;
 		await this.serializeWrite(async () => {
-			if (!this.ftsStale) return;
+			// Re-checked inside the chain: several queries can discover staleness at once,
+			// and without this each would rebuild the same corpus in turn.
+			const current = await this.ftsCorpusSignature();
+			if (!this.ftsStale && current === this.ftsSignature) return;
 			await rebuildIndex(this.raw);
 			this.ftsStale = false;
+			this.ftsSignature = await this.ftsCorpusSignature();
 		});
 	}
 
@@ -281,9 +313,12 @@ export class DuckClient implements DbClient {
 				this.current,
 				dirty,
 			);
-			// This commit already rebuilt the index when node_versions was dirty — leaving the
-			// flag set would cost a redundant rebuild on the next search.
-			if (dirty.has('node_versions')) this.ftsStale = false;
+			// This commit already rebuilt the index when node_versions was dirty — leaving
+			// either marker unset would cost a redundant rebuild on the next search.
+			if (dirty.has('node_versions')) {
+				this.ftsStale = false;
+				this.ftsSignature = await this.ftsCorpusSignature();
+			}
 			return this.current;
 		});
 	}

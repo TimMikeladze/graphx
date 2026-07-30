@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
+import { FOREVER } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { duckdbSchema } from '../src/dialect-sql.ts';
 import { createDuckClient } from '../src/duck.ts';
@@ -45,6 +46,24 @@ describe('full-text freshness on a local duckdb', () => {
 		await g.listNodes({ q: 'mercury' });
 		expect((await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n).toBe(0);
 		expect(before).toBeGreaterThan(0);
+		await c.end();
+	});
+
+	test('a node written by raw SQL, never touching Graph, is still found by full text', async () => {
+		// The signature backstop: markFtsStale() is only called from Graph/bulk, so a writer
+		// that bypasses both (raw SQL, a migration, external ETL) never sets the flag. libSQL's
+		// own AFTER INSERT trigger fires for any writer, so a flag-only DuckDB implementation
+		// would be silently weaker for exactly this case.
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		const id = '01ARZ3NDEKTSV4RRFFQ69G5FX1';
+		await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
+		await c.execute({
+			sql: 'INSERT INTO node_versions (id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?)',
+			args: [id, 'Doc', 'narwhal', 0, FOREVER],
+		});
+		const page = await g.listNodes({ q: 'narwhal' });
+		expect(page.nodes.length).toBe(1);
 		await c.end();
 	});
 
