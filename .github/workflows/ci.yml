@@ -95,12 +95,11 @@ jobs:
       GRAPHX_TEST_DRIVER: duckdb
 
     # Full-text/hybrid retrieval and p14-concurrency are closed (see docs/DUCKDB_SUPPORT.md).
-    # Two failures remain permanently by design (raw-SQL constraint-enforcement bypasses that
-    # only libSQL/Postgres reject via a partial index DuckDB has no equivalent of), and two
-    # more are blocked on a human ruling about ranking-golden.json's `shared` section (see
-    # "Golden-file regeneration" in docs/DUCKDB_SUPPORT.md). `bun run test` has no mechanism to
-    # exclude specific tests, so this job cannot go green without either such a filter or all
-    # four resolving. Remove continue-on-error only once the job would genuinely pass.
+    # Two failures remain permanently by design: raw-SQL constraint-enforcement bypasses that
+    # only libSQL/Postgres reject via a partial index DuckDB has no equivalent of. `bun run
+    # test` has no mechanism to exclude specific tests, so this job cannot go green without
+    # such a filter. Remove continue-on-error only once one exists (or the two tests are
+    # otherwise excluded) and the job genuinely passes.
     continue-on-error: true
 
     steps:

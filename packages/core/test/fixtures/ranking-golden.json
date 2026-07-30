@@ -225,6 +225,62 @@
 					"turing-machine"
 				]
 			}
+		},
+		"duckdb": {
+			"who designed the analytical engine": {
+				"ftsSet": [
+					"alan-turing",
+					"analytical-engine",
+					"charles-babbage",
+					"cobol",
+					"colossus",
+					"halting-problem"
+				]
+			},
+			"wartime codebreaking of intercepted signals": {
+				"ftsSet": [
+					"alan-turing",
+					"bletchley-park",
+					"turing-machine"
+				]
+			},
+			"the first compiler for readable english programs": {
+				"ftsSet": [
+					"ada-lovelace",
+					"alan-turing",
+					"cobol",
+					"colossus",
+					"compiler",
+					"grace-hopper"
+				]
+			},
+			"abstract model of computation with a tape": {
+				"ftsSet": [
+					"ada-lovelace",
+					"alan-turing",
+					"analytical-engine",
+					"colossus",
+					"enigma-machine",
+					"turing-machine"
+				]
+			},
+			"early electronic computer built from valves": {
+				"ftsSet": [
+					"analytical-engine",
+					"colossus",
+					"eniac",
+					"grace-hopper",
+					"punched-card"
+				]
+			},
+			"punched card input for mechanical computers": {
+				"ftsSet": [
+					"ada-lovelace",
+					"analytical-engine",
+					"charles-babbage",
+					"punched-card"
+				]
+			}
 		}
 	}
 }
