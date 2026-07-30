@@ -687,6 +687,12 @@ export const FTS_TABLES = ['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats'] as 
 /**
  * BM25 saturation and length-normalization constants. These are DuckDB's `match_bm25`
  * defaults, pinned by the ground-truth comparison in fts-bm25.test.ts rather than by faith.
+ *
+ * The IDF below uses `log` — base 10, DuckDB's default — not the natural log the textbook
+ * formula specifies. Measured, not assumed: backing IDF out of the fixture for three
+ * (tf, df, len) combinations gives log10 to ten decimal places and ln at none of them.
+ * Base is a uniform scale factor, so it cannot change rank order; it matters only because
+ * matching `match_bm25` exactly is what makes the golden comparison worth running.
  */
 export const BM25_K1 = 1.2;
 export const BM25_B = 0.75;
@@ -722,7 +728,7 @@ export function bm25Cte(scope: 'live' | 'all'): string {
   return `
   SELECT t.ver AS ver,
          sum(
-           ln(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
+           log(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
            * (t.tf * (${BM25_K1} + 1))
            / (t.tf + ${BM25_K1} * (1 - ${BM25_B} + ${BM25_B} * d.len / s.avgdl))
          ) AS score
