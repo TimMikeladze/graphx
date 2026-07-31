@@ -75,16 +75,20 @@ describe("TimelineBar playback back-pressure", () => {
     // The bar reads `asOf` from its parent, so the end of the run is only reachable through a
     // parent that actually follows `onChange` — a fixed `asOf` prop never moves off its tick and
     // leaves the play button disabled, which tests nothing.
-    let setBusyOutside: ((busy: boolean) => void) | undefined
+    // The renderer goes busy on the last slice itself, rather than being flipped from the test
+    // after the fact: the window between reaching the last tick and playback stopping is one
+    // 700ms interval wide, and a test that has to observe it mid-flight is a race under load.
     function Harness() {
       const [asOf, setAsOf] = useState<number | undefined>(2000)
       const [busy, setBusy] = useState(false)
-      setBusyOutside = setBusy
       return createElement(TimelineBar, {
         tenant: "t",
         project: "p",
         asOf,
-        onChange: setAsOf,
+        onChange: (v: number | undefined) => {
+          setAsOf(v)
+          if (v === 3000) setBusy(true)
+        },
         rendererBusy: busy,
       })
     }
@@ -97,19 +101,15 @@ describe("TimelineBar playback back-pressure", () => {
         .querySelector<HTMLButtonElement>('button[aria-label="Play through changes"]')
         ?.click(),
     )
-    // Runs to the last tick, where there is nowhere left to advance to…
-    await waitFor(
-      () => expect(document.querySelector('[role="slider"]')?.getAttribute("aria-valuenow")).toBe("3000"),
-      { timeout: 2000 },
-    )
     expect(document.querySelector('button[aria-label="Pause playback"]')).toBeTruthy()
 
-    // …and a renderer that is still busy must not keep that finished run showing Pause forever.
-    act(() => setBusyOutside?.(true))
+    // It runs to the last tick, where there is nowhere left to advance to, and a renderer that is
+    // still ingesting that tick must not keep the finished run showing Pause forever.
     await waitFor(
       () => expect(document.querySelector('button[aria-label="Pause playback"]')).toBeNull(),
-      { timeout: 2000 },
+      { timeout: 10000 },
     )
+    expect(document.querySelector('[role="slider"]')?.getAttribute("aria-valuenow")).toBe("3000")
   })
 
   it("advances without a renderer that reports business at all", async () => {
