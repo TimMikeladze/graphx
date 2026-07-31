@@ -1,0 +1,22 @@
+{
+	"name": "@graphx/example-pantheon-graph",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"description": "A cross-cultural graph of deities, built from pantheon-collector's SQLite database and browsed in @graphx/admin",
+	"scripts": {
+		"server": "bun run server.ts",
+		"test": "bun test",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@graphx/core": "workspace:*",
+		"@libsql/client": "^0.17.3",
+		"hono": "^4.12.23",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"typescript": "^6.0.3"
+	}
+}

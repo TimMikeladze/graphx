@@ -200,6 +200,12 @@ first — it returns the tenant and project ids the other tools require.
   server and no port.
 - [`examples/vault-ingest`](./examples/vault-ingest) — ingest a markdown vault.
 - [`examples/file-upload-ingest.ts`](./examples/file-upload-ingest.ts) — blob-backed ingestion.
+- [`examples/pantheon-graph`](./examples/pantheon-graph) — a real graph from a real corpus: ~10k
+  deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`
+  builds it and opens it in the admin UI.
+- [`examples/skills-graph`](./examples/skills-graph) — occupations, skills, and 2.7M observed job
+  moves dated from 1955 to 2024, so the as-of scrubber shows seventy years of a labour market.
+  `bun run dev:skills`.
 
 ## Database backend
 

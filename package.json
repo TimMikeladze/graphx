@@ -22,6 +22,8 @@
 		"dev": "bunup --watch",
 		"dev:admin": "bun scripts/dev-admin.ts",
 		"dev:admin:api": "bun scripts/admin-api.ts",
+		"dev:pantheon": "bun scripts/dev-admin.ts examples/pantheon-graph/server.ts 8788",
+		"dev:skills": "bun scripts/dev-admin.ts examples/skills-graph/server.ts 8789",
 		"format": "oxfmt",
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",

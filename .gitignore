@@ -28,7 +28,9 @@ yarn-error.log*
 *.duckdb
 *.duckdb.wal
 
-# scripts/seed rebuild fingerprint for the admin dev server's demo databases
+# Rebuild fingerprint for the admin dev server's demo databases (scripts/seed) and for the
+# collector-backed examples (examples/pantheon-graph, examples/skills-graph). Unanchored, so it
+# matches beside whichever server built the database.
 .seed-cache.json
 
 # scripts/bench output — cached corpora and run results. Anchored to the root so it does not also
@@ -38,3 +40,6 @@ yarn-error.log*
 # Agent scratch: git worktrees and per-plan SDD workspaces (ledgers, briefs, review packages).
 /.claude/worktrees/
 /.superpowers/
+
+# Playwright MCP scratch: snapshots, console logs and screenshots from driving the admin UI.
+.playwright-mcp/
