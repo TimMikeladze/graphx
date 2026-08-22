@@ -40,7 +40,9 @@ export const DEFAULT_LIMITS: QueryLimits = { maxRows: 10_000, maxFanout: 1000, t
 export function resolveLimits(partial?: Partial<QueryLimits>): QueryLimits {
 	const limits = { ...DEFAULT_LIMITS, ...partial };
 	if (!Number.isFinite(limits.maxRows) || limits.maxRows < 1) {
-		throw new Error(`resolveLimits: maxRows must be a positive finite number, got ${limits.maxRows}`);
+		throw new Error(
+			`resolveLimits: maxRows must be a positive finite number, got ${limits.maxRows}`,
+		);
 	}
 	if (!Number.isFinite(limits.maxFanout) || limits.maxFanout < 0) {
 		throw new Error(

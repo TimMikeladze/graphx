@@ -1,43 +1,43 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { api, type EdgeInput, type NodeInput, type NodePatch } from "@/lib/api"
-import { qk } from "@/lib/query-keys"
-import type { ExplorerFilters } from "@/lib/types"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, type EdgeInput, type NodeInput, type NodePatch } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
+import type { ExplorerFilters } from '@/lib/types';
 
 /** All tenants (control plane). */
 export function useTenants() {
-  return useQuery({ queryKey: qk.tenants(), queryFn: () => api.listTenants() })
+	return useQuery({ queryKey: qk.tenants(), queryFn: () => api.listTenants() });
 }
 
 /** Projects in a tenant; disabled until a tenant is selected. */
 export function useProjects(tenantId?: string) {
-  return useQuery({
-    queryKey: qk.projects(tenantId ?? ""),
-    queryFn: () => api.listProjects(tenantId as string),
-    enabled: Boolean(tenantId),
-  })
+	return useQuery({
+		queryKey: qk.projects(tenantId ?? ''),
+		queryFn: () => api.listProjects(tenantId as string),
+		enabled: Boolean(tenantId),
+	});
 }
 
 /** All users (control plane). */
 export function useUsers() {
-  return useQuery({ queryKey: qk.users(), queryFn: () => api.listUsers() })
+	return useQuery({ queryKey: qk.users(), queryFn: () => api.listUsers() });
 }
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 50;
 
 /** Keyset-paginated node list (master), keyed on the active filters. */
 export function useNodes(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
-  return useInfiniteQuery({
-    queryKey: qk.nodes(tenant ?? "", project ?? "", filters),
-    enabled: Boolean(tenant && project),
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      api.listNodes(tenant as string, project as string, {
-        ...filters,
-        cursor: pageParam,
-        limit: PAGE_SIZE,
-      }),
-    getNextPageParam: (last) => last.nextCursor ?? undefined,
-  })
+	return useInfiniteQuery({
+		queryKey: qk.nodes(tenant ?? '', project ?? '', filters),
+		enabled: Boolean(tenant && project),
+		initialPageParam: undefined as string | undefined,
+		queryFn: ({ pageParam }) =>
+			api.listNodes(tenant as string, project as string, {
+				...filters,
+				cursor: pageParam,
+				limit: PAGE_SIZE,
+			}),
+		getNextPageParam: (last) => last.nextCursor ?? undefined,
+	});
 }
 
 /**
@@ -57,17 +57,17 @@ export function useNodes(tenant?: string, project?: string, filters: ExplorerFil
  * is the only case any of these placeholders exist for.
  */
 function sameScopePlaceholder<TData>(
-  tenant: string,
-  project: string,
+	tenant: string,
+	project: string,
 ): (
-  prev: TData | undefined,
-  prevQuery: { queryKey: readonly unknown[] } | undefined,
+	prev: TData | undefined,
+	prevQuery: { queryKey: readonly unknown[] } | undefined,
 ) => TData | undefined {
-  return (prev, prevQuery) => {
-    const key = prevQuery?.queryKey
-    if (!key) return undefined
-    return key[1] === tenant && key[2] === project ? prev : undefined
-  }
+	return (prev, prevQuery) => {
+		const key = prevQuery?.queryKey;
+		if (!key) return undefined;
+		return key[1] === tenant && key[2] === project ? prev : undefined;
+	};
 }
 
 /**
@@ -84,12 +84,12 @@ function sameScopePlaceholder<TData>(
  * project's graph, node ids included, into a freshly selected one.
  */
 export function useGraphSlice(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
-  return useQuery({
-    queryKey: qk.graph(tenant ?? "", project ?? "", filters),
-    enabled: Boolean(tenant && project),
-    queryFn: () => api.graphSlice(tenant as string, project as string, filters),
-    placeholderData: sameScopePlaceholder(tenant ?? "", project ?? ""),
-  })
+	return useQuery({
+		queryKey: qk.graph(tenant ?? '', project ?? '', filters),
+		enabled: Boolean(tenant && project),
+		queryFn: () => api.graphSlice(tenant as string, project as string, filters),
+		placeholderData: sameScopePlaceholder(tenant ?? '', project ?? ''),
+	});
 }
 
 /**
@@ -97,21 +97,21 @@ export function useGraphSlice(tenant?: string, project?: string, filters: Explor
  * written to, so it is fetched once and kept — every node editor reads it.
  */
 export function useSchema(tenant?: string, project?: string) {
-  return useQuery({
-    queryKey: qk.schema(tenant ?? "", project ?? ""),
-    queryFn: () => api.getSchema(tenant as string, project as string),
-    enabled: Boolean(tenant && project),
-    staleTime: Number.POSITIVE_INFINITY,
-  })
+	return useQuery({
+		queryKey: qk.schema(tenant ?? '', project ?? ''),
+		queryFn: () => api.getSchema(tenant as string, project as string),
+		enabled: Boolean(tenant && project),
+		staleTime: Number.POSITIVE_INFINITY,
+	});
 }
 
 /** A single node (detail Sheet), at `asOf` when one is set. */
 export function useNode(tenant?: string, project?: string, id?: string, asOf?: number) {
-  return useQuery({
-    queryKey: qk.node(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.node(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(tenant && project && id),
+	});
 }
 
 /**
@@ -119,17 +119,17 @@ export function useNode(tenant?: string, project?: string, id?: string, asOf?: n
  * until the tab is open so selecting a node in the graph doesn't pull every body over the wire.
  */
 export function useNodeContent(
-  tenant?: string,
-  project?: string,
-  id?: string,
-  enabled = true,
-  asOf?: number,
+	tenant?: string,
+	project?: string,
+	id?: string,
+	enabled = true,
+	asOf?: number,
 ) {
-  return useQuery({
-    queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(enabled && tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.nodeContent(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(enabled && tenant && project && id),
+	});
 }
 
 /**
@@ -138,15 +138,15 @@ export function useNodeContent(
  * and body is in neither the node list nor the graph slice — so neither is invalidated.
  */
 export function useUpdateNodeBody(tenant?: string, project?: string, id?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (body: string) =>
-      api.updateNodeBody(tenant as string, project as string, id as string, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? "", project ?? "", id ?? "") })
-      qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
-    },
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (body: string) =>
+			api.updateNodeBody(tenant as string, project as string, id as string, body),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? '') });
+			qc.invalidateQueries({ queryKey: qk.history(tenant ?? '', project ?? '', id ?? '') });
+		},
+	});
 }
 
 /**
@@ -155,21 +155,21 @@ export function useUpdateNodeBody(tenant?: string, project?: string, id?: string
  * prefix rather than for the filters that happen to be active.
  */
 function invalidateGraphViews(
-  qc: ReturnType<typeof useQueryClient>,
-  tenant?: string,
-  project?: string,
+	qc: ReturnType<typeof useQueryClient>,
+	tenant?: string,
+	project?: string,
 ): void {
-  qc.invalidateQueries({ queryKey: qk.allNodes(tenant ?? "", project ?? "") })
-  qc.invalidateQueries({ queryKey: qk.allGraph(tenant ?? "", project ?? "") })
+	qc.invalidateQueries({ queryKey: qk.allNodes(tenant ?? '', project ?? '') });
+	qc.invalidateQueries({ queryKey: qk.allGraph(tenant ?? '', project ?? '') });
 }
 
 /** Create a node. The server applies the type's schema defaults and returns the parsed node. */
 export function useCreateNode(tenant?: string, project?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: NodeInput) => api.createNode(tenant as string, project as string, input),
-    onSuccess: () => invalidateGraphViews(qc, tenant, project),
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (input: NodeInput) => api.createNode(tenant as string, project as string, input),
+		onSuccess: () => invalidateGraphViews(qc, tenant, project),
+	});
 }
 
 /**
@@ -177,17 +177,17 @@ export function useCreateNode(tenant?: string, project?: string) {
  * so the detail, its content and its version trail are all refetched alongside the graph views.
  */
 export function useUpdateNode(tenant?: string, project?: string, id?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (patch: NodePatch) =>
-      api.updateNode(tenant as string, project as string, id as string, patch),
-    onSuccess: () => {
-      invalidateGraphViews(qc, tenant, project)
-      qc.invalidateQueries({ queryKey: qk.allNode(tenant ?? "", project ?? "", id ?? "") })
-      qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? "", project ?? "", id ?? "") })
-      qc.invalidateQueries({ queryKey: qk.history(tenant ?? "", project ?? "", id ?? "") })
-    },
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (patch: NodePatch) =>
+			api.updateNode(tenant as string, project as string, id as string, patch),
+		onSuccess: () => {
+			invalidateGraphViews(qc, tenant, project);
+			qc.invalidateQueries({ queryKey: qk.allNode(tenant ?? '', project ?? '', id ?? '') });
+			qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? '') });
+			qc.invalidateQueries({ queryKey: qk.history(tenant ?? '', project ?? '', id ?? '') });
+		},
+	});
 }
 
 /**
@@ -199,11 +199,11 @@ export function useUpdateNode(tenant?: string, project?: string, id?: string) {
  * and the unobserved entry is garbage-collected.
  */
 export function useDeleteNode(tenant?: string, project?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => api.deleteNode(tenant as string, project as string, id),
-    onSuccess: () => invalidateGraphViews(qc, tenant, project),
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) => api.deleteNode(tenant as string, project as string, id),
+		onSuccess: () => invalidateGraphViews(qc, tenant, project),
+	});
 }
 
 /**
@@ -211,45 +211,45 @@ export function useDeleteNode(tenant?: string, project?: string) {
  * views — the neighbor query is keyed per node and neither endpoint's is still correct.
  */
 export function useCreateEdge(tenant?: string, project?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (input: EdgeInput) => api.createEdge(tenant as string, project as string, input),
-    onSuccess: (_result, input) => {
-      invalidateGraphViews(qc, tenant, project)
-      for (const id of [input.src, input.dst]) {
-        qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? "", project ?? "", id) })
-      }
-    },
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (input: EdgeInput) => api.createEdge(tenant as string, project as string, input),
+		onSuccess: (_result, input) => {
+			invalidateGraphViews(qc, tenant, project);
+			for (const id of [input.src, input.dst]) {
+				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+			}
+		},
+	});
 }
 
 /** Close an edge's live version. Its endpoints survive; only the relation between them ends. */
 export function useDeleteEdge(tenant?: string, project?: string) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (edge: { id: string; source: string; target: string }) =>
-      api.deleteEdge(tenant as string, project as string, edge.id),
-    onSuccess: (_result, edge) => {
-      invalidateGraphViews(qc, tenant, project)
-      for (const id of [edge.source, edge.target]) {
-        qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? "", project ?? "", id) })
-      }
-    },
-  })
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (edge: { id: string; source: string; target: string }) =>
+			api.deleteEdge(tenant as string, project as string, edge.id),
+		onSuccess: (_result, edge) => {
+			invalidateGraphViews(qc, tenant, project);
+			for (const id of [edge.source, edge.target]) {
+				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+			}
+		},
+	});
 }
 
 /** A node's neighbors (detail Sheet · Neighbors tab), at `asOf` when one is set. */
 export function useNeighbors(tenant?: string, project?: string, id?: string, asOf?: number) {
-  return useQuery({
-    queryKey: qk.neighbors(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.neighbors(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(tenant && project && id),
+	});
 }
 
 /** Seeds fed into the walk, and hops expanded from each. */
-const RETRIEVE_K = 10
-const RETRIEVE_DEPTH = 1
+const RETRIEVE_K = 10;
+const RETRIEVE_DEPTH = 1;
 
 /**
  * Semantic / hybrid retrieval for the `q` filter. Idle unless the mode needs it and there is a
@@ -258,33 +258,29 @@ const RETRIEVE_DEPTH = 1
  * Results come back ordered by DEPTH, not relevance: the server walks outward from its seeds and
  * groups by hop. The list surfaces that ordering instead of pretending it is a relevance rank.
  */
-export function useRetrieval(
-  tenant?: string,
-  project?: string,
-  filters: ExplorerFilters = {},
-) {
-  const mode = filters.mode ?? "text"
-  const query = filters.q?.trim() ?? ""
-  const enabled = Boolean(tenant && project && query && mode !== "text")
-  return useQuery({
-    queryKey: qk.retrieval(tenant ?? "", project ?? "", mode, filters),
-    enabled,
-    queryFn: () => {
-      const opts = { query, k: RETRIEVE_K, maxDepth: RETRIEVE_DEPTH, asOf: filters.asOf }
-      return mode === "hybrid"
-        ? api.hybrid(tenant as string, project as string, opts)
-        : api.retrieve(tenant as string, project as string, opts)
-    },
-  })
+export function useRetrieval(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
+	const mode = filters.mode ?? 'text';
+	const query = filters.q?.trim() ?? '';
+	const enabled = Boolean(tenant && project && query && mode !== 'text');
+	return useQuery({
+		queryKey: qk.retrieval(tenant ?? '', project ?? '', mode, filters),
+		enabled,
+		queryFn: () => {
+			const opts = { query, k: RETRIEVE_K, maxDepth: RETRIEVE_DEPTH, asOf: filters.asOf };
+			return mode === 'hybrid'
+				? api.hybrid(tenant as string, project as string, opts)
+				: api.retrieve(tenant as string, project as string, opts);
+		},
+	});
 }
 
 /** A node's version history (detail Sheet · History tab). */
 export function useHistory(tenant?: string, project?: string, id?: string) {
-  return useQuery({
-    queryKey: qk.history(tenant ?? "", project ?? "", id ?? ""),
-    queryFn: () => api.history(tenant as string, project as string, id as string),
-    enabled: Boolean(tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.history(tenant ?? '', project ?? '', id ?? ''),
+		queryFn: () => api.history(tenant as string, project as string, id as string),
+		enabled: Boolean(tenant && project && id),
+	});
 }
 
 /**
@@ -292,21 +288,21 @@ export function useHistory(tenant?: string, project?: string, id?: string) {
  * relative to how often it is read, so it is kept for a minute rather than refetched per scrub.
  */
 export function useTimeline(
-  tenant?: string,
-  project?: string,
-  window: { from?: number; to?: number } = {},
+	tenant?: string,
+	project?: string,
+	window: { from?: number; to?: number } = {},
 ) {
-  return useQuery({
-    queryKey: qk.timeline(tenant ?? "", project ?? "", window),
-    queryFn: () => api.timeline(tenant as string, project as string, window),
-    enabled: Boolean(tenant && project),
-    staleTime: 60_000,
-    // The zoom window is part of the query key, so every narrow/widen is a fresh cache entry —
-    // without this, `data` goes undefined for the fetch, blanking the track and greying out every
-    // control for a frame instead of showing the previous window while the new one loads. Scoped
-    // to (tenant, project) via `sameScopePlaceholder` rather than plain `keepPreviousData`: unscoped,
-    // a tenant/project switch would keep showing the previous project's extent and ticks, since
-    // `ExplorerPage` doesn't remount across that switch either.
-    placeholderData: sameScopePlaceholder(tenant ?? "", project ?? ""),
-  })
+	return useQuery({
+		queryKey: qk.timeline(tenant ?? '', project ?? '', window),
+		queryFn: () => api.timeline(tenant as string, project as string, window),
+		enabled: Boolean(tenant && project),
+		staleTime: 60_000,
+		// The zoom window is part of the query key, so every narrow/widen is a fresh cache entry —
+		// without this, `data` goes undefined for the fetch, blanking the track and greying out every
+		// control for a frame instead of showing the previous window while the new one loads. Scoped
+		// to (tenant, project) via `sameScopePlaceholder` rather than plain `keepPreviousData`: unscoped,
+		// a tenant/project switch would keep showing the previous project's extent and ticks, since
+		// `ExplorerPage` doesn't remount across that switch either.
+		placeholderData: sameScopePlaceholder(tenant ?? '', project ?? ''),
+	});
 }

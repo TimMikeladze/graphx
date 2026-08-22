@@ -41,7 +41,8 @@ function GatewayList({
 						onClick={() => onSelect(gw.id)}
 						style={{ cursor: 'pointer', fontWeight: selected === gw.id ? 700 : 400 }}
 					>
-						{gw.data.name} <small style={{ color: gw.data.online ? '#2a2' : '#c33' }}>
+						{gw.data.name}{' '}
+						<small style={{ color: gw.data.online ? '#2a2' : '#c33' }}>
 							{gw.data.online ? 'online' : 'offline'}
 						</small>{' '}
 						<small style={{ color: '#888' }}>fw {gw.data.firmware}</small>
@@ -72,7 +73,9 @@ function GatewayDetail({ id }: { id: string }) {
 					{gw.data.data.online ? 'online' : 'offline'}
 				</small>
 			</h2>
-			<p>Site: {site.data?.pages[0]?.rows[0]?.data.name ?? '—'} · firmware {gw.data.data.firmware}</p>
+			<p>
+				Site: {site.data?.pages[0]?.rows[0]?.data.name ?? '—'} · firmware {gw.data.data.firmware}
+			</p>
 			<h4>Connected devices</h4>
 			<ul>
 				{devices.data?.pages

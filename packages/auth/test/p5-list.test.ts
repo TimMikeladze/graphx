@@ -88,7 +88,10 @@ test('P5: paginates by object id — limit then cursor walks the rest', async ()
 	expect(p1.objects).toEqual(['doc:1', 'doc:2']);
 	expect(p1.nextCursor).toBe('doc:2');
 
-	const p2 = await auth.listObjects('user:alice', 'viewer', 'doc', { limit: 2, cursor: p1.nextCursor! });
+	const p2 = await auth.listObjects('user:alice', 'viewer', 'doc', {
+		limit: 2,
+		cursor: p1.nextCursor!,
+	});
 	expect(p2.objects).toEqual(['doc:3']);
 	expect(p2.nextCursor).toBeNull();
 	db.close();

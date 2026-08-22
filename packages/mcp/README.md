@@ -61,7 +61,7 @@ cannot be guessed or carried over from a previous run.
 Without `GRAPHX_SCHEMA` it runs schemaless (see Limitations below): reads and the metric tools
 work, but every write tool 400s, `describe_schema` falls back to sampling types off the graph, and
 no `graphx://schema` resource is registered. Pointing `GRAPHX_SCHEMA` at a file fixes all three.
-Tool *descriptions* stay generic either way — for those, embed the server as a library instead.
+Tool _descriptions_ stay generic either way — for those, embed the server as a library instead.
 
 ## Library usage
 
@@ -154,14 +154,14 @@ request → response stream on the bare JSON-RPC id, and that id is a per-client
 Read by `graphx-mcp` (the stdio binary). The library entry points take the same values as fields on
 their options object instead.
 
-| Variable | Meaning |
-|---|---|
-| `GRAPHX_MCP_MODE` | `local` or `remote`. If unset, defaults to `remote` when `GRAPHX_URL` is set, otherwise `local`. |
-| `GRAPHX_DB` | Required in local mode. A **namespace**, not a connection string — `mygraph` means the libSQL file `./mygraph.db` in the process's working directory, created if absent. A URL here is taken literally as a namespace: `file:./graph.db` silently opens `./graph.db.db`, and `postgres://…` / `libsql://…` fail at startup. The binary throws if it is missing. |
-| `GRAPHX_SCHEMA` | Optional, local mode only. Path to a JSON schema file (below). When set, `create_node` / `create_edge` / `bulk_load` validate against it, `describe_schema` returns a real contract, and `graphx://schema` registers as a resource. When unset, local mode runs schemaless. A missing file, malformed JSON, or an unsupported construct exits 1 with a clear stderr message. |
-| `GRAPHX_URL` | Required in remote mode: the base URL of a deployed graphx server. The binary throws at startup if missing. |
-| `GRAPHX_API_KEY` | Optional bearer credential sent with every request in remote mode. |
-| `GRAPHX_MCP_READ_ONLY` | Set to `1` to register only `read`-tagged tools. Equivalent to the `--read-only` CLI flag. |
+| Variable               | Meaning                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GRAPHX_MCP_MODE`      | `local` or `remote`. If unset, defaults to `remote` when `GRAPHX_URL` is set, otherwise `local`.                                                                                                                                                                                                                                                                             |
+| `GRAPHX_DB`            | Required in local mode. A **namespace**, not a connection string — `mygraph` means the libSQL file `./mygraph.db` in the process's working directory, created if absent. A URL here is taken literally as a namespace: `file:./graph.db` silently opens `./graph.db.db`, and `postgres://…` / `libsql://…` fail at startup. The binary throws if it is missing.              |
+| `GRAPHX_SCHEMA`        | Optional, local mode only. Path to a JSON schema file (below). When set, `create_node` / `create_edge` / `bulk_load` validate against it, `describe_schema` returns a real contract, and `graphx://schema` registers as a resource. When unset, local mode runs schemaless. A missing file, malformed JSON, or an unsupported construct exits 1 with a clear stderr message. |
+| `GRAPHX_URL`           | Required in remote mode: the base URL of a deployed graphx server. The binary throws at startup if missing.                                                                                                                                                                                                                                                                  |
+| `GRAPHX_API_KEY`       | Optional bearer credential sent with every request in remote mode.                                                                                                                                                                                                                                                                                                           |
+| `GRAPHX_MCP_READ_ONLY` | Set to `1` to register only `read`-tagged tools. Equivalent to the `--read-only` CLI flag.                                                                                                                                                                                                                                                                                   |
 
 In remote mode, the tool surface itself still comes from a locally built app with an empty schema —
 the set of tools is a property of the installed graphx version, not of the deployment being
@@ -207,35 +207,35 @@ dropping it.
 `describe_schema` — 26 as a library. The binary adds `graphx_context`, for 27. `--read-only` /
 `GRAPHX_MCP_READ_ONLY=1` leaves the 16 read tools plus both of those — 18 from the binary.
 
-| Tool | Op | Description |
-|---|---|---|
-| `graphx_context` | read | **Binary only, call it first.** The `tenant` and `project` ids every other tool takes as arguments, plus the mode. Local mode mints them fresh on each start; remote mode has none to give and says so. |
-| `list_projects` | read | List the caller's projects in this tenant |
-| `create_node` | write | Create a node |
-| `create_edge` | write | Create an edge |
-| `get_node` | read | Get a node by id |
-| `update_node` | write | Update a node |
-| `delete_edge` | write | Delete an edge |
-| `delete_node` | write | Retract a node |
-| `neighbors` | read | Neighbors (unpaginated) |
-| `neighbors_page` | read | Neighbors (keyset paginated) |
-| `list_nodes` | read | List nodes (keyset paginated) |
-| `graph_slice` | read | Canvas slice (nodes + links) |
-| `get_node_content` | read | Live content payload (body + provenance) |
-| `node_history` | read | Version trail for a node |
-| `retrieve` | read | GraphRAG vector retrieve |
-| `journey` | read | Time-respecting traversal |
-| `change_feed` | read | Change feed / CDC tail |
-| `diff` | read | Snapshot delta over (t1, t2] |
-| `hybrid_search` | read | Hybrid retrieve (ANN + FTS + RRF + MMR) |
-| `bulk_load` | write | Bulk-load nodes |
-| `match_pattern` | read | Multi-hop pattern query |
-| `shortest_path` | read | Shortest path |
-| `pagerank` | write | PageRank (persists) |
-| `community` | write | Community detection (persists) |
-| `centrality` | write | Degree centrality (persists) |
-| `top_nodes` | read | Top nodes by a persisted metric |
-| `describe_schema` | read | The graph schema: node types as JSON Schema, and the declared relations. Read this before writing nodes or building pattern queries. |
+| Tool               | Op    | Description                                                                                                                                                                                             |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `graphx_context`   | read  | **Binary only, call it first.** The `tenant` and `project` ids every other tool takes as arguments, plus the mode. Local mode mints them fresh on each start; remote mode has none to give and says so. |
+| `list_projects`    | read  | List the caller's projects in this tenant                                                                                                                                                               |
+| `create_node`      | write | Create a node                                                                                                                                                                                           |
+| `create_edge`      | write | Create an edge                                                                                                                                                                                          |
+| `get_node`         | read  | Get a node by id                                                                                                                                                                                        |
+| `update_node`      | write | Update a node                                                                                                                                                                                           |
+| `delete_edge`      | write | Delete an edge                                                                                                                                                                                          |
+| `delete_node`      | write | Retract a node                                                                                                                                                                                          |
+| `neighbors`        | read  | Neighbors (unpaginated)                                                                                                                                                                                 |
+| `neighbors_page`   | read  | Neighbors (keyset paginated)                                                                                                                                                                            |
+| `list_nodes`       | read  | List nodes (keyset paginated)                                                                                                                                                                           |
+| `graph_slice`      | read  | Canvas slice (nodes + links)                                                                                                                                                                            |
+| `get_node_content` | read  | Live content payload (body + provenance)                                                                                                                                                                |
+| `node_history`     | read  | Version trail for a node                                                                                                                                                                                |
+| `retrieve`         | read  | GraphRAG vector retrieve                                                                                                                                                                                |
+| `journey`          | read  | Time-respecting traversal                                                                                                                                                                               |
+| `change_feed`      | read  | Change feed / CDC tail                                                                                                                                                                                  |
+| `diff`             | read  | Snapshot delta over (t1, t2]                                                                                                                                                                            |
+| `hybrid_search`    | read  | Hybrid retrieve (ANN + FTS + RRF + MMR)                                                                                                                                                                 |
+| `bulk_load`        | write | Bulk-load nodes                                                                                                                                                                                         |
+| `match_pattern`    | read  | Multi-hop pattern query                                                                                                                                                                                 |
+| `shortest_path`    | read  | Shortest path                                                                                                                                                                                           |
+| `pagerank`         | write | PageRank (persists)                                                                                                                                                                                     |
+| `community`        | write | Community detection (persists)                                                                                                                                                                          |
+| `centrality`       | write | Degree centrality (persists)                                                                                                                                                                            |
+| `top_nodes`        | read  | Top nodes by a persisted metric                                                                                                                                                                         |
+| `describe_schema`  | read  | The graph schema: node types as JSON Schema, and the declared relations. Read this before writing nodes or building pattern queries.                                                                    |
 
 Destructive-by-default is deliberate: graphx deletes are temporal retracts, recoverable by `asOf`,
 so `delete_node` and `delete_edge` carry `destructiveHint: true` for clients that want to confirm,
@@ -271,7 +271,7 @@ for clients that don't implement resources.
   JSON file instead. Without it, `describe_schema` falls back to sampling distinct `type` values off
   `GET /nodes` and returns them tagged `inferred: true`, with no property schemas and no relations.
   A failed sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
-  unreachable graph never reads as an empty one. Tool *descriptions* stay generic either way — embed
+  unreachable graph never reads as an empty one. Tool _descriptions_ stay generic either way — embed
   the server as a library (above) for those.
 - **In LOCAL mode, without `GRAPHX_SCHEMA`, the binary cannot create anything.** `Graph.addNode`
   rejects a type it has no definition for, so against a schemaless app `create_node`, `create_edge`
@@ -282,7 +282,7 @@ for clients that don't implement resources.
   (above) to write to a local graph without embedding the server as a library.
 - **The binary is libSQL only.** `GRAPHX_DB_DRIVER=postgres` selects the Postgres dialect, but
   `graphx-mcp` never imports `@graphx/core/pg`, so it exits at startup with `getDb: postgres driver
-  selected but the pg adapter is not registered`.
+selected but the pg adapter is not registered`.
 - **The binary defaults to `hashEmbed`.** `retrieve` and `hybrid_search` need an embedder;
   `hashEmbed()` is lexical and deterministic, not semantic, and the binary logs one line to stderr
   on startup saying so. Pass your own `embed` through the library entry points for real vector

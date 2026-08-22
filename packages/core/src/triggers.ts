@@ -89,10 +89,7 @@ export function matchesTrigger(event: GraphEvent, match: TriggerMatch): boolean 
 }
 
 /** Read dead letters newest-first — the operator's window into what failed and why. */
-export async function deadLetters(
-	raw: DbClient,
-	opts: DeadLetterOpts = {},
-): Promise<DeadLetter[]> {
+export async function deadLetters(raw: DbClient, opts: DeadLetterOpts = {}): Promise<DeadLetter[]> {
 	const conds: string[] = [];
 	const args: SqlValue[] = [];
 	if (opts.subscription !== undefined) {
@@ -221,8 +218,13 @@ export class TriggerRunner<S extends GraphSchema> {
 		private readonly graph: Graph<S>,
 		opts: TriggerRunnerOptions<S>,
 	) {
-		if (opts.concurrency !== undefined && (!Number.isInteger(opts.concurrency) || opts.concurrency < 1)) {
-			throw new Error(`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`);
+		if (
+			opts.concurrency !== undefined &&
+			(!Number.isInteger(opts.concurrency) || opts.concurrency < 1)
+		) {
+			throw new Error(
+				`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`,
+			);
 		}
 		// `retries: 0` would dead-letter every matched event without ever invoking its action,
 		// recording `attempts: 0` and an empty error — a silent black hole rather than a config error.
@@ -250,11 +252,7 @@ export class TriggerRunner<S extends GraphSchema> {
 	 */
 	async runOnce(): Promise<TriggerBatchResult> {
 		if (this.cursor === null) this.cursor = await this.seedCursor();
-		const page = await outboxTail(
-			this.graph.raw,
-			{ seq: this.cursor },
-			{ limit: this.batchSize },
-		);
+		const page = await outboxTail(this.graph.raw, { seq: this.cursor }, { limit: this.batchSize });
 		let delivered = 0;
 		let deadLettered = 0;
 		if (this.concurrency === 1) {

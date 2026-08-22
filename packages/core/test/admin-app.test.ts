@@ -52,7 +52,11 @@ test('create + list tenants round-trips', async () => {
 test('create project under a tenant + list projects', async () => {
 	const s = await setup();
 	const t = await (
-		await s.app.request('/admin/tenants', { method: 'POST', headers: AUTH, body: JSON.stringify({ name: 'Acme' }) })
+		await s.app.request('/admin/tenants', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ name: 'Acme' }),
+		})
 	).json();
 	const ns = `ns_${ulid().toLowerCase()}`;
 	const created = await s.app.request(`/admin/tenants/${t.id}/projects`, {
@@ -70,10 +74,18 @@ test('create project under a tenant + list projects', async () => {
 test('create user, add membership (204), mint api-key (201, key once)', async () => {
 	const s = await setup();
 	const t = await (
-		await s.app.request('/admin/tenants', { method: 'POST', headers: AUTH, body: JSON.stringify({ name: 'Acme' }) })
+		await s.app.request('/admin/tenants', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ name: 'Acme' }),
+		})
 	).json();
 	const u = await (
-		await s.app.request('/admin/users', { method: 'POST', headers: AUTH, body: JSON.stringify({ email: 'a@test.dev' }) })
+		await s.app.request('/admin/users', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ email: 'a@test.dev' }),
+		})
 	).json();
 	expect(u.id.length).toBe(26);
 
@@ -107,7 +119,11 @@ test('invalid body -> 400 (Zod validation mapped)', async () => {
 
 test('duplicate user email -> 400 (constraint mapped, not 500)', async () => {
 	const s = await setup();
-	await s.app.request('/admin/users', { method: 'POST', headers: AUTH, body: JSON.stringify({ email: 'dup@test.dev' }) });
+	await s.app.request('/admin/users', {
+		method: 'POST',
+		headers: AUTH,
+		body: JSON.stringify({ email: 'dup@test.dev' }),
+	});
 	const again = await s.app.request('/admin/users', {
 		method: 'POST',
 		headers: AUTH,

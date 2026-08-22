@@ -21,12 +21,13 @@
 ## Why reachability + verify is correct
 
 Edges are `subject --relation--> object` (src=subject, dst=object). Every rewrite rule is satisfied by tuples forming a `src→dst` chain from the subject to the object:
+
 - direct: `alice --viewer--> doc`
 - computed: `alice --editor--> doc` (editor ⇒ viewer)
 - group: `alice --member--> group:eng --viewer--> doc`
 - ttu: `alice --viewer--> folder:1 --parent--> doc` (the `parent` tuple `doc#parent@folder:1` is the edge `folder:1 --parent--> doc`)
 
-So forward-reachable-from-subject is a **superset** of granted objects. Exclusion/intersection only *remove* grants, never add unreachable ones. Therefore: enumerate reachable objects of `type` (over-approximate), then `check` each (exact). The recursive CTE uses `UNION` (dedups) so cycles terminate.
+So forward-reachable-from-subject is a **superset** of granted objects. Exclusion/intersection only _remove_ grants, never add unreachable ones. Therefore: enumerate reachable objects of `type` (over-approximate), then `check` each (exact). The recursive CTE uses `UNION` (dedups) so cycles terminate.
 
 > **Perf note (deferred to P6):** this is O(reachable) `check` calls, each independent (its own memo). Bounded by `SCAN_CAP` per page. A materialized reverse index (Leopard-style) and shared memo across candidates are P6 optimizations. P5 prioritizes correctness.
 
@@ -48,6 +49,7 @@ packages/auth/src/
 Implement the reachability CTE + verify loop. The public shape (`ListObjectsPage` with `objects` + `nextCursor`) is final from the start; this task ignores `limit`/`cursor` (returns all verified, `nextCursor: null`). Pagination is Task 2.
 
 **Files:**
+
 - Create: `packages/auth/src/list.ts`
 - Modify: `packages/auth/src/auth.ts`, `packages/auth/src/index.ts`
 - Test: `packages/auth/test/p5-list.test.ts`
@@ -236,10 +238,13 @@ export async function runListObjects(
 - [ ] **Step 4: Add `Auth.listObjects` to `packages/auth/src/auth.ts`**
 
 Add the import (merge with existing imports):
+
 ```typescript
 import { type ListObjectsOpts, type ListObjectsPage, runListObjects } from './list.ts';
 ```
+
 Add the method to the `Auth` class (after `expand`):
+
 ```typescript
 	/**
 	 * List the objects of `type` on which `subject` has `relation`. Candidates are found by
@@ -258,6 +263,7 @@ Add the method to the `Auth` class (after `expand`):
 - [ ] **Step 5: Export the new types from `packages/auth/src/index.ts`**
 
 Add to the existing export block:
+
 ```typescript
 export { type ListObjectsOpts, type ListObjectsPage } from './list.ts';
 ```
@@ -281,6 +287,7 @@ git commit -m "feat(auth): listObjects — reachability candidates + verify (P5,
 Wire `limit` + `cursor` into `runListObjects`. Iterate candidates (already `> cursor`, sorted, capped); collect verified objects until `limit`; set `nextCursor` to the last returned id when the page fills, or to the last scanned id when the scan window is full (more may exist), else `null`.
 
 **Files:**
+
 - Modify: `packages/auth/src/list.ts`
 - Test: `packages/auth/test/p5-list.test.ts` (append)
 
@@ -298,7 +305,10 @@ test('P5: paginates by object id — limit then cursor walks the rest', async ()
 	expect(p1.objects).toEqual(['doc:1', 'doc:2']);
 	expect(p1.nextCursor).toBe('doc:2');
 
-	const p2 = await auth.listObjects('user:alice', 'viewer', 'doc', { limit: 2, cursor: p1.nextCursor! });
+	const p2 = await auth.listObjects('user:alice', 'viewer', 'doc', {
+		limit: 2,
+		cursor: p1.nextCursor!,
+	});
 	expect(p2.objects).toEqual(['doc:3']);
 	expect(p2.nextCursor).toBeNull();
 	db.close();
@@ -391,6 +401,6 @@ git commit -m "feat(auth): keyset pagination for listObjects (P5 complete)"
 
 ## Out of scope for P5 (final phase)
 
-| Next plan | Scope |
-|-----------|-------|
-| P6 | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `@graphx/auth`, replace the relative `../../core/src` import) |
+| Next plan | Scope                                                                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P6        | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `@graphx/auth`, replace the relative `../../core/src` import) |

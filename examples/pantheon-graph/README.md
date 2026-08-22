@@ -28,13 +28,13 @@ To run only the API:
 bun run server.ts     # :8788
 ```
 
-| Variable       | Effect                                                             |
-| -------------- | ------------------------------------------------------------------ |
+| Variable       | Effect                                                                                |
+| -------------- | ------------------------------------------------------------------------------------- |
 | `COLLECTOR_DB` | Path to `pantheon_graph.db` (default `../../../pantheon-collector/pantheon_graph.db`) |
-| `PORT`         | API port (default `8788`)                                          |
-| `ADMIN_TOKEN`  | Dev bearer token (default `dev`)                                   |
-| `EMBED_CAP`    | Cap on embedded nodes, `0` for all (default `5000`)                |
-| `FRESH=1`      | Rebuild the graph even if the cache is warm                        |
+| `PORT`         | API port (default `8788`)                                                             |
+| `ADMIN_TOKEN`  | Dev bearer token (default `dev`)                                                      |
+| `EMBED_CAP`    | Cap on embedded nodes, `0` for all (default `5000`)                                   |
+| `FRESH=1`      | Rebuild the graph even if the cache is warm                                           |
 
 The first run takes a few minutes — building the vector index is nearly all of it — and writes
 `pantheon_demo.db` next to this README. Later runs reuse it, and rebuild only when the collector
@@ -44,22 +44,22 @@ database, the schema version, or the embedding settings change.
 
 Roughly 10,400 nodes and 26,900 edges.
 
-| Node type  | Count | What it is                                                            |
-| ---------- | ----- | --------------------------------------------------------------------- |
-| `deity`    | 9,453 | One source's row for one figure — the same god recurs per source       |
-| `domain`   |   840 | A domain of influence (sky, fertility, war), shared across cultures    |
-| `pantheon` |   109 | A named pantheon as one source describes it                            |
-| `source`   |     7 | An upstream dataset, with its license                                  |
+| Node type  | Count | What it is                                                          |
+| ---------- | ----- | ------------------------------------------------------------------- |
+| `deity`    | 9,453 | One source's row for one figure — the same god recurs per source    |
+| `domain`   | 840   | A domain of influence (sky, fertility, war), shared across cultures |
+| `pantheon` | 109   | A named pantheon as one source describes it                         |
+| `source`   | 7     | An upstream dataset, with its license                               |
 
-| Relation      | Count | What it means                                                     |
-| ------------- | ----- | ----------------------------------------------------------------- |
-| `sourced_from`| 9,562 | Provenance: which dataset asserted this row                       |
-| `belongs_to`  | 8,635 | Deity → pantheon                                                  |
-| `has_domain`  | 3,426 | Deity → domain, with the asserting source on the edge             |
-| `same_as`     | 1,911 | Cross-source identity, `weight` = confidence, `data.method` = how  |
-| `parent_of`   | 1,894 | Genealogy, as one source records it                               |
-| `sibling_of`  |   879 |                                                                   |
-| `consort_of`  |   553 |                                                                   |
+| Relation       | Count | What it means                                                     |
+| -------------- | ----- | ----------------------------------------------------------------- |
+| `sourced_from` | 9,562 | Provenance: which dataset asserted this row                       |
+| `belongs_to`   | 8,635 | Deity → pantheon                                                  |
+| `has_domain`   | 3,426 | Deity → domain, with the asserting source on the edge             |
+| `same_as`      | 1,911 | Cross-source identity, `weight` = confidence, `data.method` = how |
+| `parent_of`    | 1,894 | Genealogy, as one source records it                               |
+| `sibling_of`   | 879   |                                                                   |
+| `consort_of`   | 553   |                                                                   |
 
 ### Where the interesting queries are
 
@@ -89,11 +89,11 @@ sample is an even stride over the load order.
 
 ## Layout
 
-| File        | What it does                                                                  |
-| ----------- | ----------------------------------------------------------------------------- |
-| `schema.ts` | The graph schema — four node types, seven relations                           |
+| File        | What it does                                                                       |
+| ----------- | ---------------------------------------------------------------------------------- |
+| `schema.ts` | The graph schema — four node types, seven relations                                |
 | `load.ts`   | Reads the collector database and returns a load plan; no writes, so it is testable |
-| `server.ts` | Builds the graph (cached) and serves it to `@graphx/admin` with a dev token    |
+| `server.ts` | Builds the graph (cached) and serves it to `@graphx/admin` with a dev token        |
 
 `bun test` covers the loader against a hand-built miniature collector database, so it runs without
 the real 30MB corpus — and additionally against the real one when it happens to be present.

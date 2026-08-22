@@ -23,15 +23,15 @@ same way: a third branch in the existing dialect seam, measured by the existing 
 
 ## 2. Requirements settled during brainstorming
 
-| Question | Answer |
-|---|---|
-| Why object storage | Zero-ops distribution, cost at scale, serverless/edge readers |
-| Write model | Direct writes, graphx owns the transaction log — no lakehouse, no catalog DB |
-| Runtime | Node/Bun server or container only |
-| Scale | Design for ~1M nodes; do not block 10M later |
-| Parity scope | Everything: core reads + temporal, retrieval, pattern/journey/algorithms, `serve()`/admin/authz |
-| Reader freshness | Resolve the manifest per query, ETag-revalidated |
-| Commit unit | Auto-commit per mutation; `graph.write(fn)` groups a body into one commit |
+| Question           | Answer                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Why object storage | Zero-ops distribution, cost at scale, serverless/edge readers                                   |
+| Write model        | Direct writes, graphx owns the transaction log — no lakehouse, no catalog DB                    |
+| Runtime            | Node/Bun server or container only                                                               |
+| Scale              | Design for ~1M nodes; do not block 10M later                                                    |
+| Parity scope       | Everything: core reads + temporal, retrieval, pattern/journey/algorithms, `serve()`/admin/authz |
+| Reader freshness   | Resolve the manifest per query, ETag-revalidated                                                |
+| Commit unit        | Auto-commit per mutation; `graph.write(fn)` groups a body into one commit                       |
 
 ## 3. Non-goals for v1
 
@@ -94,7 +94,7 @@ namespace maps to a schema.
 
 ### 6.1 The live/history split
 
-> **Amended during implementation.** This section originally made the split a *local schema*
+> **Amended during implementation.** This section originally made the split a _local schema_
 > decision — `node_versions` as a view over two tables. That breaks every write path: DuckDB
 > rejects `INSERT` into a `UNION ALL` view, while `Graph`'s five mutation methods, `bulkLoad`,
 > `bulkEdges`, and the auth package all write to `node_versions` and `edge_versions` by name,
@@ -112,15 +112,15 @@ namespace maps to a schema.
 
 The layout below describes the **Parquet files in the bucket**, not the local tables:
 
-| manifest key | files | contents |
-|---|---|---|
+| manifest key    | files              | contents                              |
+| --------------- | ------------------ | ------------------------------------- |
 | `node_versions` | `[live, history…]` | live rows first, then closed versions |
-| `edge_versions` | `[live, history…]` | same |
+| `edge_versions` | `[live, history…]` | same                                  |
 
 Locally both load into one table; `nodes` and `edges` are views filtered to
 `valid_to = FOREVER`, exactly as on Postgres.
 
-Every index in graphx is a *partial* index whose predicate is `WHERE valid_to = 8640000000000000`
+Every index in graphx is a _partial_ index whose predicate is `WHERE valid_to = 8640000000000000`
 — `nv_emb_idx`, `ux_single_<rel>`, `ux_<type>_<prop>` (`dialect-sql.ts:424-429`,
 `constraints.ts:60-91`) — and DuckDB has no partial indexes. None of the three survives as a SQL
 index here, and the file split does not rescue any of them:
@@ -181,12 +181,12 @@ configurable and neither affects read correctness.
 
 1. **Resolve head.** `GET _head`, read that manifest, then probe `n+1` until 404. Usually zero
    extra requests; `_head` being stale or racy is harmless because it is only a hint.
-2. **Apply.** Mutations run against a local DuckDB materialized from snapshot *n*.
+2. **Apply.** Mutations run against a local DuckDB materialized from snapshot _n_.
 3. **Upload.** Changed tables are written to Parquet and PUT under their content hash. Unchanged
    tables reuse their existing refs. Content addressing makes every PUT idempotent, so a
    retried or duplicated upload is a no-op and a lost acknowledgement cannot corrupt anything.
 4. **Claim.** `putIfAbsent snapshots/{n+1}.json`. Success commits. Failure means another writer
-   took *n+1*: refetch, rebase the buffered mutations, retry under the existing
+   took _n+1_: refetch, rebase the buffered mutations, retry under the existing
    `WRITE_MAX_RETRIES = 50` bound and jittered backoff (`graph.ts:290,315`).
 5. **Sweep.** Objects orphaned by a lost race are unreferenced garbage, removed by a GC pass.
 
@@ -194,14 +194,14 @@ The only primitive required is create-if-absent. No `If-Match`, no lease, no cat
 
 ### 7.1 Provider support for create-if-absent
 
-| provider | supported | mechanism |
-|---|---|---|
-| AWS S3 | yes — verified live; 12 threads racing one key gave exactly 1 winner and 11×412 | `If-None-Match: *` |
-| Cloudflare R2 | yes, since 2022 | `If-None-Match: *` |
-| MinIO | yes — verified live, identical to S3 on all 11 probes | `If-None-Match: *`; pin a ≥2025 build, older ones accepted `*` without enforcing it |
-| Tigris | yes | `If-None-Match: *` |
-| GCS (S3-compat) | yes, with a different header | `x-goog-if-generation-match: 0`. Google documents `If-None-Match` on PUT for GET/HEAD only, and whether GCS rejects or *silently ignores* it is unknown — silent-ignore would degrade the guard to an unconditional overwrite returning 200 |
-| Backblaze B2 | **no** — neither the S3 API nor the native API has a conditional write | unsupported; throws at config time |
+| provider        | supported                                                                       | mechanism                                                                                                                                                                                                                                   |
+| --------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWS S3          | yes — verified live; 12 threads racing one key gave exactly 1 winner and 11×412 | `If-None-Match: *`                                                                                                                                                                                                                          |
+| Cloudflare R2   | yes, since 2022                                                                 | `If-None-Match: *`                                                                                                                                                                                                                          |
+| MinIO           | yes — verified live, identical to S3 on all 11 probes                           | `If-None-Match: *`; pin a ≥2025 build, older ones accepted `*` without enforcing it                                                                                                                                                         |
+| Tigris          | yes                                                                             | `If-None-Match: *`                                                                                                                                                                                                                          |
+| GCS (S3-compat) | yes, with a different header                                                    | `x-goog-if-generation-match: 0`. Google documents `If-None-Match` on PUT for GET/HEAD only, and whether GCS rejects or _silently ignores_ it is unknown — silent-ignore would degrade the guard to an unconditional overwrite returning 200 |
+| Backblaze B2    | **no** — neither the S3 API nor the native API has a conditional write          | unsupported; throws at config time                                                                                                                                                                                                          |
 
 S3 also documents 409 `ConditionalRequestConflict` when a delete races an in-flight conditional
 PUT, so 409 is treated as a retryable conflict alongside 412.
@@ -237,7 +237,7 @@ that snapshot to completion — a commit landing mid-query cannot disturb it, be
 that query names are immutable and are never overwritten or deleted while referenced.
 
 Files are content-addressed, so the local cache is `cacheDir/<sha256>.parquet` and needs no
-invalidation logic at all. Table references are `read_parquet([...])` over a *mixed* local and
+invalidation logic at all. Table references are `read_parquet([...])` over a _mixed_ local and
 remote file list — a single scan across `s3://`, `http://`, and local paths works, with
 `filename=true` giving per-file provenance — so a file that is not yet cached stays remote and
 the query still runs while the cache warms.
@@ -288,7 +288,7 @@ Every one of these is silent, and every one was reproduced against `@duckdb/node
    so two interleaving async tasks silently merge transactions: in the reproduction, task B's
    autocommit insert was swallowed into task A's rollback, leaving the table empty with no error
    raised. `transaction()` checks a connection out of the pool exclusively for its lifetime.
-4. Multi-statement `run()` returns the *first* SELECT's result if any statement is a SELECT and
+4. Multi-statement `run()` returns the _first_ SELECT's result if any statement is a SELECT and
    the last statement's otherwise, and scrambles `rowsChanged`. `executeMultiple` uses
    `extractStatements` with prepare and run in lockstep.
 5. `RETURNING` zeroes `rowsChanged`, because the statement's return type flips to a query
@@ -314,19 +314,19 @@ This refactor converts that class of bug into a type error.
 
 ### 9.1 Fragments in `dialect-sql.ts`
 
-| fragment | duckdb | note |
-|---|---|---|
-| `scalarMax`, `epochIntType`, `distinctSelect`, `jsonEqArg` | reuse the Postgres branch | `GREATEST`; `BIGINT`, since DuckDB's `INTEGER` is 32-bit and epoch-ms overflows it; real `DISTINCT ON`; `String()` coercion |
-| `insertOrIgnore` | reuse the libSQL branch | DuckDB accepts SQLite's `INSERT OR IGNORE` |
-| `jsonField`, `jsonEqExpr` | new — `json_extract_string(col, '$.k')` | `json_extract` returns *JSON*, so `= 'foo'` is silently false. Highest silent-corruption risk in the port; it reaches every `.where()` in `pattern.ts` |
-| `jsonArrayRows` | new — `unnest(from_json(?::JSON, '["VARCHAR"]'))` | a naive `unnest(json_extract(…))` yields quoted strings and joins to zero rows |
-| `embColumnType` | `FLOAT[]` | Parquet cannot preserve `FLOAT[N]` — even a pyarrow `fixed_size_list` reads back as `FLOAT[]` — so a variable-length list is the honest storage type |
-| `embFreshExpr`, `embRebindExpr` | `from_json(?, '["FLOAT"]')` | needs no `dim`, so the existing signature holds |
-| `embExtract` | `to_json(emb)` | a bare `::VARCHAR` cast renders non-finite floats as `nan`/`inf` and breaks `JSON.parse` at `hybrid.ts:318` |
-| `annSeedsLive`, `annSeedsAsOf`, `vecSeedLive` | Postgres branch shape with `list_cosine_distance` | measured faster than casting to `FLOAT[N]` (0.183s vs 0.406s). As-of ranking improves on libSQL's `MIN(v.id)` rowid proxy — it becomes true distance |
-| `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf` | own BM25, §10.2 | |
-| `vectorIndexDDL`, `ftsTableDDL`, `ftsTriggerDDL` | `''` | no ANN index, no FTS virtual table, no triggers |
-| `postgresSchema` | new `duckdbSchema(dim)` sibling, ~250 lines | `CREATE SEQUENCE` plus `DEFAULT nextval()` for `ver` and `seq`; live/history tables per §6.1 |
+| fragment                                                   | duckdb                                            | note                                                                                                                                                   |
+| ---------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scalarMax`, `epochIntType`, `distinctSelect`, `jsonEqArg` | reuse the Postgres branch                         | `GREATEST`; `BIGINT`, since DuckDB's `INTEGER` is 32-bit and epoch-ms overflows it; real `DISTINCT ON`; `String()` coercion                            |
+| `insertOrIgnore`                                           | reuse the libSQL branch                           | DuckDB accepts SQLite's `INSERT OR IGNORE`                                                                                                             |
+| `jsonField`, `jsonEqExpr`                                  | new — `json_extract_string(col, '$.k')`           | `json_extract` returns _JSON_, so `= 'foo'` is silently false. Highest silent-corruption risk in the port; it reaches every `.where()` in `pattern.ts` |
+| `jsonArrayRows`                                            | new — `unnest(from_json(?::JSON, '["VARCHAR"]'))` | a naive `unnest(json_extract(…))` yields quoted strings and joins to zero rows                                                                         |
+| `embColumnType`                                            | `FLOAT[]`                                         | Parquet cannot preserve `FLOAT[N]` — even a pyarrow `fixed_size_list` reads back as `FLOAT[]` — so a variable-length list is the honest storage type   |
+| `embFreshExpr`, `embRebindExpr`                            | `from_json(?, '["FLOAT"]')`                       | needs no `dim`, so the existing signature holds                                                                                                        |
+| `embExtract`                                               | `to_json(emb)`                                    | a bare `::VARCHAR` cast renders non-finite floats as `nan`/`inf` and breaks `JSON.parse` at `hybrid.ts:318`                                            |
+| `annSeedsLive`, `annSeedsAsOf`, `vecSeedLive`              | Postgres branch shape with `list_cosine_distance` | measured faster than casting to `FLOAT[N]` (0.183s vs 0.406s). As-of ranking improves on libSQL's `MIN(v.id)` rowid proxy — it becomes true distance   |
+| `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf`                   | own BM25, §10.2                                   |                                                                                                                                                        |
+| `vectorIndexDDL`, `ftsTableDDL`, `ftsTriggerDDL`           | `''`                                              | no ANN index, no FTS virtual table, no triggers                                                                                                        |
+| `postgresSchema`                                           | new `duckdbSchema(dim)` sibling, ~250 lines       | `CREATE SEQUENCE` plus `DEFAULT nextval()` for `ver` and `seq`; live/history tables per §6.1                                                           |
 
 ### 9.2 Inline branches
 
@@ -373,7 +373,7 @@ and a centroid partition column for probing top-p files.
 
 DuckDB's `fts` extension cannot index a view or `read_parquet`, never updates incrementally, and
 its `incremental=`, `tokenizer=`, and `layered_search=` parameters exist only in the upstream
-README and not in any released build. What it *does* give us is the shape: its index is six
+README and not in any released build. What it _does_ give us is the shape: its index is six
 ordinary tables (`dict`, `docs`, `terms`, `stats`, `fields`, `stopwords`). Exporting those to
 Parquet and computing BM25 as a plain SQL join reproduced `match_bm25` to the last digit with
 extensions fully disabled.
@@ -400,7 +400,7 @@ written to restore on Postgres.
 ## 11. Constraints
 
 `declareSingleValuedRel` gets no index either. `src` and `rel` are plain columns, but the libSQL
-and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial index to scope
+and Postgres arms scope their unique index to _one_ rel, and DuckDB has no partial index to scope
 with — an unconditional `UNIQUE(src, rel)` would silently make every rel single-valued. The
 declaration is recorded in `graph_meta` and the invariant is upheld by `addEdge`'s existing
 close-then-insert path.
@@ -437,8 +437,7 @@ in JavaScript before the upsert, on every backend.
 ## 13. Error handling
 
 `isRetryableContention` (`graph.ts:297-313`) gains the DuckDB signals — `TransactionContext
-Error: Conflict on …` and `transaction is aborted` — plus the storage-level CAS failures, 412 and
-409. None of them match today's fallback regex, so without this every conflict falls through
+Error: Conflict on …` and `transaction is aborted` — plus the storage-level CAS failures, 412 and 409. None of them match today's fallback regex, so without this every conflict falls through
 `if (!isRetryableContention(e)) throw e` and surfaces as a 500. A commit conflict refetches the
 head, rebases, and retries within the existing bound.
 
@@ -468,8 +467,8 @@ snapshot number has exactly one winner, and intervals remain contiguous and non-
 Rewritten, not skipped.
 
 Backend-specific tests beyond the ported suite: manifest CAS race; crash between object PUT and
-manifest PUT, leaving orphans but no corruption; a reader pinned to snapshot *n* while a writer
-commits *n+1*; cache correctness under `NO_VALIDATION`; BM25 golden against `create_fts_index`;
+manifest PUT, leaving orphans but no corruption; a reader pinned to snapshot _n_ while a writer
+commits _n+1_; cache correctness under `NO_VALIDATION`; BM25 golden against `create_fts_index`;
 and `graphx verify`.
 
 Parity target is the Postgres pass count on the suite as it stands when each stage lands, less

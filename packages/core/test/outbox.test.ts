@@ -169,7 +169,10 @@ test.skipIf(TEST_DRIVER !== 'postgres')(
 );
 
 /** Insert one raw outbox row inside `tx` (IDENTITY assigns `seq` at INSERT). */
-async function insertOutbox(tx: { execute: (s: unknown) => Promise<unknown> }, id: string): Promise<void> {
+async function insertOutbox(
+	tx: { execute: (s: unknown) => Promise<unknown> },
+	id: string,
+): Promise<void> {
 	await tx.execute({
 		sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts) VALUES (?,?,?,?,?,?,?,?)`,
 		args: ['node.create', 'node', id, 'person', null, null, 'insert', Date.now()],
@@ -197,7 +200,10 @@ test.skipIf(TEST_DRIVER !== 'postgres')(
 		await txB.commit();
 
 		// The hazard is real: a naive seq-keyset sees only 'b' while 'a' is still uncommitted.
-		const naive = await reader.execute({ sql: 'SELECT id FROM graph_outbox ORDER BY seq', args: [] });
+		const naive = await reader.execute({
+			sql: 'SELECT id FROM graph_outbox ORDER BY seq',
+			args: [],
+		});
 		expect((naive.rows as Array<{ id: unknown }>).map((r) => String(r.id))).toEqual(['b']);
 
 		// The gate withholds 'b' entirely until 'a' resolves — so a cursor can never advance past 'a'.

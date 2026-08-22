@@ -1,4 +1,28 @@
 import { DuckDBInstance } from '@duckdb/node-api';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import process from 'node:process';
+
+/**
+ * Root for scratch database files and DuckDB spill.
+ *
+ * Bare namespaces used to become plain relative paths, which DuckDB resolves against the
+ * PROCESS CWD — so every `bun test` run, dev server, and git worktree accumulated its own
+ * strand of `ns_*.duckdb` / `test_*.duckdb` files plus `duckdb_temp_storage_*.tmp` spill at
+ * whatever directory the process started in. All gitignored, so thousands of files
+ * (gigabytes) piled up silently. Anchoring them under one directory makes the whole set
+ * discoverable and removable in a single `rm -rf`. Override with `GRAPHX_DATA_DIR`.
+ */
+export function duckDataDir(): string {
+	return process.env.GRAPHX_DATA_DIR ?? join(process.cwd(), '.graphx-data');
+}
+
+/** Absolute path for a namespace's database file, creating the containing directory. */
+export function duckPathFor(namespace: string): string {
+	const dir = duckDataDir();
+	mkdirSync(dir, { recursive: true });
+	return join(dir, `${namespace}.duckdb`);
+}
 
 /**
  * DuckDB connection lifecycle.
@@ -62,15 +86,30 @@ export class DuckPool {
 	private readonly max: number;
 	private closed = false;
 
+	/** Where DuckDB spills to disk. Sibling of the database file; see {@link getInstance}. */
+	private readonly tempDir: string;
+
 	constructor(
 		private readonly path: string,
 		opts: { max?: number } = {},
 	) {
 		this.max = opts.max ?? 4;
+		// `:memory:` has no directory to sit beside, so its spill goes under the data dir.
+		this.tempDir = this.path === ':memory:' ? join(duckDataDir(), 'tmp') : `${this.path}.tmp`;
 	}
 
 	private getInstance(): Promise<DuckDBInstance> {
-		this.instance ??= DuckDBInstance.create(this.path);
+		// `temp_directory` is pinned rather than left at DuckDB's default, which spills into
+		// the PROCESS CWD. A query that outgrows memory then strands multi-gigabyte
+		// `duckdb_temp_storage_*.tmp` files at whatever directory the process happened to
+		// start in — and DuckDB does NOT remove them when it is killed mid-query, which is
+		// the usual way a big query ends. Anchoring the spill next to the database keeps it
+		// in one known, removable place; `max_temp_directory_size` caps a runaway query at a
+		// failed query instead of a full disk.
+		this.instance ??= DuckDBInstance.create(this.path, {
+			temp_directory: this.tempDir,
+			max_temp_directory_size: process.env.GRAPHX_DUCK_MAX_TEMP ?? '16GB',
+		});
 		return this.instance;
 	}
 

@@ -21,24 +21,30 @@ The Cosmograph canvas renders `🤒 Failed to get points data. Missing required 
 ## Areas
 
 ### A. Foundation
+
 - Unified node-type color surfaced via a `TypeDot` / `NodeTypeBadge` primitive used everywhere a type appears.
 - `tabular-nums` for counts, `font-mono` for ULIDs, `shortId()` truncation helper (head+tail of the ULID).
 - Canvas background driven from a token so it matches the dark card surface (not a hard-coded near-black).
 
 ### B. App shell
+
 - Explorer topbar: `tenant / project` breadcrumb, connection/token affordance, right-aligned actions; keeps the sidebar trigger.
 - `Cmd-K` command palette (reuses `ui/command`): jump to node by id, switch tenant/project, open admin, set token, toggle theme.
 
 ### C. Explorer layout
+
 Four resizable panes: **filter rail (sidebar) | node list | graph | docked detail**. Detail is a `ResizablePanel` that appears when a node is selected — not an overlay. Selecting a node docks detail on the right and the graph centers + highlights that node and its neighbors. On mobile (`use-mobile`) detail falls back to the existing `Sheet`.
 
 ### D. Filter rail (sidebar)
+
 Grouped scope + filters, active-filter chips with clear-all, live node count. Keeps comboboxes; better labels/spacing.
 
 ### E. Node list
+
 Type color-dot + badge, denser rows, selected emphasis, keyboard nav (↑/↓ move, ⏎/click select), sticky header, copy-id affordance, real empty/error/loading, count + truncation note.
 
 ### F. Graph canvas
+
 - Fix (above).
 - Toolbar overlay (shadcn buttons + tooltips + hugeicons): fit-to-view, zoom ±, pause/resume simulation, fullscreen.
 - Select → `selectPoint(index, false, true)` (node + connected highlighted) and `zoomToPoint`. Hover → popup with id/type. Empty-canvas click clears selection.
@@ -46,19 +52,24 @@ Type color-dot + badge, denser rows, selected emphasis, keyboard nav (↑/↓ mo
 - Proper WebGL-unavailable + empty states.
 
 ### G. Node detail (docked; shared with mobile Sheet)
+
 - Header: type badge, short id, copy-id, focus-in-graph.
 - Properties tab: key/value view with per-value copy + raw-JSON toggle.
 - Neighbors tab: grouped/labelled by **type** (the neighbors endpoint returns `{id,type,data}` only — no rel/direction), each row a type dot + short id, click to select.
 - History tab: vertical timeline with a rail, per-version `from → to`, `live` badge for the open version.
 
 ### H. Admin + index pages
+
 Polish cards/hierarchy/empty states; copy buttons on ids; API-key reveal-once UX. Index auto-skips the picker when there is a single tenant with a single project.
 
 ### I. Global states
+
 Reusable `EmptyState` (icon + title + hint) for empty/error; skeletons for loading; toasts already wired.
 
 ## Non-goals
+
 New routes, backend/API changes, new data model, graph editing/writes, auth changes.
 
 ## Verification
+
 `bun test` green (incl. updated adapter test), `tsc --noEmit` clean, `eslint` clean, `vite build` succeeds. Dev-server smoke where feasible.

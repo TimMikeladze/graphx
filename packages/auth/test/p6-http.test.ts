@@ -42,7 +42,11 @@ test('P6: /tuples writes, then /check reflects it', async () => {
 	expect(w.status).toBe(200);
 	expect(await w.json()).toEqual({ ok: true });
 
-	const r = await post(app, '/check', { object: 'doc:1', relation: 'viewer', subject: 'user:alice' });
+	const r = await post(app, '/check', {
+		object: 'doc:1',
+		relation: 'viewer',
+		subject: 'user:alice',
+	});
 	expect(r.status).toBe(200);
 	expect(await r.json()).toEqual({ allowed: true }); // via editor⇒viewer
 	db.close();
@@ -57,9 +61,14 @@ test('P6: /check is false for a non-grant', async () => {
 
 test('P6: 401 when authn throws (no token)', async () => {
 	const { db, app } = await freshApp();
-	const r = await post(app, '/check', { object: 'doc:1', relation: 'viewer', subject: 'user:a' }, {
-		'content-type': 'application/json',
-	});
+	const r = await post(
+		app,
+		'/check',
+		{ object: 'doc:1', relation: 'viewer', subject: 'user:a' },
+		{
+			'content-type': 'application/json',
+		},
+	);
 	expect(r.status).toBe(401);
 	db.close();
 });
@@ -117,7 +126,11 @@ test('P6: /list-objects returns a page', async () => {
 			{ object: 'doc:2', relation: 'editor', subject: 'user:alice' },
 		],
 	});
-	const r = await post(app, '/list-objects', { subject: 'user:alice', relation: 'viewer', type: 'doc' });
+	const r = await post(app, '/list-objects', {
+		subject: 'user:alice',
+		relation: 'viewer',
+		type: 'doc',
+	});
 	expect(r.status).toBe(200);
 	expect(await r.json()).toEqual({ objects: ['doc:1', 'doc:2'], nextCursor: null });
 	db.close();
@@ -131,20 +144,24 @@ test('P6: /list-objects paginates via limit + cursor', async () => {
 			{ object: 'doc:2', relation: 'viewer', subject: 'user:alice' },
 		],
 	});
-	const p1 = await (await post(app, '/list-objects', {
-		subject: 'user:alice',
-		relation: 'viewer',
-		type: 'doc',
-		limit: 1,
-	})).json();
+	const p1 = await (
+		await post(app, '/list-objects', {
+			subject: 'user:alice',
+			relation: 'viewer',
+			type: 'doc',
+			limit: 1,
+		})
+	).json();
 	expect(p1).toEqual({ objects: ['doc:1'], nextCursor: 'doc:1' });
-	const p2 = await (await post(app, '/list-objects', {
-		subject: 'user:alice',
-		relation: 'viewer',
-		type: 'doc',
-		limit: 1,
-		cursor: 'doc:1',
-	})).json();
+	const p2 = await (
+		await post(app, '/list-objects', {
+			subject: 'user:alice',
+			relation: 'viewer',
+			type: 'doc',
+			limit: 1,
+			cursor: 'doc:1',
+		})
+	).json();
 	expect(p2).toEqual({ objects: ['doc:2'], nextCursor: 'doc:2' });
 	db.close();
 });

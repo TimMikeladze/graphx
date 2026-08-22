@@ -43,6 +43,7 @@ packages/auth/src/
 `RewriteExpr` gains three node kinds. The builder accumulates positive terms (`self` + `.or`), intersections (`.and`), and subtractions (`.minus`) with fixed precedence: **`(self ∪ or-terms) ∩ and-terms − minus-terms`**. `tupleToUserset(tupleset, computed)` returns a ttu node usable as an operand to `.or`/`.and`/`.minus`. Validation: a `computed` operand must name a same-type relation; a ttu's `tupleset` must name a same-type relation (its `computed` is evaluated on the parent's type at runtime, so it is not checked here).
 
 **Files:**
+
 - Modify: `packages/auth/src/model.ts`
 - Test: `packages/auth/test/p3-model.test.ts`
 
@@ -118,7 +119,12 @@ Expected: FAIL — `tupleToUserset`/`.and`/`.minus` not exported / shapes mismat
 
 ```typescript
 import { z } from 'zod';
-import { defineGraphSchema, type EdgeDef, type GraphSchema, type ZObj } from '../../core/src/index.ts';
+import {
+	defineGraphSchema,
+	type EdgeDef,
+	type GraphSchema,
+	type ZObj,
+} from '../../core/src/index.ts';
 
 /**
  * A userset rewrite expression.
@@ -300,12 +306,14 @@ git commit -m "feat(auth): tuple-to-userset + set-ops in model DSL (P3)"
 Three new `evalExpr` cases. `ttu` collects parents (`edgesInto(object, tupleset)` → each `src`) and checks `computed` on each (climbing the hierarchy via the existing `check` recursion + memo + cycle guard). `intersection` requires all children; `exclusion` is base-true AND subtract-false. All three reuse the one `asOf` snapshot.
 
 **Files:**
+
 - Modify: `packages/auth/src/check.ts`
 - Test: covered by Task 3's `p3-check.test.ts` (exercised through `Auth.check`).
 
 - [ ] **Step 1: Update `evalExpr` in `packages/auth/src/check.ts`**
 
 Replace the `evalExpr` function with (adds `ttu`/`intersection`/`exclusion`; keeps `self`/`computed`/`union`):
+
 ```typescript
 /** Evaluate one rewrite node under (object, relation, subject). */
 async function evalExpr(
@@ -371,6 +379,7 @@ git commit -m "feat(auth): evaluate ttu / intersection / exclusion (P3)"
 Exercise hierarchy inheritance (single + recursive), exclusion (deny + non-over-deny), intersection, and ttu+asOf through `Auth`. Export the new public symbols.
 
 **Files:**
+
 - Modify: `packages/auth/src/index.ts`
 - Test: `packages/auth/test/p3-check.test.ts`
 
@@ -483,6 +492,7 @@ Expected: FAIL — `tupleToUserset` not exported from where the test imports it 
 - [ ] **Step 3: Update `packages/auth/src/index.ts`**
 
 Add the new public symbols to the existing export block:
+
 ```typescript
 export {
 	type AuthModel,
@@ -495,6 +505,7 @@ export {
 	tupleToUserset,
 } from './model.ts';
 ```
+
 (Keep the other existing exports — `Auth`, `CheckOpts`, `Tuple`, `VERSION` — unchanged.)
 
 - [ ] **Step 4: Full suite + type-check + lint**
@@ -535,8 +546,8 @@ git commit -m "feat(auth): P3 complete — hierarchy inheritance + set-ops green
 
 ## Out of scope for P3 (next plans)
 
-| Next plan | Scope |
-|-----------|-------|
-| P4 | `expand(object, relation)` → the full userset tree |
-| P5 | `listObjects(subject, relation, type)` (reverse-expand + verify) |
-| P6 | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging |
+| Next plan | Scope                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| P4        | `expand(object, relation)` → the full userset tree                                                |
+| P5        | `listObjects(subject, relation, type)` (reverse-expand + verify)                                  |
+| P6        | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging |

@@ -4,7 +4,7 @@ Date: 2026-07-27
 
 ## Purpose
 
-Find where graphx is slow. The repo has a retrieval-*quality* harness
+Find where graphx is slow. The repo has a retrieval-_quality_ harness
 (`packages/core/test/eval-golden.test.ts`, `eval-metrics.ts`) but nothing that
 measures time. This spec covers a performance harness whose job is to expose
 bottlenecks — missing indexes, N+1 query shapes, walk blowups, superlinear
@@ -47,15 +47,15 @@ Suite files export a case list. A case is:
 
 ```ts
 interface BenchCase {
-  name: string;
-  /** Scales this case runs at. Defaults to all. */
-  scales?: Scale[];
-  /** Whether the case mutates the database — decides state restore. */
-  mutates?: boolean;
-  /** Per-scale one-time preparation, outside the timed region. */
-  setup?: (ctx: BenchContext) => Promise<unknown>;
-  /** The timed call. `i` is the iteration index, for input variation. */
-  run: (ctx: BenchContext, i: number) => Promise<unknown>;
+	name: string;
+	/** Scales this case runs at. Defaults to all. */
+	scales?: Scale[];
+	/** Whether the case mutates the database — decides state restore. */
+	mutates?: boolean;
+	/** Per-scale one-time preparation, outside the timed region. */
+	setup?: (ctx: BenchContext) => Promise<unknown>;
+	/** The timed call. `i` is the iteration index, for input variation. */
+	run: (ctx: BenchContext, i: number) => Promise<unknown>;
 }
 ```
 
@@ -97,7 +97,7 @@ directly rather than smeared across everything else.
 Consequence worth stating: at 100k nodes, semantic search sees a 5k-node sample
 of the graph. `applyPlan` takes that sample by an even stride over a load order
 already interleaved by type and community, so it stays representative — but
-retrieval *recall* numbers from this harness are not meaningful, only timings.
+retrieval _recall_ numbers from this harness are not meaningful, only timings.
 Recall is the quality harness's job.
 
 ## Timing method
@@ -109,8 +109,7 @@ For each case at each scale:
    and prepared query plans, which would otherwise land entirely in the first
    measured sample.
 3. Iterate until 2s of measured time has elapsed or `--iters` is reached,
-   whichever comes first, with a floor of 5 iterations. `--iters` defaults to
-   100. Slow ops therefore get few samples and fast ops get many, without
+   whichever comes first, with a floor of 5 iterations. `--iters` defaults to 100. Slow ops therefore get few samples and fast ops get many, without
    per-case tuning.
 4. Record every sample.
 

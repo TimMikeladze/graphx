@@ -13,7 +13,12 @@ import {
 import { evict } from '../src/db.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
-import { InMemoryMetrics, NOOP_METRICS, QueryTimeoutError, withTimeout } from '../src/governance.ts';
+import {
+	InMemoryMetrics,
+	NOOP_METRICS,
+	QueryTimeoutError,
+	withTimeout,
+} from '../src/governance.ts';
 import { createApp, createReadiness } from '../src/serve.ts';
 import { makeTestDb } from './harness.ts';
 
@@ -51,7 +56,11 @@ test('P15 obs: withTimeout emits ONE slow-query record when elapsed > timeoutMs/
 	// ms=600 → threshold 300. work sleeps 350ms: elapsed ≥ 350 > 300 is GUARANTEED (load
 	// only grows elapsed, never shrinks it), and 350 ≪ 600 so the work completes well before
 	// the abandonment timer (250ms upper slack survives parallel-suite load).
-	const v = await withTimeout(sleep(350).then(() => 'ok'), 600, { op: 'test.slow', sink });
+	const v = await withTimeout(
+		sleep(350).then(() => 'ok'),
+		600,
+		{ op: 'test.slow', sink },
+	);
 	expect(v).toBe('ok');
 	expect(sink.observations('graphx_query_slow_ms').length).toBe(1);
 	expect(sink.histograms.find((h) => h.name === 'graphx_query_slow_ms')?.labels?.op).toBe(
@@ -63,7 +72,11 @@ test('P15 obs: withTimeout emits NO slow-query record for a fast query (< timeou
 	const sink = new InMemoryMetrics();
 	// ms=2000 → threshold 1000. work resolves at ~10ms (timer is cleared on settle, so the
 	// test stays ~10ms despite the large budget); even heavy load can't drift 10ms past 1000ms.
-	const v = await withTimeout(sleep(10).then(() => 'fast'), 2000, { op: 'test.fast', sink });
+	const v = await withTimeout(
+		sleep(10).then(() => 'fast'),
+		2000,
+		{ op: 'test.fast', sink },
+	);
 	expect(v).toBe('fast');
 	expect(sink.observations('graphx_query_slow_ms').length).toBe(0);
 });
@@ -73,7 +86,11 @@ test('P15 obs: withTimeout records slow on the timeout/abandonment path too', as
 	// ms=40 → threshold 20; work sleeps 400ms → the timer fires first (abandonment), well
 	// before the work; elapsed ≈ 40 > 20 → recorded once.
 	await expect(
-		withTimeout(sleep(400).then(() => 'late'), 40, { op: 'test.timeout', sink }),
+		withTimeout(
+			sleep(400).then(() => 'late'),
+			40,
+			{ op: 'test.timeout', sink },
+		),
 	).rejects.toBeInstanceOf(QueryTimeoutError);
 	expect(sink.observations('graphx_query_slow_ms').length).toBe(1); // recorded once, no double
 });
@@ -82,7 +99,12 @@ test('P15 obs: withTimeout WITHOUT a sink is unchanged (additive — no throw, r
 	expect(await withTimeout(Promise.resolve('x'), 200)).toBe('x');
 	// a delayed (timer-armed) query with no sink still just returns — no metric, no behavior
 	// change. ms=2000 so the work (≈50ms) resolves long before the timer regardless of load.
-	expect(await withTimeout(sleep(50).then(() => 'y'), 2000)).toBe('y');
+	expect(
+		await withTimeout(
+			sleep(50).then(() => 'y'),
+			2000,
+		),
+	).toBe('y');
 });
 
 // --- serve: /health, /ready, per-tenant counter, traversal histogram ---

@@ -24,6 +24,7 @@
 ### Task 1: Scaffold the `ingest` package
 
 **Files:**
+
 - Create: `packages/ingest/package.json`
 - Create: `packages/ingest/tsconfig.json`
 - Create: `packages/ingest/src/types.ts`
@@ -31,6 +32,7 @@
 - Modify: `bunup.config.ts`
 
 **Interfaces:**
+
 - Produces: the public types `ParsedFile`, `IngestOptions<S>`, `IngestResult` and a stub `ingestDir` (real body lands in Task 6/7). Later tasks import these from `../src/types.ts` and `../src/index.ts`.
 
 - [ ] **Step 1: Create `packages/ingest/package.json`**
@@ -185,10 +187,12 @@ git commit -m "feat(ingest): scaffold package (types + stub ingestDir)"
 ### Task 2: `parseFile`
 
 **Files:**
+
 - Create: `packages/ingest/src/parse.ts`
 - Test: `packages/ingest/test/parse.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ParsedFile` from `./types.ts`.
 - Produces: `export function parseFile(key: string, raw: string): ParsedFile`.
 
@@ -269,10 +273,12 @@ git commit -m "feat(ingest): parseFile (frontmatter/body/hash)"
 ### Task 3: `extractLinks`
 
 **Files:**
+
 - Create: `packages/ingest/src/links.ts`
 - Test: `packages/ingest/test/links.test.ts`
 
 **Interfaces:**
+
 - Produces: `export interface Link { kind: 'wiki' | 'path'; target: string }` and `export function extractLinks(body: string): Link[]`.
 
 - [ ] **Step 1: Write the failing test — `packages/ingest/test/links.test.ts`**
@@ -289,9 +295,7 @@ test('extractLinks: wikilinks (with alias stripped)', () => {
 });
 
 test('extractLinks: relative markdown links, external/anchor ignored', () => {
-	expect(
-		extractLinks('[x](./b.md) [y](../d.md) [ext](https://e.com) [a](#frag)'),
-	).toEqual([
+	expect(extractLinks('[x](./b.md) [y](../d.md) [ext](https://e.com) [a](#frag)')).toEqual([
 		{ kind: 'path', target: './b.md' },
 		{ kind: 'path', target: '../d.md' },
 	]);
@@ -353,10 +357,12 @@ git commit -m "feat(ingest): extractLinks (wikilinks + relative md links)"
 ### Task 4: `buildPathIndex` + `resolveLink`
 
 **Files:**
+
 - Create: `packages/ingest/src/resolve.ts`
 - Test: `packages/ingest/test/resolve.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Link` from `./links.ts`.
 - Produces: `export interface PathIndex { byPath: Set<string>; byBasename: Map<string, string[]> }`, `export function buildPathIndex(keys: string[]): PathIndex`, `export function resolveLink(link: Link, fromKey: string, index: PathIndex): string | null`.
 
@@ -448,10 +454,12 @@ git commit -m "feat(ingest): path index + link resolution"
 ### Task 5: `discover`
 
 **Files:**
+
 - Create: `packages/ingest/src/discover.ts`
 - Test: `packages/ingest/test/discover.test.ts`
 
 **Interfaces:**
+
 - Produces: `export const DEFAULT_INCLUDE: string[]` and `export async function discover(dir: string, include: string[]): Promise<string[]>` (sorted relative POSIX keys).
 
 - [ ] **Step 1: Write the failing test — `packages/ingest/test/discover.test.ts`**
@@ -529,11 +537,13 @@ git commit -m "feat(ingest): recursive file discovery by extension"
 ### Task 6: `ingestDir` — node reconciliation (add / idempotent / update)
 
 **Files:**
+
 - Create: `packages/ingest/src/ingest.ts`
 - Modify: `packages/ingest/src/index.ts` (re-export from `./ingest.ts`, drop the stub)
 - Test: `packages/ingest/test/ingest.test.ts`
 
 **Interfaces:**
+
 - Consumes: `parseFile` (Task 2), `discover`/`DEFAULT_INCLUDE` (Task 5), types (Task 1).
 - Produces: `export async function ingestDir<S extends GraphSchema>(opts: IngestOptions<S>): Promise<IngestResult>`. Edge reconciliation is added in Task 7 — this task leaves `edgesAdded`/`edgesClosed` at 0.
 
@@ -697,7 +707,10 @@ async function loadLiveMap(g: LooseGraph): Promise<Map<string, LiveEntry>> {
 	return map;
 }
 
-function resolveKind(file: ParsedFile, kindOf?: (f: ParsedFile) => string | undefined): string | undefined {
+function resolveKind(
+	file: ParsedFile,
+	kindOf?: (f: ParsedFile) => string | undefined,
+): string | undefined {
 	const explicit = kindOf?.(file);
 	if (explicit) return explicit;
 	if (typeof file.frontmatter.kind === 'string') return file.frontmatter.kind;
@@ -807,10 +820,12 @@ git commit -m "feat(ingest): ingestDir node reconciliation (add/idempotent/updat
 ### Task 7: `ingestDir` — edge reconciliation
 
 **Files:**
+
 - Modify: `packages/ingest/src/ingest.ts`
 - Test: `packages/ingest/test/ingest.test.ts` (add cases)
 
 **Interfaces:**
+
 - Consumes: `extractLinks`/`Link` (Task 3), `buildPathIndex`/`resolveLink` (Task 4).
 - Produces: edge counts in `IngestResult`; `links_to` edges between file nodes.
 
@@ -872,7 +887,10 @@ async function liveOutEdges(
 	g: LooseGraph,
 	srcId: string,
 ): Promise<Array<{ id: string; rel: string; dst: string }>> {
-	const r = await g.raw.execute({ sql: 'SELECT id, rel, dst FROM edges WHERE src = ?', args: [srcId] });
+	const r = await g.raw.execute({
+		sql: 'SELECT id, rel, dst FROM edges WHERE src = ?',
+		args: [srcId],
+	});
 	return r.rows.map((row) => ({ id: String(row.id), rel: String(row.rel), dst: String(row.dst) }));
 }
 
@@ -882,8 +900,8 @@ const REL = 'links_to';
 In the node loop, record the id of every current file's node so links can resolve, and remember which files were touched. Change the three branches to capture ids and push touched files. Replace the node loop's body so it builds these two structures (declare them before the loop):
 
 ```ts
-	const keyToId = new Map<string, string>();
-	const touched: ParsedFile[] = [];
+const keyToId = new Map<string, string>();
+const touched: ParsedFile[] = [];
 ```
 
 - new branch: after `await g.addNode(...)`, capture `const node = await g.addNode(...); keyToId.set(file.key, node.id); touched.push(file); result.added++;`
@@ -893,41 +911,41 @@ In the node loop, record the id of every current file's node so links can resolv
 Then after the node loop, add the edge-reconciliation pass:
 
 ```ts
-	const index = buildPathIndex(files.map((f) => f.key));
-	for (const file of touched) {
-		const srcId = keyToId.get(file.key);
-		if (!srcId) continue;
-		const desired = new Set<string>();
-		for (const link of extractLinks(file.body)) {
-			const targetKey = resolveLink(link, file.key, index);
-			if (!targetKey) {
-				result.skipped.push({ key: file.key, reason: `unresolved link: ${link.target}` });
-				continue;
-			}
-			const dst = keyToId.get(targetKey);
-			if (dst && dst !== srcId) desired.add(dst);
+const index = buildPathIndex(files.map((f) => f.key));
+for (const file of touched) {
+	const srcId = keyToId.get(file.key);
+	if (!srcId) continue;
+	const desired = new Set<string>();
+	for (const link of extractLinks(file.body)) {
+		const targetKey = resolveLink(link, file.key, index);
+		if (!targetKey) {
+			result.skipped.push({ key: file.key, reason: `unresolved link: ${link.target}` });
+			continue;
 		}
-		const existing = await liveOutEdges(g, srcId);
-		const have = new Set(existing.filter((e) => e.rel === REL).map((e) => e.dst));
-		for (const dst of desired) {
-			if (!have.has(dst)) {
-				try {
-					await g.addEdge({ rel: REL, src: srcId, dst });
-					result.edgesAdded++;
-				} catch (err) {
-					result.skipped.push({ key: file.key, reason: (err as Error).message });
-				}
-			}
-		}
-		for (const e of existing) {
-			if (e.rel === REL && !desired.has(e.dst)) {
-				await g.deleteEdge(e.id);
-				result.edgesClosed++;
+		const dst = keyToId.get(targetKey);
+		if (dst && dst !== srcId) desired.add(dst);
+	}
+	const existing = await liveOutEdges(g, srcId);
+	const have = new Set(existing.filter((e) => e.rel === REL).map((e) => e.dst));
+	for (const dst of desired) {
+		if (!have.has(dst)) {
+			try {
+				await g.addEdge({ rel: REL, src: srcId, dst });
+				result.edgesAdded++;
+			} catch (err) {
+				result.skipped.push({ key: file.key, reason: (err as Error).message });
 			}
 		}
 	}
+	for (const e of existing) {
+		if (e.rel === REL && !desired.has(e.dst)) {
+			await g.deleteEdge(e.id);
+			result.edgesClosed++;
+		}
+	}
+}
 
-	return result;
+return result;
 ```
 
 (Remove the old `return result;` that followed the node loop — there must be exactly one, after the edge pass.)
@@ -956,6 +974,7 @@ git commit -m "feat(ingest): edge reconciliation (links_to add/close)"
 ### Task 8: Package README + full verification
 
 **Files:**
+
 - Create: `packages/ingest/README.md`
 
 **Interfaces:** none (docs + final gate).
@@ -974,8 +993,8 @@ import { ingestDir } from 'ingest';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
-  nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
-  edges: { links_to: { from: 'note', to: 'note' } },
+	nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
+	edges: { links_to: { from: 'note', to: 'note' } },
 });
 
 const db = getDb('my-vault');
@@ -983,9 +1002,9 @@ await init(db, 768);
 const graph = new Graph(db, schema);
 
 const result = await ingestDir({
-  dir: './vault',
-  graph,
-  embed: async (text) => myEmbedder(text), // (text: string) => Promise<number[]>
+	dir: './vault',
+	graph,
+	embed: async (text) => myEmbedder(text), // (text: string) => Promise<number[]>
 });
 // { added, updated, unchanged, edgesAdded, edgesClosed, skipped }
 ```
@@ -1012,6 +1031,7 @@ See [`docs/superpowers/specs/2026-06-17-file-ingest-static-graph-design.md`](../
 - [ ] **Step 2: Full matrix verification**
 
 Run each and confirm:
+
 - `bun run build` → emits `packages/ingest/dist/index.js` + `index.d.ts`
 - `bun run type-check` → all packages exit 0
 - `bun run lint` → exit 0
@@ -1030,6 +1050,7 @@ git commit -m "docs(ingest): package README"
 ## Self-Review
 
 **Spec coverage:**
+
 - Convention 1 file = 1 node → Tasks 2, 6 (`resolveKind`, props/body/uri mapping). ✓
 - Identity in `uri`/`content_hash` columns → Task 6 (`loadLiveMap`, `addNode` uri). ✓
 - Incremental temporal upsert (add/update/skip by hash) → Task 6. ✓

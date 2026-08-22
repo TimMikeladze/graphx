@@ -29,13 +29,13 @@ Each is a separate spec, in rough priority order:
 
 ## 3. Decisions (resolved during brainstorming)
 
-| Fork | Decision |
-|---|---|
+| Fork                       | Decision                                                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Fix the `asOf` leak where? | **In `packages/core`.** Neighbors at an as-of time cannot be derived client-side — the graph slice is type/`q`-filtered and row-capped, so a derived neighbor list would be silently wrong. |
-| Control placement | **Docked timeline bar** under the canvas. Always visible; a popover hides the one thing the user said was missing. |
-| Timeline data | **One new `GET /timeline`** returning range + buckets + ticks, windowable by `from`/`to`. |
-| Editing while in the past | **Read-only mode.** A write from a historical view lands on the live version — a silent footgun. |
-| v1 bar controls | Scrub + snap, density histogram, prev/next step, play. All four. |
+| Control placement          | **Docked timeline bar** under the canvas. Always visible; a popover hides the one thing the user said was missing.                                                                          |
+| Timeline data              | **One new `GET /timeline`** returning range + buckets + ticks, windowable by `from`/`to`.                                                                                                   |
+| Editing while in the past  | **Read-only mode.** A write from a historical view lands on the live version — a silent footgun.                                                                                            |
+| v1 bar controls            | Scrub + snap, density histogram, prev/next step, play. All four.                                                                                                                            |
 
 ## 4. Change points
 
@@ -57,12 +57,12 @@ this feature.
 
 `packages/core/src/graph.ts` — four read methods gain `asOf?: number`:
 
-| Method | Today | Change |
-|---|---|---|
-| `getNode` | `FROM nodes WHERE id = ?` | as-of ⇒ `FROM node_versions nv WHERE nv.id = ? AND nv.valid_from <= ? AND ? < nv.valid_to` |
-| `getNodeContent` | same view, content columns | same substitution |
-| `neighbors` | `neighborSubquery` over the `edges` view | as-of ⇒ `edge_versions` with the temporal predicate; the `nodes` join likewise |
-| `neighborsPage` | shares `neighborSubquery` | inherits the same change |
+| Method           | Today                                    | Change                                                                                     |
+| ---------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `getNode`        | `FROM nodes WHERE id = ?`                | as-of ⇒ `FROM node_versions nv WHERE nv.id = ? AND nv.valid_from <= ? AND ? < nv.valid_to` |
+| `getNodeContent` | same view, content columns               | same substitution                                                                          |
+| `neighbors`      | `neighborSubquery` over the `edges` view | as-of ⇒ `edge_versions` with the temporal predicate; the `nodes` join likewise             |
+| `neighborsPage`  | shares `neighborSubquery`                | inherits the same change                                                                   |
 
 `neighborSubquery` is the single place the edge side is built, and both neighbor methods
 already route through it — so the edge half is one edit, and the node-join half is one more.
@@ -94,20 +94,20 @@ as `GET /t/{tenant}/p/{project}/timeline` (tag `read`, `requireGraph(cfg, 'read'
 
 ```ts
 interface Timeline {
-  /** Full extent of the graph's change points, ignoring from/to. null on an empty graph. */
-  min: number | null
-  max: number | null
-  /** Change-point count over the full extent. */
-  total: number
-  /** The window actually bucketed (echoes from/to, resolved against the extent). */
-  from: number
-  to: number
-  /** Length === buckets. Change-point counts per equal-width slot over [from, to]. */
-  buckets: number[]
-  /** Distinct change timestamps in [from, to], ascending. Drives snap and step. */
-  ticks: number[]
-  /** True when ticks hit the cap — snap/step fall back to bucket edges outside the window. */
-  ticksTruncated: boolean
+	/** Full extent of the graph's change points, ignoring from/to. null on an empty graph. */
+	min: number | null;
+	max: number | null;
+	/** Change-point count over the full extent. */
+	total: number;
+	/** The window actually bucketed (echoes from/to, resolved against the extent). */
+	from: number;
+	to: number;
+	/** Length === buckets. Change-point counts per equal-width slot over [from, to]. */
+	buckets: number[];
+	/** Distinct change timestamps in [from, to], ascending. Drives snap and step. */
+	ticks: number[];
+	/** True when ticks hit the cap — snap/step fall back to bucket edges outside the window. */
+	ticksTruncated: boolean;
 }
 ```
 
@@ -252,11 +252,11 @@ Any manual interaction — scrub, step, preset, Now — pauses.
 
 ## 12. Risks
 
-| Risk | Mitigation |
-|---|---|
-| Postgres int4 overflow in bucketing | `CAST(... AS BIGINT)`; covered by a bucket test on both drivers |
-| Division by zero when all changes share one instant | Explicit guard before the query; a dedicated test |
-| Cosmograph relayout thrash during play | Pin the simulation for the duration of playback |
-| `asOf` in query keys breaking invalidation | Append at the end; prefix matching is unchanged, and a test asserts it |
-| Timeline bar eats canvas height | Collapses to a readout on mobile |
-| Tick cap on a busy project | `ticksTruncated` is returned, and the window narrows on zoom |
+| Risk                                                | Mitigation                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------------- |
+| Postgres int4 overflow in bucketing                 | `CAST(... AS BIGINT)`; covered by a bucket test on both drivers        |
+| Division by zero when all changes share one instant | Explicit guard before the query; a dedicated test                      |
+| Cosmograph relayout thrash during play              | Pin the simulation for the duration of playback                        |
+| `asOf` in query keys breaking invalidation          | Append at the end; prefix matching is unchanged, and a test asserts it |
+| Timeline bar eats canvas height                     | Collapses to a readout on mobile                                       |
+| Tick cap on a busy project                          | `ticksTruncated` is returned, and the window narrows on zoom           |

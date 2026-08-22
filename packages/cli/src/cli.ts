@@ -433,7 +433,7 @@ async function runNew(argv: string[]): Promise<void> {
 	console.log(
 		`Scaffolded graphx project in ${dir}/\n\n` +
 			`  cd ${dir}\n` +
-			`  bun install        # resolves @graphx/* from your registry (see README if not published)\n` +
+			`  bun install        # pulls @graphx/core and @graphx/cli from npm\n` +
 			`  bun run serve      # http://localhost:8899\n`,
 	);
 }
@@ -485,16 +485,15 @@ export default {
 const SCAFFOLD_README = `# graphx app
 
 \`\`\`sh
-bun install              # resolves @graphx/* from your registry (see below if not published)
+bun install              # pulls @graphx/core and @graphx/cli from npm
 bun run serve            # http://localhost:8899  (GET /demo, GET /docs, GET /openapi.json)
 bun run ingest           # ingest ./vault into the graph
 \`\`\`
 
-Not published yet? \`bun install\` can't resolve \`@graphx/*\` from a registry, and the source
-packages use the \`workspace:\` protocol so they can't be \`file:\`-linked directly. Until they're
-published, develop this app **inside the graphx repo** — add its path to the repo's root
-\`package.json\` \`workspaces\` array, then \`bun install\` from the repo root (the \`workspace:\`
-deps resolve there).
+Working against an unreleased graphx instead of npm? The source packages use the \`workspace:\`
+protocol, so they can't be \`file:\`-linked — develop this app **inside the graphx repo**: add its
+path to the repo's root \`package.json\` \`workspaces\` array, then \`bun install\` from the repo
+root.
 
 Edit \`graphx.config.ts\` to shape your graph. Point a \`@graphx/react\` client at the server with
 \`<GraphProvider bootstrap="/demo" fetch={...} />\`.

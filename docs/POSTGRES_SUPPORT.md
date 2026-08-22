@@ -2,7 +2,7 @@
 
 ## Status (as of this branch)
 
-- **Phase 0 — Dialect type seam: DONE.** New `packages/core/src/dialect.ts` (neutral `DbClient`/`SqlStatement`/`SqlValue`/`SqlRow`/`DbTransaction` + `Dialect`/`dialectOf`, aliasing libSQL types 1:1 so a real `Client` stays assignable). All 12 dialect-touching core modules now type against `DbClient` instead of `@libsql/client`. Divergent DDL extracted to `packages/core/src/dialect-sql.ts` (libSQL impl; Postgres branches `throw` "later phase"). `init()`/`declareUniqueNodeProp()` guard the Postgres path. Neutral types exported from the public API (additive). **Scope note:** the heavy *query* SQL (vector_top_k, json_each, FTS5 MATCH, recursive-CTE walks) was left in place and routed through the seam — its Postgres form is a structural rewrite written whole in Phases 3–4, not a Phase-0 fragment swap. The `auth` package still imports `@libsql/client` (DbClient is assignable to Client); it neutralizes alongside its own SQL rewrites (Phase 2/5).
+- **Phase 0 — Dialect type seam: DONE.** New `packages/core/src/dialect.ts` (neutral `DbClient`/`SqlStatement`/`SqlValue`/`SqlRow`/`DbTransaction` + `Dialect`/`dialectOf`, aliasing libSQL types 1:1 so a real `Client` stays assignable). All 12 dialect-touching core modules now type against `DbClient` instead of `@libsql/client`. Divergent DDL extracted to `packages/core/src/dialect-sql.ts` (libSQL impl; Postgres branches `throw` "later phase"). `init()`/`declareUniqueNodeProp()` guard the Postgres path. Neutral types exported from the public API (additive). **Scope note:** the heavy _query_ SQL (vector_top_k, json_each, FTS5 MATCH, recursive-CTE walks) was left in place and routed through the seam — its Postgres form is a structural rewrite written whole in Phases 3–4, not a Phase-0 fragment swap. The `auth` package still imports `@libsql/client` (DbClient is assignable to Client); it neutralizes alongside its own SQL rewrites (Phase 2/5).
 - **Phase 1 — Test harness: DONE.** New `packages/core/test/harness.ts` exposes `makeTestDb({file?})` branching on `GRAPHX_TEST_DRIVER` (libsql default; postgres throws), plus a `sibling()` factory for multi-connection contention tests. All 33 test files obtain connections via the harness — the only `createClient` outside it is `p12-serve.ts` inspecting a `getDb`-managed namespace file (rebuilt in Phase 5).
 - **Phase 2 — Postgres adapter + schema + emb storage: FOUNDATION DONE.** New `packages/core/src/pg.ts` (`PgClient implements DbClient` over `pg.Pool`: `?`→`$n` rewrite skipping string literals, result-shape mapping, interactive tx, multi-statement DDL, lazy `CREATE SCHEMA`/`CREATE EXTENSION`). `pg` added as optional peer + dev dep. `postgresSchema(dim)` in `dialect-sql.ts` (bigint identity `ver`, `vector(dim)` emb, generated STORED `tsvector` + GIN, `props` text, `CREATE OR REPLACE VIEW`). `init()` runs it for PG. Embedding INSERT/carry-forward use `embFreshExpr`/`embRebindExpr` (`vector(?)` ↔ `?::vector`). `makeTestDb` PG mode = schema-per-test against a `pgvector/pgvector:pg16` container (`GRAPHX_TEST_PG_URL`, default `:5455`), dropped on teardown. `getDb`/`DbConfig` left libSQL-only on purpose (PG tenant model is Phase 5) so `pg` stays off the main import.
 - **Verification:** libSQL **362 pass / 0 fail**, type-check (3 pkgs) + lint green — zero behavior change. Postgres: **174 / 366 pass**. The 192 failures triage exactly to the remaining phases:
@@ -38,6 +38,7 @@
 **libSQL 362/362 · Postgres 344 pass + 18 skip + 0 fail · lint+type green.** Every Postgres-applicable test passes. The 18 skips are libSQL-native capability/mechanics probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, F32_BLOB/vector_top_k, FTS5 virtual table, deferred-index speedup) with no Postgres analog — the user-facing contracts they cover are exercised by cross-backend tests. The user-facing API is unchanged; backend is selected by config (`DbConfig.driver` / `GRAPHX_DB_DRIVER`) only.
 
 **Phase 6 — polish (NOT parity-blocking):**
+
 - ✅ `core/pg` subpath **export** in `packages/core/package.json` (`./pg` → `dist/pg.{js,d.ts}`) + a second bunup entry (`src/index.ts` + `src/pg.ts`). Shipped consumers `import 'core/pg'` once to register the adapter (side effect); the optional `pg` peer is only pulled in by that subpath. Tests still import `../src/pg.ts` directly. (`@libsql/client` left a hard dep — `getDb`'s default path imports it, so demoting it is not low-risk.)
 - ✅ pgvector **HNSW** partial index — `vectorIndexDDL('postgres')` now returns `CREATE INDEX … USING hnsw (emb vector_cosine_ops) WHERE valid_to=FOREVER`, embedded in `postgresSchema()` (mirrors libSQL's `${NV_EMB_IDX_DDL}`). Accelerates the live-seed ANN scan (`annSeedsLive`); the as-of path still over-fetches (live-only index). Default HNSW build/`ef_search` params — fine for tests, tunable at scale. PG suite unchanged (344/18skip/0fail; set-membership assertions tolerate ANN ordering).
 - ✅ CI: `.github/workflows/ci.yml` gains a `test-postgres` job — runs the same suite under `GRAPHX_TEST_DRIVER=postgres` against a `pgvector/pgvector:pg16` service container (`CREATE EXTENSION vector` step + `GRAPHX_TEST_PG_URL`). Linux-only (GH service containers don't run on macOS/Windows); the existing matrix job (renamed "… (libSQL)") still covers libSQL on all 3 OS.
@@ -48,9 +49,10 @@
 ---
 
 ## Earlier phase log
+
 - **Superseded earlier "remaining" list:**
   - **auth (~47):** `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`, recursive CTEs `WITH`→`WITH RECURSIVE`, MVCC idempotency.
-  - **multi-tenant (~47):** `getDb`/control-plane schema-per-tenant on PG (Phase 5) — p11-serving, observability, admin-*, authz, cdc.
+  - **multi-tenant (~47):** `getDb`/control-plane schema-per-tenant on PG (Phase 5) — p11-serving, observability, admin-\*, authz, cdc.
   - **FTS (Phase 4):** `nodes_fts MATCH`→`body_tsv @@ websearch_to_tsquery`, `json_each`→`jsonb_array_elements_text`, `vector_extract`→read `emb` text — hybrid, bulk, listNodes(q), graphSlice(q).
   - **algorithms (7):** shortestPath recursive `ORDER BY` → route PG to in-memory Dijkstra.
   - **constraints (Phase 4):** VIRTUAL generated col → expression index.
@@ -65,6 +67,7 @@
 Let consumers pick SQLite/libSQL or Postgres **via config only** — every public type, method signature, route shape, and JSON wire contract stays byte-stable. A consumer who passes `{ driver: 'postgres', connectionString }` instead of the current libSQL config gets identical behavior (modulo unavoidable ANN/FTS scoring nuances). No change to `Graph`, `Auth`, `retrieve`, `match`, `journey`, HTTP routes, or `defineGraphSchema`.
 
 Verified against the tree:
+
 - `@libsql/client` `Client`/`InStatement`/`InValue`/`Row`/`Transaction` is imported in **20 source files** (16 core, 4 auth).
 - The entire driver surface actually used is tiny: **65 `.execute()`, 6 `.batch(_, 'write')`, 2 `.executeMultiple()`, 1 `.transaction('write')`, 1 `.sync()`, 2 `.close()`**. This is the keystone fact — the abstraction interface only needs ~6 methods.
 - **~858 `?` placeholders**, **10 `json_extract`, 7 `vector_top_k`, 5 `MATCH`/18 `nodes_fts`, 5 `RECURSIVE`, 1 each `libsql_vector_idx`/`vector_extract`/`ON CONFLICT`/`INSERT OR IGNORE`/`GENERATED ALWAYS`** across src.
@@ -74,20 +77,20 @@ Verified against the tree:
 
 ## 1. Dialect-Surface Inventory (grouped, with counts & hardest cases)
 
-| Category | Count (src occurrences) | Key sites | Hardest specific case |
-|---|---|---|---|
-| **vector** | ~12 sites | `schema.ts` (`F32_BLOB(dim)`, `libsql_vector_idx`), `retrieve.ts` (`vector_top_k` x7), `hybrid.ts` (`vector_extract`, MMR), `bulk.ts` (`vector(?)`, DROP/recreate idx), `graph.ts` (`vector(?)` insert) | **libSQL native vectors → pgvector.** `vector_top_k('nv_emb_idx', vector(?), ?)` is a table-valued-function-by-index-NAME returning rowids joined via `n.rowid=v.id`. pgvector has no such function — must become `ORDER BY emb <=> $1::vector LIMIT $2` against a partial HNSW index. The `MIN(v.id)` rowid-rank proxy becomes real distance ranking (changes scores → RRF fusion output → golden tests). |
-| **fts** | 18 `nodes_fts` + 5 `MATCH` | `schema.ts` (virtual table + `nodes_fts_ai` trigger), `hybrid.ts` (`MATCH`, `sanitizeMatch`, bm25 `rank`), `graph.ts` (`ver IN (SELECT rowid FROM nodes_fts ...)`), `bulk.ts` (DROP trigger, `'rebuild'`) | **FTS5 → tsvector/GIN.** External-content virtual table + `content_rowid='ver'` + AFTER INSERT sync trigger collapses to a `body_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body,''))) STORED` column + GIN index. Removes the trigger entirely (so exported `NODES_FTS_TRIGGER_DDL` changes meaning) and the rowid-subquery join becomes `body_tsv @@ websearch_to_tsquery($1)`. `sanitizeMatch` (FTS5 grammar) must become tsquery building or pass-through. |
-| **json** | 10 `json_extract` + 3 `json_each` | `constraints.ts` (`json_extract(props,'$.x')` in generated col), `pattern.ts`, `journey.ts` (`->>`), `hybrid.ts` (`json_each(?)`), `check.ts`/`store.ts` (subjectRelation) | `props TEXT` + JS `JSON.stringify`/`JSON.parse` → `props jsonb`. `json_extract(props,'$.k')` → `props->>'k'`; `json_each(?)` → `unnest($1::text[])`. **Risk:** `pg` auto-parses jsonb to objects → `rowToNode`/`updateNode` would double-handle unless centralized. |
-| **upsert** | 1 `ON CONFLICT` + 1 `INSERT OR IGNORE` + several `INSERT…SELECT…WHERE NOT EXISTS` | `algorithms.ts` (`ON CONFLICT(id) DO UPDATE … excluded`), `auth/store.ts` (`INSERT OR IGNORE`, NOT-EXISTS guards) | **`INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`.** `ON CONFLICT … excluded` is already PG-valid. The auth NOT-EXISTS idempotency guards rely on SQLite single-writer serialization — under PG MVCC they race; need partial UNIQUE indexes + `ON CONFLICT DO NOTHING` + explicit transactions. |
-| **recursive-cte** | 5 `RECURSIVE` | `pattern.ts`, `journey.ts`, `algorithms.ts` (sql-mode shortestPath), `auth/list.ts`, `retrieve.ts`/`hybrid.ts` walk | **`ORDER BY` inside the recursive term** (algorithms.ts priority-queue Dijkstra) is a SQLite extension PG **rejects** — loses best-first pruning. Also scalar `MAX(a,b)` in journey.ts → `GREATEST` (PG `MAX` is an aggregate). String-path cycle guard `path NOT LIKE '%,'||id||',%'` → `NOT (id = ANY(path::text[]))`. Bare-column `GROUP BY id` → `DISTINCT ON (id)`. |
-| **pragma** | 4 `PRAGMA` | `db.ts` (`foreign_keys`, `busy_timeout`), `schema.ts` (`journal_mode=WAL`, `table_xinfo`) | All drop out for PG (FKs always on, MVCC, WAL inherent). `table_xinfo` introspection → `information_schema.columns` or `ADD COLUMN IF NOT EXISTS`. |
-| **generated-column** | 1 `GENERATED ALWAYS` | `constraints.ts` (`… VIRTUAL`) | PG has no `VIRTUAL` generated columns. Replace with an **expression index** `CREATE UNIQUE INDEX … ON node_versions((props->>'x')) WHERE …` (closer match, no storage) or `STORED`. |
-| **types** | pervasive | `INTEGER PRIMARY KEY` (rowid alias), `REAL`, `TEXT`, `valid_to INTEGER DEFAULT 8640000000000000` | `ver INTEGER PRIMARY KEY` (rowid) → `ver bigint GENERATED ALWAYS AS IDENTITY`. FOREVER sentinel `8640000000000000` → `bigint` (fits). **`pg` returns bigint as string** → mirror existing `Number(vf)` casts. |
-| **placeholders** | ~858 `?` | every SQL-emitting file | **`?` → `$n`.** Owned by the driver adapter at one chokepoint, not hand-rewritten. Dynamic IN-lists `rels.map(()=>'?')` → `= ANY($n::text[])`. `CompiledPattern.sql/args` is a **documented, test-asserted** contract (acceptance §16) — see Decision below. |
-| **client-api** | 65 exec / 6 batch / 2 execMulti / 1 tx / 1 sync / 2 close | `db.ts`, all SQL files | `createClient`/`Client` type leak (20 files). `executeMultiple` (no PG analog → single multi-statement `query` or loop). `batch(_, 'write')` → `BEGIN…COMMIT`. `transaction('write')` (BEGIN IMMEDIATE) → pooled connection + `BEGIN`. `.sync()` → no-op. |
-| **tenant-isolation** | `db.ts` getDb + teardown | `db.ts` (`file:${ns}.db`, sync replica), `scripts/admin-api.ts` (`:memory:`, `.db`/`-wal`/`-shm` rmSync) | **per-namespace `.db` files → PG tenant model.** One libSQL file per project → schema-per-tenant (`SET search_path`) or database-per-tenant. Embedded-replica `syncUrl`/`syncInterval`/`.sync()` have no PG analog. |
-| **transactions** | 6 batch + 1 interactive tx + SQLITE_BUSY retry | `graph.ts` (`runWriteBatch`/`runConditionalClose`, SQLITE_BUSY/LOCKED retry), `auth/store.ts` | **SQLITE_BUSY/LOCKED retry → SQLSTATE 40001/40P01.** The conditional-close + retry envelope encodes SQLite single-writer locking; under PG MVCC use `SELECT … FOR UPDATE` on the live row (or SERIALIZABLE + 40001 retry). Naive translation risks interval overlap in the temporal model. |
+| Category             | Count (src occurrences)                                                           | Key sites                                                                                                                                                                                                 | Hardest specific case                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --- | --- | ----------------------------------------------------------------------------------- |
+| **vector**           | ~12 sites                                                                         | `schema.ts` (`F32_BLOB(dim)`, `libsql_vector_idx`), `retrieve.ts` (`vector_top_k` x7), `hybrid.ts` (`vector_extract`, MMR), `bulk.ts` (`vector(?)`, DROP/recreate idx), `graph.ts` (`vector(?)` insert)   | **libSQL native vectors → pgvector.** `vector_top_k('nv_emb_idx', vector(?), ?)` is a table-valued-function-by-index-NAME returning rowids joined via `n.rowid=v.id`. pgvector has no such function — must become `ORDER BY emb <=> $1::vector LIMIT $2` against a partial HNSW index. The `MIN(v.id)` rowid-rank proxy becomes real distance ranking (changes scores → RRF fusion output → golden tests).                                                                            |
+| **fts**              | 18 `nodes_fts` + 5 `MATCH`                                                        | `schema.ts` (virtual table + `nodes_fts_ai` trigger), `hybrid.ts` (`MATCH`, `sanitizeMatch`, bm25 `rank`), `graph.ts` (`ver IN (SELECT rowid FROM nodes_fts ...)`), `bulk.ts` (DROP trigger, `'rebuild'`) | **FTS5 → tsvector/GIN.** External-content virtual table + `content_rowid='ver'` + AFTER INSERT sync trigger collapses to a `body_tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body,''))) STORED` column + GIN index. Removes the trigger entirely (so exported `NODES_FTS_TRIGGER_DDL` changes meaning) and the rowid-subquery join becomes `body_tsv @@ websearch_to_tsquery($1)`. `sanitizeMatch` (FTS5 grammar) must become tsquery building or pass-through. |
+| **json**             | 10 `json_extract` + 3 `json_each`                                                 | `constraints.ts` (`json_extract(props,'$.x')` in generated col), `pattern.ts`, `journey.ts` (`->>`), `hybrid.ts` (`json_each(?)`), `check.ts`/`store.ts` (subjectRelation)                                | `props TEXT` + JS `JSON.stringify`/`JSON.parse` → `props jsonb`. `json_extract(props,'$.k')` → `props->>'k'`; `json_each(?)` → `unnest($1::text[])`. **Risk:** `pg` auto-parses jsonb to objects → `rowToNode`/`updateNode` would double-handle unless centralized.                                                                                                                                                                                                                   |
+| **upsert**           | 1 `ON CONFLICT` + 1 `INSERT OR IGNORE` + several `INSERT…SELECT…WHERE NOT EXISTS` | `algorithms.ts` (`ON CONFLICT(id) DO UPDATE … excluded`), `auth/store.ts` (`INSERT OR IGNORE`, NOT-EXISTS guards)                                                                                         | **`INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`.** `ON CONFLICT … excluded` is already PG-valid. The auth NOT-EXISTS idempotency guards rely on SQLite single-writer serialization — under PG MVCC they race; need partial UNIQUE indexes + `ON CONFLICT DO NOTHING` + explicit transactions.                                                                                                                                                                                         |
+| **recursive-cte**    | 5 `RECURSIVE`                                                                     | `pattern.ts`, `journey.ts`, `algorithms.ts` (sql-mode shortestPath), `auth/list.ts`, `retrieve.ts`/`hybrid.ts` walk                                                                                       | **`ORDER BY` inside the recursive term** (algorithms.ts priority-queue Dijkstra) is a SQLite extension PG **rejects** — loses best-first pruning. Also scalar `MAX(a,b)` in journey.ts → `GREATEST` (PG `MAX` is an aggregate). String-path cycle guard `path NOT LIKE '%,'                                                                                                                                                                                                           |     | id  |     | ',%'`→`NOT (id = ANY(path::text[]))`. Bare-column `GROUP BY id`→`DISTINCT ON (id)`. |
+| **pragma**           | 4 `PRAGMA`                                                                        | `db.ts` (`foreign_keys`, `busy_timeout`), `schema.ts` (`journal_mode=WAL`, `table_xinfo`)                                                                                                                 | All drop out for PG (FKs always on, MVCC, WAL inherent). `table_xinfo` introspection → `information_schema.columns` or `ADD COLUMN IF NOT EXISTS`.                                                                                                                                                                                                                                                                                                                                    |
+| **generated-column** | 1 `GENERATED ALWAYS`                                                              | `constraints.ts` (`… VIRTUAL`)                                                                                                                                                                            | PG has no `VIRTUAL` generated columns. Replace with an **expression index** `CREATE UNIQUE INDEX … ON node_versions((props->>'x')) WHERE …` (closer match, no storage) or `STORED`.                                                                                                                                                                                                                                                                                                   |
+| **types**            | pervasive                                                                         | `INTEGER PRIMARY KEY` (rowid alias), `REAL`, `TEXT`, `valid_to INTEGER DEFAULT 8640000000000000`                                                                                                          | `ver INTEGER PRIMARY KEY` (rowid) → `ver bigint GENERATED ALWAYS AS IDENTITY`. FOREVER sentinel `8640000000000000` → `bigint` (fits). **`pg` returns bigint as string** → mirror existing `Number(vf)` casts.                                                                                                                                                                                                                                                                         |
+| **placeholders**     | ~858 `?`                                                                          | every SQL-emitting file                                                                                                                                                                                   | **`?` → `$n`.** Owned by the driver adapter at one chokepoint, not hand-rewritten. Dynamic IN-lists `rels.map(()=>'?')` → `= ANY($n::text[])`. `CompiledPattern.sql/args` is a **documented, test-asserted** contract (acceptance §16) — see Decision below.                                                                                                                                                                                                                          |
+| **client-api**       | 65 exec / 6 batch / 2 execMulti / 1 tx / 1 sync / 2 close                         | `db.ts`, all SQL files                                                                                                                                                                                    | `createClient`/`Client` type leak (20 files). `executeMultiple` (no PG analog → single multi-statement `query` or loop). `batch(_, 'write')` → `BEGIN…COMMIT`. `transaction('write')` (BEGIN IMMEDIATE) → pooled connection + `BEGIN`. `.sync()` → no-op.                                                                                                                                                                                                                             |
+| **tenant-isolation** | `db.ts` getDb + teardown                                                          | `db.ts` (`file:${ns}.db`, sync replica), `scripts/admin-api.ts` (`:memory:`, `.db`/`-wal`/`-shm` rmSync)                                                                                                  | **per-namespace `.db` files → PG tenant model.** One libSQL file per project → schema-per-tenant (`SET search_path`) or database-per-tenant. Embedded-replica `syncUrl`/`syncInterval`/`.sync()` have no PG analog.                                                                                                                                                                                                                                                                   |
+| **transactions**     | 6 batch + 1 interactive tx + SQLITE_BUSY retry                                    | `graph.ts` (`runWriteBatch`/`runConditionalClose`, SQLITE_BUSY/LOCKED retry), `auth/store.ts`                                                                                                             | **SQLITE_BUSY/LOCKED retry → SQLSTATE 40001/40P01.** The conditional-close + retry envelope encodes SQLite single-writer locking; under PG MVCC use `SELECT … FOR UPDATE` on the live row (or SERIALIZABLE + 40001 retry). Naive translation risks interval overlap in the temporal model.                                                                                                                                                                                            |
 
 ---
 
@@ -101,13 +104,13 @@ Define a driver-neutral `DbClient` that is a **strict structural subset of what 
 
 ```ts
 export interface DbClient {
-  execute(stmt: SqlStatement): Promise<SqlResult>;       // {rows, rowsAffected, lastInsertRowid?}
-  batch(stmts: SqlStatement[], mode?: 'write'): Promise<SqlResult[]>;  // atomic
-  transaction(mode?: 'write'): Promise<DbTransaction>;   // interactive
-  executeMultiple(script: string): Promise<void>;        // DDL script
-  sync?(): Promise<void>;                                // optional; PG no-op
-  close(): void | Promise<void>;
-  readonly dialect: 'libsql' | 'postgres';               // NEW: for fragment selection
+	execute(stmt: SqlStatement): Promise<SqlResult>; // {rows, rowsAffected, lastInsertRowid?}
+	batch(stmts: SqlStatement[], mode?: 'write'): Promise<SqlResult[]>; // atomic
+	transaction(mode?: 'write'): Promise<DbTransaction>; // interactive
+	executeMultiple(script: string): Promise<void>; // DDL script
+	sync?(): Promise<void>; // optional; PG no-op
+	close(): void | Promise<void>;
+	readonly dialect: 'libsql' | 'postgres'; // NEW: for fragment selection
 }
 ```
 
@@ -115,18 +118,25 @@ export interface DbClient {
 
 ### Where dialect-specific SQL lives
 
-The driver **owns placeholder rewriting** (`?` → `$n` for PG) at `execute`/`batch` time — eliminating ~858 hand-edits. But it cannot rewrite *feature* SQL (F32_BLOB, vector_top_k, FTS5, generated columns). Those ~30 fragments move behind a small **dialect SQL module** keyed on `client.dialect`:
+The driver **owns placeholder rewriting** (`?` → `$n` for PG) at `execute`/`batch` time — eliminating ~858 hand-edits. But it cannot rewrite _feature_ SQL (F32_BLOB, vector_top_k, FTS5, generated columns). Those ~30 fragments move behind a small **dialect SQL module** keyed on `client.dialect`:
 
 ```ts
 // dialect/sql.ts
-embColumnDDL(dim) / vectorIndexDDL() / ftsSetupDDL() / vectorSearchSQL() /
-ftsMatchSQL() / generatedPropIndexDDL() / jsonExtract(col, key) / arrayParam()
+embColumnDDL(dim) /
+	vectorIndexDDL() /
+	ftsSetupDDL() /
+	vectorSearchSQL() /
+	ftsMatchSQL() /
+	generatedPropIndexDDL() /
+	jsonExtract(col, key) /
+	arrayParam();
 ```
 
 Each call site asks `sqlFor(client.dialect).vectorSearchSQL(...)` instead of inlining libSQL strings. This is the surgical change: ~30 fragment functions with two implementations each, vs. rewriting hundreds of strings or adopting a builder for the whole codebase.
 
 ### Why not (b) or (c)
-- **(b) SQL-string rewrite layer:** placeholder rewriting is fine, but you cannot regex `vector_top_k('idx', vector(?), ?) JOIN … ON n.rowid=v.id` into an `ORDER BY <=> LIMIT` form, nor a `GROUP BY id` bare-column query into `DISTINCT ON`, nor `ORDER BY`-in-recursive-CTE into outer ordering. These are *structural* rewrites a translator can't do safely. It also hides bugs.
+
+- **(b) SQL-string rewrite layer:** placeholder rewriting is fine, but you cannot regex `vector_top_k('idx', vector(?), ?) JOIN … ON n.rowid=v.id` into an `ORDER BY <=> LIMIT` form, nor a `GROUP BY id` bare-column query into `DISTINCT ON`, nor `ORDER BY`-in-recursive-CTE into outer ordering. These are _structural_ rewrites a translator can't do safely. It also hides bugs.
 - **(c) Query builder / ORM (Kysely/Drizzle):** would require rewriting **every one of ~hundreds of hand-written SQL strings**, including 5 recursive CTEs, the FTS5/pgvector feature SQL (which builders model poorly), and the inspectable `CompiledPattern.sql` contract. Massive blast radius, high regression risk, and it still doesn't model pgvector/FTS5 natively. Violates "surgical changes."
 
 ---
@@ -164,8 +174,9 @@ Each call site asks `sqlFor(client.dialect).vectorSearchSQL(...)` instead of inl
 **Problem (verified):** 33/39 test files call `createClient({url:':memory:'})` or `file:…db` directly, with libSQL-specific teardown (`evict` + `rmSync` of `.db`/`-wal`/`-shm`). There is no shared factory to swap, and CI has **zero DB infra** (no `pg` dep, no service container, runs on windows-latest too).
 
 **Plan:**
+
 1. **Introduce `makeTestDb()` harness** in a shared test util that branches on `process.env.GRAPHX_TEST_DRIVER` (`libsql` default | `postgres`). It returns a `DbClient` plus a `teardown()`. libSQL path: `:memory:` or temp file + file teardown. PG path: `CREATE SCHEMA test_<ulid>; SET search_path` + `DROP SCHEMA … CASCADE` teardown (per-test isolation via fresh schema, mirroring fresh-file).
-2. **Refactor all 33 test files** to use `makeTestDb()` (mechanical but broad — do it *before* touching src, as Phase 1, so the suite is driver-parametrized while still green on libSQL).
+2. **Refactor all 33 test files** to use `makeTestDb()` (mechanical but broad — do it _before_ touching src, as Phase 1, so the suite is driver-parametrized while still green on libSQL).
 3. **Run the matrix:** `GRAPHX_TEST_DRIVER=libsql bun test` (default, every PR, all OS) and `GRAPHX_TEST_DRIVER=postgres bun test` (Linux/mac only).
 4. **Golden-output handling:** ANN seed ordering (pgvector distance vs vector_top_k rowid) and FTS ranking (ts_rank vs bm25) will differ. Tests asserting exact id order must either (a) assert set-membership not order, or (b) keep per-driver golden snapshots. Decide per test; prefer (a) where the public contract is "shape, not exact order."
 
@@ -177,35 +188,36 @@ Each call site asks `sqlFor(client.dialect).vectorSearchSQL(...)` instead of inl
 
 **Phase 0 — Driver interface + libSQL adapter (refactor-only, no PG yet).**
 Define `DbClient`/`SqlStatement`/`SqlResult` etc. Make `@libsql/client.Client` structurally satisfy it (add a `dialect:'libsql'` wrapper). Retype the 20 files from `Client` → `DbClient`. Move the ~30 feature-SQL fragments into `dialect/sql.ts` with **only the libSQL implementation**.
-✅ *Check:* `bun test` + type-check fully green on libSQL; zero behavior change; `graph.raw` still accepts a libSQL Client.
+✅ _Check:_ `bun test` + type-check fully green on libSQL; zero behavior change; `graph.raw` still accepts a libSQL Client.
 
 **Phase 1 — Test harness parametrization.**
 Add `makeTestDb()`; refactor all 33 test files to use it. Still libSQL-only.
-✅ *Check:* `GRAPHX_TEST_DRIVER=libsql bun test` green; no `createClient` calls remain in test files except inside the harness.
+✅ _Check:_ `GRAPHX_TEST_DRIVER=libsql bun test` green; no `createClient` calls remain in test files except inside the harness.
 
 **Phase 2 — PG adapter + connection/config.**
 Implement the PG `DbClient` (six methods over `pg.Pool`, `?`→`$n` rewrite, bigint coercion, jsonb handling). Add `pg` as optional peer dep + conditional subpath export (`core` vs `core/pg`). Extend `DbConfig`/`getDb` with a `driver` discriminator (libSQL fields kept optional/deprecated). Add testcontainers + `dialect/sql.ts` PG fragment implementations for the **non-vector/non-FTS** categories first.
-✅ *Check:* `GRAPHX_TEST_DRIVER=postgres bun test` passes for the non-vector, non-FTS suites (graph CRUD, temporal, pattern, journey, algorithms-memory-mode, control-plane, authz, auth check/expand/list).
+✅ _Check:_ `GRAPHX_TEST_DRIVER=postgres bun test` passes for the non-vector, non-FTS suites (graph CRUD, temporal, pattern, journey, algorithms-memory-mode, control-plane, authz, auth check/expand/list).
 
 **Phase 3 — pgvector.**
 Implement vector fragments + the `vector_top_k`→`ORDER BY <=>` rewrite in `retrieve.ts`/`hybrid.ts`/`bulk.ts`. Re-validate the deferred-index DROP/recreate story for HNSW.
-✅ *Check:* `retrieve`/`hybridRetrieve` PG tests pass (set-membership assertions where order differs).
+✅ _Check:_ `retrieve`/`hybridRetrieve` PG tests pass (set-membership assertions where order differs).
 
 **Phase 4 — tsvector/GIN FTS.**
 Implement FTS fragments (generated `body_tsv` + GIN, `@@`/`ts_rank_cd`, `sanitizeMatch` PG body). Remove trigger dependence for PG; adjust `bulk.ts` `'rebuild'` → no-op.
-✅ *Check:* hybrid lexical-leg PG tests pass; bulk-load PG test passes.
+✅ _Check:_ hybrid lexical-leg PG tests pass; bulk-load PG test passes.
 
 **Phase 5 — Tenant model + transactions + dev harness.**
 Schema-per-tenant in `getDb` (PG); bounded pool; async `evict`/`closeAll`; SQLSTATE-40001 retry classifier; FOR-UPDATE conditional-close. Port `scripts/admin-api.ts` teardown to `DROP SCHEMA`.
-✅ *Check:* multi-tenant + admin/serve PG tests pass; concurrent-write tests show no interval overlap; CI matrix (libSQL all-OS, PG Linux/mac) green.
+✅ _Check:_ multi-tenant + admin/serve PG tests pass; concurrent-write tests show no interval overlap; CI matrix (libSQL all-OS, PG Linux/mac) green.
 
 **Phase 6 — Docs + cleanup.**
 Document `driver` config, deprecate libSQL-only exported DDL constants (gate behind dialect), update README. Verify `graph.raw` consumers (P4/P6/P7) only call interface methods.
-✅ *Check:* full matrix green; no `@libsql/client` import remains outside the libSQL adapter; public API diff is additive-only.
+✅ _Check:_ full matrix green; no `@libsql/client` import remains outside the libSQL adapter; public API diff is additive-only.
 
 ---
 
 ## 6. Risks Carried Forward
+
 - `Graph.raw` is documented PUBLIC; narrowing `Client`→`DbClient` can break out-of-tree consumers calling libSQL-only methods (`.sync()`, raw `.batch`). Mitigate: interface is a strict subset; document the change.
 - ANN/FTS scoring differences may break order-asserting golden tests (behavioral, not API).
 - Exported DDL constants (`NV_EMB_IDX_DDL`, `NODES_FTS_TRIGGER_DDL`, `CONTROL_SCHEMA`, `schema`) are SQLite-dialect strings in the public API — must be per-dialect or deprecated without removal.

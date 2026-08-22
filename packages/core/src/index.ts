@@ -24,6 +24,12 @@ export {
 	type TransactionMode,
 } from './dialect.ts';
 
+// Dialect SQL fragments that packages layered on core need to write portable SQL of their
+// own. `@graphx/auth` stores its tuples as edges and queries them directly, so it needs the
+// same `->>` / `INSERT OR IGNORE` forms core uses internally. Exported deliberately and
+// narrowly — the rest of `dialect-sql.ts` stays private.
+export { insertOrIgnore, jsonField } from './dialect-sql.ts';
+
 // P1 — schema init
 export {
 	ensureColumn,
@@ -167,11 +173,7 @@ export {
 } from './retrieve.ts';
 
 // Record/replay embedder — real model vectors, committed once, replayed offline
-export {
-	fixtureEmbed,
-	type FixtureEmbedder,
-	type FixtureEmbedOpts,
-} from './embed-fixture.ts';
+export { fixtureEmbed, type FixtureEmbedder, type FixtureEmbedOpts } from './embed-fixture.ts';
 
 // P13 — hybrid retrieval (FTS5 + RRF) + rerank/MMR
 export {

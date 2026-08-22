@@ -28,12 +28,14 @@
 ## File Structure
 
 **Stage 1 — seam hardening (no new files):**
+
 - Modify `packages/core/src/dialect.ts` — add `'duckdb'` to `Dialect`, add `assertNever`.
 - Modify `packages/core/src/dialect-sql.ts` — convert every fragment from a two-way ternary to an exhaustive `switch`.
 - Modify the 12 inline dialect branches: `schema.ts`, `db.ts`, `constraints.ts`, `temporal.ts`, `algorithms.ts`, `bulk.ts`, `journey.ts`, `pattern.ts`.
 - Modify `packages/core/test/harness.ts` — invert the skip gate to an allowlist.
 
 **Stage 2 — storage layer (new, standalone, no DuckDB):**
+
 - Create `packages/core/src/objstore/store.ts` — the `ObjectStore` interface and its errors. One responsibility: the provider-neutral contract.
 - Create `packages/core/src/objstore/memory.ts` — in-memory `ObjectStore` for unit tests.
 - Create `packages/core/src/objstore/file.ts` — filesystem `ObjectStore`, the default test store.
@@ -44,6 +46,7 @@
 - Create `packages/core/test/objstore/*.test.ts` — one test file per module above.
 
 **Stage 3 — DuckDB adapter (new):**
+
 - Create `packages/core/src/duck.ts` — `DuckClient`, `createDuckClient`, `registerDuckDriver` call. Mirrors `pg.ts` exactly in shape and role.
 - Create `packages/core/src/duck-pool.ts` — `DuckDBInstance` lifecycle, connection checkout, FATAL detection and rebuild.
 - Create `packages/core/src/duck-value.ts` — JS↔DuckDB value marshalling (bigint normalization, embedding binding).
@@ -52,6 +55,7 @@
 - Modify `packages/core/package.json`, `bunup.config.ts` — `./duck` subpath and build entry.
 
 **Stage 4 — snapshots (new):**
+
 - Create `packages/core/src/duck-materialize.ts` — snapshot → local DuckDB tables/views.
 - Create `packages/core/src/duck-commit.ts` — local tables → Parquet → manifest commit.
 - Modify `packages/core/src/duck.ts` — wire materialize/commit into the client lifecycle.
@@ -65,11 +69,13 @@
 Today `Dialect` is a two-member union and every branch is `dialect === 'postgres' ? A : B`. Adding a third member without this task means a `duckdb` client silently takes the libSQL arm everywhere and dies at `init()` with an unrelated error. Converting to exhaustive switches turns each of those into a compile error instead.
 
 **Files:**
+
 - Modify: `packages/core/src/dialect.ts:16` (the `Dialect` union) and append `assertNever`
 - Modify: `packages/core/src/dialect-sql.ts` (all 22 exported fragments)
 - Test: `packages/core/test/dialect-sql.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: nothing (first task).
 - Produces: `type Dialect = 'libsql' | 'postgres' | 'duckdb'`; `function assertNever(x: never, ctx: string): never`. Every fragment in `dialect-sql.ts` keeps its existing exported name and signature, and throws `dialect-sql: <name>(duckdb) not implemented yet` when called with `'duckdb'`.
 
@@ -227,9 +233,10 @@ error instead of a silent fall-through to the libSQL arm."
 
 ## Task 2: Give the 12 inline dialect branches a duckdb arm, and fix the harness skip gate
 
-Twelve call sites branch on the dialect outside `dialect-sql.ts`. Each is a bare `=== 'postgres'` test with no default, so a `duckdb` client takes the libSQL path — issuing PRAGMAs and querying `sqlite_master`. Separately, the test harness's skip gate is `TEST_DRIVER === 'postgres' ? test.skip : test`, which means 18 libSQL-internals probes would *run* under any third driver.
+Twelve call sites branch on the dialect outside `dialect-sql.ts`. Each is a bare `=== 'postgres'` test with no default, so a `duckdb` client takes the libSQL path — issuing PRAGMAs and querying `sqlite_master`. Separately, the test harness's skip gate is `TEST_DRIVER === 'postgres' ? test.skip : test`, which means 18 libSQL-internals probes would _run_ under any third driver.
 
 **Files:**
+
 - Modify: `packages/core/src/db.ts:14-18` (`applyConnPragmas`)
 - Modify: `packages/core/src/schema.ts:166-186` (`readEmbDim`), `:188-218` (`init`), `:227-237` (`ensureColumn`)
 - Modify: `packages/core/src/constraints.ts:62`, `packages/core/src/temporal.ts:294,320`, `packages/core/src/algorithms.ts:341`, `packages/core/src/bulk.ts:200,238,246`, `packages/core/src/journey.ts:104-106`, `packages/core/src/pattern.ts:206-215`
@@ -237,6 +244,7 @@ Twelve call sites branch on the dialect outside `dialect-sql.ts`. Each is a bare
 - Test: `packages/core/test/duck-guards.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `Dialect` and `assertNever` from Task 1.
 - Produces: `TEST_DRIVER: Dialect` (was `string`) and `libsqlOnly` exported from `packages/core/test/harness.ts`. Every inline branch throws `<module>: duckdb not implemented yet` when reached with a duckdb client, so Stage 3 can find them by running the suite.
 
@@ -433,12 +441,14 @@ libSQL-internals probes under any driver that was not literally postgres."
 The whole commit protocol rests on one primitive: create a key, fail if it already exists. This task defines that contract and the two implementations tests use. No DuckDB, no S3 — this task is verifiable entirely offline.
 
 **Files:**
+
 - Create: `packages/core/src/objstore/store.ts`
 - Create: `packages/core/src/objstore/memory.ts`
 - Create: `packages/core/src/objstore/file.ts`
 - Test: `packages/core/test/objstore/store.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces:
   - `interface ObjectStore { get(key): Promise<Uint8Array | null>; getIfChanged(key, etag?): Promise<{ body: Uint8Array; etag: string } | 'unchanged' | null>; put(key, body): Promise<void>; putIfAbsent(key, body): Promise<void>; list(prefix): Promise<string[]>; delete(key): Promise<void>; }`
@@ -787,13 +797,15 @@ If-None-Match semantics rather than approximating them."
 
 ## Task 4: The S3 `ObjectStore` and the startup CAS probe
 
-`If-None-Match: *` is supported by S3, R2, MinIO, and Tigris. GCS's S3-compatible endpoint needs `x-goog-if-generation-match: 0` instead, and whether it *rejects or silently ignores* the S3 spelling is unknown — silent-ignore would degrade create-only into unconditional overwrite. Backblaze B2 has no conditional write in either API. The probe turns all of that into a fact at connect time.
+`If-None-Match: *` is supported by S3, R2, MinIO, and Tigris. GCS's S3-compatible endpoint needs `x-goog-if-generation-match: 0` instead, and whether it _rejects or silently ignores_ the S3 spelling is unknown — silent-ignore would degrade create-only into unconditional overwrite. Backblaze B2 has no conditional write in either API. The probe turns all of that into a fact at connect time.
 
 **Files:**
+
 - Create: `packages/core/src/objstore/s3.ts`
 - Test: `packages/core/test/objstore/s3.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ObjectStore`, `ObjectExistsError` from Task 3.
 - Produces:
   - `interface S3ObjectStoreOptions { bucket: string; prefix?: string; region?: string; endpoint?: string; forcePathStyle?: boolean; credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string }; conditionalWrite?: 'if-none-match' | 'gcs-generation'; }`
@@ -808,10 +820,7 @@ Create `packages/core/test/objstore/s3.test.ts`:
 ```ts
 import { describe, expect, test } from 'bun:test';
 import { MemoryObjectStore } from '../../src/objstore/memory.ts';
-import {
-	ConditionalWriteUnsupportedError,
-	probeConditionalWrite,
-} from '../../src/objstore/s3.ts';
+import { ConditionalWriteUnsupportedError, probeConditionalWrite } from '../../src/objstore/s3.ts';
 import type { ObjectStore } from '../../src/objstore/store.ts';
 
 /** A store whose putIfAbsent silently overwrites — the GCS-silent-ignore failure mode. */
@@ -969,9 +978,7 @@ export class S3ObjectStore implements ObjectStore {
 	}
 
 	async put(key: string, body: Uint8Array): Promise<void> {
-		await this.s3.send(
-			new PutObjectCommand({ Bucket: this.bucket, Key: this.k(key), Body: body }),
-		);
+		await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.k(key), Body: body }));
 	}
 
 	async putIfAbsent(key: string, body: Uint8Array): Promise<void> {
@@ -1055,7 +1062,9 @@ export async function probeConditionalWrite(store: ObjectStore): Promise<void> {
 		}
 		const after = await store.get(key);
 		if (after !== null && new TextDecoder().decode(after) !== '1') {
-			throw new ConditionalWriteUnsupportedError('the probe object was modified by the second write');
+			throw new ConditionalWriteUnsupportedError(
+				'the probe object was modified by the second write',
+			);
 		}
 	} finally {
 		await store.delete(key).catch(() => {});
@@ -1123,11 +1132,13 @@ each other, not a slow path."
 This is the heart of the design: a snapshot chain where committing means claiming the next number with a create-only write. Losing that race is normal and is resolved by rebasing, not by failing.
 
 **Files:**
+
 - Create: `packages/core/src/objstore/manifest.ts`
 - Create: `packages/core/src/objstore/snapshot.ts`
 - Test: `packages/core/test/objstore/snapshot.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ObjectStore`, `ObjectExistsError` from Task 3.
 - Produces:
   - `interface TableRef { files: string[]; tombstones?: string; partition?: string }`
@@ -1447,13 +1458,13 @@ test('a build that ignores its base is rejected, not silently corrected', async 
 	await s.commit(null, async (b) => bump(b));
 	const base = await s.resolveHead();
 	// Right number, wrong parent — a lineage that never happened.
-	await expect(
-		s.commit(base, async (b) => ({ ...bump(b), parent: 99 })),
-	).rejects.toThrow(/ignored its base/);
+	await expect(s.commit(base, async (b) => ({ ...bump(b), parent: 99 }))).rejects.toThrow(
+		/ignored its base/,
+	);
 	// Wrong number.
-	await expect(
-		s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 })),
-	).rejects.toThrow(/ignored its base/);
+	await expect(s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 }))).rejects.toThrow(
+		/ignored its base/,
+	);
 	expect((await s.resolveHead())?.snapshot).toBe(0);
 });
 
@@ -1503,10 +1514,12 @@ so a stale or torn pointer costs one extra request, never correctness."
 Every ANN query re-egresses the whole embedding column when served remotely — 1M×768 floats is about 3GB — and DuckDB will not help: its external file cache is in-memory, scoped to the `DuckDBInstance`, and does not survive a cold start. The cache is ours to build, and content addressing makes it trivially correct.
 
 **Files:**
+
 - Create: `packages/core/src/objstore/cache.ts`
 - Test: `packages/core/test/objstore/cache.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ObjectStore` from Task 3.
 - Produces:
   - `function contentKey(bytes: Uint8Array): string` — `data/<sha256-hex>.parquet`
@@ -1730,15 +1743,17 @@ reader later."
 
 ## Task 7: Package wiring and the DuckDB connection pool
 
-`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `@graphx/core/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but *shared*: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
+`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `@graphx/core/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but _shared_: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
 
 **Files:**
+
 - Modify: `packages/core/package.json` (exports, peerDependencies, peerDependenciesMeta, devDependencies)
 - Modify: `bunup.config.ts` (core entry list)
 - Create: `packages/core/src/duck-pool.ts`
 - Test: `packages/core/test/duck-pool.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces:
   - `interface PooledConnection { run(sql: string, values?: unknown[], types?: unknown[]): Promise<DuckResult>; release(): void }`
@@ -2204,12 +2219,14 @@ behind the core/duck subpath, exactly as pg does."
 This is `pg.ts`'s counterpart. Read `packages/core/src/pg.ts` first; this file mirrors its structure, and the differences are all defenses against verified DuckDB behaviors.
 
 **Files:**
+
 - Create: `packages/core/src/duck-value.ts`
 - Create: `packages/core/src/duck.ts`
 - Modify: `packages/core/src/db.ts` (register a third driver factory)
 - Test: `packages/core/test/duck-client.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DuckPool`, `PooledConnection` from Task 7; `Dialect` from Task 1.
 - Produces:
   - `function normalizeRow(row: Record<string, unknown>): SqlRow` — bigint → number where safe
@@ -2345,10 +2362,7 @@ describe('DuckClient', () => {
 		// Each of these would silently corrupt schema DDL if mis-split: a dropped
 		// statement, a merged one, or a literal cut in half.
 		expect(splitStatements('SELECT 1; SELECT 2')).toEqual(['SELECT 1', 'SELECT 2']);
-		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual([
-			"SELECT ';' AS a",
-			'SELECT 2',
-		]);
+		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual(["SELECT ';' AS a", 'SELECT 2']);
 		expect(splitStatements("SELECT 'a''b;c' AS a")).toEqual(["SELECT 'a''b;c' AS a"]);
 		expect(splitStatements('SELECT 1; -- trailing; comment\nSELECT 2')).toEqual([
 			'SELECT 1',
@@ -2422,7 +2436,9 @@ export function normalizeRow(row: Record<string, unknown>): SqlRow {
 	const out: SqlRow = {};
 	for (const [k, v] of Object.entries(row)) {
 		out[k] =
-			typeof v === 'bigint' && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+			typeof v === 'bigint' &&
+			v <= BigInt(Number.MAX_SAFE_INTEGER) &&
+			v >= BigInt(Number.MIN_SAFE_INTEGER)
 				? Number(v)
 				: v;
 	}
@@ -2797,25 +2813,25 @@ function resolveDriver(cfg: DbConfig): Dialect {
 In `getDb`, replace the `if (resolveDriver(cfg) === 'postgres')` block with a switch:
 
 ```ts
-	const driver = resolveDriver(cfg);
-	let client: DbClient;
-	if (driver === 'postgres') {
-		if (!pgFactory) {
-			throw new Error(
-				"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
-			);
-		}
-		client = pgFactory(namespace, cfg);
-	} else if (driver === 'duckdb') {
-		if (!duckFactory) {
-			throw new Error(
-				"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
-			);
-		}
-		client = duckFactory(namespace, cfg);
-	} else {
-		/* the existing libSQL body, unchanged */
+const driver = resolveDriver(cfg);
+let client: DbClient;
+if (driver === 'postgres') {
+	if (!pgFactory) {
+		throw new Error(
+			"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
+		);
 	}
+	client = pgFactory(namespace, cfg);
+} else if (driver === 'duckdb') {
+	if (!duckFactory) {
+		throw new Error(
+			"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
+		);
+	}
+	client = duckFactory(namespace, cfg);
+} else {
+	/* the existing libSQL body, unchanged */
+}
 ```
 
 - [ ] **Step 6: Run the tests**
@@ -2849,7 +2865,7 @@ first element alone and truncates floats without error."
 
 ## Task 9: `duckdbSchema(dim)` and the live/history split
 
-> **Correction, applied during execution (Task 11 found it).** An earlier version of this task made `node_versions` and `edge_versions` *views* over separate `nv_live` / `nv_history` tables. DuckDB refuses `INSERT` into a `UNION ALL` view, and every write path in the codebase — `Graph.addNode`/`addEdge`/`updateNode`/`deleteNode`/`deleteEdge`, `bulkLoad`, `bulkEdges`, and auth — writes to those names directly, because on libSQL and Postgres they are real tables. The split as a *local schema* broke the entire write path.
+> **Correction, applied during execution (Task 11 found it).** An earlier version of this task made `node_versions` and `edge_versions` _views_ over separate `nv_live` / `nv_history` tables. DuckDB refuses `INSERT` into a `UNION ALL` view, and every write path in the codebase — `Graph.addNode`/`addEdge`/`updateNode`/`deleteNode`/`deleteEdge`, `bulkLoad`, `bulkEdges`, and auth — writes to those names directly, because on libSQL and Postgres they are real tables. The split as a _local schema_ broke the entire write path.
 >
 > The split now lives where it actually pays off: **in the Parquet layout**, not the local materialization. Task 15 exports `valid_to = FOREVER` rows to a live file and the rest to history files; Task 14 loads both back into one table. The local database keeps single tables and needs no write-path changes at all.
 >
@@ -2858,11 +2874,13 @@ first element alone and truncates floats without error."
 This schema is the third sibling of `schema()` (libSQL) and `postgresSchema()`, and deliberately mirrors the Postgres one: single version tables, `nodes`/`edges` as views filtered to `valid_to = FOREVER`.
 
 **Files:**
+
 - Modify: `packages/core/src/dialect-sql.ts` (add `duckdbSchema`)
 - Modify: `packages/core/src/schema.ts` (`init`, `readEmbDim` duckdb arms)
 - Test: `packages/core/test/duck-schema.test.ts`
 
 **Interfaces:**
+
 - Consumes: `createDuckClient` from Task 8.
 - Produces: `function duckdbSchema(dim?: number): string` exported from `dialect-sql.ts`. Real tables `node_versions` and `edge_versions`; views `nodes` and `edges` filtered to `valid_to = FOREVER`. Same shape as `postgresSchema()`, so every existing write path works unchanged.
 
@@ -3138,22 +3156,22 @@ Note the deliberate omission of `REFERENCES` clauses: DuckDB's foreign-key suppo
 Replace the `duckdb` throw in `readEmbDim` with a `graph_meta` read, and the one in `init` with the schema run:
 
 ```ts
-	if (dialectOf(client) === 'duckdb') {
-		const r = await client.execute(
-			`SELECT value FROM graph_meta WHERE key = 'emb_dim'`,
-		).catch(() => ({ rows: [] as SqlRow[] }));
-		const v = r.rows[0]?.value;
-		return typeof v === 'string' ? Number(v) : null;
-	}
+if (dialectOf(client) === 'duckdb') {
+	const r = await client
+		.execute(`SELECT value FROM graph_meta WHERE key = 'emb_dim'`)
+		.catch(() => ({ rows: [] as SqlRow[] }));
+	const v = r.rows[0]?.value;
+	return typeof v === 'string' ? Number(v) : null;
+}
 ```
 
 ```ts
-	if (dialectOf(client) === 'duckdb') {
-		// No pragmas: FKs are not declared, there is no WAL to set, and there is no
-		// lock-based contention to time out — the writer is serialized in-process.
-		await client.executeMultiple(duckdbSchema(dim));
-		return;
-	}
+if (dialectOf(client) === 'duckdb') {
+	// No pragmas: FKs are not declared, there is no WAL to set, and there is no
+	// lock-based contention to time out — the writer is serialized in-process.
+	await client.executeMultiple(duckdbSchema(dim));
+	return;
+}
 ```
 
 Import `duckdbSchema` alongside the other fragments, and `SqlRow` from `./dialect.ts`.
@@ -3191,10 +3209,12 @@ Parquet cannot preserve a fixed-size FLOAT[N]."
 Task 1 left every fragment throwing for `duckdb`. This fills in all of them except full-text, which needs the inverted-index builder and belongs to spec stage 5.
 
 **Files:**
+
 - Modify: `packages/core/src/dialect-sql.ts`
 - Test: `packages/core/test/dialect-sql.test.ts` (extend), `packages/core/test/duck-fragments.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `duckdbSchema` from Task 9, `createDuckClient` from Task 8.
 - Produces: no new exports. Every fragment except `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf` returns SQL for `'duckdb'`.
 
@@ -3464,12 +3484,14 @@ Full-text is left unimplemented; it needs the inverted-index builder."
 Three call sites Task 2 left throwing. Each has a specific DuckDB hazard behind it.
 
 **Files:**
+
 - Modify: `packages/core/src/bulk.ts:200,238,246`
 - Modify: `packages/core/src/journey.ts:104-106`
 - Modify: `packages/core/src/pattern.ts:206-215,403`
 - Test: `packages/core/test/duck-queries.test.ts`
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 8–10.
 - Produces: no new exports. `bulkLoad`, `journey`, and `PatternBuilder` work against a duckdb client.
 
@@ -3636,15 +3658,17 @@ is unverified on DuckDB."
 
 Neither constraint gets a store-level index on DuckDB, for two different reasons.
 
-`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns — but the libSQL and Postgres arms scope their unique index to *one* rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on live edges would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
+`declareUniqueNodeProp` cannot: DuckDB indexes no JSON extraction, directly or through a generated column, verified on both 1.4.4 and 1.5.5. `declareSingleValuedRel` could in principle — `src` and `rel` are real columns — but the libSQL and Postgres arms scope their unique index to _one_ rel, and DuckDB has no partial indexes, so an unconditional `UNIQUE(src, rel)` on live edges would silently make every rel single-valued. Both are therefore enforced in application code, which is exact because the writer is serialized.
 
 **Files:**
+
 - Modify: `packages/core/src/constraints.ts:62-91`
 - Create: `packages/core/src/duck-constraints.ts`
 - Modify: `packages/core/src/graph.ts` (call the check on the node write paths)
 - Test: `packages/core/test/duck-constraints.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DbClient`, `dialectOf`; the `graph_meta` table from Task 9.
 - Produces:
   - `async function declareDuckUniqueProp(client: DbClient, type: string, prop: string): Promise<void>` — records the declaration
@@ -3858,9 +3882,7 @@ export async function assertUniqueProps(
 			      WHERE valid_to = ${FOREVER} AND type = ? AND json_extract_string(data, '$.${prop}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}
 			      LIMIT 1`,
-			args: excludeId
-				? [type, String(value), excludeId]
-				: [type, String(value)],
+			args: excludeId ? [type, String(value), excludeId] : [type, String(value)],
 		});
 		if (r.rows.length > 0) {
 			throw new Error(
@@ -3876,26 +3898,26 @@ export async function assertUniqueProps(
 In `constraints.ts`, replace the `duckdb` throw in `declareUniqueNodeProp`:
 
 ```ts
-	if (dialectOf(client) === 'duckdb') {
-		await declareDuckUniqueProp(client, type, prop);
-		return;
-	}
+if (dialectOf(client) === 'duckdb') {
+	await declareDuckUniqueProp(client, type, prop);
+	return;
+}
 ```
 
-And in `declareSingleValuedRel`. The libSQL and Postgres arms create a *partial* unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
+And in `declareSingleValuedRel`. The libSQL and Postgres arms create a _partial_ unique index scoped to one rel (`WHERE rel = '<rel>' AND valid_to = FOREVER`). DuckDB has no partial indexes, and an unconditional `UNIQUE(src, rel)` would be wrong — it would make every rel single-valued, not just the declared one. So the declaration is recorded and the invariant is upheld by `addEdge`'s existing close-then-insert path:
 
 ```ts
-	if (dialectOf(client) === 'duckdb') {
-		// No partial indexes, and an unconditional UNIQUE(src, rel) would silently make
-		// every rel single-valued. addEdge already closes the prior live edge for a
-		// single-valued rel before inserting the new one; this records the declaration so
-		// it survives a restart, the way the index does on the other two backends.
-		await client.execute({
-			sql: `INSERT OR IGNORE INTO graph_meta (key, value) VALUES (?, ?)`,
-			args: [`single_rel:${rel}`, '1'],
-		});
-		return;
-	}
+if (dialectOf(client) === 'duckdb') {
+	// No partial indexes, and an unconditional UNIQUE(src, rel) would silently make
+	// every rel single-valued. addEdge already closes the prior live edge for a
+	// single-valued rel before inserting the new one; this records the declaration so
+	// it survives a restart, the way the index does on the other two backends.
+	await client.execute({
+		sql: `INSERT OR IGNORE INTO graph_meta (key, value) VALUES (?, ?)`,
+		args: [`single_rel:${rel}`, '1'],
+	});
+	return;
+}
 ```
 
 Before writing this, read `graph.ts:531-591`. If that path takes its set of single-valued rels from the in-memory `defineGraphSchema` output rather than from the database, the `graph_meta` row is purely for durability across restarts and nothing else needs to read it. If it queries the database, point that query at `graph_meta` on the duckdb arm.
@@ -3955,44 +3977,46 @@ which DuckDB does not have."
 This is where parity stops being a promise. The whole suite runs under `GRAPHX_TEST_DRIVER=duckdb` and the result is recorded — including the failures, which are the work list for stages 5–7.
 
 **Files:**
+
 - Modify: `packages/core/test/harness.ts`
 - Modify: `.github/workflows/ci.yml`
 - Create: `docs/DUCKDB_SUPPORT.md`
 
 **Interfaces:**
+
 - Consumes: `createDuckClient` from Task 8.
 - Produces: `makeTestDb()` returns a DuckDB-backed `TestDb` when `GRAPHX_TEST_DRIVER=duckdb`; `docs/DUCKDB_SUPPORT.md` records the parity number and the triage.
 
 - [ ] **Step 1: Add the duckdb arm to `makeTestDb`**
 
-In `packages/core/test/harness.ts`, add the import and the branch. Put it *before* the postgres branch so the if-chain reads in driver order:
+In `packages/core/test/harness.ts`, add the import and the branch. Put it _before_ the postgres branch so the if-chain reads in driver order:
 
 ```ts
 import { createDuckClient, type DuckClient } from '../src/duck.ts';
 ```
 
 ```ts
-	if (DRIVER === 'duckdb') {
-		// A temp file rather than :memory:, so `sibling()` can open a second connection to
-		// the same database — the concurrency suite needs two genuine connections, and an
-		// in-memory DuckDB is private to its instance.
-		const path = `test_${ulid()}.duckdb`;
-		const main = createDuckClient({ path });
-		const siblings: DuckClient[] = [];
-		return {
-			client: main,
-			sibling: () => {
-				const s = createDuckClient({ path });
-				siblings.push(s);
-				return s;
-			},
-			teardown: async () => {
-				for (const s of siblings) await s.end().catch(() => {});
-				await main.end().catch(() => {});
-				for (const sfx of ['', '.wal']) rmSync(`${path}${sfx}`, { force: true });
-			},
-		};
-	}
+if (DRIVER === 'duckdb') {
+	// A temp file rather than :memory:, so `sibling()` can open a second connection to
+	// the same database — the concurrency suite needs two genuine connections, and an
+	// in-memory DuckDB is private to its instance.
+	const path = `test_${ulid()}.duckdb`;
+	const main = createDuckClient({ path });
+	const siblings: DuckClient[] = [];
+	return {
+		client: main,
+		sibling: () => {
+			const s = createDuckClient({ path });
+			siblings.push(s);
+			return s;
+		},
+		teardown: async () => {
+			for (const s of siblings) await s.end().catch(() => {});
+			await main.end().catch(() => {});
+			for (const sfx of ['', '.wal']) rmSync(`${path}${sfx}`, { force: true });
+		},
+	};
+}
 ```
 
 Extend the env wiring beside the postgres block so multi-tenant `getDb()` resolves to DuckDB too:
@@ -4032,15 +4056,15 @@ Expected: a mix. Record the exact pass/fail/skip counts — that number is the d
 
 Group the failures and write `docs/DUCKDB_SUPPORT.md` in the shape of `docs/POSTGRES_SUPPORT.md` — a status block, then a table mapping failure categories to counts and to the stage that resolves each. Expected categories, from the spec:
 
-| category | resolved by |
-|---|---|
-| full-text: `ftsWhere` / `ftsSeedLive` / `ftsSeedAsOf` throw `notYet` | stage 5 |
-| hybrid retrieval, which fuses a lexical leg | stage 5 |
-| outbox ordering and trigger-runner cursors | stage 6 |
-| auth package read-modify-write idempotency | stage 6 |
-| multi-tenant `getDb` suites needing a bucket per namespace | stage 4 (Task 15) |
-| `p14-concurrency` — asserts lock contention that does not exist here | Task 16 rewrite |
-| libSQL-internals probes | none; already skipped by `libsqlOnly` |
+| category                                                             | resolved by                           |
+| -------------------------------------------------------------------- | ------------------------------------- |
+| full-text: `ftsWhere` / `ftsSeedLive` / `ftsSeedAsOf` throw `notYet` | stage 5                               |
+| hybrid retrieval, which fuses a lexical leg                          | stage 5                               |
+| outbox ordering and trigger-runner cursors                           | stage 6                               |
+| auth package read-modify-write idempotency                           | stage 6                               |
+| multi-tenant `getDb` suites needing a bucket per namespace           | stage 4 (Task 15)                     |
+| `p14-concurrency` — asserts lock contention that does not exist here | Task 16 rewrite                       |
+| libSQL-internals probes                                              | none; already skipped by `libsqlOnly` |
 
 Any failure that does not fit one of those rows is a real bug in stages 1–3 and must be fixed before this task closes. State that explicitly in the doc.
 
@@ -4049,24 +4073,24 @@ Any failure that does not fit one of those rows is a real bug in stages 1–3 an
 In `.github/workflows/ci.yml`, add a `test-duckdb` job modeled on the existing `test-postgres` job, minus the service container — DuckDB needs no server:
 
 ```yaml
-  test-duckdb:
-    name: test (DuckDB)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun test --timeout 30000
-        env:
-          GRAPHX_TEST_DRIVER: duckdb
+test-duckdb:
+  name: test (DuckDB)
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: oven-sh/setup-bun@v2
+    - run: bun install --frozen-lockfile
+    - run: bun test --timeout 30000
+      env:
+        GRAPHX_TEST_DRIVER: duckdb
 ```
 
 Mark it `continue-on-error: true` for now, with a comment naming the stage that removes the flag:
 
 ```yaml
-    # Stages 5-7 close the remaining gaps; until then this job reports without
-    # blocking. Remove continue-on-error when docs/DUCKDB_SUPPORT.md reaches parity.
-    continue-on-error: true
+# Stages 5-7 close the remaining gaps; until then this job reports without
+# blocking. Remove continue-on-error when docs/DUCKDB_SUPPORT.md reaches parity.
+continue-on-error: true
 ```
 
 - [ ] **Step 5: Commit**
@@ -4091,10 +4115,12 @@ docs/DUCKDB_SUPPORT.md reaches parity."
 Stage 4 begins. The client's durable state moves from a local file to a snapshot chain in a bucket. This half is the read direction.
 
 **Files:**
+
 - Create: `packages/core/src/duck-materialize.ts`
 - Test: `packages/core/test/duck-materialize.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Manifest`, `TableRef` (Task 5); `FileCache` (Task 6); `DuckClient` (Task 8); `duckdbSchema` (Task 9).
 - Produces:
   - `const SNAPSHOT_TABLES: readonly string[]` — every table name a manifest can carry
@@ -4188,8 +4214,14 @@ describe('materialize', () => {
 		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
 
 		const c = createDuckClient();
-		await materialize(c, { ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } }, cache);
-		expect((await c.execute(`SELECT count(*) AS n FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.n).toBe(1);
+		await materialize(
+			c,
+			{ ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } },
+			cache,
+		);
+		expect(
+			(await c.execute(`SELECT count(*) AS n FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.n,
+		).toBe(1);
 		await c.end();
 	});
 
@@ -4197,8 +4229,9 @@ describe('materialize', () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
 		await materialize(c, { ...emptyManifest(384, 'h'), tables: {} }, cache);
-		expect((await c.execute(`SELECT value FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.value)
-			.toBe('384');
+		expect(
+			(await c.execute(`SELECT value FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.value,
+		).toBe('384');
 		await c.end();
 	});
 });
@@ -4338,12 +4371,14 @@ every data object is content-addressed."
 The write direction, and the point at which `DuckClient` stops being a local database.
 
 **Files:**
+
 - Create: `packages/core/src/duck-commit.ts`
 - Modify: `packages/core/src/duck.ts` (bucket-backed lifecycle)
 - Modify: `packages/core/src/db.ts` (`DbConfig` bucket fields)
 - Test: `packages/core/test/duck-commit.test.ts`
 
 **Interfaces:**
+
 - Consumes: `SnapshotStore`, `Manifest` (Task 5); `FileCache` (Task 6); `materialize`, `SNAPSHOT_TABLES` (Task 14).
 - Produces:
   - `async function exportTable(client, table, cache, tmpDir, where?, suffix?): Promise<string | null>` — writes a table (or the subset matching `where`) to Parquet, uploads it, returns its content key; null when empty
@@ -4556,7 +4591,14 @@ export async function buildManifest(
 		const splitOn = SPLIT_TABLES[table];
 		if (splitOn) {
 			// Live first, so a reader that wants only current state can take files[0].
-			const live = await exportTable(client, table, cache, tmpDir, `${splitOn} = ${FOREVER}`, 'live');
+			const live = await exportTable(
+				client,
+				table,
+				cache,
+				tmpDir,
+				`${splitOn} = ${FOREVER}`,
+				'live',
+			);
 			const history = await exportTable(
 				client,
 				table,
@@ -4741,6 +4783,7 @@ use, mirroring PgClient.ready."
 The last piece. A commit per mutation is untenable, and the conditional-close CAS needs a serialized writer to be a CAS at all. Both are the same mechanism.
 
 **Files:**
+
 - Modify: `packages/core/src/graph.ts` (write session, mutex, `isRetryableContention`)
 - Modify: `packages/core/src/serve.ts:687-715` (contention → 409)
 - Create: `packages/core/test/duck-e2e.test.ts`
@@ -4748,6 +4791,7 @@ The last piece. A commit per mutation is untenable, and the conditional-close CA
 - Modify: `docs/DUCKDB_SUPPORT.md`
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: `Graph.write<T>(fn: (g: Graph) => Promise<T>): Promise<T>` — groups every mutation in `fn` into one snapshot commit; nested calls join the enclosing session.
 
@@ -4966,10 +5010,10 @@ Add `reload()` to `DuckClient` — re-materialize the current manifest, discardi
 `graph.ts:297-313` matches SQLITE_BUSY and the Postgres SQLSTATEs. None of DuckDB's conflict signals match, so today every conflict would fall through `if (!isRetryableContention(e)) throw e` and reach the caller as a 500. Add them:
 
 ```ts
-	// DuckDB signals a write-write conflict as a TransactionContext error with no code,
-	// and the snapshot store signals a lost commit race with ObjectExistsError.
-	if (e instanceof ObjectExistsError) return true;
-	if (/Conflict on|transaction is aborted|TransactionContext Error/i.test(msg)) return true;
+// DuckDB signals a write-write conflict as a TransactionContext error with no code,
+// and the snapshot store signals a lost commit race with ObjectExistsError.
+if (e instanceof ObjectExistsError) return true;
+if (/Conflict on|transaction is aborted|TransactionContext Error/i.test(msg)) return true;
 ```
 
 - [ ] **Step 5: Map contention to 409 in `serve.ts`**
@@ -4977,16 +5021,16 @@ Add `reload()` to `DuckClient` — re-materialize the current manifest, discardi
 `"…: too much contention"` is unmapped in `serve.ts:687-715` and falls to 500. On object storage it becomes an expected condition:
 
 ```ts
-	// Retries exhausted against a contended writer. A 500 would tell the caller the server
-	// is broken; 409 tells them to retry, which is what they should do.
-	if (/: too much contention$/.test(msg)) return 409;
+// Retries exhausted against a contended writer. A 500 would tell the caller the server
+// is broken; 409 tells them to retry, which is what they should do.
+if (/: too much contention$/.test(msg)) return 409;
 ```
 
 Add a test asserting the status alongside the existing mappings in the serve suite.
 
 - [ ] **Step 6: Give `p14-concurrency` a duckdb variant**
 
-Its 5 tests open 8 connections to one file and rely on write-lock contention, which does not exist here. Gate the existing bodies with `libsqlOnly`-style guards for the lock mechanics, and add a duckdb block asserting the same *invariant* through the commit protocol: N clients over one store, each committing, exactly one winner per snapshot number, and version intervals contiguous. The last two tests in `duck-e2e.test.ts` are that block — move them into `p14-concurrency.test.ts` so the invariant stays in one file.
+Its 5 tests open 8 connections to one file and rely on write-lock contention, which does not exist here. Gate the existing bodies with `libsqlOnly`-style guards for the lock mechanics, and add a duckdb block asserting the same _invariant_ through the commit protocol: N clients over one store, each committing, exactly one winner per snapshot number, and version intervals contiguous. The last two tests in `duck-e2e.test.ts` are that block — move them into `p14-concurrency.test.ts` so the invariant stays in one file.
 
 - [ ] **Step 7: Run everything**
 
@@ -5047,7 +5091,7 @@ contention' now maps to 409 rather than 500."
 
 Checked against the spec:
 
-- **§6 storage layout** — Tasks 5 (manifest, keys), 9 (live/history split), 14 (materialize), 15 (commit). The delta/tombstone mechanism is in the manifest type and honored by `materialize`, but no task *produces* deltas: stage 4 rewrites a dirty table whole. Compaction and delta writes are correctly deferred, and `TableRef.files` being a list from day one is what keeps that a pure addition later.
+- **§6 storage layout** — Tasks 5 (manifest, keys), 9 (live/history split), 14 (materialize), 15 (commit). The delta/tombstone mechanism is in the manifest type and honored by `materialize`, but no task _produces_ deltas: stage 4 rewrites a dirty table whole. Compaction and delta writes are correctly deferred, and `TableRef.files` being a list from day one is what keeps that a pure addition later.
 - **§7 commit protocol** — Task 5 (CAS, probe-forward, rebase), Task 4 (provider matrix, probe). `_head` is written best-effort and never trusted.
 - **§8 runtime** — Tasks 7 (pool, FATAL rebuild), 8 (all eight landmines), 14 (`NO_VALIDATION`, cache).
 - **§9 dialect branch** — Tasks 1, 2, 10, 11.

@@ -6,7 +6,11 @@ import { makeTestDb } from '../../core/test/harness.ts';
 import { Auth } from '../src/auth.ts';
 import { defineAuthModel, rel } from '../src/model.ts';
 
-const MODEL = defineAuthModel({ user: {}, group: { member: rel() }, doc: { editor: rel(), viewer: rel() } });
+const MODEL = defineAuthModel({
+	user: {},
+	group: { member: rel() },
+	doc: { editor: rel(), viewer: rel() },
+});
 
 async function freshAuth(): Promise<{ db: DbClient; auth: Auth }> {
 	const db = makeTestDb().client;

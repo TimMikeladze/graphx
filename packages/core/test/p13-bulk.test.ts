@@ -133,26 +133,29 @@ libsqlOnly('P13 bulk: measurably faster than per-row close-and-insert', async ()
 	console.log(`bulk speedup: ${speedup.toFixed(1)}× (loop ${tLoop}ms → bulk ${tBulk}ms, N=${N})`);
 });
 
-libsqlOnly('P13 bulk: invalid data throw, leaving the ANN index intact (fail-fast before drop)', async () => {
-	const client = await mem();
-	// seed a valid node first via the normal path so the index has a live row.
-	const g = new Graph(client, SCHEMA);
-	await g.addNode({ type: 'doc', data: { title: 'ok' }, body: 'fine', emb: [0, 0, 0, 1] });
+libsqlOnly(
+	'P13 bulk: invalid data throw, leaving the ANN index intact (fail-fast before drop)',
+	async () => {
+		const client = await mem();
+		// seed a valid node first via the normal path so the index has a live row.
+		const g = new Graph(client, SCHEMA);
+		await g.addNode({ type: 'doc', data: { title: 'ok' }, body: 'fine', emb: [0, 0, 0, 1] });
 
-	// a row missing the required `title` must throw (Zod) — validation runs BEFORE any
-	// index is dropped, so it cannot leave the schema in a half-torn state.
-	const bad = [{ type: 'doc' as const, data: {}, body: 'bad' }] as BulkRow<typeof SCHEMA>[];
-	await expect(bulkLoad(client, SCHEMA, bad)).rejects.toThrow();
+		// a row missing the required `title` must throw (Zod) — validation runs BEFORE any
+		// index is dropped, so it cannot leave the schema in a half-torn state.
+		const bad = [{ type: 'doc' as const, data: {}, body: 'bad' }] as BulkRow<typeof SCHEMA>[];
+		await expect(bulkLoad(client, SCHEMA, bad)).rejects.toThrow();
 
-	// the ANN index is still present and queryable
-	const idx = await client.execute(
-		"SELECT name FROM sqlite_master WHERE type='index' AND name='nv_emb_idx'",
-	);
-	expect(idx.rows.length).toBe(1);
-	const res = await retrieve(client, stubEmbed, { query: 'needle', k: 1 });
-	expect(res.length).toBe(1);
-	client.close();
-});
+		// the ANN index is still present and queryable
+		const idx = await client.execute(
+			"SELECT name FROM sqlite_master WHERE type='index' AND name='nv_emb_idx'",
+		);
+		expect(idx.rows.length).toBe(1);
+		const res = await retrieve(client, stubEmbed, { query: 'needle', k: 1 });
+		expect(res.length).toBe(1);
+		client.close();
+	},
+);
 
 test('P13 bulk: unknown type throws', async () => {
 	const client = await mem();

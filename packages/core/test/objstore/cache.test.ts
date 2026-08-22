@@ -84,8 +84,6 @@ describe('FileCache', () => {
 	test('ensure throws a named error for a key that is in neither place', async () => {
 		const cache = new FileCache(new MemoryObjectStore(), mkdtempSync(join(root, 'c-')));
 		await expect(cache.ensure('data/deadbeef.parquet')).rejects.toThrow(/not found/);
-		await expect(cache.ensure('data/deadbeef.parquet')).rejects.toBeInstanceOf(
-			ObjectNotFoundError,
-		);
+		await expect(cache.ensure('data/deadbeef.parquet')).rejects.toBeInstanceOf(ObjectNotFoundError);
 	});
 });

@@ -454,7 +454,9 @@ test('P6: neighbors(asOf) in both directions, and asOf=FOREVER matches the live 
 	expect((await g.neighbors(d.id, { direction: 'reverse', asOf: t })).map((n) => n.id)).toEqual([
 		p.id,
 	]);
-	expect((await g.neighbors(p.id, { direction: 'both', asOf: t })).map((n) => n.id)).toEqual([d.id]);
+	expect((await g.neighbors(p.id, { direction: 'both', asOf: t })).map((n) => n.id)).toEqual([
+		d.id,
+	]);
 	expect((await g.neighbors(p.id, { asOf: FOREVER })).map((n) => n.id)).toEqual(
 		(await g.neighbors(p.id)).map((n) => n.id),
 	);

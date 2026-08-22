@@ -10,7 +10,7 @@ import type {
 } from './dialect.ts';
 import { commitSnapshot, type ExportSource } from './duck-commit.ts';
 import { type LoadTarget, materialize } from './duck-materialize.ts';
-import { DuckPool, type PooledConnection } from './duck-pool.ts';
+import { DuckPool, duckPathFor, type PooledConnection } from './duck-pool.ts';
 import { normalizeRow } from './duck-value.ts';
 import { rebuildIndex } from './fts/index-tables.ts';
 import { FileCache } from './objstore/cache.ts';
@@ -359,14 +359,7 @@ export class DuckClient implements DbClient {
 			const rebuilds = dirty.has('node_versions');
 			const signature = rebuilds ? await this.ftsCorpusSignature() : undefined;
 			if (rebuilds) this.ftsStale = false;
-			this.current = await commitSnapshot(
-				this.raw,
-				snapshots,
-				cache,
-				tmpDir,
-				this.current,
-				dirty,
-			);
+			this.current = await commitSnapshot(this.raw, snapshots, cache, tmpDir, this.current, dirty);
 			if (signature !== undefined) this.ftsSignature = signature;
 			return this.current;
 		});
@@ -541,7 +534,7 @@ registerDuckDriver((namespace: string, cfg: DbConfig): DbClient => {
 			)
 		: undefined;
 	return new DuckClient({
-		path: cfg.duckPath ?? (store ? ':memory:' : `${namespace}.duckdb`),
+		path: cfg.duckPath ?? (store ? ':memory:' : duckPathFor(namespace)),
 		...(store ? { store, cacheDir: cfg.cacheDir ?? `.graphx-cache/${namespace}` } : {}),
 		...(cfg.snapshot !== undefined ? { snapshot: cfg.snapshot } : {}),
 		...(cfg.poolMax !== undefined ? { poolMax: cfg.poolMax } : {}),

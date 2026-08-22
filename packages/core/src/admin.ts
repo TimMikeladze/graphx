@@ -80,7 +80,11 @@ export function createAdminApp(cfg: AdminConfig): Hono {
 		)
 		.post('/tenants/:id/projects', zValidator('json', projectBody), async (c) => {
 			const { name, dbNamespace } = c.req.valid('json');
-			const id = await createProject(cfg.control, { tenantId: c.req.param('id'), name, dbNamespace });
+			const id = await createProject(cfg.control, {
+				tenantId: c.req.param('id'),
+				name,
+				dbNamespace,
+			});
 			return c.json({ id }, 201);
 		})
 		.get('/users', async (c) => c.json({ users: await listUsers(cfg.control) }))

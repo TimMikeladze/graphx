@@ -77,7 +77,9 @@ export async function probeConditionalWrite(store: ObjectStore): Promise<void> {
 		}
 		const after = await store.get(key);
 		if (after !== null && new TextDecoder().decode(after) !== '1') {
-			throw new ConditionalWriteUnsupportedError('the probe object was modified by the second write');
+			throw new ConditionalWriteUnsupportedError(
+				'the probe object was modified by the second write',
+			);
 		}
 	} finally {
 		await store.delete(key).catch(() => {});

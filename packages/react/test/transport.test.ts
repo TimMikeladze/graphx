@@ -43,7 +43,10 @@ test('request: appends defined query params, omits undefined', async () => {
 test('request: merges auth headers from the headers getter', async () => {
 	const cap: { url?: string; init?: RequestInit } = {};
 	const f = fakeFetch(new Response('{}', { status: 200 }), cap);
-	await request(t(f, () => ({ authorization: 'Bearer z' })), { method: 'GET', path: '/x' });
+	await request(
+		t(f, () => ({ authorization: 'Bearer z' })),
+		{ method: 'GET', path: '/x' },
+	);
 	expect(new Headers(cap.init?.headers).get('authorization')).toBe('Bearer z');
 });
 

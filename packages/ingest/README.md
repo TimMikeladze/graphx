@@ -9,8 +9,8 @@ import { ingestDir } from 'ingest';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
-  nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
-  edges: { links_to: { from: 'note', to: 'note' } },
+	nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
+	edges: { links_to: { from: 'note', to: 'note' } },
 });
 
 const db = getDb('my-vault');
@@ -18,9 +18,9 @@ await init(db, 768);
 const graph = new Graph(db, schema);
 
 const result = await ingestDir({
-  dir: './vault',
-  graph,
-  embed: async (text) => myEmbedder(text), // (text: string) => Promise<number[]>
+	dir: './vault',
+	graph,
+	embed: async (text) => myEmbedder(text), // (text: string) => Promise<number[]>
 });
 // { added, updated, unchanged, edgesAdded, edgesClosed, skipped }
 ```

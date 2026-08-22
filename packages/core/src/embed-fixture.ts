@@ -80,7 +80,11 @@ function round(v: number[]): number[] {
 function load(path: string): FixtureFile {
 	if (!existsSync(path)) return { dim: 0, entries: {} };
 	const parsed = JSON.parse(readFileSync(path, 'utf8')) as FixtureFile;
-	if (typeof parsed.dim !== 'number' || typeof parsed.entries !== 'object' || parsed.entries === null) {
+	if (
+		typeof parsed.dim !== 'number' ||
+		typeof parsed.entries !== 'object' ||
+		parsed.entries === null
+	) {
 		throw new Error(`fixtureEmbed: ${path} is not a fixture file (expected { dim, entries })`);
 	}
 	return parsed;

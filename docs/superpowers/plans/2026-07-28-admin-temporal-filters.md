@@ -16,7 +16,7 @@
 - **Dual-driver tests.** Core tests obtain connections only via `makeTestDb()` from `packages/core/test/harness.ts` — never `createClient` directly. The suite must pass under both `bun test` (libSQL, the default) and `GRAPHX_TEST_DRIVER=postgres bun test`.
 - **Indentation:** tabs in `packages/core`, two spaces in `packages/admin`. Match the file you are editing.
 - **Temporal predicate:** always half-open — `valid_from <= t AND t < valid_to`. Use `asOfPredicate(alias)` from `packages/core/src/temporal.ts` rather than retyping it.
-- **Live-read convention:** `asOf === undefined` *or* `asOf >= FOREVER` means "now" and must take the live `nodes`/`edges` view path. Never bind `FOREVER` into a temporal predicate. `FOREVER` is imported from `packages/core/src/db.ts`.
+- **Live-read convention:** `asOf === undefined` _or_ `asOf >= FOREVER` means "now" and must take the live `nodes`/`edges` view path. Never bind `FOREVER` into a temporal predicate. `FOREVER` is imported from `packages/core/src/db.ts`.
 - **Pre-commit hook** runs `bun run lint && bun run type-check && bun run clean:db`. A commit that fails lint or type-check will not land — fix, do not bypass.
 - **Full test command:** `bun test --timeout 30000` from the repo root (the `test` script). Single file: `bun test packages/core/test/<file>.test.ts`.
 
@@ -26,45 +26,45 @@ Two corrections found while mapping files. Both are already reflected in the tas
 
 1. **Spec §9 says to gate "the write entries in the ⌘K palette."** `packages/admin/src/components/command-palette.tsx` has no write entries — its items are node search, navigate-to-admin, set-token, and theme toggle. Nothing to gate; the palette is not modified by this plan.
 2. **Spec §9 omits `ContentTab`.** `packages/admin/src/components/content-tab.tsx` holds an inline body editor backed by `useUpdateNodeBody` — a genuine write path inside the inspector. Task 10 gates it.
-3. **Spec §8 lists a "hover readout" on the track.** Task 8 reports the previewed time while *dragging* only. A readout that jumps every time the pointer crosses the track is noise, and the same information is available on drag, which is when it is wanted. Deliberate, not an omission.
+3. **Spec §8 lists a "hover readout" on the track.** Task 8 reports the previewed time while _dragging_ only. A readout that jumps every time the pointer crosses the track is noise, and the same information is available on drag, which is when it is wanted. Deliberate, not an omission.
 
 ## File Structure
 
 **Created**
 
-| Path | Responsibility |
-|---|---|
-| `packages/core/src/timeline.ts` | Change-point aggregation: extent, density buckets, snap ticks. Pure DB reads, no HTTP. |
-| `packages/core/test/timeline.test.ts` | Dual-driver tests for the above. |
-| `packages/admin/src/lib/timeline.ts` | Pure scrub math — snap, step, presets, time↔pixel. No React. |
-| `packages/admin/src/lib/timeline.test.ts` | Unit tests for the above. |
-| `packages/admin/src/components/timeline/timeline-track.tsx` | SVG histogram + drag handle. Reports a time; owns no time state. |
-| `packages/admin/src/components/timeline/timeline-bar.tsx` | The docked frame: transport controls, track, readout, presets. Owns only `playing`. |
-| `packages/admin/src/components/time-travel-banner.tsx` | Amber "viewing the past, read-only" bar with a Return-to-now action. |
+| Path                                                        | Responsibility                                                                         |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/core/src/timeline.ts`                             | Change-point aggregation: extent, density buckets, snap ticks. Pure DB reads, no HTTP. |
+| `packages/core/test/timeline.test.ts`                       | Dual-driver tests for the above.                                                       |
+| `packages/admin/src/lib/timeline.ts`                        | Pure scrub math — snap, step, presets, time↔pixel. No React.                           |
+| `packages/admin/src/lib/timeline.test.ts`                   | Unit tests for the above.                                                              |
+| `packages/admin/src/components/timeline/timeline-track.tsx` | SVG histogram + drag handle. Reports a time; owns no time state.                       |
+| `packages/admin/src/components/timeline/timeline-bar.tsx`   | The docked frame: transport controls, track, readout, presets. Owns only `playing`.    |
+| `packages/admin/src/components/time-travel-banner.tsx`      | Amber "viewing the past, read-only" bar with a Return-to-now action.                   |
 
 **Modified**
 
-| Path | Change |
-|---|---|
-| `packages/core/src/graph.ts` | `asOf` on `getNode`, `getNodeContent`, `neighborSubquery`, `neighbors`, `neighborsPage`. |
-| `packages/core/src/serve.ts` | `asOf` on four route query schemas; new `GET /timeline` route. |
-| `packages/core/src/index.ts` | Export the timeline module. |
-| `packages/core/test/openapi.test.ts` | Assert the new path is in the document. |
-| `packages/admin/src/lib/types.ts` | `Timeline` DTO. |
-| `packages/admin/src/lib/api.ts` | `asOf` on three reads; `timeline()`. |
-| `packages/admin/src/lib/query-keys.ts` | `asOf` suffix on three keys; `timeline` key. |
-| `packages/admin/src/hooks/use-graph.ts` | Thread `asOf`; add `useTimeline`. |
-| `packages/admin/src/components/node-detail.tsx` | Accept `asOf` + `readOnly`; pass through. |
-| `packages/admin/src/components/node-detail-sheet.tsx` | Same pass-through. |
-| `packages/admin/src/components/content-tab.tsx` | Accept `asOf` + `readOnly`; disable editing when read-only. |
-| `packages/admin/src/components/graph-shell.tsx` | Render the timeline bar under the canvas. |
-| `packages/admin/src/components/app-sidebar.tsx` | Drop the `AsOfPicker`; keep the as-of filter chip. |
-| `packages/admin/src/routes/explorer-page.tsx` | Derive `readOnly`; wire the bar, the banner, and `asOf`. |
+| Path                                                  | Change                                                                                   |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/core/src/graph.ts`                          | `asOf` on `getNode`, `getNodeContent`, `neighborSubquery`, `neighbors`, `neighborsPage`. |
+| `packages/core/src/serve.ts`                          | `asOf` on four route query schemas; new `GET /timeline` route.                           |
+| `packages/core/src/index.ts`                          | Export the timeline module.                                                              |
+| `packages/core/test/openapi.test.ts`                  | Assert the new path is in the document.                                                  |
+| `packages/admin/src/lib/types.ts`                     | `Timeline` DTO.                                                                          |
+| `packages/admin/src/lib/api.ts`                       | `asOf` on three reads; `timeline()`.                                                     |
+| `packages/admin/src/lib/query-keys.ts`                | `asOf` suffix on three keys; `timeline` key.                                             |
+| `packages/admin/src/hooks/use-graph.ts`               | Thread `asOf`; add `useTimeline`.                                                        |
+| `packages/admin/src/components/node-detail.tsx`       | Accept `asOf` + `readOnly`; pass through.                                                |
+| `packages/admin/src/components/node-detail-sheet.tsx` | Same pass-through.                                                                       |
+| `packages/admin/src/components/content-tab.tsx`       | Accept `asOf` + `readOnly`; disable editing when read-only.                              |
+| `packages/admin/src/components/graph-shell.tsx`       | Render the timeline bar under the canvas.                                                |
+| `packages/admin/src/components/app-sidebar.tsx`       | Drop the `AsOfPicker`; keep the as-of filter chip.                                       |
+| `packages/admin/src/routes/explorer-page.tsx`         | Derive `readOnly`; wire the bar, the banner, and `asOf`.                                 |
 
 **Deleted**
 
-| Path | Reason |
-|---|---|
+| Path                                                     | Reason                                                                                       |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `packages/admin/src/components/filters/as-of-picker.tsx` | Superseded by the timeline bar. Two controls for one filter is a worse UI than either alone. |
 
 ---
@@ -72,10 +72,12 @@ Two corrections found while mapping files. Both are already reflected in the tas
 ### Task 1: Core — `asOf` on `getNode` and `getNodeContent`
 
 **Files:**
+
 - Modify: `packages/core/src/graph.ts:622-649` (`getNode`, `getNodeContent`)
 - Test: `packages/core/test/p6-temporal.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `asOfPredicate` from `./temporal.ts`, `FOREVER` from `./db.ts` (already imported in `graph.ts`).
 - Produces:
   - `getNode(id: string, opts?: { asOf?: number }): Promise<AnyNode<S> | null>`
@@ -215,10 +217,12 @@ git commit -m "feat(core): read a node and its content as of a past instant"
 ### Task 2: Core — `asOf` on `neighbors` and `neighborsPage`
 
 **Files:**
+
 - Modify: `packages/core/src/graph.ts:104-118` (`NeighborOpts`), `:653-706` (`neighborSubquery`, `neighbors`), `:707-742` (`neighborsPage`)
 - Test: `packages/core/test/p6-temporal.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `asOfPredicate` (imported in Task 1).
 - Produces: `NeighborOpts.asOf?: number`, inherited by `NeighborPageOpts`. Both `neighbors(id, opts)` and `neighborsPage(id, opts)` honour it.
 
@@ -273,7 +277,9 @@ test('P6: neighbors(asOf) in both directions, and asOf=FOREVER matches the live 
 	expect((await g.neighbors(d.id, { direction: 'reverse', asOf: t })).map((n) => n.id)).toEqual([
 		p.id,
 	]);
-	expect((await g.neighbors(p.id, { direction: 'both', asOf: t })).map((n) => n.id)).toEqual([d.id]);
+	expect((await g.neighbors(p.id, { direction: 'both', asOf: t })).map((n) => n.id)).toEqual([
+		d.id,
+	]);
 	expect((await g.neighbors(p.id, { asOf: FOREVER })).map((n) => n.id)).toEqual(
 		(await g.neighbors(p.id)).map((n) => n.id),
 	);
@@ -328,7 +334,7 @@ export interface NeighborOpts {
 
 - [ ] **Step 4: Make `neighborSubquery` temporal**
 
-Replace `neighborSubquery` (`graph.ts:657`). The temporal predicate is appended *after* the rel clause on each side, so its two args follow that side's rel args:
+Replace `neighborSubquery` (`graph.ts:657`). The temporal predicate is appended _after_ the rel clause on each side, so its two args follow that side's rel args:
 
 ```ts
 	private neighborSubquery(
@@ -392,26 +398,26 @@ Replace the body of `neighbors` (`graph.ts:687`), keeping its doc comment:
 In `neighborsPage` (`graph.ts:707`), the cursor clause is a `WHERE` that follows the join, so the join's binds must be pushed before the cursor's. Replace from `const pageArgs` through the `const sql` template:
 
 ```ts
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const join = past
-			? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
-			: 'JOIN nodes n ON n.id = nb.nid';
-		const pageArgs: (string | number)[] = [...args];
-		if (past) pageArgs.push(opts.asOf as number, opts.asOf as number);
-		let cursorClause = '';
-		if (opts.cursor) {
-			const [lastId] = decodeCursor(opts.cursor);
-			cursorClause = ' WHERE n.id > ?';
-			pageArgs.push(lastId as string);
-		}
-		// Dedup by n.id so the keyset key is unique even when multiple edges reach the
-		// same neighbor (a duplicate nid would otherwise break no-overlap/no-skip).
-		const { select, group } = distinctSelect(
-			dialectOf(this.raw),
-			'n.id',
-			'n.id AS id, n.type AS type, n.data AS data',
-		);
-		const sql = `${select}
+const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+const join = past
+	? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
+	: 'JOIN nodes n ON n.id = nb.nid';
+const pageArgs: (string | number)[] = [...args];
+if (past) pageArgs.push(opts.asOf as number, opts.asOf as number);
+let cursorClause = '';
+if (opts.cursor) {
+	const [lastId] = decodeCursor(opts.cursor);
+	cursorClause = ' WHERE n.id > ?';
+	pageArgs.push(lastId as string);
+}
+// Dedup by n.id so the keyset key is unique even when multiple edges reach the
+// same neighbor (a duplicate nid would otherwise break no-overlap/no-skip).
+const { select, group } = distinctSelect(
+	dialectOf(this.raw),
+	'n.id',
+	'n.id AS id, n.type AS type, n.data AS data',
+);
+const sql = `${select}
 			FROM (${neighborSql}) nb
 			${join}${cursorClause}
 			${group}
@@ -448,10 +454,12 @@ git commit -m "feat(core): traverse neighbors as of a past instant"
 ### Task 3: Core — routes accept `asOf` on the four reads
 
 **Files:**
+
 - Modify: `packages/core/src/serve.ts:258-269` (`neighborQuerySchema`), `:866-880` (get node), `:1072-1088` (node content), `:946-968` (neighbors), `:970-992` (neighborsPage)
 - Test: `packages/core/test/p12-serve.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: Task 1 and Task 2's method signatures.
 - Produces: `GET /nodes/{id}`, `GET /nodes/{id}/content`, `GET /nodes/{id}/neighbors`, `GET /nodes/{id}/neighborsPage` all accept `?asOf=<epoch ms>`.
 
@@ -467,7 +475,11 @@ test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 
 	const app = createApp({ control, schema: SCHEMA, authenticate });
 	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
@@ -621,11 +633,13 @@ git commit -m "feat(core): accept asOf on the node, content and neighbor routes"
 ### Task 4: Core — the `timeline` aggregate
 
 **Files:**
+
 - Create: `packages/core/src/timeline.ts`
 - Modify: `packages/core/src/index.ts:209-224` (export block)
 - Test: `packages/core/test/timeline.test.ts`
 
 **Interfaces:**
+
 - Consumes: `DbClient` from `./dialect.ts`, `FOREVER` from `./db.ts`, `resolveLimits`/`QueryLimits` from `./governance.ts`.
 - Produces:
   - `timeline(raw: DbClient, opts?: TimelineOpts): Promise<Timeline>`
@@ -965,10 +979,12 @@ git commit -m "feat(core): aggregate graph change points into a scrubber timelin
 ### Task 5: Core — `GET /timeline`
 
 **Files:**
+
 - Modify: `packages/core/src/serve.ts` (imports, query + response schemas, one route next to `/diff` at `:1268`)
 - Test: `packages/core/test/openapi.test.ts` (append), `packages/core/test/p12-serve.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: `timeline` from Task 4.
 - Produces: `GET /t/{tenant}/p/{project}/timeline?from&to&buckets` → the `Timeline` JSON body.
 
@@ -984,7 +1000,11 @@ test('P12 (serve): GET /timeline returns the extent, histogram and ticks', async
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 
 	const app = createApp({ control, schema: SCHEMA, authenticate });
 	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
@@ -1115,11 +1135,13 @@ git commit -m "feat(core): serve the change-point timeline at GET /timeline"
 ### Task 6: Admin — thread `asOf` through the client, keys and hooks
 
 **Files:**
+
 - Modify: `packages/admin/src/lib/types.ts` (append `Timeline`), `packages/admin/src/lib/api.ts:170-244`, `packages/admin/src/lib/query-keys.ts`, `packages/admin/src/hooks/use-graph.ts`
 - Modify: `packages/admin/src/components/node-detail.tsx`, `node-detail-sheet.tsx`, `content-tab.tsx` (pass `asOf` through), `packages/admin/src/routes/explorer-page.tsx` (supply it)
 - Test: `packages/admin/src/lib/api.test.ts` (append)
 
 **Interfaces:**
+
 - Consumes: Tasks 3 and 5's HTTP surface.
 - Produces:
   - `api.getNode(tenant, project, id, asOf?)`, `api.getNodeContent(tenant, project, id, asOf?)`, `api.neighbors(tenant, project, id, asOf?)`
@@ -1135,68 +1157,68 @@ git commit -m "feat(core): serve the change-point timeline at GET /timeline"
 Append to `packages/admin/src/lib/api.test.ts`, inside the existing `describe("api transport", ...)` block:
 
 ```ts
-  it("passes asOf to the single-node reads", async () => {
-    fetchMock.mockResolvedValue(ok({ id: "n1", type: "device", data: {} }))
-    await api.getNode("tA", "pA", "n1", 1234)
-    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/nodes/n1?asOf=1234")
+it('passes asOf to the single-node reads', async () => {
+	fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: {} }));
+	await api.getNode('tA', 'pA', 'n1', 1234);
+	expect(fetchMock.mock.calls[0][0]).toBe('/t/tA/p/pA/nodes/n1?asOf=1234');
 
-    fetchMock.mockResolvedValue(ok({ body: null, uri: null, contentType: null, contentHash: null }))
-    await api.getNodeContent("tA", "pA", "n1", 1234)
-    expect(fetchMock.mock.calls[1][0]).toBe("/t/tA/p/pA/nodes/n1/content?asOf=1234")
+	fetchMock.mockResolvedValue(ok({ body: null, uri: null, contentType: null, contentHash: null }));
+	await api.getNodeContent('tA', 'pA', 'n1', 1234);
+	expect(fetchMock.mock.calls[1][0]).toBe('/t/tA/p/pA/nodes/n1/content?asOf=1234');
 
-    fetchMock.mockResolvedValue(ok([]))
-    await api.neighbors("tA", "pA", "n1", 1234)
-    expect(fetchMock.mock.calls[2][0]).toBe("/t/tA/p/pA/nodes/n1/neighbors?asOf=1234")
-  })
+	fetchMock.mockResolvedValue(ok([]));
+	await api.neighbors('tA', 'pA', 'n1', 1234);
+	expect(fetchMock.mock.calls[2][0]).toBe('/t/tA/p/pA/nodes/n1/neighbors?asOf=1234');
+});
 
-  it("omits asOf from the single-node reads when live", async () => {
-    fetchMock.mockResolvedValue(ok({ id: "n1", type: "device", data: {} }))
-    await api.getNode("tA", "pA", "n1")
-    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/nodes/n1")
-  })
+it('omits asOf from the single-node reads when live', async () => {
+	fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: {} }));
+	await api.getNode('tA', 'pA', 'n1');
+	expect(fetchMock.mock.calls[0][0]).toBe('/t/tA/p/pA/nodes/n1');
+});
 
-  it("builds the timeline URL", async () => {
-    fetchMock.mockResolvedValue(
-      ok({
-        min: 1,
-        max: 2,
-        total: 2,
-        from: 1,
-        to: 2,
-        buckets: [1, 1],
-        ticks: [1, 2],
-        ticksTruncated: false,
-      }),
-    )
-    await api.timeline("tA", "pA", { from: 1, to: 2, buckets: 2 })
-    expect(fetchMock.mock.calls[0][0]).toBe("/t/tA/p/pA/timeline?from=1&to=2&buckets=2")
-  })
+it('builds the timeline URL', async () => {
+	fetchMock.mockResolvedValue(
+		ok({
+			min: 1,
+			max: 2,
+			total: 2,
+			from: 1,
+			to: 2,
+			buckets: [1, 1],
+			ticks: [1, 2],
+			ticksTruncated: false,
+		}),
+	);
+	await api.timeline('tA', 'pA', { from: 1, to: 2, buckets: 2 });
+	expect(fetchMock.mock.calls[0][0]).toBe('/t/tA/p/pA/timeline?from=1&to=2&buckets=2');
+});
 ```
 
 Create the query-key test at `packages/admin/src/lib/query-keys.test.ts`:
 
 ```ts
-import { describe, expect, it } from "bun:test"
-import { qk } from "./query-keys"
+import { describe, expect, it } from 'bun:test';
+import { qk } from './query-keys';
 
-describe("query keys", () => {
-  it("distinguishes a live read from an as-of read", () => {
-    expect(qk.node("t", "p", "n")).not.toEqual(qk.node("t", "p", "n", 5))
-    expect(qk.neighbors("t", "p", "n")).not.toEqual(qk.neighbors("t", "p", "n", 5))
-    expect(qk.nodeContent("t", "p", "n")).not.toEqual(qk.nodeContent("t", "p", "n", 5))
-  })
+describe('query keys', () => {
+	it('distinguishes a live read from an as-of read', () => {
+		expect(qk.node('t', 'p', 'n')).not.toEqual(qk.node('t', 'p', 'n', 5));
+		expect(qk.neighbors('t', 'p', 'n')).not.toEqual(qk.neighbors('t', 'p', 'n', 5));
+		expect(qk.nodeContent('t', 'p', 'n')).not.toEqual(qk.nodeContent('t', 'p', 'n', 5));
+	});
 
-  it("exposes an asOf-agnostic prefix that every as-of key extends", () => {
-    // A write must evict the live entry AND every as-of entry, so the mutations invalidate this
-    // prefix rather than a leaf key. TanStack matches partial prefixes, so both are covered.
-    const prefix = qk.allNode("t", "p", "n")
-    for (const key of [qk.node("t", "p", "n"), qk.node("t", "p", "n", 5)]) {
-      expect(key.slice(0, prefix.length)).toEqual([...prefix])
-    }
-    expect(qk.allNeighbors("t", "p", "n").length).toBe(4)
-    expect(qk.allNodeContent("t", "p", "n").length).toBe(4)
-  })
-})
+	it('exposes an asOf-agnostic prefix that every as-of key extends', () => {
+		// A write must evict the live entry AND every as-of entry, so the mutations invalidate this
+		// prefix rather than a leaf key. TanStack matches partial prefixes, so both are covered.
+		const prefix = qk.allNode('t', 'p', 'n');
+		for (const key of [qk.node('t', 'p', 'n'), qk.node('t', 'p', 'n', 5)]) {
+			expect(key.slice(0, prefix.length)).toEqual([...prefix]);
+		}
+		expect(qk.allNeighbors('t', 'p', 'n').length).toBe(4);
+		expect(qk.allNodeContent('t', 'p', 'n').length).toBe(4);
+	});
+});
 ```
 
 - [ ] **Step 2: Run the tests and verify they fail**
@@ -1214,20 +1236,20 @@ Append to `packages/admin/src/lib/types.ts`:
  * `valid_from` plus any non-FOREVER `valid_to`, so retractions are represented.
  */
 export interface Timeline {
-  /** Extent over all time, ignoring the requested window. `null` on an empty graph. */
-  min: number | null
-  max: number | null
-  /** Change-point count over the full extent. */
-  total: number
-  /** The window the server actually bucketed. */
-  from: number
-  to: number
-  /** Change-point counts per equal-width slot over `[from, to]`. */
-  buckets: number[]
-  /** Distinct change instants in the window, ascending — what the handle snaps to. */
-  ticks: number[]
-  /** True when `ticks` hit the server row cap; narrow the window for an exact list. */
-  ticksTruncated: boolean
+	/** Extent over all time, ignoring the requested window. `null` on an empty graph. */
+	min: number | null;
+	max: number | null;
+	/** Change-point count over the full extent. */
+	total: number;
+	/** The window the server actually bucketed. */
+	from: number;
+	to: number;
+	/** Change-point counts per equal-width slot over `[from, to]`. */
+	buckets: number[];
+	/** Distinct change instants in the window, ascending — what the handle snaps to. */
+	ticks: number[];
+	/** True when `ticks` hit the server row cap; narrow the window for an exact list. */
+	ticksTruncated: boolean;
 }
 ```
 
@@ -1301,38 +1323,38 @@ In `packages/admin/src/hooks/use-graph.ts`, replace `useNode`, `useNodeContent` 
 ```ts
 /** A single node (detail Sheet), at `asOf` when one is set. */
 export function useNode(tenant?: string, project?: string, id?: string, asOf?: number) {
-  return useQuery({
-    queryKey: qk.node(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.node(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(tenant && project && id),
+	});
 }
 ```
 
 ```ts
 export function useNodeContent(
-  tenant?: string,
-  project?: string,
-  id?: string,
-  enabled = true,
-  asOf?: number,
+	tenant?: string,
+	project?: string,
+	id?: string,
+	enabled = true,
+	asOf?: number,
 ) {
-  return useQuery({
-    queryKey: qk.nodeContent(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(enabled && tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.nodeContent(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(enabled && tenant && project && id),
+	});
 }
 ```
 
 ```ts
 /** A node's neighbors (detail Sheet · Neighbors tab), at `asOf` when one is set. */
 export function useNeighbors(tenant?: string, project?: string, id?: string, asOf?: number) {
-  return useQuery({
-    queryKey: qk.neighbors(tenant ?? "", project ?? "", id ?? "", asOf),
-    queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
-    enabled: Boolean(tenant && project && id),
-  })
+	return useQuery({
+		queryKey: qk.neighbors(tenant ?? '', project ?? '', id ?? '', asOf),
+		queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
+		enabled: Boolean(tenant && project && id),
+	});
 }
 ```
 
@@ -1342,16 +1364,16 @@ export function useNeighbors(tenant?: string, project?: string, id?: string, asO
  * relative to how often it is read, so it is kept for a minute rather than refetched per scrub.
  */
 export function useTimeline(
-  tenant?: string,
-  project?: string,
-  window: { from?: number; to?: number } = {},
+	tenant?: string,
+	project?: string,
+	window: { from?: number; to?: number } = {},
 ) {
-  return useQuery({
-    queryKey: qk.timeline(tenant ?? "", project ?? "", window),
-    queryFn: () => api.timeline(tenant as string, project as string, window),
-    enabled: Boolean(tenant && project),
-    staleTime: 60_000,
-  })
+	return useQuery({
+		queryKey: qk.timeline(tenant ?? '', project ?? '', window),
+		queryFn: () => api.timeline(tenant as string, project as string, window),
+		enabled: Boolean(tenant && project),
+		staleTime: 60_000,
+	});
 }
 ```
 
@@ -1366,27 +1388,27 @@ Finally, in the same file, point the four write invalidations at the as-of-agnos
 `packages/admin/src/components/node-detail.tsx` — add `asOf?: number` to the props type with the comment `/** Viewing instant; absent ⇒ live. */`, then use it in the three hook calls:
 
 ```ts
-  const node = useNode(tenant, project, nodeId, asOf)
-  const neighbors = useNeighbors(tenant, project, nodeId, asOf)
-  const history = useHistory(tenant, project, nodeId)
+const node = useNode(tenant, project, nodeId, asOf);
+const neighbors = useNeighbors(tenant, project, nodeId, asOf);
+const history = useHistory(tenant, project, nodeId);
 ```
 
 and pass it to the content tab:
 
 ```tsx
-          <ContentTab
-            tenant={tenant}
-            project={project}
-            nodeId={nodeId}
-            active={tab === "content"}
-            asOf={asOf}
-          />
+<ContentTab
+	tenant={tenant}
+	project={project}
+	nodeId={nodeId}
+	active={tab === 'content'}
+	asOf={asOf}
+/>
 ```
 
 `packages/admin/src/components/content-tab.tsx` — add `asOf?: number` to the props type and forward it:
 
 ```ts
-  const content = useNodeContent(tenant, project, nodeId, active, asOf)
+const content = useNodeContent(tenant, project, nodeId, active, asOf);
 ```
 
 `packages/admin/src/components/node-detail-sheet.tsx` — add `asOf?: number` to the props type and pass it to `<NodeDetail>`.
@@ -1417,10 +1439,12 @@ git commit -m "fix(admin): make the inspector honour the as-of filter"
 ### Task 7: Admin — scrub math
 
 **Files:**
+
 - Create: `packages/admin/src/lib/timeline.ts`
 - Test: `packages/admin/src/lib/timeline.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `nearestTick(ticks: number[], t: number): number | undefined`
   - `stepTick(ticks: number[], t: number, dir: -1 | 1): number | undefined`
@@ -1437,70 +1461,70 @@ Pure functions, no React, no DOM — so the bar's arithmetic is testable without
 Create `packages/admin/src/lib/timeline.test.ts`:
 
 ```ts
-import { describe, expect, it } from "bun:test"
-import { nearestTick, presetTime, stepTick, timeToX, xToTime } from "./timeline"
+import { describe, expect, it } from 'bun:test';
+import { nearestTick, presetTime, stepTick, timeToX, xToTime } from './timeline';
 
-const TICKS = [100, 200, 500, 900]
+const TICKS = [100, 200, 500, 900];
 
-describe("nearestTick", () => {
-  it("returns the closest tick on either side", () => {
-    expect(nearestTick(TICKS, 180)).toBe(200)
-    expect(nearestTick(TICKS, 120)).toBe(100)
-    expect(nearestTick(TICKS, 500)).toBe(500)
-  })
-  it("clamps past both ends", () => {
-    expect(nearestTick(TICKS, 0)).toBe(100)
-    expect(nearestTick(TICKS, 10_000)).toBe(900)
-  })
-  it("breaks an exact tie toward the earlier tick", () => {
-    expect(nearestTick([0, 100], 50)).toBe(0)
-  })
-  it("has nothing to return for an empty tick list", () => {
-    expect(nearestTick([], 5)).toBeUndefined()
-  })
-})
+describe('nearestTick', () => {
+	it('returns the closest tick on either side', () => {
+		expect(nearestTick(TICKS, 180)).toBe(200);
+		expect(nearestTick(TICKS, 120)).toBe(100);
+		expect(nearestTick(TICKS, 500)).toBe(500);
+	});
+	it('clamps past both ends', () => {
+		expect(nearestTick(TICKS, 0)).toBe(100);
+		expect(nearestTick(TICKS, 10_000)).toBe(900);
+	});
+	it('breaks an exact tie toward the earlier tick', () => {
+		expect(nearestTick([0, 100], 50)).toBe(0);
+	});
+	it('has nothing to return for an empty tick list', () => {
+		expect(nearestTick([], 5)).toBeUndefined();
+	});
+});
 
-describe("stepTick", () => {
-  it("moves to the adjacent tick", () => {
-    expect(stepTick(TICKS, 200, 1)).toBe(500)
-    expect(stepTick(TICKS, 200, -1)).toBe(100)
-  })
-  it("steps from a time that is not itself a tick", () => {
-    expect(stepTick(TICKS, 250, 1)).toBe(500)
-    expect(stepTick(TICKS, 250, -1)).toBe(200)
-  })
-  it("returns undefined at the ends so the caller can stop", () => {
-    expect(stepTick(TICKS, 900, 1)).toBeUndefined()
-    expect(stepTick(TICKS, 100, -1)).toBeUndefined()
-    expect(stepTick([], 5, 1)).toBeUndefined()
-  })
-})
+describe('stepTick', () => {
+	it('moves to the adjacent tick', () => {
+		expect(stepTick(TICKS, 200, 1)).toBe(500);
+		expect(stepTick(TICKS, 200, -1)).toBe(100);
+	});
+	it('steps from a time that is not itself a tick', () => {
+		expect(stepTick(TICKS, 250, 1)).toBe(500);
+		expect(stepTick(TICKS, 250, -1)).toBe(200);
+	});
+	it('returns undefined at the ends so the caller can stop', () => {
+		expect(stepTick(TICKS, 900, 1)).toBeUndefined();
+		expect(stepTick(TICKS, 100, -1)).toBeUndefined();
+		expect(stepTick([], 5, 1)).toBeUndefined();
+	});
+});
 
-describe("presetTime", () => {
-  it("subtracts the preset window from now", () => {
-    const now = 1_000_000_000_000
-    expect(presetTime("1h", now)).toBe(now - 3_600_000)
-    expect(presetTime("1d", now)).toBe(now - 86_400_000)
-    expect(presetTime("7d", now)).toBe(now - 604_800_000)
-  })
-})
+describe('presetTime', () => {
+	it('subtracts the preset window from now', () => {
+		const now = 1_000_000_000_000;
+		expect(presetTime('1h', now)).toBe(now - 3_600_000);
+		expect(presetTime('1d', now)).toBe(now - 86_400_000);
+		expect(presetTime('7d', now)).toBe(now - 604_800_000);
+	});
+});
 
-describe("time and pixel conversion", () => {
-  it("round-trips a time through a pixel offset", () => {
-    expect(timeToX(500, 0, 1000, 200)).toBe(100)
-    expect(xToTime(100, 0, 1000, 200)).toBe(500)
-  })
-  it("clamps outside the window", () => {
-    expect(timeToX(-50, 0, 1000, 200)).toBe(0)
-    expect(timeToX(5000, 0, 1000, 200)).toBe(200)
-    expect(xToTime(-10, 0, 1000, 200)).toBe(0)
-    expect(xToTime(9999, 0, 1000, 200)).toBe(1000)
-  })
-  it("puts a zero-width window at the start rather than dividing by zero", () => {
-    expect(timeToX(7, 7, 7, 200)).toBe(0)
-    expect(xToTime(150, 7, 7, 200)).toBe(7)
-  })
-})
+describe('time and pixel conversion', () => {
+	it('round-trips a time through a pixel offset', () => {
+		expect(timeToX(500, 0, 1000, 200)).toBe(100);
+		expect(xToTime(100, 0, 1000, 200)).toBe(500);
+	});
+	it('clamps outside the window', () => {
+		expect(timeToX(-50, 0, 1000, 200)).toBe(0);
+		expect(timeToX(5000, 0, 1000, 200)).toBe(200);
+		expect(xToTime(-10, 0, 1000, 200)).toBe(0);
+		expect(xToTime(9999, 0, 1000, 200)).toBe(1000);
+	});
+	it('puts a zero-width window at the start rather than dividing by zero', () => {
+		expect(timeToX(7, 7, 7, 200)).toBe(0);
+		expect(xToTime(150, 7, 7, 200)).toBe(7);
+	});
+});
 ```
 
 - [ ] **Step 2: Run the tests and verify they fail**
@@ -1519,19 +1543,19 @@ Create `packages/admin/src/lib/timeline.ts`:
  */
 
 /** The relative windows the bar offers as one-click jumps. */
-export type TimePreset = "1h" | "1d" | "7d"
+export type TimePreset = '1h' | '1d' | '7d';
 
-export const PRESETS: readonly TimePreset[] = ["1h", "1d", "7d"]
+export const PRESETS: readonly TimePreset[] = ['1h', '1d', '7d'];
 
 const PRESET_MS: Record<TimePreset, number> = {
-  "1h": 3_600_000,
-  "1d": 86_400_000,
-  "7d": 604_800_000,
-}
+	'1h': 3_600_000,
+	'1d': 86_400_000,
+	'7d': 604_800_000,
+};
 
 /** The preset window's start, relative to `now`. */
 export function presetTime(preset: TimePreset, now: number): number {
-  return now - PRESET_MS[preset]
+	return now - PRESET_MS[preset];
 }
 
 /**
@@ -1540,17 +1564,17 @@ export function presetTime(preset: TimePreset, now: number): number {
  * between two changes shows the state that had already happened.
  */
 export function nearestTick(ticks: number[], t: number): number | undefined {
-  if (ticks.length === 0) return undefined
-  let best = ticks[0]
-  let bestDist = Math.abs(t - best)
-  for (const tick of ticks) {
-    const dist = Math.abs(t - tick)
-    if (dist < bestDist) {
-      best = tick
-      bestDist = dist
-    }
-  }
-  return best
+	if (ticks.length === 0) return undefined;
+	let best = ticks[0];
+	let bestDist = Math.abs(t - best);
+	for (const tick of ticks) {
+		const dist = Math.abs(t - tick);
+		if (dist < bestDist) {
+			best = tick;
+			bestDist = dist;
+		}
+	}
+	return best;
 }
 
 /**
@@ -1558,27 +1582,27 @@ export function nearestTick(ticks: number[], t: number): number | undefined {
  * ends, which is how the caller knows to stop stepping — and how playback knows it has finished.
  */
 export function stepTick(ticks: number[], t: number, dir: -1 | 1): number | undefined {
-  if (dir === 1) return ticks.find((tick) => tick > t)
-  for (let i = ticks.length - 1; i >= 0; i--) {
-    if (ticks[i] < t) return ticks[i]
-  }
-  return undefined
+	if (dir === 1) return ticks.find((tick) => tick > t);
+	for (let i = ticks.length - 1; i >= 0; i--) {
+		if (ticks[i] < t) return ticks[i];
+	}
+	return undefined;
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Pixel offset of `t` within a `width`-wide track spanning `[from, to]`. */
 export function timeToX(t: number, from: number, to: number, width: number): number {
-  const span = to - from
-  if (span <= 0) return 0
-  return clamp(((t - from) / span) * width, 0, width)
+	const span = to - from;
+	if (span <= 0) return 0;
+	return clamp(((t - from) / span) * width, 0, width);
 }
 
 /** The time a pixel offset represents — the inverse of {@link timeToX}. */
 export function xToTime(x: number, from: number, to: number, width: number): number {
-  const span = to - from
-  if (span <= 0 || width <= 0) return from
-  return clamp(from + (x / width) * span, from, to)
+	const span = to - from;
+	if (span <= 0 || width <= 0) return from;
+	return clamp(from + (x / width) * span, from, to);
 }
 ```
 
@@ -1599,10 +1623,12 @@ git commit -m "feat(admin): add scrub, snap and preset maths for the timeline"
 ### Task 8: Admin — the timeline track and bar
 
 **Files:**
+
 - Create: `packages/admin/src/components/timeline/timeline-track.tsx`
 - Create: `packages/admin/src/components/timeline/timeline-bar.tsx`
 
 **Interfaces:**
+
 - Consumes: Task 6's `useTimeline`, Task 7's scrub maths, `fmtTime` from `@/lib/format`, `Button` from `@/components/ui/button`.
 - Produces:
   - `<TimelineTrack ticks buckets from to value onChange onPreview />`
@@ -1615,9 +1641,9 @@ The bar holds no time state. `asOf` lives in the URL, so a time-travelled view i
 Create `packages/admin/src/components/timeline/timeline-track.tsx`:
 
 ```tsx
-import { useCallback, useEffect, useRef, useState } from "react"
-import { nearestTick, timeToX, xToTime } from "@/lib/timeline"
-import { cn } from "@/lib/utils"
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { nearestTick, timeToX, xToTime } from '@/lib/timeline';
+import { cn } from '@/lib/utils';
 
 /**
  * The scrub track: a change-density histogram with a draggable handle over it.
@@ -1627,117 +1653,117 @@ import { cn } from "@/lib/utils"
  * a gap where the graph did not change.
  */
 export function TimelineTrack({
-  buckets,
-  ticks,
-  from,
-  to,
-  value,
-  onChange,
-  onPreview,
-  disabled,
+	buckets,
+	ticks,
+	from,
+	to,
+	value,
+	onChange,
+	onPreview,
+	disabled,
 }: {
-  buckets: number[]
-  ticks: number[]
-  from: number
-  to: number
-  /** The committed time, or `undefined` when live (the handle parks at the right edge). */
-  value?: number
-  onChange: (t: number) => void
-  /** Fires continuously while dragging so the readout can track the pointer. */
-  onPreview?: (t: number | undefined) => void
-  disabled?: boolean
+	buckets: number[];
+	ticks: number[];
+	from: number;
+	to: number;
+	/** The committed time, or `undefined` when live (the handle parks at the right edge). */
+	value?: number;
+	onChange: (t: number) => void;
+	/** Fires continuously while dragging so the readout can track the pointer. */
+	onPreview?: (t: number | undefined) => void;
+	disabled?: boolean;
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(0)
-  const [dragging, setDragging] = useState<number | undefined>(undefined)
+	const ref = useRef<HTMLDivElement>(null);
+	const [width, setWidth] = useState(0);
+	const [dragging, setDragging] = useState<number | undefined>(undefined);
 
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, []);
 
-  const timeAt = useCallback(
-    (clientX: number) => {
-      const rect = ref.current?.getBoundingClientRect()
-      if (!rect) return from
-      return xToTime(clientX - rect.left, from, to, rect.width)
-    },
-    [from, to],
-  )
+	const timeAt = useCallback(
+		(clientX: number) => {
+			const rect = ref.current?.getBoundingClientRect();
+			if (!rect) return from;
+			return xToTime(clientX - rect.left, from, to, rect.width);
+		},
+		[from, to],
+	);
 
-  // Pointer capture keeps the drag alive when the pointer leaves the track, which it will —
-  // the track is 32px tall and people drag horizontally past it.
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (disabled) return
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const t = timeAt(e.clientX)
-    setDragging(t)
-    onPreview?.(t)
-  }
-  const onPointerMove = (e: React.PointerEvent) => {
-    if (dragging === undefined) return
-    const t = timeAt(e.clientX)
-    setDragging(t)
-    onPreview?.(t)
-  }
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (dragging === undefined) return
-    e.currentTarget.releasePointerCapture(e.pointerId)
-    const snapped = nearestTick(ticks, dragging)
-    setDragging(undefined)
-    onPreview?.(undefined)
-    if (snapped !== undefined) onChange(snapped)
-  }
+	// Pointer capture keeps the drag alive when the pointer leaves the track, which it will —
+	// the track is 32px tall and people drag horizontally past it.
+	const onPointerDown = (e: React.PointerEvent) => {
+		if (disabled) return;
+		e.currentTarget.setPointerCapture(e.pointerId);
+		const t = timeAt(e.clientX);
+		setDragging(t);
+		onPreview?.(t);
+	};
+	const onPointerMove = (e: React.PointerEvent) => {
+		if (dragging === undefined) return;
+		const t = timeAt(e.clientX);
+		setDragging(t);
+		onPreview?.(t);
+	};
+	const onPointerUp = (e: React.PointerEvent) => {
+		if (dragging === undefined) return;
+		e.currentTarget.releasePointerCapture(e.pointerId);
+		const snapped = nearestTick(ticks, dragging);
+		setDragging(undefined);
+		onPreview?.(undefined);
+		if (snapped !== undefined) onChange(snapped);
+	};
 
-  const peak = Math.max(1, ...buckets)
-  const handleAt = dragging ?? value
-  const handleX = handleAt === undefined ? width : timeToX(handleAt, from, to, width)
+	const peak = Math.max(1, ...buckets);
+	const handleAt = dragging ?? value;
+	const handleX = handleAt === undefined ? width : timeToX(handleAt, from, to, width);
 
-  return (
-    <div
-      ref={ref}
-      className={cn(
-        "relative h-8 flex-1 touch-none select-none",
-        disabled ? "cursor-default opacity-50" : "cursor-pointer",
-      )}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      role="slider"
-      aria-label="As-of time"
-      aria-valuemin={from}
-      aria-valuemax={to}
-      aria-valuenow={handleAt ?? to}
-      aria-disabled={disabled}
-      tabIndex={disabled ? -1 : 0}
-    >
-      {/* density */}
-      <div className="absolute inset-x-0 bottom-2 flex h-6 items-end gap-px">
-        {buckets.map((n, i) => (
-          <div
-            key={i}
-            className="flex-1 rounded-t-[1px] bg-muted-foreground/25"
-            style={{ height: `${(n / peak) * 100}%` }}
-          />
-        ))}
-      </div>
-      {/* baseline */}
-      <div className="absolute inset-x-0 bottom-2 h-px bg-border" />
-      {/* handle */}
-      {width > 0 && (
-        <div
-          className="pointer-events-none absolute bottom-0 w-px bg-primary"
-          style={{ left: handleX, height: "100%" }}
-        >
-          <span className="absolute -top-0.5 -left-[3px] size-[7px] rounded-full bg-primary ring-2 ring-background" />
-        </div>
-      )}
-    </div>
-  )
+	return (
+		<div
+			ref={ref}
+			className={cn(
+				'relative h-8 flex-1 touch-none select-none',
+				disabled ? 'cursor-default opacity-50' : 'cursor-pointer',
+			)}
+			onPointerDown={onPointerDown}
+			onPointerMove={onPointerMove}
+			onPointerUp={onPointerUp}
+			onPointerCancel={onPointerUp}
+			role="slider"
+			aria-label="As-of time"
+			aria-valuemin={from}
+			aria-valuemax={to}
+			aria-valuenow={handleAt ?? to}
+			aria-disabled={disabled}
+			tabIndex={disabled ? -1 : 0}
+		>
+			{/* density */}
+			<div className="absolute inset-x-0 bottom-2 flex h-6 items-end gap-px">
+				{buckets.map((n, i) => (
+					<div
+						key={i}
+						className="flex-1 rounded-t-[1px] bg-muted-foreground/25"
+						style={{ height: `${(n / peak) * 100}%` }}
+					/>
+				))}
+			</div>
+			{/* baseline */}
+			<div className="absolute inset-x-0 bottom-2 h-px bg-border" />
+			{/* handle */}
+			{width > 0 && (
+				<div
+					className="pointer-events-none absolute bottom-0 w-px bg-primary"
+					style={{ left: handleX, height: '100%' }}
+				>
+					<span className="absolute -top-0.5 -left-[3px] size-[7px] rounded-full bg-primary ring-2 ring-background" />
+				</div>
+			)}
+		</div>
+	);
 }
 ```
 
@@ -1746,127 +1772,132 @@ export function TimelineTrack({
 Create `packages/admin/src/components/timeline/timeline-bar.tsx`:
 
 ```tsx
-import { useState } from "react"
-import { HugeiconsIcon } from "@hugeicons/react"
-import { NextIcon, PreviousIcon } from "@hugeicons/core-free-icons"
-import { TimelineTrack } from "@/components/timeline/timeline-track"
-import { Button } from "@/components/ui/button"
-import { useIsMobile } from "@/hooks/use-mobile"
-import { useTimeline } from "@/hooks/use-graph"
-import { fmtTime } from "@/lib/format"
-import { PRESETS, presetTime, stepTick } from "@/lib/timeline"
+import { useState } from 'react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { NextIcon, PreviousIcon } from '@hugeicons/core-free-icons';
+import { TimelineTrack } from '@/components/timeline/timeline-track';
+import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useTimeline } from '@/hooks/use-graph';
+import { fmtTime } from '@/lib/format';
+import { PRESETS, presetTime, stepTick } from '@/lib/timeline';
 
 /**
  * The docked time-travel control. It owns no time state — `asOf` lives in the URL, so a
  * time-travelled view is shareable and the Back button walks the scrub history.
  */
 export function TimelineBar({
-  tenant,
-  project,
-  asOf,
-  onChange,
+	tenant,
+	project,
+	asOf,
+	onChange,
 }: {
-  tenant: string
-  project: string
-  /** The current as-of instant; `undefined` ⇒ live. */
-  asOf?: number
-  onChange: (asOf: number | undefined) => void
+	tenant: string;
+	project: string;
+	/** The current as-of instant; `undefined` ⇒ live. */
+	asOf?: number;
+	onChange: (asOf: number | undefined) => void;
 }) {
-  const timeline = useTimeline(tenant, project)
-  const isMobile = useIsMobile()
-  const [preview, setPreview] = useState<number | undefined>(undefined)
+	const timeline = useTimeline(tenant, project);
+	const isMobile = useIsMobile();
+	const [preview, setPreview] = useState<number | undefined>(undefined);
 
-  const data = timeline.data
-  const empty = !data || data.min === null || data.max === null
-  const from = data?.from ?? 0
-  const to = data?.to ?? 0
-  const ticks = data?.ticks ?? []
-  const current = asOf ?? to
-  const shown = preview ?? asOf
+	const data = timeline.data;
+	const empty = !data || data.min === null || data.max === null;
+	const from = data?.from ?? 0;
+	const to = data?.to ?? 0;
+	const ticks = data?.ticks ?? [];
+	const current = asOf ?? to;
+	const shown = preview ?? asOf;
 
-  const go = (t: number | undefined) => onChange(t)
-  const step = (dir: -1 | 1) => {
-    const next = stepTick(ticks, current, dir)
-    if (next !== undefined) go(next)
-  }
+	const go = (t: number | undefined) => onChange(t);
+	const step = (dir: -1 | 1) => {
+		const next = stepTick(ticks, current, dir);
+		if (next !== undefined) go(next);
+	};
 
-  // A 32px scrub track on a phone is not usable and the canvas needs the height more, so the bar
-  // collapses to what it is showing plus the way back to live.
-  if (isMobile) {
-    return (
-      <div className="flex items-center gap-2 border-t bg-background px-3 py-1.5 text-xs">
-        <span className="tabular-nums text-muted-foreground">
-          {empty ? "No history" : asOf === undefined ? "Now" : fmtTime(asOf)}
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="ml-auto"
-          disabled={asOf === undefined}
-          onClick={() => go(undefined)}
-        >
-          Now
-        </Button>
-      </div>
-    )
-  }
+	// A 32px scrub track on a phone is not usable and the canvas needs the height more, so the bar
+	// collapses to what it is showing plus the way back to live.
+	if (isMobile) {
+		return (
+			<div className="flex items-center gap-2 border-t bg-background px-3 py-1.5 text-xs">
+				<span className="tabular-nums text-muted-foreground">
+					{empty ? 'No history' : asOf === undefined ? 'Now' : fmtTime(asOf)}
+				</span>
+				<Button
+					variant="ghost"
+					size="xs"
+					className="ml-auto"
+					disabled={asOf === undefined}
+					onClick={() => go(undefined)}
+				>
+					Now
+				</Button>
+			</div>
+		);
+	}
 
-  return (
-    <div className="flex items-center gap-3 border-t bg-background px-3 py-1.5">
-      <div className="flex items-center gap-0.5">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Previous change"
-          disabled={empty || stepTick(ticks, current, -1) === undefined}
-          onClick={() => step(-1)}
-        >
-          <HugeiconsIcon icon={PreviousIcon} strokeWidth={2} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Next change"
-          disabled={empty || stepTick(ticks, current, 1) === undefined}
-          onClick={() => step(1)}
-        >
-          <HugeiconsIcon icon={NextIcon} strokeWidth={2} />
-        </Button>
-      </div>
+	return (
+		<div className="flex items-center gap-3 border-t bg-background px-3 py-1.5">
+			<div className="flex items-center gap-0.5">
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Previous change"
+					disabled={empty || stepTick(ticks, current, -1) === undefined}
+					onClick={() => step(-1)}
+				>
+					<HugeiconsIcon icon={PreviousIcon} strokeWidth={2} />
+				</Button>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Next change"
+					disabled={empty || stepTick(ticks, current, 1) === undefined}
+					onClick={() => step(1)}
+				>
+					<HugeiconsIcon icon={NextIcon} strokeWidth={2} />
+				</Button>
+			</div>
 
-      <TimelineTrack
-        buckets={data?.buckets ?? []}
-        ticks={ticks}
-        from={from}
-        to={to}
-        value={asOf}
-        onChange={go}
-        onPreview={setPreview}
-        disabled={empty}
-      />
+			<TimelineTrack
+				buckets={data?.buckets ?? []}
+				ticks={ticks}
+				from={from}
+				to={to}
+				value={asOf}
+				onChange={go}
+				onPreview={setPreview}
+				disabled={empty}
+			/>
 
-      <span className="w-36 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-        {empty ? "No history" : shown === undefined ? "Now" : fmtTime(shown)}
-      </span>
+			<span className="w-36 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+				{empty ? 'No history' : shown === undefined ? 'Now' : fmtTime(shown)}
+			</span>
 
-      <div className="flex shrink-0 items-center gap-0.5">
-        {PRESETS.map((p) => (
-          <Button
-            key={p}
-            variant="ghost"
-            size="xs"
-            disabled={empty}
-            onClick={() => go(presetTime(p, Date.now()))}
-          >
-            {p}
-          </Button>
-        ))}
-        <Button variant="ghost" size="xs" disabled={asOf === undefined} onClick={() => go(undefined)}>
-          Now
-        </Button>
-      </div>
-    </div>
-  )
+			<div className="flex shrink-0 items-center gap-0.5">
+				{PRESETS.map((p) => (
+					<Button
+						key={p}
+						variant="ghost"
+						size="xs"
+						disabled={empty}
+						onClick={() => go(presetTime(p, Date.now()))}
+					>
+						{p}
+					</Button>
+				))}
+				<Button
+					variant="ghost"
+					size="xs"
+					disabled={asOf === undefined}
+					onClick={() => go(undefined)}
+				>
+					Now
+				</Button>
+			</div>
+		</div>
+	);
 }
 ```
 
@@ -1899,12 +1930,14 @@ git commit -m "feat(admin): add the timeline track and bar"
 ### Task 9: Admin — mount the bar, retire the sidebar picker
 
 **Files:**
+
 - Modify: `packages/admin/src/components/graph-shell.tsx` (props + layout)
 - Modify: `packages/admin/src/routes/explorer-page.tsx` (pass the bar's props)
 - Modify: `packages/admin/src/components/app-sidebar.tsx` (drop `AsOfPicker`)
 - Delete: `packages/admin/src/components/filters/as-of-picker.tsx`
 
 **Interfaces:**
+
 - Consumes: Task 8's `<TimelineBar>`.
 - Produces: `GraphShell` accepts `timeline?: React.ReactNode`, rendered under the canvas.
 
@@ -1927,56 +1960,56 @@ Add `timeline` to the destructured parameter list alongside the other props — 
 Then wrap each of the three returns so the bar survives the loading and empty states. Replace the loading return:
 
 ```tsx
-  if (isLoading) {
-    return (
-      <div className="flex h-full w-full flex-col">
-        <div className={cn("min-h-0 flex-1", backdrop)}>
-          <EmptyState icon={ChartRelationshipIcon} title="Loading graph…" className="animate-pulse" />
-        </div>
-        {timeline}
-      </div>
-    )
-  }
+if (isLoading) {
+	return (
+		<div className="flex h-full w-full flex-col">
+			<div className={cn('min-h-0 flex-1', backdrop)}>
+				<EmptyState icon={ChartRelationshipIcon} title="Loading graph…" className="animate-pulse" />
+			</div>
+			{timeline}
+		</div>
+	);
+}
 ```
 
 the empty return:
 
 ```tsx
-  if (!slice || slice.nodes.length === 0) {
-    return (
-      <div className="flex h-full w-full flex-col">
-        <div className={cn("min-h-0 flex-1", backdrop)}>
-          <EmptyState
-            icon={ChartRelationshipIcon}
-            title="No graph for these filters"
-            hint="Broaden the NodeType or search filters to see connected nodes."
-          />
-        </div>
-        {timeline}
-      </div>
-    )
-  }
+if (!slice || slice.nodes.length === 0) {
+	return (
+		<div className="flex h-full w-full flex-col">
+			<div className={cn('min-h-0 flex-1', backdrop)}>
+				<EmptyState
+					icon={ChartRelationshipIcon}
+					title="No graph for these filters"
+					hint="Broaden the NodeType or search filters to see connected nodes."
+				/>
+			</div>
+			{timeline}
+		</div>
+	);
+}
 ```
 
 and the main return — rename the existing outer `<div ref={containerRef} …>` to be nested inside a new flex column, so fullscreen still targets the canvas container:
 
 ```tsx
-  return (
-    <div className="flex h-full w-full flex-col">
-      <div
-        ref={containerRef}
-        className={cn("relative min-h-0 w-full flex-1", isCosmograph && "dark text-foreground")}
-        style={isCosmograph ? { background: CANVAS_BG } : undefined}
-      >
-        {/*
+return (
+	<div className="flex h-full w-full flex-col">
+		<div
+			ref={containerRef}
+			className={cn('relative min-h-0 w-full flex-1', isCosmograph && 'dark text-foreground')}
+			style={isCosmograph ? { background: CANVAS_BG } : undefined}
+		>
+			{/*
           Every existing child moves across verbatim, in order and unedited: the <ErrorBoundary>
           wrapping GraphCanvas/FlowCanvas, the vignette div, the stats pill, <GraphToolbar>, and
           the legend block. Only the wrapper above them changes.
         */}
-      </div>
-      {timeline}
-    </div>
-  )
+		</div>
+		{timeline}
+	</div>
+);
 ```
 
 - [ ] **Step 2: Pass the bar from the explorer**
@@ -1997,7 +2030,7 @@ In `packages/admin/src/routes/explorer-page.tsx`, add to the `<GraphShell …>` 
 and import it:
 
 ```ts
-import { TimelineBar } from "@/components/timeline/timeline-bar"
+import { TimelineBar } from '@/components/timeline/timeline-bar';
 ```
 
 - [ ] **Step 3: Retire the sidebar picker**
@@ -2037,11 +2070,13 @@ git commit -m "feat(admin): dock the timeline bar and retire the as-of picker"
 ### Task 10: Admin — read-only while viewing the past
 
 **Files:**
+
 - Create: `packages/admin/src/components/time-travel-banner.tsx`
 - Modify: `packages/admin/src/routes/explorer-page.tsx`
 - Modify: `packages/admin/src/components/node-detail.tsx`, `node-detail-sheet.tsx`, `content-tab.tsx`
 
 **Interfaces:**
+
 - Consumes: `filters.asOf`.
 - Produces: `<TimeTravelBanner asOf onReturn />`; `ContentTab` accepts `readOnly?: boolean`.
 
@@ -2052,10 +2087,10 @@ A write issued from a historical view lands on the **live** version, not the one
 Create `packages/admin/src/components/time-travel-banner.tsx`, matching `results-banner.tsx`'s amber treatment:
 
 ```tsx
-import { HugeiconsIcon } from "@hugeicons/react"
-import { Alert02Icon } from "@hugeicons/core-free-icons"
-import { Button } from "@/components/ui/button"
-import { fmtTime } from "@/lib/format"
+import { HugeiconsIcon } from '@hugeicons/react';
+import { Alert02Icon } from '@hugeicons/core-free-icons';
+import { Button } from '@/components/ui/button';
+import { fmtTime } from '@/lib/format';
 
 /**
  * Shown whenever the explorer is pinned to a past instant. Editing is disabled there because a
@@ -2063,23 +2098,23 @@ import { fmtTime } from "@/lib/format"
  * being viewed and offers the way back.
  */
 export function TimeTravelBanner({ asOf, onReturn }: { asOf: number; onReturn: () => void }) {
-  return (
-    <div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
-      <HugeiconsIcon icon={Alert02Icon} strokeWidth={2} className="size-3.5 shrink-0" />
-      <span>
-        Viewing <span className="font-medium tabular-nums">{fmtTime(asOf)}</span> — read-only,
-        because an edit would apply to the live version rather than this one.
-      </span>
-      <Button
-        variant="link"
-        size="xs"
-        className="ml-auto h-auto p-0 text-amber-700 dark:text-amber-400"
-        onClick={onReturn}
-      >
-        Return to now
-      </Button>
-    </div>
-  )
+	return (
+		<div className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+			<HugeiconsIcon icon={Alert02Icon} strokeWidth={2} className="size-3.5 shrink-0" />
+			<span>
+				Viewing <span className="font-medium tabular-nums">{fmtTime(asOf)}</span> — read-only,
+				because an edit would apply to the live version rather than this one.
+			</span>
+			<Button
+				variant="link"
+				size="xs"
+				className="ml-auto h-auto p-0 text-amber-700 dark:text-amber-400"
+				onClick={onReturn}
+			>
+				Return to now
+			</Button>
+		</div>
+	);
 }
 ```
 
@@ -2088,16 +2123,18 @@ export function TimeTravelBanner({ asOf, onReturn }: { asOf: number; onReturn: (
 In `packages/admin/src/routes/explorer-page.tsx`, derive the flag next to the other derived values:
 
 ```ts
-  // A write from a historical view would land on the live version, not the one on screen.
-  const readOnly = filters.asOf !== undefined
+// A write from a historical view would land on the live version, not the one on screen.
+const readOnly = filters.asOf !== undefined;
 ```
 
 Render the banner directly under the existing truncation banner:
 
 ```tsx
-        {filters.asOf !== undefined && (
-          <TimeTravelBanner asOf={filters.asOf} onReturn={() => setSearch({ asOf: undefined })} />
-        )}
+{
+	filters.asOf !== undefined && (
+		<TimeTravelBanner asOf={filters.asOf} onReturn={() => setSearch({ asOf: undefined })} />
+	);
+}
 ```
 
 `GraphShell` already documents that absent write handlers mean a read-only explorer, so the canvas half is subtractive — make each of the five handlers conditional:
@@ -2156,11 +2193,13 @@ git commit -m "feat(admin): lock the explorer read-only while viewing the past"
 ### Task 11: Admin — playback
 
 **Files:**
+
 - Modify: `packages/admin/src/components/timeline/timeline-bar.tsx`
 - Modify: `packages/admin/src/components/graph-shell.tsx` (pin the simulation while playing)
 - Modify: `packages/admin/src/routes/explorer-page.tsx` (thread the playing flag)
 
 **Interfaces:**
+
 - Consumes: Task 7's `stepTick`, Task 8's bar.
 - Produces: `TimelineBar` accepts `onPlayingChange?: (playing: boolean) => void`; `GraphShell` accepts `pinSimulation?: boolean`.
 
@@ -2169,46 +2208,46 @@ git commit -m "feat(admin): lock the explorer read-only while viewing the past"
 In `packages/admin/src/components/timeline/timeline-bar.tsx`, add the imports:
 
 ```ts
-import { useEffect, useRef, useState } from "react"
-import { PauseIcon, PlayIcon } from "@hugeicons/core-free-icons"
+import { useEffect, useRef, useState } from 'react';
+import { PauseIcon, PlayIcon } from '@hugeicons/core-free-icons';
 ```
 
 Add `onPlayingChange?: (playing: boolean) => void` to the props type, then the state and the timer:
 
 ```ts
-  const [playing, setPlaying] = useState(false)
+const [playing, setPlaying] = useState(false);
 
-  // The timer reads its inputs through a ref rather than closing over them. `onChange` is an
-  // inline arrow at the call site, so listing it as a dependency would tear the interval down and
-  // rebuild it on every parent render — a 700ms timer that keeps restarting never fires.
-  const latest = useRef({ ticks, current, onChange })
-  latest.current = { ticks, current, onChange }
+// The timer reads its inputs through a ref rather than closing over them. `onChange` is an
+// inline arrow at the call site, so listing it as a dependency would tear the interval down and
+// rebuild it on every parent render — a 700ms timer that keeps restarting never fires.
+const latest = useRef({ ticks, current, onChange });
+latest.current = { ticks, current, onChange };
 
-  // Advance tick-to-tick. Each step is a filter change, so every dependent query refetches; the
-  // interval is slow enough that a step's fetches land before the next one starts on a local DB.
-  useEffect(() => {
-    if (!playing) return
-    const id = setInterval(() => {
-      const { ticks: ts, current: now, onChange: emit } = latest.current
-      const next = stepTick(ts, now, 1)
-      if (next === undefined) setPlaying(false)
-      else emit(next)
-    }, 700)
-    return () => clearInterval(id)
-  }, [playing])
+// Advance tick-to-tick. Each step is a filter change, so every dependent query refetches; the
+// interval is slow enough that a step's fetches land before the next one starts on a local DB.
+useEffect(() => {
+	if (!playing) return;
+	const id = setInterval(() => {
+		const { ticks: ts, current: now, onChange: emit } = latest.current;
+		const next = stepTick(ts, now, 1);
+		if (next === undefined) setPlaying(false);
+		else emit(next);
+	}, 700);
+	return () => clearInterval(id);
+}, [playing]);
 
-  useEffect(() => {
-    onPlayingChange?.(playing)
-  }, [playing, onPlayingChange])
+useEffect(() => {
+	onPlayingChange?.(playing);
+}, [playing, onPlayingChange]);
 ```
 
 Any manual interaction pauses. Wrap the existing `go` so every scrub, step, preset and Now stops playback:
 
 ```ts
-  const go = (t: number | undefined) => {
-    setPlaying(false)
-    onChange(t)
-  }
+const go = (t: number | undefined) => {
+	setPlaying(false);
+	onChange(t);
+};
 ```
 
 The interval calls `onChange` directly rather than `go`, so it does not pause itself.
@@ -2216,15 +2255,15 @@ The interval calls `onChange` directly rather than `go`, so it does not pause it
 Add the transport button between the step buttons:
 
 ```tsx
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={playing ? "Pause playback" : "Play through changes"}
-          disabled={empty || (!playing && stepTick(ticks, current, 1) === undefined)}
-          onClick={() => setPlaying((p) => !p)}
-        >
-          <HugeiconsIcon icon={playing ? PauseIcon : PlayIcon} strokeWidth={2} />
-        </Button>
+<Button
+	variant="ghost"
+	size="icon-sm"
+	aria-label={playing ? 'Pause playback' : 'Play through changes'}
+	disabled={empty || (!playing && stepTick(ticks, current, 1) === undefined)}
+	onClick={() => setPlaying((p) => !p)}
+>
+	<HugeiconsIcon icon={playing ? PauseIcon : PlayIcon} strokeWidth={2} />
+</Button>
 ```
 
 - [ ] **Step 2: Pin the simulation while playing**
@@ -2250,7 +2289,7 @@ and feed it to the canvas alongside the user's own pause toggle:
 In `packages/admin/src/routes/explorer-page.tsx`:
 
 ```ts
-  const [playing, setPlaying] = useState(false)
+const [playing, setPlaying] = useState(false);
 ```
 
 pass `pinSimulation={playing}` to `<GraphShell>` and `onPlayingChange={setPlaying}` to `<TimelineBar>`.
@@ -2293,9 +2332,10 @@ git commit -m "feat(admin): play through the graph's change points"
 
 Added after Task 9's interactive verification measured the tick cap's real behaviour. Supersedes the tick-selection half of `e4438fee`; that commit's other half — `Home`/`End` committing the extent bounds rather than the ends of the tick array — stays correct and is not revisited.
 
-**Why this exists.** `ticks` is capped at `limits.maxRows` (10k). On a measured project with 97,770 change points, taking the *earliest* 10k left the newest 28 days unreachable; taking the *most recent* 10k instead collapsed 99.7% of the track onto a single snap target, because change density concentrates heavily toward now. Any contiguous slice is the wrong shape for a full-extent scrubber. Two changes fix it: sample across the range instead of slicing, and let the bar narrow the window when the user wants precision.
+**Why this exists.** `ticks` is capped at `limits.maxRows` (10k). On a measured project with 97,770 change points, taking the _earliest_ 10k left the newest 28 days unreachable; taking the _most recent_ 10k instead collapsed 99.7% of the track onto a single snap target, because change density concentrates heavily toward now. Any contiguous slice is the wrong shape for a full-extent scrubber. Two changes fix it: sample across the range instead of slicing, and let the bar narrow the window when the user wants precision.
 
 **Files:**
+
 - Modify: `packages/core/src/timeline.ts` (tick selection)
 - Modify: `packages/core/test/timeline.test.ts`
 - Create: `packages/admin/src/lib/timeline-window.ts`
@@ -2303,6 +2343,7 @@ Added after Task 9's interactive verification measured the tick cap's real behav
 - Modify: `packages/admin/src/components/timeline/timeline-bar.tsx`
 
 **Interfaces:**
+
 - Consumes: `timeline(raw, opts)` and its `from`/`to`/`buckets` options; `useTimeline(tenant, project, window)`, which already accepts a window and is currently always called without one.
 - Produces: `zoomWindow(...)`, `fullRange` semantics described below.
 
@@ -2377,8 +2418,8 @@ Create `packages/admin/src/lib/timeline-window.ts` — pure, DOM-free, mirroring
 ```ts
 /** A scrub window. `undefined` bounds mean "the full extent". */
 export interface TimeWindow {
-  from?: number
-  to?: number
+	from?: number;
+	to?: number;
 }
 
 /**
@@ -2387,12 +2428,12 @@ export interface TimeWindow {
  * and the Full range button and a zoom-out converge on the same state.
  */
 export function zoomWindow(
-  win: TimeWindow,
-  centre: number,
-  factor: number,
-  extentMin: number,
-  extentMax: number,
-): TimeWindow
+	win: TimeWindow,
+	centre: number,
+	factor: number,
+	extentMin: number,
+	extentMax: number,
+): TimeWindow;
 ```
 
 Test it: zooming in halves the span and keeps `centre` inside; zooming out past the extent yields `{}`; clamping at either extent edge keeps the span rather than letting it shrink; a zero-width extent is a no-op.

@@ -1,6 +1,13 @@
 import { ulid } from 'ulidx';
-import { insertOrIgnore, jsonField } from '../../core/src/dialect-sql.ts';
-import { type DbClient, dialectOf, FOREVER, type Graph, type GraphSchema } from '../../core/src/index.ts';
+import {
+	type DbClient,
+	dialectOf,
+	FOREVER,
+	type Graph,
+	type GraphSchema,
+	insertOrIgnore,
+	jsonField,
+} from '@graphx/core';
 import type { Tuple } from './types.ts';
 import { typeOf } from './types.ts';
 
@@ -60,8 +67,7 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 			? JSON.stringify({ subjectRelation: tuple.subjectRelation })
 			: '{}';
 	const srField = jsonField(d, 'data', 'subjectRelation');
-	const srPred =
-		tuple.subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
+	const srPred = tuple.subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = tuple.subjectRelation === undefined ? [] : [tuple.subjectRelation];
 	const guard = `NOT EXISTS (SELECT 1 FROM edges WHERE src = ? AND rel = ? AND dst = ? AND ${srPred})`;
 

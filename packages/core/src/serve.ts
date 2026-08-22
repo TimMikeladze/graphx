@@ -507,9 +507,7 @@ const nodeContentSchema = z.object({
  * form instead of guessing fields, or handing the user a raw JSON textarea.
  */
 const schemaDocSchema = z.object({
-	nodes: z.array(
-		z.object({ type: z.string(), jsonSchema: z.record(z.string(), z.unknown()) }),
-	),
+	nodes: z.array(z.object({ type: z.string(), jsonSchema: z.record(z.string(), z.unknown()) })),
 	edges: z.array(
 		z.object({
 			rel: z.string(),
@@ -1120,7 +1118,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', nodeContentSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const content = await c.get('graph').getNodeContent(c.req.param('id'), c.req.valid('query'));
+				const content = await c
+					.get('graph')
+					.getNodeContent(c.req.param('id'), c.req.valid('query'));
 				if (!content) throw new HTTPException(404, { message: 'node not found' });
 				return c.json(content, 200);
 			},

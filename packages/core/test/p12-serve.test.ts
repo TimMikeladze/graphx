@@ -50,7 +50,11 @@ test('P12 (serve): a v1 row served over HTTP is upcast to the latest shape when 
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 
 	const app = createApp({ control, schema: SCHEMA, authenticate, upcasters: UPCAST });
 	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
@@ -87,7 +91,11 @@ test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 
 	const app = createApp({ control, schema: SCHEMA, authenticate });
 	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };
@@ -150,7 +158,11 @@ test('P12 (serve): GET /timeline returns the extent, histogram and ticks', async
 	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 
 	const app = createApp({ control, schema: SCHEMA, authenticate });
 	const hdr = { 'x-user': editor, 'x-tenant': tenant, 'content-type': 'application/json' };

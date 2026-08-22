@@ -24,5 +24,8 @@ export const TOKEN_SPLIT: RegExp = /[^\p{L}\p{N}]+/u;
 
 /** Lowercase terms in document order. Duplicates are kept — term frequency is the caller's. */
 export function tokenize(text: string): string[] {
-  return text.toLowerCase().split(TOKEN_SPLIT).filter((t: string) => t.length > 0);
+	return text
+		.toLowerCase()
+		.split(TOKEN_SPLIT)
+		.filter((t: string) => t.length > 0);
 }

@@ -36,7 +36,13 @@ async function node(
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await client.execute({
 		sql: `INSERT INTO node_versions (id, type, data, valid_from, valid_to) VALUES (?, ?, ?, ?, ?)`,
-		args: [id, opts.type ?? 'thing', JSON.stringify({ name }), opts.validFrom ?? 0, opts.validTo ?? FOREVER],
+		args: [
+			id,
+			opts.type ?? 'thing',
+			JSON.stringify({ name }),
+			opts.validFrom ?? 0,
+			opts.validTo ?? FOREVER,
+		],
 	});
 	return id;
 }
@@ -52,7 +58,15 @@ async function edge(
 	await client.execute({ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] });
 	await client.execute({
 		sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, valid_from, valid_to) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		args: [id, src, dst, opts.rel ?? 'link', opts.weight ?? 1.0, opts.validFrom ?? 0, opts.validTo ?? FOREVER],
+		args: [
+			id,
+			src,
+			dst,
+			opts.rel ?? 'link',
+			opts.weight ?? 1.0,
+			opts.validFrom ?? 0,
+			opts.validTo ?? FOREVER,
+		],
 	});
 	return id;
 }
@@ -129,7 +143,12 @@ test('P8: buildCSR builds a dense-int dictionary + adjacency over the live edges
 
 	// a's neighbors = {b:2, c:5}
 	const aN = neighbors(csr, csr.idToIdx.get(a)!);
-	expect(new Map(aN.map((x) => [x.id, x.weight]))).toEqual(new Map([[b, 2], [c, 5]]));
+	expect(new Map(aN.map((x) => [x.id, x.weight]))).toEqual(
+		new Map([
+			[b, 2],
+			[c, 5],
+		]),
+	);
 	// d is a sink
 	expect(neighbors(csr, csr.idToIdx.get(d)!)).toEqual([]);
 	client.close();
@@ -180,7 +199,15 @@ test('P8: shortestPath sql and memory modes agree with reference Dijkstra (non-n
 	const client = await fresh();
 	const ids = [];
 	for (let i = 0; i < 7; i++) ids.push(await node(client, `n${i}`));
-	const [n0, n1, n2, n3, n4, n5, n6] = ids as [string, string, string, string, string, string, string];
+	const [n0, n1, n2, n3, n4, n5, n6] = ids as [
+		string,
+		string,
+		string,
+		string,
+		string,
+		string,
+		string,
+	];
 	const E: Array<[string, string, number]> = [
 		[n0, n1, 4],
 		[n0, n2, 1],
@@ -320,7 +347,9 @@ test('P8: pagerank persists to node_analytics, sums to ~1, ranks the hub first',
 	for (const s of spokes) expect(hubScore).toBeGreaterThan(pr.get(s)!);
 
 	// persisted + orderable
-	const persisted = await client.execute('SELECT id, pagerank FROM node_analytics WHERE pagerank IS NOT NULL');
+	const persisted = await client.execute(
+		'SELECT id, pagerank FROM node_analytics WHERE pagerank IS NOT NULL',
+	);
 	expect(persisted.rows.length).toBe(6);
 	const top = await topNodes(client, { by: 'pagerank', limit: 1 });
 	expect(top[0]!.id).toBe(hub);
@@ -329,10 +358,28 @@ test('P8: pagerank persists to node_analytics, sums to ~1, ranks the hub first',
 
 test('P8: community (label propagation) separates two disconnected triangles', async () => {
 	const client = await fresh();
-	const t1 = [await node(client, 'a0'), await node(client, 'a1'), await node(client, 'a2')] as const;
-	const t2 = [await node(client, 'b0'), await node(client, 'b1'), await node(client, 'b2')] as const;
-	for (const [x, y] of [[t1[0], t1[1]], [t1[1], t1[2]], [t1[2], t1[0]]] as const) await edge(client, x, y);
-	for (const [x, y] of [[t2[0], t2[1]], [t2[1], t2[2]], [t2[2], t2[0]]] as const) await edge(client, x, y);
+	const t1 = [
+		await node(client, 'a0'),
+		await node(client, 'a1'),
+		await node(client, 'a2'),
+	] as const;
+	const t2 = [
+		await node(client, 'b0'),
+		await node(client, 'b1'),
+		await node(client, 'b2'),
+	] as const;
+	for (const [x, y] of [
+		[t1[0], t1[1]],
+		[t1[1], t1[2]],
+		[t1[2], t1[0]],
+	] as const)
+		await edge(client, x, y);
+	for (const [x, y] of [
+		[t2[0], t2[1]],
+		[t2[1], t2[2]],
+		[t2[2], t2[0]],
+	] as const)
+		await edge(client, x, y);
 
 	const com = await community(client);
 	expect(com.size).toBe(6);
@@ -343,7 +390,9 @@ test('P8: community (label propagation) separates two disconnected triangles', a
 	expect(com.get(t2[1])).toBe(com.get(t2[2])!);
 	expect(com.get(t1[0])).not.toBe(com.get(t2[0])!);
 
-	const persisted = await client.execute('SELECT COUNT(*) AS c FROM node_analytics WHERE community IS NOT NULL');
+	const persisted = await client.execute(
+		'SELECT COUNT(*) AS c FROM node_analytics WHERE community IS NOT NULL',
+	);
 	expect(Number(persisted.rows[0]!.c)).toBe(6);
 	client.close();
 });
@@ -363,7 +412,9 @@ test('P8: degree centrality persists and topNodes orders by it', async () => {
 	expect(deg.get(a)).toBe(2);
 	expect(deg.get(b)).toBe(2);
 
-	const persisted = await client.execute('SELECT COUNT(*) AS c FROM node_analytics WHERE degree IS NOT NULL');
+	const persisted = await client.execute(
+		'SELECT COUNT(*) AS c FROM node_analytics WHERE degree IS NOT NULL',
+	);
 	expect(Number(persisted.rows[0]!.c)).toBe(3);
 	client.close();
 });
@@ -403,7 +454,8 @@ test('P8: topNodes strictly orders by the metric DESC (distinct values)', async 
 	expect(top[0]!.id).toBe(hub);
 	expect(top[0]!.degree).toBe(3);
 	// strictly non-increasing across the whole result (not a tautology — values differ)
-	for (let i = 1; i < top.length; i++) expect(top[i - 1]!.degree!).toBeGreaterThanOrEqual(top[i]!.degree!);
+	for (let i = 1; i < top.length; i++)
+		expect(top[i - 1]!.degree!).toBeGreaterThanOrEqual(top[i]!.degree!);
 	client.close();
 });
 
@@ -460,7 +512,11 @@ test('P8: sql-mode unbounded finds the long optimum; maxDepth bound may return s
 	expect(mem!.cost).toBe(6);
 	expect(sqlUnbounded!.cost).toBe(6);
 	// bounded sql can only see the short expensive route -> suboptimal but documented
-	const sqlBounded = await shortestPath(client, n0, n6, { mode: 'sql', weighted: true, maxDepth: 2 });
+	const sqlBounded = await shortestPath(client, n0, n6, {
+		mode: 'sql',
+		weighted: true,
+		maxDepth: 2,
+	});
 	expect(sqlBounded!.cost).toBe(100);
 	expect(sqlBounded!.path).toEqual([n0, n6]);
 	client.close();
@@ -491,7 +547,11 @@ test('P8: A* with a non-zero admissible heuristic returns the same optimum as Di
 	await edge(client, a, d, { weight: 5 });
 
 	// positions on a line; unit-weight edges -> manhattan-to-dst is admissible & non-zero
-	const pos = new Map<string, number>([[a, 0], [b, 1], [d, 2]]);
+	const pos = new Map<string, number>([
+		[a, 0],
+		[b, 1],
+		[d, 2],
+	]);
 	const heuristic = (id: string): number => Math.abs(2 - (pos.get(id) ?? 0));
 	expect(heuristic(a)).toBe(2); // non-zero -> exercises h(v) in the heap key
 

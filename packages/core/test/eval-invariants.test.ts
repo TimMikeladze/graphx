@@ -64,7 +64,9 @@ test('stored vectors round-trip exactly (what goes in is what the walk scores)',
 		`SELECT id, ${embReadSql(db.client)} AS e FROM node_versions WHERE valid_to = ${FOREVER}`,
 	);
 	expect(r.rows.length).toBe(CORPUS.length);
-	const stored = new Map(r.rows.map((row) => [String(row.id), JSON.parse(String(row.e)) as number[]]));
+	const stored = new Map(
+		r.rows.map((row) => [String(row.id), JSON.parse(String(row.e)) as number[]]),
+	);
 
 	for (const doc of CORPUS) {
 		const expected = await embed(doc.body);

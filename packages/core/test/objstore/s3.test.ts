@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MemoryObjectStore } from '../../src/objstore/memory.ts';
-import {
-	ConditionalWriteUnsupportedError,
-	probeConditionalWrite,
-} from '../../src/objstore/s3.ts';
+import { ConditionalWriteUnsupportedError, probeConditionalWrite } from '../../src/objstore/s3.ts';
 import type { ObjectStore } from '../../src/objstore/store.ts';
 
 /** A store whose putIfAbsent silently overwrites — the GCS-silent-ignore failure mode. */

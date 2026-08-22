@@ -164,7 +164,11 @@ test('P14 page: a malformed cursor is rejected cleanly (not a cryptic internal e
 	await expect(g.neighborsPage(hub, { cursor: badShape })).rejects.toThrow(/cursor/i);
 	// wrong arity: a 1-tuple cursor against a 2-alias page
 	const oneTuple = Buffer.from(JSON.stringify(['only']), 'utf8').toString('base64');
-	const q = await match(SCHEMA, client).node('a', 'person').out('knows').node('b', 'person').select('a', 'b');
+	const q = await match(SCHEMA, client)
+		.node('a', 'person')
+		.out('knows')
+		.node('b', 'person')
+		.select('a', 'b');
 	await expect(q.page({ cursor: oneTuple })).rejects.toThrow(/cursor/i);
 	client.close();
 });

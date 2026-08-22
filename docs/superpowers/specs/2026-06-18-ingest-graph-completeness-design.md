@@ -16,9 +16,10 @@ Every change keeps libSQL + Postgres at parity.
 ## Grounding correction (from the survey)
 
 Three "gaps" are smaller than first stated:
+
 - **`deleteNode`** = ~15-line mechanical copy of `deleteEdge` (graph.ts:772-792) on
   `node_versions`, reusing `runConditionalClose` (graph.ts:647-666) verbatim → MVCC retry
-  + dialect tx seam inherited free. No new SQL fragment, no schema change.
+  - dialect tx seam inherited free. No new SQL fragment, no schema change.
 - **Edge weight/props** = NOT a core gap. `edge_versions.weight`/`.props` columns, the
   `edges` view, `AddEdgeInput.weight`/`.props`, per-rel validation, and the writer all
   already exist on both backends. Only ingest's `LooseGraph.addEdge` narrows them away.
@@ -27,24 +28,24 @@ Three "gaps" are smaller than first stated:
 
 ## Resolved design forks
 
-| Fork | Decision |
-|---|---|
-| deleteNode edge cascade | **A** — close node version only (mirror deleteEdge); document caller retracts edges. Cascade is a later opt-in. |
-| Deletion safety | **prune: true opt-in** flag + absent-set scoped per-source via the namespaced uri prefix. Never delete-by-default. |
-| uri namespace | `ingest:<source>:` prefix (replaces `file:`); LIKE pattern **parameterized** (bound `?`), not interpolated. |
-| Identity / rename | Configurable `idField` (default `id`) → `id:<id>` uri; fallback path-keyed `file:<path>`. Distinct `id:`/`file:` sub-namespaces. Separate path→id index for link resolution. |
-| Typed relations | **Both** — Dataview inline `[rel:: [[t]]]` + frontmatter `edgeFields` config, feeding one per-rel desired-edge map; inline overrides. Unknown rel → skip-with-clear-reason (pre-validate vs schema). |
-| Edge props/weights | Widen ingest `LooseGraph.addEdge` + call site; reconcile gains value-equality check (else props write-once); `liveOutEdges` must also SELECT weight/props. |
-| embedHash persistence | **Dedicated `embed_hash` column** in `node_versions` — symmetric libSQL + PG DDL. Embed input = body only. |
-| Batched embeds | Concurrency-limited fan-out in ingest (single-text `EmbedFn` kept, no core change); `embedConcurrency` option. Must preserve key→embedding association. |
-| Streaming | Buffer only extracted links per touched file (option b), not full `ParsedFile[]`; reconcile edges after nodes built. |
-| Ambiguous wikilink | `resolveLink` returns resolved/missing/ambiguous; folder-qualified `[[dir/Note]]` → same-folder → report-and-skip. No silent tie-break. |
-| Schema-reject report | Structured tagged entry `{key, stage, code, message, detail?}` (catch ZodError → issues) as a **parallel field**; keep flat string view (no semver break). |
-| S3 source | Ship `Source {list, read}` + default `fsSource` now; S3 reader as optional `ingest/s3` subpath, `@aws-sdk/client-s3` optional peer + 2nd bunup entry (mirrors core/pg). Keep `dir:` as sugar. |
-| CLI | New `packages/cli`, `bin: graphx`, Bun `util.parseArgs`, dynamically-imported `graphx.config.ts` (default-export `{schema, embed, db}`) + `--config` override. db→getDb so backend selection rides along. |
-| Watch | `fs.watch({recursive})` + 150-300ms debounce, single-flight + one trailing run; `watchDir()` primitive in ingest, `--watch` flag in cli. Polling fallback documented. |
-| Image-asset | Lightweight metadata node (uri/path + content_hash + content_type, empty body) + `embeds` edge, riding existing reconcile. |
-| P9 blob layer | **In scope (full).** put(bytes,contentType)->{uri,hash}, SHA256 content addressing `blobs/{prefix}/{hash}`, S3 IfNoneMatch dedup/412, presign(ttl=900), get, inline-<32KB-else-S3 policy, GC off by default. Optional S3 SDK (same gating as s3-source). |
+| Fork                    | Decision                                                                                                                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| deleteNode edge cascade | **A** — close node version only (mirror deleteEdge); document caller retracts edges. Cascade is a later opt-in.                                                                                                                                          |
+| Deletion safety         | **prune: true opt-in** flag + absent-set scoped per-source via the namespaced uri prefix. Never delete-by-default.                                                                                                                                       |
+| uri namespace           | `ingest:<source>:` prefix (replaces `file:`); LIKE pattern **parameterized** (bound `?`), not interpolated.                                                                                                                                              |
+| Identity / rename       | Configurable `idField` (default `id`) → `id:<id>` uri; fallback path-keyed `file:<path>`. Distinct `id:`/`file:` sub-namespaces. Separate path→id index for link resolution.                                                                             |
+| Typed relations         | **Both** — Dataview inline `[rel:: [[t]]]` + frontmatter `edgeFields` config, feeding one per-rel desired-edge map; inline overrides. Unknown rel → skip-with-clear-reason (pre-validate vs schema).                                                     |
+| Edge props/weights      | Widen ingest `LooseGraph.addEdge` + call site; reconcile gains value-equality check (else props write-once); `liveOutEdges` must also SELECT weight/props.                                                                                               |
+| embedHash persistence   | **Dedicated `embed_hash` column** in `node_versions` — symmetric libSQL + PG DDL. Embed input = body only.                                                                                                                                               |
+| Batched embeds          | Concurrency-limited fan-out in ingest (single-text `EmbedFn` kept, no core change); `embedConcurrency` option. Must preserve key→embedding association.                                                                                                  |
+| Streaming               | Buffer only extracted links per touched file (option b), not full `ParsedFile[]`; reconcile edges after nodes built.                                                                                                                                     |
+| Ambiguous wikilink      | `resolveLink` returns resolved/missing/ambiguous; folder-qualified `[[dir/Note]]` → same-folder → report-and-skip. No silent tie-break.                                                                                                                  |
+| Schema-reject report    | Structured tagged entry `{key, stage, code, message, detail?}` (catch ZodError → issues) as a **parallel field**; keep flat string view (no semver break).                                                                                               |
+| S3 source               | Ship `Source {list, read}` + default `fsSource` now; S3 reader as optional `ingest/s3` subpath, `@aws-sdk/client-s3` optional peer + 2nd bunup entry (mirrors core/pg). Keep `dir:` as sugar.                                                            |
+| CLI                     | New `packages/cli`, `bin: graphx`, Bun `util.parseArgs`, dynamically-imported `graphx.config.ts` (default-export `{schema, embed, db}`) + `--config` override. db→getDb so backend selection rides along.                                                |
+| Watch                   | `fs.watch({recursive})` + 150-300ms debounce, single-flight + one trailing run; `watchDir()` primitive in ingest, `--watch` flag in cli. Polling fallback documented.                                                                                    |
+| Image-asset             | Lightweight metadata node (uri/path + content_hash + content_type, empty body) + `embeds` edge, riding existing reconcile.                                                                                                                               |
+| P9 blob layer           | **In scope (full).** put(bytes,contentType)->{uri,hash}, SHA256 content addressing `blobs/{prefix}/{hash}`, S3 IfNoneMatch dedup/412, presign(ttl=900), get, inline-<32KB-else-S3 policy, GC off by default. Optional S3 SDK (same gating as s3-source). |
 
 ## Cluster sequence (each = one shippable commit set, both backends green)
 

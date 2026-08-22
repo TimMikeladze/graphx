@@ -17,7 +17,14 @@ import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { defineGraphSchema, getDb, Graph, hashEmbed, init, retrieve } from '../../packages/core/src/index.ts';
+import {
+	defineGraphSchema,
+	getDb,
+	Graph,
+	hashEmbed,
+	init,
+	retrieve,
+} from '../../packages/core/src/index.ts';
 import { ingestDir } from '../../packages/ingest/src/index.ts';
 
 // --- Schema ------------------------------------------------------------------
@@ -115,7 +122,11 @@ if (import.meta.main) {
 
 	// --- GraphRAG retrieve -----------------------------------------------------
 	// ANN seeds from the vector index, then expands `maxDepth` hops over the live edges.
-	const hits = await retrieve(db, embed, { query: 'how does bitemporal storage work?', k: 2, maxDepth: 1 });
+	const hits = await retrieve(db, embed, {
+		query: 'how does bitemporal storage work?',
+		k: 2,
+		maxDepth: 1,
+	});
 	console.log(
 		'\nretrieve (depth-ordered):',
 		hits.map((h) => ({ uri: h.uri, depth: h.depth })),

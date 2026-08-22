@@ -16,13 +16,13 @@ in seconds on a normal dev start.
 
 ## Target
 
-| Project           | Nodes  | Purpose                                                   |
-| ----------------- | ------ | --------------------------------------------------------- |
+| Project           | Nodes  | Purpose                                                      |
+| ----------------- | ------ | ------------------------------------------------------------ |
 | Acme / Platform   | 25,000 | The big one. Exceeds the 10k slice cap, so `truncated` fires |
-| Acme / Archive    | 2,000  | Fits under the cap, renders whole                          |
-| Globex / Research | 200    | Small, readable, good for walking the detail pane          |
-| Globex / Scratch  | 40     | Trivially small                                            |
-| Initech / Empty   | 0      | Empty states                                              |
+| Acme / Archive    | 2,000  | Fits under the cap, renders whole                            |
+| Globex / Research | 200    | Small, readable, good for walking the detail pane            |
+| Globex / Scratch  | 40     | Trivially small                                              |
+| Initech / Empty   | 0      | Empty states                                                 |
 
 Roughly 80,000 edges across all five, concentrated in Platform. Actual: 70,767 edges and 30,688
 node version rows over 27,240 identities, built in 6.5s.
@@ -68,7 +68,7 @@ instead. For each supplied id:
 
 Any violation throws before a single index is dropped or a row written.
 
-**As built:** the rule is *at most* one open version, not exactly one. A fully closed timeline
+**As built:** the rule is _at most_ one open version, not exactly one. A fully closed timeline
 means the entity existed and ended — which is precisely how the temporal pass closes an edge, so
 requiring an open version would have made the common case illegal.
 

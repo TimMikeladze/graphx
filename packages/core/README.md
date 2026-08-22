@@ -29,32 +29,32 @@ import { getDb, init, defineGraphSchema, Graph, hashEmbed } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
-  nodes: {
-    person: z.object({ name: z.string() }),
-    doc: z.object({ title: z.string() }),
-  },
-  edges: {
-    wrote: { from: 'person', to: 'doc' },
-    knows: { from: 'person', to: 'person' },
-  },
+	nodes: {
+		person: z.object({ name: z.string() }),
+		doc: z.object({ title: z.string() }),
+	},
+	edges: {
+		wrote: { from: 'person', to: 'doc' },
+		knows: { from: 'person', to: 'person' },
+	},
 });
 
 const client = getDb('my-project'); // libSQL: file:my-project.db
-await init(client, 768);            // create schema + vector index (dim 768)
+await init(client, 768); // create schema + vector index (dim 768)
 
 const embed = hashEmbed(768);
 const g = new Graph(client, schema);
 const ada = await g.addNode({ type: 'person', data: { name: 'Ada' } });
 const paper = await g.addNode({
-  type: 'doc',
-  data: { title: 'Notes' },
-  body: 'analytical engine',
-  emb: await embed('analytical engine'), // `Graph` never calls the embedder itself
+	type: 'doc',
+	data: { title: 'Notes' },
+	body: 'analytical engine',
+	emb: await embed('analytical engine'), // `Graph` never calls the embedder itself
 });
 await g.addEdge({ rel: 'wrote', src: ada.id, dst: paper.id });
 
 const neighbors = await g.neighbors(ada.id, { rels: ['wrote'] }); // omit `rels` for every relation
-const page = await g.listNodes({ type: 'doc' });                  // { nodes, nextCursor }
+const page = await g.listNodes({ type: 'doc' }); // { nodes, nextCursor }
 ```
 
 A node written without `emb` has a NULL vector: FTS and `hybridRetrieve` still find it, the ANN
@@ -81,9 +81,9 @@ const hybrid = await hybridRetrieve(client, embed, { query: 'computing', k: 10, 
 ```ts
 import { history, diff, changeFeed, retrieve } from '@graphx/core';
 
-const versions = await history(client, id);   // full immutable version trail for an id
-const delta = await diff(client, t1, t2);     // what changed in (t1, t2]
-const page = await changeFeed(client);        // tailable CDC log (keyset cursor)
+const versions = await history(client, id); // full immutable version trail for an id
+const delta = await diff(client, t1, t2); // what changed in (t1, t2]
+const page = await changeFeed(client); // tailable CDC log (keyset cursor)
 
 // as-of reads run through the retrieval/traversal ops (and match().asOf(t)), not getNode:
 const past = await retrieve(client, embed, { query: 'computing', asOf: 1_700_000_000_000 });
@@ -103,13 +103,15 @@ control plane, seeds, and serves. One call:
 import { createApp } from '@graphx/core';
 
 const { app, tenant, project, user } = await createApp({
-  schema,
-  embed: hashEmbed(),            // optional; enables /retrieve + /hybrid. Auto-dim sizes the vector column to it.
-  cors: true,                    // optional; browser SPA on another origin, no dev proxy
-  logger: true,                  // optional; log every request
-  seed: async (g) => { await g.addNode({ type: 'device', data: { name: 'temp-1' } }); },
+	schema,
+	embed: hashEmbed(), // optional; enables /retrieve + /hybrid. Auto-dim sizes the vector column to it.
+	cors: true, // optional; browser SPA on another origin, no dev proxy
+	logger: true, // optional; log every request
+	seed: async (g) => {
+		await g.addNode({ type: 'device', data: { name: 'temp-1' } });
+	},
 });
-export default { fetch: app.fetch };  // GET /demo returns { tenant, project, user }
+export default { fetch: app.fetch }; // GET /demo returns { tenant, project, user }
 ```
 
 Or skip the file entirely: `bunx @graphx/cli new my-app && cd my-app && bun run serve` scaffolds a
@@ -121,10 +123,10 @@ synchronously:
 
 ```ts
 const app = createApp({
-  control,                       // control-plane DB (tenants/projects/memberships)
-  schema,
-  authenticate: (c) => verifyToken(c), // -> { userId, tenantId }; throw to 401
-  embed,
+	control, // control-plane DB (tenants/projects/memberships)
+	schema,
+	authenticate: (c) => verifyToken(c), // -> { userId, tenantId }; throw to 401
+	embed,
 });
 export default { fetch: app.fetch }; // Bun.serve / Cloudflare / Node
 ```

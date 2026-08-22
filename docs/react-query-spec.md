@@ -20,6 +20,7 @@ change feed — with **no codegen** and types **inferred through the same zod** 
 server-side.
 
 ### Non-goals
+
 - No GraphQL (the project is Hono REST by decision D2).
 - No codegen / no build step (consistent with D2's "typed client, no codegen").
 - No new query semantics — hooks are a transport + cache wrapper over the SDK's existing surface.
@@ -33,11 +34,11 @@ server-side.
    - outputs: `NodeOf<S, K>`, `AnyNode<S>`, `EdgeRef`, `NeighborPage<S>`
    - read opts: `NeighborOpts`, `NeighborPageOpts`, `RetrieveOpts`, `JourneyOpts`, `RetrievedNode`,
      `JourneyRow`
-   These are `z.input` / `z.infer` of the user's `defineGraphSchema(...)`. A hook's in/out types come
-   straight from them.
+     These are `z.input` / `z.infer` of the user's `defineGraphSchema(...)`. A hook's in/out types come
+     straight from them.
 
 2. **Generic factory parameterised by the user's schema `S`** (mirrors `createApp<S>`). Per-kind prop
-   typing requires the user's `S`, because the *wire* schemas are deliberately loose
+   typing requires the user's `S`, because the _wire_ schemas are deliberately loose
    (`nodeInputSchema = { kind: z.string(), props: z.record(...) }`). So the public entry is
    `createGraphHooks(schema)`, not standalone hooks.
 
@@ -51,31 +52,31 @@ server-side.
 
 From `serve.ts`, the routes that exist:
 
-| Method | Path | SDK call | React hook |
-|---|---|---|---|
-| POST | `/t/:tenant/p/:project/nodes` | `addNode` | `useAddNode` |
-| POST | `/t/:tenant/p/:project/edges` | `addEdge` | `useAddEdge` |
-| GET  | `/t/:tenant/p/:project/nodes/:id` | `getNode` | `useNode` |
-| PATCH | `/t/:tenant/p/:project/nodes/:id` | `updateNode` | `useUpdateNode` |
-| DELETE | `/t/:tenant/p/:project/edges/:id` | `deleteEdge` | `useDeleteEdge` |
-| GET  | `/t/:tenant/p/:project/nodes/:id/neighbors` | `neighbors` (unpaginated) | `useNeighbors` |
-| GET  | `/t/:tenant/p/:project/nodes/:id/neighborsPage` | `neighborsPage` (keyset) | `useNeighbors` (infinite) |
-| GET  | `/t/:tenant/p/:project/nodes/:id/history` | `history` | `useHistory` |
-| GET  | `/t/:tenant/p/:project/nodes` | `listNodes` | — |
-| GET  | `/t/:tenant/p/:project/graph` | `graphSlice` | — |
-| GET  | `/t/:tenant/p/:project/retrieve` | `retrieve` | `useRetrieve` |
-| POST | `/t/:tenant/p/:project/hybrid` | `hybridRetrieve` | — |
-| POST | `/t/:tenant/p/:project/journey` | `journey` | `useJourney` |
-| POST | `/t/:tenant/p/:project/match` | `match` / `PatternBuilder` | — |
-| POST | `/t/:tenant/p/:project/bulk` | `bulkLoad` | — |
-| GET  | `/t/:tenant/p/:project/changes` | `changeFeed` | `useChangeFeedSync` ← **CDC live-sync** |
-| GET  | `/t/:tenant/p/:project/diff` | `diff` | reconciliation (close events) |
-| POST | `/t/:tenant/p/:project/algorithms/shortest-path` | `shortestPath` | — |
-| POST | `/t/:tenant/p/:project/algorithms/pagerank` | `pagerank` | — |
-| POST | `/t/:tenant/p/:project/algorithms/community` | `community` | — |
-| POST | `/t/:tenant/p/:project/algorithms/centrality` | `centrality` | — |
-| GET  | `/t/:tenant/p/:project/algorithms/top` | `topNodes` | — |
-| GET  | `/health`, `/ready` | — | (ops, no hook) |
+| Method | Path                                             | SDK call                   | React hook                              |
+| ------ | ------------------------------------------------ | -------------------------- | --------------------------------------- |
+| POST   | `/t/:tenant/p/:project/nodes`                    | `addNode`                  | `useAddNode`                            |
+| POST   | `/t/:tenant/p/:project/edges`                    | `addEdge`                  | `useAddEdge`                            |
+| GET    | `/t/:tenant/p/:project/nodes/:id`                | `getNode`                  | `useNode`                               |
+| PATCH  | `/t/:tenant/p/:project/nodes/:id`                | `updateNode`               | `useUpdateNode`                         |
+| DELETE | `/t/:tenant/p/:project/edges/:id`                | `deleteEdge`               | `useDeleteEdge`                         |
+| GET    | `/t/:tenant/p/:project/nodes/:id/neighbors`      | `neighbors` (unpaginated)  | `useNeighbors`                          |
+| GET    | `/t/:tenant/p/:project/nodes/:id/neighborsPage`  | `neighborsPage` (keyset)   | `useNeighbors` (infinite)               |
+| GET    | `/t/:tenant/p/:project/nodes/:id/history`        | `history`                  | `useHistory`                            |
+| GET    | `/t/:tenant/p/:project/nodes`                    | `listNodes`                | —                                       |
+| GET    | `/t/:tenant/p/:project/graph`                    | `graphSlice`               | —                                       |
+| GET    | `/t/:tenant/p/:project/retrieve`                 | `retrieve`                 | `useRetrieve`                           |
+| POST   | `/t/:tenant/p/:project/hybrid`                   | `hybridRetrieve`           | —                                       |
+| POST   | `/t/:tenant/p/:project/journey`                  | `journey`                  | `useJourney`                            |
+| POST   | `/t/:tenant/p/:project/match`                    | `match` / `PatternBuilder` | —                                       |
+| POST   | `/t/:tenant/p/:project/bulk`                     | `bulkLoad`                 | —                                       |
+| GET    | `/t/:tenant/p/:project/changes`                  | `changeFeed`               | `useChangeFeedSync` ← **CDC live-sync** |
+| GET    | `/t/:tenant/p/:project/diff`                     | `diff`                     | reconciliation (close events)           |
+| POST   | `/t/:tenant/p/:project/algorithms/shortest-path` | `shortestPath`             | —                                       |
+| POST   | `/t/:tenant/p/:project/algorithms/pagerank`      | `pagerank`                 | —                                       |
+| POST   | `/t/:tenant/p/:project/algorithms/community`     | `community`                | —                                       |
+| POST   | `/t/:tenant/p/:project/algorithms/centrality`    | `centrality`               | —                                       |
+| GET    | `/t/:tenant/p/:project/algorithms/top`           | `topNodes`                 | —                                       |
+| GET    | `/health`, `/ready`                              | —                          | (ops, no hook)                          |
 
 **Still SDK-only:** `buildCSR`/`snapshotCSR`/CSR `neighbors` and the `constraints` setup ops
 (reasonably SDK-only). The whole R0 HTTP surface is now live.
@@ -85,16 +86,17 @@ From `serve.ts`, the routes that exist:
 The hooks we want (infinite scroll, mutations, live sync) needed routes that didn't exist. All of
 these are now in `serve.ts`, each with a zod wire schema and `requireGraph(op)`:
 
-| Method | Path | SDK call | Op | Backs | Status |
-|---|---|---|---|---|---|
-| GET  | `/nodes/:id/neighborsPage` | `neighborsPage` | read | `useNeighbors` (infinite) | done |
-| PATCH| `/nodes/:id` | `updateNode` | write | `useUpdateNode` | done |
-| DELETE | `/edges/:id` | `deleteEdge` | write | `useDeleteEdge` | done |
-| GET  | `/nodes/:id/history` | `history` | read | `useHistory` | done |
-| GET  | `/changes` | `changeFeed` | read | `useChangeFeedSync` ← **the CDC live-sync route** | done |
-| GET  | `/diff` | `diff` | read | reconciliation (close events) | done |
+| Method | Path                       | SDK call        | Op    | Backs                                             | Status |
+| ------ | -------------------------- | --------------- | ----- | ------------------------------------------------- | ------ |
+| GET    | `/nodes/:id/neighborsPage` | `neighborsPage` | read  | `useNeighbors` (infinite)                         | done   |
+| PATCH  | `/nodes/:id`               | `updateNode`    | write | `useUpdateNode`                                   | done   |
+| DELETE | `/edges/:id`               | `deleteEdge`    | write | `useDeleteEdge`                                   | done   |
+| GET    | `/nodes/:id/history`       | `history`       | read  | `useHistory`                                      | done   |
+| GET    | `/changes`                 | `changeFeed`    | read  | `useChangeFeedSync` ← **the CDC live-sync route** | done   |
+| GET    | `/diff`                    | `diff`          | read  | reconciliation (close events)                     | done   |
 
 Notes:
+
 - `/changes` takes opaque per-stream cursors as query params: `?nodes=<cursor>&edges=<cursor>&limit=`.
   Returns the `ChangeFeedPage` shape verbatim (`{ nodes, edges, nextCursor: { nodes, edges } }`).
   changeFeed emits **raw stored bytes** (never upcast) — preserved over the wire.
@@ -111,9 +113,9 @@ Notes:
 ```ts
 // createGraphHooks — generic over the user's schema S (like createApp)
 export function createGraphHooks<S extends GraphSchema>(schema: S) {
-  // returns { useNode, useNeighbors, useRetrieve, useJourney, useHistory,
-  //           useAddNode, useAddEdge, useUpdateNode, useDeleteEdge,
-  //           useChangeFeedSync, keys }
+	// returns { useNode, useNeighbors, useRetrieve, useJourney, useHistory,
+	//           useAddNode, useAddEdge, useUpdateNode, useDeleteEdge,
+	//           useChangeFeedSync, keys }
 }
 ```
 
@@ -122,42 +124,45 @@ export function createGraphHooks<S extends GraphSchema>(schema: S) {
   Wrap in the app's `QueryClientProvider`.
 - **Query keys**: a single `keys` factory, project-scoped, opaque-cursor-friendly:
   ```ts
-  keys.node(id)            // ['graphx', project, 'node', id]
-  keys.neighbors(id, opts) // ['graphx', project, 'neighbors', id, opts]
-  keys.retrieve(params)    // ['graphx', project, 'retrieve', params]
-  keys.journey(body)
-  keys.history(id)
-  keys.changes()
+  keys.node(id); // ['graphx', project, 'node', id]
+  keys.neighbors(id, opts); // ['graphx', project, 'neighbors', id, opts]
+  keys.retrieve(params); // ['graphx', project, 'retrieve', params]
+  keys.journey(body);
+  keys.history(id);
+  keys.changes();
   ```
 
 ## 6. Hook catalog + inference contract
 
-| Hook | RQ primitive | Input type (inferred) | Output type (inferred) |
-|---|---|---|---|
-| `useNode(id)` | `useQuery` | `string` | `AnyNode<S> \| null` |
-| `useNeighbors(id, opts)` | `useInfiniteQuery` | `NeighborPageOpts` | `NeighborPage<S>` pages |
-| `useRetrieve(params)` | `useQuery` | `RetrieveOpts` (no `limits`) | `RetrievedNode[]` |
-| `useJourney(body)` | `useQuery`/`useMutation` | `JourneyOpts` (no `limits`) | `JourneyRow[]` |
-| `useHistory(id)` | `useQuery` | `string` | raw version rows |
-| `useAddNode()` | `useMutation` | `AddNodeInput<S, Kind<S>>` | `NodeOf<S, Kind<S>>` |
-| `useAddEdge()` | `useMutation` | `AddEdgeInput<S, Rel<S>>` | `EdgeRef` |
-| `useUpdateNode()` | `useMutation` | `{ id: string; patch: Partial<…> }` | `void` |
-| `useDeleteEdge()` | `useMutation` | `string` | `void` |
-| `useChangeFeedSync()` | `useQuery` (polling) | — | `ChangeFeedPage` |
+| Hook                     | RQ primitive             | Input type (inferred)               | Output type (inferred)  |
+| ------------------------ | ------------------------ | ----------------------------------- | ----------------------- |
+| `useNode(id)`            | `useQuery`               | `string`                            | `AnyNode<S> \| null`    |
+| `useNeighbors(id, opts)` | `useInfiniteQuery`       | `NeighborPageOpts`                  | `NeighborPage<S>` pages |
+| `useRetrieve(params)`    | `useQuery`               | `RetrieveOpts` (no `limits`)        | `RetrievedNode[]`       |
+| `useJourney(body)`       | `useQuery`/`useMutation` | `JourneyOpts` (no `limits`)         | `JourneyRow[]`          |
+| `useHistory(id)`         | `useQuery`               | `string`                            | raw version rows        |
+| `useAddNode()`           | `useMutation`            | `AddNodeInput<S, Kind<S>>`          | `NodeOf<S, Kind<S>>`    |
+| `useAddEdge()`           | `useMutation`            | `AddEdgeInput<S, Rel<S>>`           | `EdgeRef`               |
+| `useUpdateNode()`        | `useMutation`            | `{ id: string; patch: Partial<…> }` | `void`                  |
+| `useDeleteEdge()`        | `useMutation`            | `string`                            | `void`                  |
+| `useChangeFeedSync()`    | `useQuery` (polling)     | —                                   | `ChangeFeedPage`        |
 
 `limits` is intentionally absent from client input types — the server applies it (§19.2), not the
 client.
 
 ### Infinite neighbors
+
 The SDK's keyset pagination maps directly:
+
 ```ts
 useInfiniteQuery({
-  queryKey: keys.neighbors(id, opts),
-  queryFn: ({ pageParam }) => getPage(`/nodes/${id}/neighborsPage`, { cursor: pageParam, ...opts }),
-  initialPageParam: undefined as string | undefined,
-  getNextPageParam: (last) => last.nextCursor ?? undefined, // null = last page → stops
+	queryKey: keys.neighbors(id, opts),
+	queryFn: ({ pageParam }) => getPage(`/nodes/${id}/neighborsPage`, { cursor: pageParam, ...opts }),
+	initialPageParam: undefined as string | undefined,
+	getNextPageParam: (last) => last.nextCursor ?? undefined, // null = last page → stops
 });
 ```
+
 `nextCursor` is opaque base64; thread it untouched.
 
 ## 7. CDC-driven live invalidation (the differentiator)
@@ -167,24 +172,24 @@ blind interval refetch:
 
 ```ts
 function useChangeFeedSync(intervalMs = 2000) {
-  const cursor = useRef<{ nodes?: string; edges?: string }>({});
-  return useQuery({
-    queryKey: keys.changes(),
-    refetchInterval: intervalMs,
-    queryFn: async () => {
-      const page = await getChanges(cursor.current); // GET /changes?nodes=&edges=
-      for (const n of page.nodes) qc.invalidateQueries({ queryKey: keys.node(String(n.id)) });
-      for (const e of page.edges) {
-        qc.invalidateQueries({ queryKey: keys.neighbors(String(e.src)) });
-        qc.invalidateQueries({ queryKey: keys.neighbors(String(e.dst)) });
-      }
-      cursor.current = {
-        nodes: page.nextCursor.nodes ?? cursor.current.nodes, // null = caught up → keep last cursor
-        edges: page.nextCursor.edges ?? cursor.current.edges,
-      };
-      return page;
-    },
-  });
+	const cursor = useRef<{ nodes?: string; edges?: string }>({});
+	return useQuery({
+		queryKey: keys.changes(),
+		refetchInterval: intervalMs,
+		queryFn: async () => {
+			const page = await getChanges(cursor.current); // GET /changes?nodes=&edges=
+			for (const n of page.nodes) qc.invalidateQueries({ queryKey: keys.node(String(n.id)) });
+			for (const e of page.edges) {
+				qc.invalidateQueries({ queryKey: keys.neighbors(String(e.src)) });
+				qc.invalidateQueries({ queryKey: keys.neighbors(String(e.dst)) });
+			}
+			cursor.current = {
+				nodes: page.nextCursor.nodes ?? cursor.current.nodes, // null = caught up → keep last cursor
+				edges: page.nextCursor.edges ?? cursor.current.edges,
+			};
+			return page;
+		},
+	});
 }
 ```
 
@@ -192,9 +197,11 @@ The `(valid_from, ver)` keyset guarantees no skip / no overlap, so the poller ne
 or misses a version.
 
 ### Close/delete caveat (decision A.3)
+
 The feed is **valid_from-only**: it surfaces INSERTs + UPDATE-successors, **not** pure closes
 (`deleteEdge`, single-valued `addEdge` supersession move `valid_to` with no new row). So edge
-*removals* will not arrive via the feed. Handle them one of two ways:
+_removals_ will not arrive via the feed. Handle them one of two ways:
+
 - **(recommended for v1)** invalidate on the mutation's `onSettled` — the client already holds the
   affected ids for `useDeleteEdge`/single-valued `useAddEdge`.
 - **(follow-up)** add the `valid_to`-keyed companion close-feed (documented §19.10 follow-up) and a
@@ -204,14 +211,15 @@ The feed is **valid_from-only**: it surfaces INSERTs + UPDATE-successors, **not*
 
 Invalidation matrix (on `onSettled`):
 
-| Mutation | Invalidate |
-|---|---|
-| `useAddNode` | nothing required (new id; or `keys.node(newId)` to prime) |
-| `useAddEdge` | `keys.neighbors(src)`, `keys.neighbors(dst)`, `keys.node(dst)` |
-| `useUpdateNode` | `keys.node(id)`, `keys.history(id)` |
-| `useDeleteEdge` | `keys.neighbors(src)`, `keys.neighbors(dst)` |
+| Mutation        | Invalidate                                                     |
+| --------------- | -------------------------------------------------------------- |
+| `useAddNode`    | nothing required (new id; or `keys.node(newId)` to prime)      |
+| `useAddEdge`    | `keys.neighbors(src)`, `keys.neighbors(dst)`, `keys.node(dst)` |
+| `useUpdateNode` | `keys.node(id)`, `keys.history(id)`                            |
+| `useDeleteEdge` | `keys.neighbors(src)`, `keys.neighbors(dst)`                   |
 
 ### Optimistic-update policy
+
 **Default to invalidate-on-settle, not optimistic, for writes that gain server-derived fields.** The
 server mints the ULID `id`, applies zod **defaults** (e.g. `crit: 1`), and stamps the P12 `_v` — none
 of which the client can predict, so an optimistic cache entry won't byte-match the server response.

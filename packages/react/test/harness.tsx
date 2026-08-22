@@ -68,8 +68,17 @@ export async function setup(): Promise<Harness> {
 	await addMembership(control, { userId: editor, tenantId: tenant, role: 'editor' });
 	await addMembership(control, { userId: viewer, tenantId: tenant, role: 'viewer' });
 	const ns = `ns_${crypto.randomUUID().replace(/-/g, '')}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
-	const app = createApp({ control, schema: SCHEMA, authenticate, embed: async (q) => vec(q.length) });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
+	const app = createApp({
+		control,
+		schema: SCHEMA,
+		authenticate,
+		embed: async (q) => vec(q.length),
+	});
 	return {
 		app,
 		tenant,

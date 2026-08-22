@@ -81,7 +81,10 @@ export function extractLinks(body: string): Link[] {
 			// wiki form: [[target]]
 			const { target, fragment } = splitFragment(m[2].trim());
 			if (target) {
-				entries.push({ link: { type: 'wiki', target, rel, ...(fragment ? { fragment } : {}) }, start });
+				entries.push({
+					link: { type: 'wiki', target, rel, ...(fragment ? { fragment } : {}) },
+					start,
+				});
 				typedSpans.push([start, end]);
 			}
 		} else if (m[3] !== undefined) {
@@ -91,7 +94,10 @@ export function extractLinks(body: string): Link[] {
 			if (raw.startsWith('#')) continue;
 			const { target, fragment } = splitPathTarget(raw);
 			if (!target) continue;
-			entries.push({ link: { type: 'path', target, rel, ...(fragment ? { fragment } : {}) }, start });
+			entries.push({
+				link: { type: 'path', target, rel, ...(fragment ? { fragment } : {}) },
+				start,
+			});
 			typedSpans.push([start, end]);
 		}
 	}
@@ -109,7 +115,10 @@ export function extractLinks(body: string): Link[] {
 		if (inTypedSpan(m.index)) continue;
 		const { target, fragment } = splitFragment(m[1]!.split('|')[0]!.trim());
 		if (target) {
-			entries.push({ link: { type: 'wiki', target, ...(fragment ? { fragment } : {}) }, start: m.index });
+			entries.push({
+				link: { type: 'wiki', target, ...(fragment ? { fragment } : {}) },
+				start: m.index,
+			});
 		}
 	}
 	for (const m of body.matchAll(MDLINK)) {
@@ -120,7 +129,10 @@ export function extractLinks(body: string): Link[] {
 		if (raw.startsWith('#')) continue;
 		const { target, fragment } = splitPathTarget(raw);
 		if (!target) continue;
-		entries.push({ link: { type: 'path', target, ...(fragment ? { fragment } : {}) }, start: m.index });
+		entries.push({
+			link: { type: 'path', target, ...(fragment ? { fragment } : {}) },
+			start: m.index,
+		});
 	}
 
 	entries.sort((a, b) => a.start - b.start);

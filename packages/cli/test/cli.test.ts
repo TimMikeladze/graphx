@@ -151,28 +151,31 @@ test('run: `new <dir>` refuses to overwrite an existing project', async () => {
 });
 
 // buildServeApp is the testable core of `graphx serve` (loads config → builds the app, no listener).
-test.skipIf(NOT_LIBSQL)('buildServeApp: loads a config and serves the seeded graph via /demo (libSQL)', async () => {
-	const ns = `cli-serve-${Date.now()}`;
-	const configPath = join(import.meta.dir, `${ns}.config.ts`);
-	await writeFile(
-		configPath,
-		`import { defineGraphSchema, hashEmbed } from '../../core/src/index.ts';
+test.skipIf(NOT_LIBSQL)(
+	'buildServeApp: loads a config and serves the seeded graph via /demo (libSQL)',
+	async () => {
+		const ns = `cli-serve-${Date.now()}`;
+		const configPath = join(import.meta.dir, `${ns}.config.ts`);
+		await writeFile(
+			configPath,
+			`import { defineGraphSchema, hashEmbed } from '../../core/src/index.ts';
 import { z } from 'zod';
 const schema = defineGraphSchema({ nodes: { note: z.object({ title: z.string().optional() }) }, edges: {} });
 export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'libsql' }, namespace: '${ns}' };
 `,
-	);
-	try {
-		const { app, control, tenant, project, user } = await buildServeApp(configPath);
-		expect(await (await app.request('/demo')).json()).toEqual({ tenant, project, user });
-		const res = await app.request(`/t/${tenant}/p/${project}/nodes`);
-		expect(res.status).toBe(200);
-		control.close();
-	} finally {
-		await rm(configPath, { force: true });
-		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
-	}
-});
+		);
+		try {
+			const { app, control, tenant, project, user } = await buildServeApp(configPath);
+			expect(await (await app.request('/demo')).json()).toEqual({ tenant, project, user });
+			const res = await app.request(`/t/${tenant}/p/${project}/nodes`);
+			expect(res.status).toBe(200);
+			control.close();
+		} finally {
+			await rm(configPath, { force: true });
+			for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
+		}
+	},
+);
 
 // buildServeApp bridges a postgres config through GRAPHX_DB_DRIVER/PG_URL env for the dev createApp,
 // then MUST restore them — otherwise a later call / the rest of the process inherits the wrong
@@ -280,7 +283,9 @@ export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
 	);
 	try {
 		const { run } = await import('../src/cli.ts');
-		await expect(run(['ingest', vaultDir, '--config', configPath])).rejects.toThrow(/must set .?dim/);
+		await expect(run(['ingest', vaultDir, '--config', configPath])).rejects.toThrow(
+			/must set .?dim/,
+		);
 	} finally {
 		await rm(vaultDir, { recursive: true, force: true });
 		await rm(configPath, { force: true });

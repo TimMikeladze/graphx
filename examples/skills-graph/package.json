@@ -1,9 +1,9 @@
 {
 	"name": "@graphx/example-skills-graph",
-	"private": true,
 	"version": "0.0.0",
-	"type": "module",
+	"private": true,
 	"description": "An occupations, skills and career-transition graph, built from skill-collector's SQLite database and browsed in @graphx/admin",
+	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",
 		"test": "bun test",

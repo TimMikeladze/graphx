@@ -15,7 +15,10 @@ test('P2: .or(rel) compiles to union(self, computed)', () => {
 });
 
 test('P2: .self().or(rel) equals .or(rel)', () => {
-	const m = defineAuthModel({ user: {}, doc: { editor: rel(), viewer: rel().self().or('editor') } });
+	const m = defineAuthModel({
+		user: {},
+		doc: { editor: rel(), viewer: rel().self().or('editor') },
+	});
 	expect(m.rewrite('doc', 'viewer')).toEqual({
 		kind: 'union',
 		children: [{ kind: 'self' }, { kind: 'computed', relation: 'editor' }],

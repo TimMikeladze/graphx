@@ -128,21 +128,10 @@
 				]
 			},
 			"wartime codebreaking of intercepted signals": {
-				"ftsSet": [
-					"alan-turing",
-					"bletchley-park",
-					"turing-machine"
-				]
+				"ftsSet": ["alan-turing", "bletchley-park", "turing-machine"]
 			},
 			"the first compiler for readable english programs": {
-				"ftsSet": [
-					"ada-lovelace",
-					"alan-turing",
-					"cobol",
-					"colossus",
-					"compiler",
-					"grace-hopper"
-				]
+				"ftsSet": ["ada-lovelace", "alan-turing", "cobol", "colossus", "compiler", "grace-hopper"]
 			},
 			"abstract model of computation with a tape": {
 				"ftsSet": [
@@ -155,35 +144,18 @@
 				]
 			},
 			"early electronic computer built from valves": {
-				"ftsSet": [
-					"analytical-engine",
-					"colossus",
-					"eniac",
-					"grace-hopper",
-					"punched-card"
-				]
+				"ftsSet": ["analytical-engine", "colossus", "eniac", "grace-hopper", "punched-card"]
 			},
 			"punched card input for mechanical computers": {
-				"ftsSet": [
-					"ada-lovelace",
-					"analytical-engine",
-					"charles-babbage",
-					"punched-card"
-				]
+				"ftsSet": ["ada-lovelace", "analytical-engine", "charles-babbage", "punched-card"]
 			}
 		},
 		"postgres": {
 			"who designed the analytical engine": {
-				"ftsSet": [
-					"analytical-engine",
-					"charles-babbage",
-					"cobol"
-				]
+				"ftsSet": ["analytical-engine", "charles-babbage", "cobol"]
 			},
 			"wartime codebreaking of intercepted signals": {
-				"ftsSet": [
-					"bletchley-park"
-				]
+				"ftsSet": ["bletchley-park"]
 			},
 			"the first compiler for readable english programs": {
 				"ftsSet": [
@@ -238,21 +210,10 @@
 				]
 			},
 			"wartime codebreaking of intercepted signals": {
-				"ftsSet": [
-					"alan-turing",
-					"bletchley-park",
-					"turing-machine"
-				]
+				"ftsSet": ["alan-turing", "bletchley-park", "turing-machine"]
 			},
 			"the first compiler for readable english programs": {
-				"ftsSet": [
-					"ada-lovelace",
-					"alan-turing",
-					"cobol",
-					"colossus",
-					"compiler",
-					"grace-hopper"
-				]
+				"ftsSet": ["ada-lovelace", "alan-turing", "cobol", "colossus", "compiler", "grace-hopper"]
 			},
 			"abstract model of computation with a tape": {
 				"ftsSet": [
@@ -265,21 +226,10 @@
 				]
 			},
 			"early electronic computer built from valves": {
-				"ftsSet": [
-					"analytical-engine",
-					"colossus",
-					"eniac",
-					"grace-hopper",
-					"punched-card"
-				]
+				"ftsSet": ["analytical-engine", "colossus", "eniac", "grace-hopper", "punched-card"]
 			},
 			"punched card input for mechanical computers": {
-				"ftsSet": [
-					"ada-lovelace",
-					"analytical-engine",
-					"charles-babbage",
-					"punched-card"
-				]
+				"ftsSet": ["ada-lovelace", "analytical-engine", "charles-babbage", "punched-card"]
 			}
 		}
 	}

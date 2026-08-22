@@ -1,9 +1,9 @@
 {
 	"name": "@graphx/example-iot-fleet",
-	"private": true,
 	"version": "0.0.0",
-	"type": "module",
+	"private": true,
 	"description": "Vite + Bun + SQLite (libSQL) React example — an IoT fleet graph over @graphx/core + @graphx/react",
+	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",
 		"dev": "vite",

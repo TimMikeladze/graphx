@@ -9,6 +9,7 @@
 **Tech Stack:** Bun, libSQL (`@libsql/client`), Hono, `@hono/zod-validator`, Zod 4, `bun:test`. In-memory libSQL (`:memory:`) for tests, matching the existing 244-test suite.
 
 **Spec refinements (decided during planning, deviating from `2026-06-12-graphx-admin-ui-design.md`):**
+
 - §3/§4: operator impersonation is NOT "zero authz change". `authorize()` reads membership from a table, so a synthesized principal alone fails the membership check (403). Resolution: add optional `Principal.operator` and a one-line bypass in `authorize`. The consumer's `authenticate` returns an operator principal (`tenantId` taken from the route param) when it recognizes the admin token.
 - §3: `listNodes`/`graphSlice` are methods on `Graph` (in `graph.ts`), not a new `src/list.ts`.
 
@@ -35,6 +36,7 @@ All `bun test` commands run from the repo root `/Users/tim/workspace/graphx`.
 ### Task 1: `Principal.operator` bypass in authz
 
 **Files:**
+
 - Modify: `packages/core/src/authz.ts:8-12` (Principal), `packages/core/src/authz.ts:41-69` (authorize)
 - Test: `packages/core/test/admin-authz.test.ts`
 
@@ -54,14 +56,23 @@ async function controlWithProject() {
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'Acme' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 	return { control, tenant, project, ns };
 }
 
 test('operator principal bypasses membership check and resolves the namespace', async () => {
 	const { control, tenant, project, ns } = await controlWithProject();
 	// No membership row exists for this operator user at all.
-	const res = await authorize(control, { userId: 'operator', tenantId: tenant, operator: true }, project, 'write');
+	const res = await authorize(
+		control,
+		{ userId: 'operator', tenantId: tenant, operator: true },
+		project,
+		'write',
+	);
 	expect(res.dbNamespace).toBe(ns);
 	control.close();
 });
@@ -69,7 +80,12 @@ test('operator principal bypasses membership check and resolves the namespace', 
 test('operator still cannot reach a project outside the principal tenant (404, no leak)', async () => {
 	const { control, project } = await controlWithProject();
 	await expect(
-		authorize(control, { userId: 'operator', tenantId: 'some-other-tenant', operator: true }, project, 'read'),
+		authorize(
+			control,
+			{ userId: 'operator', tenantId: 'some-other-tenant', operator: true },
+			project,
+			'read',
+		),
 	).rejects.toBeInstanceOf(AuthzError);
 	control.close();
 });
@@ -112,12 +128,12 @@ export interface Principal {
 In `packages/core/src/authz.ts`, inside `authorize`, immediately AFTER the project-tenant check (right after the `if (!row || String(row.tenant_id) !== principal.tenantId) { throw new AuthzError(404, 'project not found'); }` block, before the `const mem = ...` membership query), insert:
 
 ```ts
-	// Operator bypass: the project-tenant guard above already ran (no cross-tenant leak), so an
-	// operator is authorized for any op without a membership row. End users fall through to the
-	// membership/role check below.
-	if (principal.operator) {
-		return { dbNamespace: String(row.db_namespace) };
-	}
+// Operator bypass: the project-tenant guard above already ran (no cross-tenant leak), so an
+// operator is authorized for any op without a membership row. End users fall through to the
+// membership/role check below.
+if (principal.operator) {
+	return { dbNamespace: String(row.db_namespace) };
+}
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -137,6 +153,7 @@ git commit -m "feat(core): operator principal bypass in authorize (admin cross-t
 ### Task 2: Control-plane list/create helpers
 
 **Files:**
+
 - Modify: `packages/core/src/control-plane.ts` (append after `createProject`, end of file ~line 76)
 - Test: `packages/core/test/admin-controlplane.test.ts`
 
@@ -180,8 +197,16 @@ test('listProjects is scoped to one tenant', async () => {
 	const control = await freshControl();
 	const a = await createTenant(control, { name: 'A' });
 	const b = await createTenant(control, { name: 'B' });
-	await createProject(control, { tenantId: a, name: 'Alpha', dbNamespace: `ns_${ulid().toLowerCase()}` });
-	await createProject(control, { tenantId: b, name: 'Beta', dbNamespace: `ns_${ulid().toLowerCase()}` });
+	await createProject(control, {
+		tenantId: a,
+		name: 'Alpha',
+		dbNamespace: `ns_${ulid().toLowerCase()}`,
+	});
+	await createProject(control, {
+		tenantId: b,
+		name: 'Beta',
+		dbNamespace: `ns_${ulid().toLowerCase()}`,
+	});
 	const projA = await listProjects(control, a);
 	expect(projA.map((p) => p.name)).toEqual(['Alpha']);
 	expect(projA[0].dbNamespace.startsWith('ns_')).toBe(true);
@@ -294,6 +319,7 @@ git commit -m "feat(core): control-plane list helpers + api-key minting (admin r
 ### Task 3: `Graph.listNodes` — governed, temporal, filterable node list
 
 **Files:**
+
 - Modify: `packages/core/src/graph.ts` (add types near line 93; add `ftsMatch` + `listNodes` inside the `Graph` class, e.g. after `neighborsPage` ends at line 399)
 - Test: `packages/core/test/admin-list.test.ts`
 
@@ -344,7 +370,11 @@ test('listNodes filters by kind', async () => {
 
 test('listNodes full-text filters on body via FTS', async () => {
 	const g = await graph();
-	const hit = await g.addNode({ kind: 'device', props: { type: 'router' }, body: 'mercury gateway' });
+	const hit = await g.addNode({
+		kind: 'device',
+		props: { type: 'router' },
+		body: 'mercury gateway',
+	});
 	await g.addNode({ kind: 'device', props: { type: 'switch' }, body: 'venus relay' });
 	const page = await g.listNodes({ q: 'mercury' });
 	expect(page.nodes.map((n) => n.id)).toEqual([hit.id]);
@@ -354,7 +384,8 @@ test('listNodes full-text filters on body via FTS', async () => {
 test('listNodes keyset-paginates with cursor', async () => {
 	const g = await graph();
 	const ids: string[] = [];
-	for (let i = 0; i < 3; i++) ids.push((await g.addNode({ kind: 'person', props: { name: `p${i}` } })).id);
+	for (let i = 0; i < 3; i++)
+		ids.push((await g.addNode({ kind: 'person', props: { name: `p${i}` } })).id);
 	ids.sort();
 	const p1 = await g.listNodes({ limit: 2 });
 	expect(p1.nodes.map((n) => n.id)).toEqual(ids.slice(0, 2));
@@ -544,6 +575,7 @@ git commit -m "feat(core): Graph.listNodes — governed temporal/kind/FTS node l
 ### Task 4: `Graph.graphSlice` — governed `{nodes, links}` for the canvas
 
 **Files:**
+
 - Modify: `packages/core/src/graph.ts` (add `graphSlice` after `listNodes`)
 - Test: `packages/core/test/admin-list.test.ts` (append)
 
@@ -684,6 +716,7 @@ git commit -m "feat(core): Graph.graphSlice — governed {nodes,links} canvas sl
 ### Task 5: Tenant-scoped read routes (`/nodes`, `/graph`, `/nodes/:id/history`)
 
 **Files:**
+
 - Modify: `packages/core/src/serve.ts` (import `history`; add 3 query schemas; add 3 routes to the chain; add `invalid cursor` branch in `onError`)
 - Test: `packages/core/test/admin-routes.test.ts`
 
@@ -698,7 +731,13 @@ import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
 import type { Principal } from '../src/authz.ts';
-import { addMembership, createProject, createTenant, createUser, initControl } from '../src/control-plane.ts';
+import {
+	addMembership,
+	createProject,
+	createTenant,
+	createUser,
+	initControl,
+} from '../src/control-plane.ts';
 import { evict } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { createApp } from '../src/serve.ts';
@@ -709,7 +748,9 @@ const SCHEMA = defineGraphSchema({
 });
 
 // authenticate: x-admin-token => operator principal scoped to the route tenant; else x-user/x-tenant.
-function authenticate(c: { req: { header: (n: string) => string | undefined; param: (n: string) => string } }): Principal {
+function authenticate(c: {
+	req: { header: (n: string) => string | undefined; param: (n: string) => string };
+}): Principal {
 	if (c.req.header('x-admin-token') === 'secret') {
 		return { userId: 'operator', tenantId: c.req.param('tenant'), operator: true };
 	}
@@ -763,7 +804,9 @@ test('GET /nodes lists nodes and filters by kind', async () => {
 	const s = await setup();
 	await addNode(s, { kind: 'person', props: { name: 'p1' } });
 	const d = await addNode(s, { kind: 'device', props: { type: 'router' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?kind=device`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?kind=device`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	const body = await res.json();
 	expect(body.nodes.map((n: { id: string }) => n.id)).toEqual([d]);
@@ -792,7 +835,9 @@ test('GET /graph returns a {nodes,links,truncated} slice', async () => {
 test('GET /nodes/:id/history returns the version trail', async () => {
 	const s = await setup();
 	const id = await addNode(s, { kind: 'person', props: { name: 'p1' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	const body = await res.json();
 	expect(body.versions.length).toBe(1);
@@ -802,7 +847,9 @@ test('GET /nodes/:id/history returns the version trail', async () => {
 
 test('GET /nodes with a malformed cursor -> 400', async () => {
 	const s = await setup();
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(400);
 	cleanup(s);
 });
@@ -890,8 +937,8 @@ In `packages/core/src/serve.ts`, in `buildApp`, insert these three routes into t
 In `packages/core/src/serve.ts`, in `onError`, add this branch right before the final `return c.json({ error: 'internal' }, 500);` (line 222):
 
 ```ts
-	// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.
-	if (err.message === 'invalid cursor') return c.json({ error: 'invalid cursor' }, 400);
+// decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.
+if (err.message === 'invalid cursor') return c.json({ error: 'invalid cursor' }, 400);
 ```
 
 - [ ] **Step 6: Run test to verify it passes**
@@ -916,6 +963,7 @@ git commit -m "feat(core): /nodes /graph /nodes/:id/history read routes + invali
 ### Task 6: `createAdminApp` — operator-gated control-plane CRUD sub-app
 
 **Files:**
+
 - Create: `packages/core/src/admin.ts`
 - Test: `packages/core/test/admin-app.test.ts`
 
@@ -976,7 +1024,13 @@ test('create + list tenants round-trips', async () => {
 
 test('create project under a tenant + list projects', async () => {
 	const s = await setup();
-	const t = await (await s.app.request('/admin/tenants', { method: 'POST', headers: AUTH, body: JSON.stringify({ name: 'Acme' }) })).json();
+	const t = await (
+		await s.app.request('/admin/tenants', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ name: 'Acme' }),
+		})
+	).json();
 	const ns = `ns_${ulid().toLowerCase()}`;
 	const created = await s.app.request(`/admin/tenants/${t.id}/projects`, {
 		method: 'POST',
@@ -992,8 +1046,20 @@ test('create project under a tenant + list projects', async () => {
 
 test('create user, add membership (204), mint api-key (201, key once)', async () => {
 	const s = await setup();
-	const t = await (await s.app.request('/admin/tenants', { method: 'POST', headers: AUTH, body: JSON.stringify({ name: 'Acme' }) })).json();
-	const u = await (await s.app.request('/admin/users', { method: 'POST', headers: AUTH, body: JSON.stringify({ email: 'a@test.dev' }) })).json();
+	const t = await (
+		await s.app.request('/admin/tenants', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ name: 'Acme' }),
+		})
+	).json();
+	const u = await (
+		await s.app.request('/admin/users', {
+			method: 'POST',
+			headers: AUTH,
+			body: JSON.stringify({ email: 'a@test.dev' }),
+		})
+	).json();
 	expect(u.id.length).toBe(26);
 
 	const mem = await s.app.request('/admin/memberships', {
@@ -1026,8 +1092,16 @@ test('invalid body -> 400 (Zod validation mapped)', async () => {
 
 test('duplicate user email -> 400 (constraint mapped, not 500)', async () => {
 	const s = await setup();
-	await s.app.request('/admin/users', { method: 'POST', headers: AUTH, body: JSON.stringify({ email: 'dup@test.dev' }) });
-	const again = await s.app.request('/admin/users', { method: 'POST', headers: AUTH, body: JSON.stringify({ email: 'dup@test.dev' }) });
+	await s.app.request('/admin/users', {
+		method: 'POST',
+		headers: AUTH,
+		body: JSON.stringify({ email: 'dup@test.dev' }),
+	});
+	const again = await s.app.request('/admin/users', {
+		method: 'POST',
+		headers: AUTH,
+		body: JSON.stringify({ email: 'dup@test.dev' }),
+	});
 	expect(again.status).toBe(400);
 	s.control.close();
 });
@@ -1117,7 +1191,11 @@ export function createAdminApp(cfg: AdminConfig): Hono {
 		)
 		.post('/tenants/:id/projects', zValidator('json', projectBody), async (c) => {
 			const { name, dbNamespace } = c.req.valid('json');
-			const id = await createProject(cfg.control, { tenantId: c.req.param('id'), name, dbNamespace });
+			const id = await createProject(cfg.control, {
+				tenantId: c.req.param('id'),
+				name,
+				dbNamespace,
+			});
 			return c.json({ id }, 201);
 		})
 		.get('/users', async (c) => c.json({ users: await listUsers(cfg.control) }))
@@ -1155,6 +1233,7 @@ git commit -m "feat(core): createAdminApp — operator-gated control-plane CRUD 
 ### Task 7: Public API exports + full suite + type-check
 
 **Files:**
+
 - Modify: `packages/core/src/index.ts`
 
 - [ ] **Step 1: Add the control-plane export additions**
@@ -1224,6 +1303,7 @@ git commit -m "feat(core): export admin API — createAdminApp, control-plane he
 ## Self-Review
 
 **1. Spec coverage** (against `docs/superpowers/specs/2026-06-12-graphx-admin-ui-design.md` §5 contract):
+
 - `/admin/tenants` GET+POST → Task 6 ✓
 - `/admin/tenants/:id/projects` GET+POST → Task 6 ✓
 - `/admin/users` GET+POST → Task 6 ✓
@@ -1242,6 +1322,7 @@ git commit -m "feat(core): export admin API — createAdminApp, control-plane he
 **3. Type consistency:** `listNodes` returns `NodeListPage` (`{nodes, nextCursor}`); `graphSlice` returns `GraphSlice` (`{nodes, links, truncated}`); links use `source`/`target`/`rel`/`weight`; `Principal.operator?: boolean`; `AdminConfig.authenticate: (c) => void | Promise<void>`. Route handlers call `c.get('graph').listNodes(...)` / `.graphSlice(...)` matching the method names added in Tasks 3/4. `createApiKey` returns `{key}`; route returns `{key}` 201. All consistent across tasks. ✓
 
 **4. Notes for the executor:**
+
 - Zod 4: `z.string().min(3)` is used for email (avoids any `.email()` API-version friction); validation is intentionally loose — the DB `UNIQUE` on `users.email` is the real guard (tested via the duplicate-email 400 test).
 - Tests that open a project DB (`admin-routes.test.ts`) must `evict` + `rmSync` the namespace files in `cleanup`, mirroring `p11-serving.test.ts` — libSQL writes `ns_*.db` files to cwd.
 - The `nodeFilter`/`graphSlice` subquery inlines `LIMIT <maxRows>` (validated integer from `resolveLimits`, injection-safe — same pattern as `applyLimit`).

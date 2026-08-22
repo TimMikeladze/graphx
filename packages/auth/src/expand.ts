@@ -1,5 +1,5 @@
 import { edgesInto } from './check.ts';
-import type { DbClient } from '../../core/src/index.ts';
+import type { DbClient } from '@graphx/core';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 
@@ -26,9 +26,7 @@ async function expandSelf(ctx: ExpandCtx, object: string, relation: string): Pro
 		else usersets.push({ object: src, relation: subjectRelation });
 	}
 	subjects.sort();
-	usersets.sort((a, b) =>
-		`${a.object}#${a.relation}`.localeCompare(`${b.object}#${b.relation}`),
-	);
+	usersets.sort((a, b) => `${a.object}#${a.relation}`.localeCompare(`${b.object}#${b.relation}`));
 	return { type: 'leaf', subjects, usersets };
 }
 

@@ -28,29 +28,29 @@
 
 **Created:**
 
-| File | Responsibility |
-|---|---|
-| `packages/mcp/package.json` | package manifest, `graphx-mcp` bin, deps |
-| `packages/mcp/tsconfig.json` | extends the base config, matches `packages/cli` |
-| `packages/mcp/src/backend.ts` | the `Backend` seam and its two implementations |
-| `packages/mcp/src/tools.ts` | registry → `ToolDescriptor[]`; args → HTTP request parts |
-| `packages/mcp/src/resources.ts` | `graphx://schema` content, from a `GraphSchema` or inferred |
-| `packages/mcp/src/server.ts` | `McpServer` construction: registers tools + resource, maps results |
-| `packages/mcp/src/index.ts` | public exports |
-| `packages/mcp/src/bin.ts` | stdio entry point, env config parsing |
-| `packages/mcp/test/tools.test.ts` | descriptor extraction, arg splitting |
-| `packages/mcp/test/backend.test.ts` | URL building, header injection |
-| `packages/mcp/test/server.test.ts` | end-to-end over `InMemoryTransport` |
-| `packages/mcp/test/resources.test.ts` | schema resource + `describe_schema` |
-| `packages/mcp/README.md` | install, configure, tool list |
+| File                                  | Responsibility                                                     |
+| ------------------------------------- | ------------------------------------------------------------------ |
+| `packages/mcp/package.json`           | package manifest, `graphx-mcp` bin, deps                           |
+| `packages/mcp/tsconfig.json`          | extends the base config, matches `packages/cli`                    |
+| `packages/mcp/src/backend.ts`         | the `Backend` seam and its two implementations                     |
+| `packages/mcp/src/tools.ts`           | registry → `ToolDescriptor[]`; args → HTTP request parts           |
+| `packages/mcp/src/resources.ts`       | `graphx://schema` content, from a `GraphSchema` or inferred        |
+| `packages/mcp/src/server.ts`          | `McpServer` construction: registers tools + resource, maps results |
+| `packages/mcp/src/index.ts`           | public exports                                                     |
+| `packages/mcp/src/bin.ts`             | stdio entry point, env config parsing                              |
+| `packages/mcp/test/tools.test.ts`     | descriptor extraction, arg splitting                               |
+| `packages/mcp/test/backend.test.ts`   | URL building, header injection                                     |
+| `packages/mcp/test/server.test.ts`    | end-to-end over `InMemoryTransport`                                |
+| `packages/mcp/test/resources.test.ts` | schema resource + `describe_schema`                                |
+| `packages/mcp/README.md`              | install, configure, tool list                                      |
 
 **Modified:**
 
-| File | Change |
-|---|---|
-| `packages/core/src/serve.ts` | `operationId` + `tags` on 25 routes; new `GET /t/{tenant}/projects`; widen the authn middleware |
-| `packages/core/test/openapi.test.ts` | coverage assertions for `operationId` and tags |
-| `bunup.config.ts` | build entry for the new package |
+| File                                 | Change                                                                                          |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `packages/core/src/serve.ts`         | `operationId` + `tags` on 25 routes; new `GET /t/{tenant}/projects`; widen the authn middleware |
+| `packages/core/test/openapi.test.ts` | coverage assertions for `operationId` and tags                                                  |
+| `bunup.config.ts`                    | build entry for the new package                                                                 |
 
 ---
 
@@ -59,42 +59,44 @@
 Adds the two facts MCP needs to `serve.ts`'s route declarations. The read/write distinction currently exists only as the `requireGraph(cfg, 'read' | 'write')` middleware argument, which is invisible to the OpenAPI registry.
 
 **Files:**
+
 - Modify: `packages/core/src/serve.ts` (the 25 tenant `createRoute` calls, lines 727–1320)
 - Test: `packages/core/test/openapi.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: every tenant route in the registry carries `operationId: string` and `tags: ['read'] | ['write']`, except `GET /t/{tenant}/p/{project}/events`, which carries neither. `/health` and `/ready` carry neither.
 
 The complete assignment — `operationId` matches the tag to the route's existing `requireGraph` argument:
 
-| Line | Method | Path suffix | `tags` | `operationId` |
-|---|---|---|---|---|
-| 729 | post | `/nodes` | `write` | `create_node` |
-| 749 | post | `/edges` | `write` | `create_edge` |
-| 767 | get | `/nodes/{id}` | `read` | `get_node` |
-| 785 | patch | `/nodes/{id}` | `write` | `update_node` |
-| 807 | delete | `/edges/{id}` | `write` | `delete_edge` |
-| 824 | delete | `/nodes/{id}` | `write` | `delete_node` |
-| 839 | get | `/nodes/{id}/neighbors` | `read` | `neighbors` |
-| 861 | get | `/nodes/{id}/neighborsPage` | `read` | `neighbors_page` |
-| 883 | get | `/nodes` | `read` | `list_nodes` |
-| 901 | get | `/graph` | `read` | `graph_slice` |
-| 919 | get | `/nodes/{id}/content` | `read` | `get_node_content` |
-| 935 | get | `/nodes/{id}/history` | `read` | `node_history` |
-| 953 | get | `/retrieve` | `read` | `retrieve` |
-| 979 | post | `/journey` | `read` | `journey` |
-| 1006 | get | `/changes` | `read` | `change_feed` |
-| 1032 | get | `/events` | *(none)* | *(none — not mirrored)* |
-| 1105 | get | `/diff` | `read` | `diff` |
-| 1122 | post | `/hybrid` | `read` | `hybrid_search` |
-| 1150 | post | `/bulk` | `write` | `bulk_load` |
-| 1176 | post | `/match` | `read` | `match_pattern` |
-| 1232 | post | `/algorithms/shortest-path` | `read` | `shortest_path` |
-| 1250 | post | `/algorithms/pagerank` | `write` | `pagerank` |
-| 1268 | post | `/algorithms/community` | `write` | `community` |
-| 1286 | post | `/algorithms/centrality` | `write` | `centrality` |
-| 1307 | get | `/algorithms/top` | `read` | `top_nodes` |
+| Line | Method | Path suffix                 | `tags`   | `operationId`           |
+| ---- | ------ | --------------------------- | -------- | ----------------------- |
+| 729  | post   | `/nodes`                    | `write`  | `create_node`           |
+| 749  | post   | `/edges`                    | `write`  | `create_edge`           |
+| 767  | get    | `/nodes/{id}`               | `read`   | `get_node`              |
+| 785  | patch  | `/nodes/{id}`               | `write`  | `update_node`           |
+| 807  | delete | `/edges/{id}`               | `write`  | `delete_edge`           |
+| 824  | delete | `/nodes/{id}`               | `write`  | `delete_node`           |
+| 839  | get    | `/nodes/{id}/neighbors`     | `read`   | `neighbors`             |
+| 861  | get    | `/nodes/{id}/neighborsPage` | `read`   | `neighbors_page`        |
+| 883  | get    | `/nodes`                    | `read`   | `list_nodes`            |
+| 901  | get    | `/graph`                    | `read`   | `graph_slice`           |
+| 919  | get    | `/nodes/{id}/content`       | `read`   | `get_node_content`      |
+| 935  | get    | `/nodes/{id}/history`       | `read`   | `node_history`          |
+| 953  | get    | `/retrieve`                 | `read`   | `retrieve`              |
+| 979  | post   | `/journey`                  | `read`   | `journey`               |
+| 1006 | get    | `/changes`                  | `read`   | `change_feed`           |
+| 1032 | get    | `/events`                   | _(none)_ | _(none — not mirrored)_ |
+| 1105 | get    | `/diff`                     | `read`   | `diff`                  |
+| 1122 | post   | `/hybrid`                   | `read`   | `hybrid_search`         |
+| 1150 | post   | `/bulk`                     | `write`  | `bulk_load`             |
+| 1176 | post   | `/match`                    | `read`   | `match_pattern`         |
+| 1232 | post   | `/algorithms/shortest-path` | `read`   | `shortest_path`         |
+| 1250 | post   | `/algorithms/pagerank`      | `write`  | `pagerank`              |
+| 1268 | post   | `/algorithms/community`     | `write`  | `community`             |
+| 1286 | post   | `/algorithms/centrality`    | `write`  | `centrality`            |
+| 1307 | get    | `/algorithms/top`           | `read`   | `top_nodes`             |
 
 That is 24 routes with metadata plus `/events` without. `list_projects` arrives in Task 2, bringing the mirrored total to 25.
 
@@ -209,10 +211,12 @@ groups routes by op."
 The only way an agent learns which projects it can address. The existing control-plane listing lives in `createAdminApp`, a separate auth realm gated on "is this caller an operator" — a normal tenant credential gets 401 there.
 
 **Files:**
+
 - Modify: `packages/core/src/serve.ts`
 - Test: `packages/core/test/p11-serving.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1's tagging convention.
 - Produces: `GET /t/{tenant}/projects` → `200 { projects: Array<{ id: string; name: string }> }`, `operationId: 'list_projects'`, `tags: ['read']`. This is the only route whose `request.params` omits `project`.
 
@@ -265,13 +269,13 @@ Expected: FAIL with status 404 — the route does not exist, so Hono's not-found
 In `packages/core/src/serve.ts`, find this line in `buildApp` (just above the route chain):
 
 ```ts
-	base.use('/t/:tenant/p/:project/*', authn(cfg));
+base.use('/t/:tenant/p/:project/*', authn(cfg));
 ```
 
 Change it to:
 
 ```ts
-	base.use('/t/:tenant/*', authn(cfg));
+base.use('/t/:tenant/*', authn(cfg));
 ```
 
 A superset: it covers every path the old pattern did, plus `/t/:tenant/projects`.
@@ -333,6 +337,7 @@ Expected: PASS.
 - [ ] **Step 6: Run the full core suite on both drivers**
 
 Run:
+
 ```bash
 bun test packages/core --timeout 30000
 GRAPHX_TEST_DRIVER=postgres bun test packages/core --timeout 30000
@@ -358,11 +363,13 @@ as requireGraph, and db_namespace is stripped per §2.9."
 The seam is one method. Everything downstream depends on it, and nothing in it knows about MCP.
 
 **Files:**
+
 - Create: `packages/mcp/package.json`, `packages/mcp/tsconfig.json`, `packages/mcp/src/backend.ts`
 - Modify: `bunup.config.ts`
 - Test: `packages/mcp/test/backend.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `interface Backend { call(method: string, path: string, init?: BackendInit): Promise<Response> }`
@@ -396,9 +403,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 		},
 		"./package.json": "./package.json"
 	},
-	"files": [
-		"dist"
-	],
+	"files": ["dist"],
 	"scripts": {
 		"type-check": "tsc --noEmit"
 	},
@@ -627,7 +632,14 @@ export function localBackend(app: FetchLike, headers: Record<string, string> = {
 	return {
 		call: (method, path, init) =>
 			Promise.resolve(
-				app.fetch(buildRequest(`http://graphx.local${path}${queryString(init?.query)}`, method, init, headers)),
+				app.fetch(
+					buildRequest(
+						`http://graphx.local${path}${queryString(init?.query)}`,
+						method,
+						init,
+						headers,
+					),
+				),
 			),
 	};
 }
@@ -676,10 +688,12 @@ without a socket; remote is the same shape against a base URL."
 Reads the app's own OpenAPI registry and turns each declared route into everything the MCP layer needs. No knowledge of MCP lives here — it is a pure transformation, which is what makes it cheap to test.
 
 **Files:**
+
 - Create: `packages/mcp/src/tools.ts`
 - Test: `packages/mcp/test/tools.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Backend`/`BackendInit` from `./backend.ts` (types only).
 - Produces:
   - `interface ToolDescriptor { name: string; description: string; method: string; path: string; readOnly: boolean; pathFields: string[]; queryFields: string[]; bodyFields: string[]; inputShape: Record<string, ZodType>; annotations: ToolAnnotations }`
@@ -832,7 +846,9 @@ test('buildCall: routes each argument to its source', () => {
 	});
 
 	const create = tools.find((t) => t.name === 'create_node')!;
-	expect(buildCall(create, { tenant: 't1', project: 'p1', type: 'person', data: { name: 'a' } })).toEqual({
+	expect(
+		buildCall(create, { tenant: 't1', project: 'p1', type: 'person', data: { name: 'a' } }),
+	).toEqual({
 		method: 'POST',
 		path: '/t/t1/p/p1/nodes',
 		init: { query: {}, body: { type: 'person', data: { name: 'a' } } },
@@ -1032,10 +1048,12 @@ construction rather than defaulting."
 Wires descriptors to the backend and maps HTTP responses onto MCP results. This is the task that produces something a client can actually talk to.
 
 **Files:**
+
 - Create: `packages/mcp/src/server.ts`, `packages/mcp/src/index.ts`
 - Test: `packages/mcp/test/server.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Backend` (Task 3), `toolsFrom` / `buildCall` / `ToolDescriptor` (Task 4).
 - Produces:
   - `interface GraphxMcpOptions { app: RegistryHost; backend: Backend; readOnly?: boolean; name?: string; version?: string; schema?: GraphSchemaLike }`
@@ -1077,7 +1095,12 @@ async function harness(opts: { readOnly?: boolean } = {}) {
 		},
 	});
 	const backend = localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant });
-	const server = createGraphxMcp({ app: dev.app, backend, readOnly: opts.readOnly, schema: SCHEMA });
+	const server = createGraphxMcp({
+		app: dev.app,
+		backend,
+		readOnly: opts.readOnly,
+		schema: SCHEMA,
+	});
 	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 	const client = new Client({ name: 'test', version: '1.0.0' });
 	await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -1183,17 +1206,31 @@ test('server: read-only mode drops every write tool', async () => {
 	const { tools } = await h.client.listTools();
 	const names = tools.map((t) => t.name);
 
-	for (const write of ['create_node', 'create_edge', 'update_node', 'delete_node', 'delete_edge', 'bulk_load', 'pagerank', 'community', 'centrality']) {
+	for (const write of [
+		'create_node',
+		'create_edge',
+		'update_node',
+		'delete_node',
+		'delete_edge',
+		'bulk_load',
+		'pagerank',
+		'community',
+		'centrality',
+	]) {
 		expect(names).not.toContain(write);
 	}
 	expect(names).toContain('list_nodes');
-	expect(tools.every((t) => t.annotations?.readOnlyHint === true || t.name === 'describe_schema')).toBe(true);
+	expect(
+		tools.every((t) => t.annotations?.readOnlyHint === true || t.name === 'describe_schema'),
+	).toBe(true);
 	await h.teardown();
 });
 
 test('server: list_projects reaches the tenant-scoped route', async () => {
 	const h = await harness();
-	const body = payload(await h.client.callTool({ name: 'list_projects', arguments: { tenant: h.tenant } }));
+	const body = payload(
+		await h.client.callTool({ name: 'list_projects', arguments: { tenant: h.tenant } }),
+	);
 	expect(body.projects.map((p: any) => p.id)).toContain(h.project);
 	await h.teardown();
 });
@@ -1260,7 +1297,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 /** The `{ error }` message graphx's `onError` emits, or the raw body. */
 function errorText(status: number, body: unknown, raw: string): string {
-	const message = isRecord(body) && typeof body.error === 'string' ? body.error : raw || 'request failed';
+	const message =
+		isRecord(body) && typeof body.error === 'string' ? body.error : raw || 'request failed';
 	const issues = isRecord(body) && body.issues ? ` ${JSON.stringify(body.issues)}` : '';
 	return `HTTP ${status}: ${message}${issues}`;
 }
@@ -1304,7 +1342,9 @@ function registerTool(server: McpServer, desc: ToolDescriptor, backend: Backend)
 				// non-2xx responses and are mapped above.
 				return {
 					isError: true,
-					content: [{ type: 'text' as const, text: `${desc.name} failed: ${(err as Error).message}` }],
+					content: [
+						{ type: 'text' as const, text: `${desc.name} failed: ${(err as Error).message}` },
+					],
 				};
 			}
 		},
@@ -1386,11 +1426,13 @@ an empty body."
 Without this, an agent writing to an empty graph is guessing type names. The resource loads once as context; the tool exists because several MCP clients do not implement resources.
 
 **Files:**
+
 - Create: `packages/mcp/src/resources.ts`
 - Modify: `packages/mcp/src/server.ts`, `packages/mcp/src/index.ts`
 - Test: `packages/mcp/test/resources.test.ts`
 
 **Interfaces:**
+
 - Consumes: `GraphSchemaLike` (Task 5), `Backend` (Task 3).
 - Produces:
   - `interface SchemaDoc { nodes: Record<string, unknown>; edges: Array<{ rel: string; from?: unknown; to?: unknown; single?: boolean }>; inferred?: true }`
@@ -1536,9 +1578,13 @@ export async function inferSchemaDoc(
 	tenant: string,
 	project: string,
 ): Promise<SchemaDoc> {
-	const res = await backend.call('GET', `/t/${encodeURIComponent(tenant)}/p/${encodeURIComponent(project)}/nodes`, {
-		query: { limit: '200' },
-	});
+	const res = await backend.call(
+		'GET',
+		`/t/${encodeURIComponent(tenant)}/p/${encodeURIComponent(project)}/nodes`,
+		{
+			query: { limit: '200' },
+		},
+	);
 	if (!res.ok) return { nodes: {}, edges: [], inferred: true };
 	const body = (await res.json()) as { nodes?: Array<{ type?: string }> };
 	const nodes: Record<string, unknown> = {};
@@ -1567,9 +1613,7 @@ export function registerSchema(
 			},
 			(uri) =>
 				Promise.resolve({
-					contents: [
-						{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(known) },
-					],
+					contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(known) }],
 				}),
 		);
 	}
@@ -1585,7 +1629,10 @@ export function registerSchema(
 		async (args: { tenant: string; project: string }) => {
 			const doc = known ?? (await inferSchemaDoc(opts.backend, args.tenant, args.project));
 			const text = JSON.stringify(doc);
-			return { content: [{ type: 'text' as const, text }], structuredContent: doc as unknown as Record<string, unknown> };
+			return {
+				content: [{ type: 'text' as const, text }],
+				structuredContent: doc as unknown as Record<string, unknown>,
+			};
 		},
 	);
 }
@@ -1602,13 +1649,13 @@ import { registerSchema } from './resources.ts';
 and register before returning, inside `createGraphxMcp`:
 
 ```ts
-	for (const desc of toolsFrom(opts.app)) {
-		if (opts.readOnly && !desc.readOnly) continue;
-		registerTool(server, desc, opts.backend);
-	}
-	// Discovery is read-only, so it survives read-only mode.
-	registerSchema(server, { schema: opts.schema, backend: opts.backend });
-	return server;
+for (const desc of toolsFrom(opts.app)) {
+	if (opts.readOnly && !desc.readOnly) continue;
+	registerTool(server, desc, opts.backend);
+}
+// Discovery is read-only, so it survives read-only mode.
+registerSchema(server, { schema: opts.schema, backend: opts.backend });
+return server;
 ```
 
 Add to `packages/mcp/src/index.ts`:
@@ -1649,11 +1696,13 @@ the result inferred rather than presenting a guess as a contract."
 Two ways to reach the server: a process a desktop client spawns, and a route on an existing app.
 
 **Files:**
+
 - Create: `packages/mcp/src/bin.ts`
 - Modify: `packages/mcp/src/index.ts`
 - Test: `packages/mcp/test/server.test.ts` (mount test appended)
 
 **Interfaces:**
+
 - Consumes: `createGraphxMcp` (Task 5), `localBackend` / `remoteBackend` (Task 3).
 - Produces: `function createMcpApp(opts: GraphxMcpOptions): Hono` — a Hono app answering MCP over Streamable HTTP at `/`, meant to be mounted with `app.route('/mcp', createMcpApp(...))`.
 
@@ -1804,7 +1853,11 @@ async function main(): Promise<void> {
 		if (!url) throw new Error('GRAPHX_MCP_MODE=remote requires GRAPHX_URL');
 		// The route registry still comes from a locally built app: the tool surface is a
 		// property of the graphx version, not of the deployment being addressed.
-		const dev = await createApp({ schema: { nodes: {}, edges: {} }, db: ':memory:', embed: hashEmbed() });
+		const dev = await createApp({
+			schema: { nodes: {}, edges: {} },
+			db: ':memory:',
+			embed: hashEmbed(),
+		});
 		app = dev.app;
 		backend = remoteBackend({ url, apiKey: process.env.GRAPHX_API_KEY });
 	} else {
@@ -1834,6 +1887,7 @@ If `createApp`'s dev overload rejects an empty schema, pass `defineGraphSchema({
 - [ ] **Step 6: Smoke-test the binary**
 
 Run:
+
 ```bash
 GRAPHX_DB=mcp_smoke bun run packages/mcp/src/bin.ts <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}
@@ -1865,15 +1919,18 @@ the result. Diagnostics go to stderr — stdout carries JSON-RPC frames."
 ### Task 8: Documentation
 
 **Files:**
+
 - Create: `packages/mcp/README.md`
 
 **Interfaces:**
+
 - Consumes: everything.
 - Produces: nothing consumed by code.
 
 - [ ] **Step 1: Generate the live tool list**
 
 Run:
+
 ```bash
 bun -e '
 import { createApp, defineGraphSchema } from "./packages/core/src/serve.ts";
@@ -1948,23 +2005,23 @@ git commit -m "docs(mcp): README with client config, library usage and limits"
 
 **Spec coverage:**
 
-| Spec section | Task |
-|---|---|
-| Package layout, deps | 3 |
-| Backend seam, local + remote | 3 |
-| Registry as source of truth | 4 |
-| `operationId` + tags | 1 |
-| Input-schema merge, collision guard | 4 |
-| Annotations | 4 |
-| Read-only mode | 5 |
-| Result and error mapping | 5 |
-| `graphx://schema` resource | 6 |
-| `describe_schema` + inferred fallback | 6 |
-| `list_projects` + widened authn | 2 |
-| Configuration + embedder warning | 7 |
-| stdio + Streamable HTTP transports | 7 |
-| Testing (manifest, read-only, reads, writes, errors, resource, coverage, both drivers) | 1, 2, 4, 5, 6 |
-| Deferred `GET /stats` | not implemented, per spec |
+| Spec section                                                                           | Task                      |
+| -------------------------------------------------------------------------------------- | ------------------------- |
+| Package layout, deps                                                                   | 3                         |
+| Backend seam, local + remote                                                           | 3                         |
+| Registry as source of truth                                                            | 4                         |
+| `operationId` + tags                                                                   | 1                         |
+| Input-schema merge, collision guard                                                    | 4                         |
+| Annotations                                                                            | 4                         |
+| Read-only mode                                                                         | 5                         |
+| Result and error mapping                                                               | 5                         |
+| `graphx://schema` resource                                                             | 6                         |
+| `describe_schema` + inferred fallback                                                  | 6                         |
+| `list_projects` + widened authn                                                        | 2                         |
+| Configuration + embedder warning                                                       | 7                         |
+| stdio + Streamable HTTP transports                                                     | 7                         |
+| Testing (manifest, read-only, reads, writes, errors, resource, coverage, both drivers) | 1, 2, 4, 5, 6             |
+| Deferred `GET /stats`                                                                  | not implemented, per spec |
 
 **Known deviations from the spec, both deliberate:**
 

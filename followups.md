@@ -19,7 +19,7 @@ is counted in the recorded signature while absent from the index — the row bec
 permanently unsearchable, silently.
 
 That exact defect was found and fixed three times during stage 5, once per call site, because
-each fix and each regression test pinned the *call site* rather than the contract. Both call
+each fix and each regression test pinned the _call site_ rather than the contract. Both call
 sites are correct today and each has a delay-swept regression test, but a third call site
 added later would reintroduce it and nothing would catch that.
 

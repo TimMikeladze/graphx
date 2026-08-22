@@ -226,7 +226,10 @@ function aliasesOf(frontmatter: Record<string, unknown>): string[] {
 	return raw.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
 }
 
-function resolveType(file: ParsedFile, typeOf?: (f: ParsedFile) => string | undefined): string | undefined {
+function resolveType(
+	file: ParsedFile,
+	typeOf?: (f: ParsedFile) => string | undefined,
+): string | undefined {
 	const explicit = typeOf?.(file);
 	if (explicit) return explicit;
 	if (typeof file.frontmatter.type === 'string') return file.frontmatter.type;
@@ -252,7 +255,13 @@ function linkResolutionSkip(key: string, target: string, r: Resolution): SkipEnt
 function nodeErrorSkip(key: string, err: unknown): SkipEntry {
 	const e = err as { name?: string; issues?: unknown; message?: string };
 	if (e?.name === 'ZodError' && Array.isArray(e.issues)) {
-		return { key, stage: 'node', code: 'schema-reject', reason: e.message ?? 'schema validation failed', detail: e.issues };
+		return {
+			key,
+			stage: 'node',
+			code: 'schema-reject',
+			reason: e.message ?? 'schema validation failed',
+			detail: e.issues,
+		};
 	}
 	return { key, stage: 'node', code: 'node-error', reason: (err as Error).message };
 }
@@ -260,7 +269,12 @@ function nodeErrorSkip(key: string, err: unknown): SkipEntry {
 /** Skip entry for an edge write that threw (unknown rel / type mismatch). */
 function edgeErrorSkip(key: string, err: unknown): SkipEntry {
 	const msg = (err as Error).message;
-	return { key, stage: 'edge', code: /unknown rel/.test(msg) ? 'unknown-rel' : 'edge-error', reason: msg };
+	return {
+		key,
+		stage: 'edge',
+		code: /unknown rel/.test(msg) ? 'unknown-rel' : 'edge-error',
+		reason: msg,
+	};
 }
 
 /** Frontmatter minus reserved keys: `type` and any configured `edgeFields` keys. */
@@ -342,7 +356,8 @@ export async function ingestDir<S extends GraphSchema>(
 	opts: IngestOptions<S>,
 ): Promise<IngestResult> {
 	const g = opts.graph as unknown as LooseGraph;
-	const fileSource = opts.fileSource ?? (opts.dir != null ? fsSource(opts.dir, opts.include) : undefined);
+	const fileSource =
+		opts.fileSource ?? (opts.dir != null ? fsSource(opts.dir, opts.include) : undefined);
 	if (!fileSource) throw new Error('ingestDir: requires `dir` or `fileSource`');
 	const keyPrefix = keyPrefixFor(opts.source ?? 'default');
 	const idField = opts.idField ?? 'id';
@@ -684,7 +699,12 @@ export async function ingestDir<S extends GraphSchema>(
 					try {
 						dst = await ensureAsset(assetPath);
 					} catch (err) {
-						result.skipped.push({ key: file.key, stage: 'node', code: 'asset-error', reason: (err as Error).message });
+						result.skipped.push({
+							key: file.key,
+							stage: 'node',
+							code: 'asset-error',
+							reason: (err as Error).message,
+						});
 						continue;
 					}
 				}
@@ -700,7 +720,12 @@ export async function ingestDir<S extends GraphSchema>(
 				try {
 					dst = await ensureTag(tag);
 				} catch (err) {
-					result.skipped.push({ key: file.key, stage: 'node', code: 'tag-error', reason: (err as Error).message });
+					result.skipped.push({
+						key: file.key,
+						stage: 'node',
+						code: 'tag-error',
+						reason: (err as Error).message,
+					});
 					continue;
 				}
 				if (dst !== srcId) desired.set(`${rel}\0${dst}`, {});
@@ -718,7 +743,14 @@ export async function ingestDir<S extends GraphSchema>(
 			if (!live2) {
 				// new edge
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, data: desiredEdge.data, source: keyPrefix });
+					await g.addEdge({
+						rel,
+						src: srcId,
+						dst,
+						weight: desiredEdge.weight,
+						data: desiredEdge.data,
+						source: keyPrefix,
+					});
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));
@@ -728,7 +760,14 @@ export async function ingestDir<S extends GraphSchema>(
 				await g.deleteEdge(live2.id);
 				result.edgesClosed++;
 				try {
-					await g.addEdge({ rel, src: srcId, dst, weight: desiredEdge.weight, data: desiredEdge.data, source: keyPrefix });
+					await g.addEdge({
+						rel,
+						src: srcId,
+						dst,
+						weight: desiredEdge.weight,
+						data: desiredEdge.data,
+						source: keyPrefix,
+					});
 					result.edgesAdded++;
 				} catch (err) {
 					result.skipped.push(edgeErrorSkip(file.key, err));
@@ -766,7 +805,10 @@ export async function ingestDir<S extends GraphSchema>(
 		}
 		// One batched read for every doomed node's incident edges, de-duplicated: an edge joining
 		// two doomed nodes is incident to both and must be retracted (and counted) exactly once.
-		for (const edgeId of await liveIncidentEdges(g, doomed.map((e) => e.id))) {
+		for (const edgeId of await liveIncidentEdges(
+			g,
+			doomed.map((e) => e.id),
+		)) {
 			await g.deleteEdge(edgeId);
 			result.edgesClosed++;
 		}

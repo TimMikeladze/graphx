@@ -66,7 +66,8 @@ export interface EvalScore {
 	perQuery: number[];
 }
 
-const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length);
+const mean = (xs: number[]): number =>
+	xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length;
 
 /** Score one strategy over a query set. `runs[i]` is the ranked id list for `judgments[i]`. */
 export function scoreRuns(runs: string[][], judgments: Judgments[], k: number): EvalScore {

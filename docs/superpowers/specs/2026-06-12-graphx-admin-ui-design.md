@@ -15,12 +15,14 @@ as-of time) → see results simultaneously as a **node list** (master) and a **C
 a **detail inspector** (Sheet) on node click. Operators can also manage the control-plane registry.
 
 ### v1 scope (all four shipping)
+
 1. **Tenant/project read + switch** — list tenants, list projects per tenant, the two scoping selectors.
 2. **Control-plane writes** — create/edit tenant, project, user, membership, API key.
 3. **Graph explore** — filterable node list + Cosmograph canvas + node detail inspector with neighbors.
 4. **Temporal controls** — "as-of" picker + node version history view (graphx's differentiator).
 
 ### Non-goals (deferred, named so they are not silently dropped)
+
 - match / hybridRetrieve / algorithm (pagerank, centrality, community) visualizations.
 - CDC live-sync (`useChangeFeedSync` — the `@graphx/react` change-feed story).
 - Edge creation/editing from the canvas; multi-project overlay.
@@ -66,6 +68,7 @@ Bun.serve({ fetch: app.fetch })
 ```
 
 New core files (keep `serve.ts` focused):
+
 - `packages/core/src/admin.ts` — `createAdminApp(cfg)`: operator sub-app, `adminAuthenticate` hook,
   control-plane CRUD handlers wrapping existing `control-plane.ts` functions.
 - `Graph.listNodes(opts)` and `Graph.graphSlice(opts)` — new read primitives added as **methods on
@@ -88,11 +91,12 @@ The existing `authenticate(c) → {userId, tenantId}` is single-tenant; authz ch
 (b) the ability to browse **any** tenant's graph. Nothing today grants either.
 
 **Resolution — one operator token, two effects:**
+
 1. Gates `/admin/*` registry CRUD via a new `adminAuthenticate(c)` injection point on the sub-app
    (same pattern as `authenticate`). Dev default compares a `Bearer` token to a server-configured
    `adminToken`; production verifies a real session/JWT.
 2. **Operator impersonation** on tenant-scoped graph routes: when a valid admin token is present, the
-   consumer's `authenticate` returns a principal synthesized *per route* as
+   consumer's `authenticate` returns a principal synthesized _per route_ as
    `{userId:'operator', tenantId: <:tenant param>, operator:true}`. `authorize()` reads membership from
    a table, so a synthesized principal alone fails the membership check (403) — the operator has no
    `memberships` row. Resolution: a **one-field** `Principal.operator?` + a one-line bypass in
@@ -104,19 +108,19 @@ dialog and retries on submit.
 
 ## 5. API contract
 
-| Realm | Method | Path | Backed by | Returns |
-|---|---|---|---|---|
-| admin  | GET  | `/admin/tenants` | `control` query | `{tenants:[{id,name}]}` |
-| admin  | POST | `/admin/tenants` | `createTenant` | `{id}` |
-| admin  | GET  | `/admin/tenants/:id/projects` | `control` query | `{projects:[{id,name,dbNamespace}]}` |
-| admin  | POST | `/admin/tenants/:id/projects` | `createProject` | `{id}` |
-| admin  | GET  | `/admin/users` | `control` query | `{users:[{id,email}]}` |
-| admin  | POST | `/admin/users` | `createUser` | `{id}` |
-| admin  | POST | `/admin/memberships` | `addMembership` | `204` |
-| admin  | POST | `/admin/api-keys` | hash + insert | `{key}` (shown once) |
-| tenant | GET  | `/t/:t/p/:p/nodes` | **new** `listNodes` | `{nodes:[AnyNode], nextCursor}` |
-| tenant | GET  | `/t/:t/p/:p/graph` | **new** `graphSlice` | `{nodes:[{id,kind}], links:[{source,target,rel,weight}], truncated}` |
-| tenant | GET  | `/t/:t/p/:p/nodes/:id/history` | `history` | `{versions:[...]}` |
+| Realm  | Method | Path                           | Backed by            | Returns                                                              |
+| ------ | ------ | ------------------------------ | -------------------- | -------------------------------------------------------------------- |
+| admin  | GET    | `/admin/tenants`               | `control` query      | `{tenants:[{id,name}]}`                                              |
+| admin  | POST   | `/admin/tenants`               | `createTenant`       | `{id}`                                                               |
+| admin  | GET    | `/admin/tenants/:id/projects`  | `control` query      | `{projects:[{id,name,dbNamespace}]}`                                 |
+| admin  | POST   | `/admin/tenants/:id/projects`  | `createProject`      | `{id}`                                                               |
+| admin  | GET    | `/admin/users`                 | `control` query      | `{users:[{id,email}]}`                                               |
+| admin  | POST   | `/admin/users`                 | `createUser`         | `{id}`                                                               |
+| admin  | POST   | `/admin/memberships`           | `addMembership`      | `204`                                                                |
+| admin  | POST   | `/admin/api-keys`              | hash + insert        | `{key}` (shown once)                                                 |
+| tenant | GET    | `/t/:t/p/:p/nodes`             | **new** `listNodes`  | `{nodes:[AnyNode], nextCursor}`                                      |
+| tenant | GET    | `/t/:t/p/:p/graph`             | **new** `graphSlice` | `{nodes:[{id,kind}], links:[{source,target,rel,weight}], truncated}` |
+| tenant | GET    | `/t/:t/p/:p/nodes/:id/history` | `history`            | `{versions:[...]}`                                                   |
 
 **Filter query params** (on `/nodes` and `/graph`): `kind`, `q` (FTS5 via existing `sanitizeMatch`),
 `asOf` (epoch ms → `asOfPredicate`; default = now), `limit`, `cursor` (keyset, existing
@@ -133,6 +137,7 @@ select edges where **both** endpoints are in that set. Shape the result to Cosmo
 ## 6. UI
 
 **Routing (TanStack Router):**
+
 - `/` → tenant picker (redirect to last-used).
 - `/t/:tenant/p/:project` → explorer; filters live in URL search params
   (`?kind=&q=&asOf=&node=&expand=`) — shareable/bookmarkable.
@@ -155,6 +160,7 @@ select edges where **both** endpoints are in that set. Shape the result to Cosmo
 ```
 
 **Components (`packages/admin/src/components/`):**
+
 - `app-sidebar.tsx` — shadcn `Sidebar`: tenant `Combobox`, project `Combobox`, filter controls, link to `/admin`.
 - `filters/` — `kind-filter` (multi-select), `search-box` (debounced → `q`), `as-of-picker` (→ `asOf` epoch, "now" default).
 - `node-list.tsx` — virtualized master table; `useNodes` infinite query; selection drives canvas highlight + Sheet.
@@ -163,6 +169,7 @@ select edges where **both** endpoints are in that set. Shape the result to Cosmo
 - `admin/` — `Dialog` forms: create tenant, project, user, add membership, mint api-key (shown once).
 
 **State:**
+
 - Server state: TanStack Query. Keys: `['tenants']`, `['projects',tenant]`,
   `['nodes',tenant,project,filters]` (infinite/keyset), `['graph',tenant,project,filters]`,
   `['node',id]`, `['history',id]`.
@@ -198,12 +205,14 @@ double-click → useNeighbors → merge into canvas → append ?expand=id
 ## 9. Testing
 
 **Core (`bun test`, matching the existing 244-test suite; in-memory libSQL):**
+
 - `listNodes` / `graphSlice` — kind filter, FTS `q`, `asOf` temporal correctness, keyset pagination,
   governance cap enforcement (`truncated`).
 - Admin routes — operator-token gate (401 without, 200 with); control-plane CRUD round-trips;
   operator impersonation lets graph routes pass authz for an arbitrary tenant.
 
 **UI (Vitest + Testing Library):**
+
 - Filter → URL sync; list selection → Sheet open; token dialog on 401. Mock the fetch client with
   typed fixtures.
 - Cosmograph not unit-tested (WebGL). Wrap it behind a thin adapter; test the adapter's data-shaping

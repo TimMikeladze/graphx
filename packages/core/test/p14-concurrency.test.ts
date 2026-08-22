@@ -65,27 +65,30 @@ function assertNonOverlapping(rows: Interval[]): void {
 	}
 }
 
-sharedWriterOnly('P14 race: N concurrent updateNode never create overlapping intervals', async () => {
-	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
-	teardowns.push(teardown);
-	await init(setup, 4);
-	const seed = await new Graph(setup, SCHEMA).addNode({ type: 'person', data: { name: 'race' } });
+sharedWriterOnly(
+	'P14 race: N concurrent updateNode never create overlapping intervals',
+	async () => {
+		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+		teardowns.push(teardown);
+		await init(setup, 4);
+		const seed = await new Graph(setup, SCHEMA).addNode({ type: 'person', data: { name: 'race' } });
 
-	// N writers, each on its OWN connection → genuine write-lock contention.
-	const N = 8;
-	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
-	const graphs = clients.map((c) => new Graph(c, SCHEMA));
+		// N writers, each on its OWN connection → genuine write-lock contention.
+		const N = 8;
+		const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
+		const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
-	const results = await Promise.allSettled(
-		graphs.map((g, i) => g.updateNode(seed.id, { data: { v: i } })),
-	);
-	// every writer succeeded (busy_timeout serializes; the close always affects 1 row)
-	for (const r of results) expect(r.status).toBe('fulfilled');
+		const results = await Promise.allSettled(
+			graphs.map((g, i) => g.updateNode(seed.id, { data: { v: i } })),
+		);
+		// every writer succeeded (busy_timeout serializes; the close always affects 1 row)
+		for (const r of results) expect(r.status).toBe('fulfilled');
 
-	const rows = await intervals(setup, seed.id);
-	expect(rows.length).toBe(N + 1); // original + one new version per writer
-	assertNonOverlapping(rows);
-});
+		const rows = await intervals(setup, seed.id);
+		expect(rows.length).toBe(N + 1); // original + one new version per writer
+		assertNonOverlapping(rows);
+	},
+);
 
 test('P14 race (F2): updateNode never creates an inverted/zero-width interval when the live valid_from leads the clock', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
@@ -110,101 +113,110 @@ test('P14 race (F2): updateNode never creates an inverted/zero-width interval wh
 	expect((closed[0] as Interval).valid_to).toBeGreaterThan((closed[0] as Interval).valid_from);
 });
 
-sharedWriterOnly('P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry envelope', async () => {
-	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
-	teardowns.push(teardown);
-	await init(setup, 4);
+sharedWriterOnly(
+	'P14 race (F1): a contended addNode survives SQLITE_BUSY via the same retry envelope',
+	async () => {
+		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+		teardowns.push(teardown);
+		await init(setup, 4);
 
-	const clientA = (sibling as () => DbClient)();
-	const gA = new Graph(clientA, SCHEMA);
-	// An interactive tx detaches/recreates A's connection, dropping busy_timeout to 0 →
-	// A's next batch BEGIN IMMEDIATE fails fast on a held lock instead of waiting.
-	const t0 = await clientA.transaction('write');
-	await t0.commit();
+		const clientA = (sibling as () => DbClient)();
+		const gA = new Graph(clientA, SCHEMA);
+		// An interactive tx detaches/recreates A's connection, dropping busy_timeout to 0 →
+		// A's next batch BEGIN IMMEDIATE fails fast on a held lock instead of waiting.
+		const t0 = await clientA.transaction('write');
+		await t0.commit();
 
-	// B holds the write lock; released after a beat.
-	const clientB = (sibling as () => DbClient)();
-	const txB = await clientB.transaction('write');
-	await txB.execute({ sql: "INSERT INTO node_identity (id) VALUES ('lock')" });
+		// B holds the write lock; released after a beat.
+		const clientB = (sibling as () => DbClient)();
+		const txB = await clientB.transaction('write');
+		await txB.execute({ sql: "INSERT INTO node_identity (id) VALUES ('lock')" });
 
-	const p = gA.addNode({ type: 'person', data: { name: 'survivor' } });
-	await new Promise((r) => setTimeout(r, 120));
-	await txB.rollback();
+		const p = gA.addNode({ type: 'person', data: { name: 'survivor' } });
+		await new Promise((r) => setTimeout(r, 120));
+		await txB.rollback();
 
-	// Without the batch retry envelope this rejects with SQLITE_BUSY in ~1ms.
-	const node = await p;
-	expect(node.id.length).toBe(26);
-	const r = await setup.execute({ sql: 'SELECT 1 FROM nodes WHERE id = ?', args: [node.id] });
-	expect(r.rows.length).toBe(1); // it really persisted, not lost
-});
+		// Without the batch retry envelope this rejects with SQLITE_BUSY in ~1ms.
+		const node = await p;
+		expect(node.id.length).toBe(26);
+		const r = await setup.execute({ sql: 'SELECT 1 FROM nodes WHERE id = ?', args: [node.id] });
+		expect(r.rows.length).toBe(1); // it really persisted, not lost
+	},
+);
 
-sharedWriterOnly('P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-width/inverted closed interval', async () => {
-	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
-	teardowns.push(teardown);
-	await init(setup, 4);
-	await materializeConstraints(setup, SCHEMA);
-	const g0 = new Graph(setup, SCHEMA);
-	const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
-	const dsts = await Promise.all(
-		Array.from({ length: 16 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
-	);
-	const N = dsts.length;
-	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
-	const graphs = clients.map((c) => new Graph(c, SCHEMA));
+sharedWriterOnly(
+	'P14 race (F2-edge): concurrent single-valued addEdge never leave a zero-width/inverted closed interval',
+	async () => {
+		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+		teardowns.push(teardown);
+		await init(setup, 4);
+		await materializeConstraints(setup, SCHEMA);
+		const g0 = new Graph(setup, SCHEMA);
+		const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
+		const dsts = await Promise.all(
+			Array.from({ length: 16 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
+		);
+		const N = dsts.length;
+		const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
+		const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
-	const results = await Promise.allSettled(
-		graphs.map((g, i) =>
-			g.addEdge({ rel: 'best_friend', src: src.id, dst: (dsts[i] as { id: string }).id }),
-		),
-	);
-	for (const r of results) expect(r.status).toBe('fulfilled');
+		const results = await Promise.allSettled(
+			graphs.map((g, i) =>
+				g.addEdge({ rel: 'best_friend', src: src.id, dst: (dsts[i] as { id: string }).id }),
+			),
+		);
+		for (const r of results) expect(r.status).toBe('fulfilled');
 
-	const rows = await setup.execute({
-		sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
-		args: [src.id, 'best_friend'],
-	});
-	// every version (live + every closed predecessor) must be a real, non-zero interval
-	for (const row of rows.rows) {
-		expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
-	}
-	expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
-});
+		const rows = await setup.execute({
+			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
+			args: [src.id, 'best_friend'],
+		});
+		// every version (live + every closed predecessor) must be a real, non-zero interval
+		for (const row of rows.rows) {
+			expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
+		}
+		expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
+	},
+);
 
-sharedWriterOnly('P14 race: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
-	const { client: setup, sibling, teardown } = makeTestDb({ file: true });
-	teardowns.push(teardown);
-	await init(setup, 4);
-	await materializeConstraints(setup, SCHEMA); // partial unique index on (src) for best_friend
-	const g0 = new Graph(setup, SCHEMA);
-	const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
-	const dsts = await Promise.all(
-		Array.from({ length: 8 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
-	);
+sharedWriterOnly(
+	'P14 race: N concurrent single-valued addEdge converge to exactly one live edge',
+	async () => {
+		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
+		teardowns.push(teardown);
+		await init(setup, 4);
+		await materializeConstraints(setup, SCHEMA); // partial unique index on (src) for best_friend
+		const g0 = new Graph(setup, SCHEMA);
+		const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
+		const dsts = await Promise.all(
+			Array.from({ length: 8 }, (_, i) => g0.addNode({ type: 'person', data: { name: `d${i}` } })),
+		);
 
-	const N = dsts.length;
-	const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
-	const graphs = clients.map((c) => new Graph(c, SCHEMA));
+		const N = dsts.length;
+		const clients = Array.from({ length: N }, () => (sibling as () => DbClient)());
+		const graphs = clients.map((c) => new Graph(c, SCHEMA));
 
-	const results = await Promise.allSettled(
-		graphs.map((g, i) =>
-			g.addEdge({ rel: 'best_friend', src: src.id, dst: (dsts[i] as { id: string }).id }),
-		),
-	);
-	for (const r of results) expect(r.status).toBe('fulfilled');
+		const results = await Promise.allSettled(
+			graphs.map((g, i) =>
+				g.addEdge({ rel: 'best_friend', src: src.id, dst: (dsts[i] as { id: string }).id }),
+			),
+		);
+		for (const r of results) expect(r.status).toBe('fulfilled');
 
-	// exactly one live best_friend edge from src; total versions = N (one per addEdge,
-	// closes don't add rows), so N-1 are closed.
-	const live = await setup.execute({
-		sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
-		args: [src.id, 'best_friend', FOREVER],
-	});
-	expect(Number(live.rows[0]?.c)).toBe(1);
-	const total = await setup.execute({
-		sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ?',
-		args: [src.id, 'best_friend'],
-	});
-	expect(Number(total.rows[0]?.c)).toBe(N);
-});
+		// exactly one live best_friend edge from src; total versions = N (one per addEdge,
+		// closes don't add rows), so N-1 are closed.
+		const live = await setup.execute({
+			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+			args: [src.id, 'best_friend', FOREVER],
+		});
+		expect(Number(live.rows[0]?.c)).toBe(1);
+		const total = await setup.execute({
+			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ?',
+			args: [src.id, 'best_friend'],
+		});
+		expect(Number(total.rows[0]?.c)).toBe(N);
+	},
+);
 
 // --- DuckDB on object storage -------------------------------------------------------
 // The four tests above prove the §19.1 invariants through write-lock contention, which
@@ -232,34 +244,37 @@ duckdbOnly('P14 duckdb: N concurrent updateNode serialize into one contiguous ch
 	await c.end();
 });
 
-duckdbOnly('P14 duckdb: N concurrent single-valued addEdge converge to exactly one live edge', async () => {
-	const store = new MemoryObjectStore();
-	const c = createDuckClient({ store, cacheDir: mkdtempSync(join(tmpdir(), 'graphx-p14-')) });
-	const g = new Graph(c, SCHEMA);
-	const src = await g.addNode({ type: 'person', data: { name: 'src' } });
-	const dsts = await Promise.all(
-		Array.from({ length: 8 }, (_, i) => g.addNode({ type: 'person', data: { name: `d${i}` } })),
-	);
-	const N = dsts.length;
+duckdbOnly(
+	'P14 duckdb: N concurrent single-valued addEdge converge to exactly one live edge',
+	async () => {
+		const store = new MemoryObjectStore();
+		const c = createDuckClient({ store, cacheDir: mkdtempSync(join(tmpdir(), 'graphx-p14-')) });
+		const g = new Graph(c, SCHEMA);
+		const src = await g.addNode({ type: 'person', data: { name: 'src' } });
+		const dsts = await Promise.all(
+			Array.from({ length: 8 }, (_, i) => g.addNode({ type: 'person', data: { name: `d${i}` } })),
+		);
+		const N = dsts.length;
 
-	const results = await Promise.allSettled(
-		dsts.map((d) => g.addEdge({ rel: 'best_friend', src: src.id, dst: d.id })),
-	);
-	for (const r of results) expect(r.status).toBe('fulfilled');
+		const results = await Promise.allSettled(
+			dsts.map((d) => g.addEdge({ rel: 'best_friend', src: src.id, dst: d.id })),
+		);
+		for (const r of results) expect(r.status).toBe('fulfilled');
 
-	const rows = await c.execute({
-		sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
-		args: [src.id, 'best_friend'],
-	});
-	// Every version is a real, non-zero interval, and exactly one is still open — the same
-	// assertion the libSQL test makes, reached through the mutex instead of the write lock.
-	for (const row of rows.rows) {
-		expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
-	}
-	expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
-	expect(rows.rows.length).toBe(N);
-	await c.end();
-});
+		const rows = await c.execute({
+			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
+			args: [src.id, 'best_friend'],
+		});
+		// Every version is a real, non-zero interval, and exactly one is still open — the same
+		// assertion the libSQL test makes, reached through the mutex instead of the write lock.
+		for (const row of rows.rows) {
+			expect(Number(row.valid_to)).toBeGreaterThan(Number(row.valid_from));
+		}
+		expect(rows.rows.filter((r) => Number(r.valid_to) === FOREVER).length).toBe(1);
+		expect(rows.rows.length).toBe(N);
+		await c.end();
+	},
+);
 
 duckdbOnly('P14 duckdb: two writers racing one snapshot number never both win', async () => {
 	const store = new MemoryObjectStore();

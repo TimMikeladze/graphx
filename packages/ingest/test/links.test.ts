@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { extractEmbeds, extractLinks } from '../src/links.ts';
 
 test('extractEmbeds: returns only the `!`-prefixed embeds (wiki + path), skips plain links', () => {
-	expect(extractEmbeds('![[pic.png]] and ![alt](./img/p.jpg) but [real](./b.md) and [[note]]')).toEqual([
+	expect(
+		extractEmbeds('![[pic.png]] and ![alt](./img/p.jpg) but [real](./b.md) and [[note]]'),
+	).toEqual([
 		{ type: 'wiki', target: 'pic.png' },
 		{ type: 'path', target: './img/p.jpg' },
 	]);
@@ -29,9 +31,9 @@ test('extractLinks: relative markdown links, external/anchor ignored', () => {
 });
 
 test('extractLinks: image embeds are not treated as links', () => {
-	expect(
-		extractLinks('![alt](./pic.png) and ![[embed.md]] but [real](./b.md)'),
-	).toEqual([{ type: 'path', target: './b.md' }]);
+	expect(extractLinks('![alt](./pic.png) and ![[embed.md]] but [real](./b.md)')).toEqual([
+		{ type: 'path', target: './b.md' },
+	]);
 });
 
 test('extractLinks: none', () => {
@@ -107,9 +109,7 @@ test('extractEmbeds: a transclusion fragment is split off the target', () => {
 
 test('extractLinks: a percent-encoded path link is decoded to the real filename', () => {
 	// Obsidian writes markdown-style links percent-encoded: `[my note](my%20note.md)`.
-	expect(extractLinks('[my note](my%20note.md)')).toEqual([
-		{ type: 'path', target: 'my note.md' },
-	]);
+	expect(extractLinks('[my note](my%20note.md)')).toEqual([{ type: 'path', target: 'my note.md' }]);
 	expect(extractLinks('[n](sub%20folder/my%20note.md)')).toEqual([
 		{ type: 'path', target: 'sub folder/my note.md' },
 	]);

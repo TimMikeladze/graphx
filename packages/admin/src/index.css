@@ -1,243 +1,292 @@
-@import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
-@import "@fontsource-variable/public-sans";
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/public-sans';
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Public Sans Variable', sans-serif;
-    --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', 'Fira Code', Menlo, monospace;
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+	--font-heading: var(--font-sans);
+	--font-sans: 'Public Sans Variable', sans-serif;
+	--font-mono:
+		ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', 'Fira Code', Menlo, monospace;
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.828 0.111 230.318);
-    --chart-2: oklch(0.685 0.169 237.323);
-    --chart-3: oklch(0.588 0.158 241.966);
-    --chart-4: oklch(0.5 0.134 242.749);
-    --chart-5: oklch(0.443 0.11 240.79);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.145 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.145 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.145 0 0);
+	--primary: oklch(0.205 0 0);
+	--primary-foreground: oklch(0.985 0 0);
+	--secondary: oklch(0.97 0 0);
+	--secondary-foreground: oklch(0.205 0 0);
+	--muted: oklch(0.97 0 0);
+	--muted-foreground: oklch(0.556 0 0);
+	--accent: oklch(0.97 0 0);
+	--accent-foreground: oklch(0.205 0 0);
+	--destructive: oklch(0.577 0.245 27.325);
+	--border: oklch(0.922 0 0);
+	--input: oklch(0.922 0 0);
+	--ring: oklch(0.708 0 0);
+	--chart-1: oklch(0.828 0.111 230.318);
+	--chart-2: oklch(0.685 0.169 237.323);
+	--chart-3: oklch(0.588 0.158 241.966);
+	--chart-4: oklch(0.5 0.134 242.749);
+	--chart-5: oklch(0.443 0.11 240.79);
+	--radius: 0.625rem;
+	--sidebar: oklch(0.985 0 0);
+	--sidebar-foreground: oklch(0.145 0 0);
+	--sidebar-primary: oklch(0.205 0 0);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.97 0 0);
+	--sidebar-accent-foreground: oklch(0.205 0 0);
+	--sidebar-border: oklch(0.922 0 0);
+	--sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.828 0.111 230.318);
-    --chart-2: oklch(0.685 0.169 237.323);
-    --chart-3: oklch(0.588 0.158 241.966);
-    --chart-4: oklch(0.5 0.134 242.749);
-    --chart-5: oklch(0.443 0.11 240.79);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+	--background: oklch(0.145 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.205 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.205 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.922 0 0);
+	--primary-foreground: oklch(0.205 0 0);
+	--secondary: oklch(0.269 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.269 0 0);
+	--muted-foreground: oklch(0.708 0 0);
+	--accent: oklch(0.269 0 0);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.704 0.191 22.216);
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 15%);
+	--ring: oklch(0.556 0 0);
+	--chart-1: oklch(0.828 0.111 230.318);
+	--chart-2: oklch(0.685 0.169 237.323);
+	--chart-3: oklch(0.588 0.158 241.966);
+	--chart-4: oklch(0.5 0.134 242.749);
+	--chart-5: oklch(0.443 0.11 240.79);
+	--sidebar: oklch(0.205 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.488 0.243 264.376);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.269 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 10%);
+	--sidebar-ring: oklch(0.556 0 0);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    /* opt into the Public Sans opsz + tighter tracking for a more engineered feel */
-    font-optical-sizing: auto;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-    }
-  html {
-    @apply font-sans;
-    }
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+		/* opt into the Public Sans opsz + tighter tracking for a more engineered feel */
+		font-optical-sizing: auto;
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
+	}
+	html {
+		@apply font-sans;
+	}
 }
 
 @layer components {
-  /* Frosted control surface floated over the graph canvas — one look for every HUD element
+	/* Frosted control surface floated over the graph canvas — one look for every HUD element
      (stats, toolbar, legend) so they read as a single instrument overlay. */
-  .hud {
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
-    background-color: color-mix(in oklch, var(--background) 80%, transparent);
-    box-shadow:
-      0 10px 30px -14px rgb(0 0 0 / 0.7),
-      inset 0 1px 0 0 color-mix(in oklch, var(--foreground) 6%, transparent);
-    backdrop-filter: blur(10px) saturate(1.2);
-  }
+	.hud {
+		border-radius: var(--radius-lg);
+		border: 1px solid color-mix(in oklch, var(--foreground) 12%, transparent);
+		background-color: color-mix(in oklch, var(--background) 80%, transparent);
+		box-shadow:
+			0 10px 30px -14px rgb(0 0 0 / 0.7),
+			inset 0 1px 0 0 color-mix(in oklch, var(--foreground) 6%, transparent);
+		backdrop-filter: blur(10px) saturate(1.2);
+	}
 
-  /* Edge falloff that frames the graph without touching the centered nodes — makes even a
+	/* Edge falloff that frames the graph without touching the centered nodes — makes even a
      5-node slice read as an intentional composition instead of dots lost in a void. */
-  .canvas-vignette {
-    background: radial-gradient(78% 80% at 50% 42%, transparent 54%, rgb(0 0 0 / 0.55) 100%);
-  }
+	.canvas-vignette {
+		background: radial-gradient(78% 80% at 50% 42%, transparent 54%, rgb(0 0 0 / 0.55) 100%);
+	}
 
-  /* Rendered markdown (node Content tab). Hand-rolled against the design tokens rather than
+	/* Rendered markdown (node Content tab). Hand-rolled against the design tokens rather than
      pulling in @tailwindcss/typography — the panel is narrow and dense, so `prose` defaults
      (large headings, generous leading, its own color ramp) would fight the inspector's scale. */
-  .markdown {
-    font-size: 0.8125rem;
-    line-height: 1.65;
-    overflow-wrap: anywhere;
-  }
-  .markdown > :first-child { margin-top: 0; }
-  .markdown > :last-child { margin-bottom: 0; }
-  .markdown h1,
-  .markdown h2,
-  .markdown h3,
-  .markdown h4 {
-    margin: 1.25em 0 0.5em;
-    font-weight: 600;
-    line-height: 1.3;
-    letter-spacing: -0.01em;
-  }
-  .markdown h1 { font-size: 1.35em; }
-  .markdown h2 { font-size: 1.18em; }
-  .markdown h3 { font-size: 1.05em; }
-  .markdown h4 { font-size: 1em; }
-  .markdown p,
-  .markdown ul,
-  .markdown ol,
-  .markdown blockquote,
-  .markdown pre,
-  .markdown table { margin: 0.75em 0; }
-  .markdown ul { list-style: disc; padding-left: 1.25em; }
-  .markdown ol { list-style: decimal; padding-left: 1.25em; }
-  .markdown li { margin: 0.2em 0; }
-  .markdown li::marker { color: var(--muted-foreground); }
-  .markdown a {
-    color: var(--foreground);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    text-decoration-color: color-mix(in oklch, var(--foreground) 35%, transparent);
-  }
-  .markdown a:hover { text-decoration-color: currentColor; }
-  .markdown strong { font-weight: 600; }
-  .markdown code {
-    border-radius: var(--radius-sm);
-    background-color: var(--muted);
-    padding: 0.1em 0.35em;
-    font-family: var(--font-mono);
-    font-size: 0.9em;
-  }
-  .markdown pre {
-    overflow-x: auto;
-    border-radius: var(--radius-md);
-    background-color: var(--muted);
-    padding: 0.75rem;
-  }
-  .markdown pre code {
-    background: none;
-    padding: 0;
-    font-size: 0.85em;
-  }
-  .markdown blockquote {
-    border-left: 2px solid var(--border);
-    padding-left: 0.75em;
-    color: var(--muted-foreground);
-  }
-  .markdown hr { margin: 1.25em 0; border-top: 1px solid var(--border); }
-  .markdown table { display: block; overflow-x: auto; border-collapse: collapse; }
-  .markdown th,
-  .markdown td {
-    border: 1px solid var(--border);
-    padding: 0.3em 0.55em;
-    text-align: left;
-  }
-  .markdown th { font-weight: 600; }
-  .markdown img { max-width: 100%; border-radius: var(--radius-md); }
-  /* GFM task lists — the checkboxes are informational, not interactive. */
-  .markdown input[type="checkbox"] { margin-right: 0.4em; vertical-align: middle; }
-  .markdown li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.25em; }
+	.markdown {
+		font-size: 0.8125rem;
+		line-height: 1.65;
+		overflow-wrap: anywhere;
+	}
+	.markdown > :first-child {
+		margin-top: 0;
+	}
+	.markdown > :last-child {
+		margin-bottom: 0;
+	}
+	.markdown h1,
+	.markdown h2,
+	.markdown h3,
+	.markdown h4 {
+		margin: 1.25em 0 0.5em;
+		font-weight: 600;
+		line-height: 1.3;
+		letter-spacing: -0.01em;
+	}
+	.markdown h1 {
+		font-size: 1.35em;
+	}
+	.markdown h2 {
+		font-size: 1.18em;
+	}
+	.markdown h3 {
+		font-size: 1.05em;
+	}
+	.markdown h4 {
+		font-size: 1em;
+	}
+	.markdown p,
+	.markdown ul,
+	.markdown ol,
+	.markdown blockquote,
+	.markdown pre,
+	.markdown table {
+		margin: 0.75em 0;
+	}
+	.markdown ul {
+		list-style: disc;
+		padding-left: 1.25em;
+	}
+	.markdown ol {
+		list-style: decimal;
+		padding-left: 1.25em;
+	}
+	.markdown li {
+		margin: 0.2em 0;
+	}
+	.markdown li::marker {
+		color: var(--muted-foreground);
+	}
+	.markdown a {
+		color: var(--foreground);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		text-decoration-color: color-mix(in oklch, var(--foreground) 35%, transparent);
+	}
+	.markdown a:hover {
+		text-decoration-color: currentColor;
+	}
+	.markdown strong {
+		font-weight: 600;
+	}
+	.markdown code {
+		border-radius: var(--radius-sm);
+		background-color: var(--muted);
+		padding: 0.1em 0.35em;
+		font-family: var(--font-mono);
+		font-size: 0.9em;
+	}
+	.markdown pre {
+		overflow-x: auto;
+		border-radius: var(--radius-md);
+		background-color: var(--muted);
+		padding: 0.75rem;
+	}
+	.markdown pre code {
+		background: none;
+		padding: 0;
+		font-size: 0.85em;
+	}
+	.markdown blockquote {
+		border-left: 2px solid var(--border);
+		padding-left: 0.75em;
+		color: var(--muted-foreground);
+	}
+	.markdown hr {
+		margin: 1.25em 0;
+		border-top: 1px solid var(--border);
+	}
+	.markdown table {
+		display: block;
+		overflow-x: auto;
+		border-collapse: collapse;
+	}
+	.markdown th,
+	.markdown td {
+		border: 1px solid var(--border);
+		padding: 0.3em 0.55em;
+		text-align: left;
+	}
+	.markdown th {
+		font-weight: 600;
+	}
+	.markdown img {
+		max-width: 100%;
+		border-radius: var(--radius-md);
+	}
+	/* GFM task lists — the checkboxes are informational, not interactive. */
+	.markdown input[type='checkbox'] {
+		margin-right: 0.4em;
+		vertical-align: middle;
+	}
+	.markdown li:has(> input[type='checkbox']) {
+		list-style: none;
+		margin-left: -1.25em;
+	}
 
-  /* The deep-space canvas backdrop for empty/loading states: soft central glow + fine dot grid. */
-  .canvas-atmos {
-    background-color: #0a0a0f;
-    background-image:
-      radial-gradient(62% 55% at 50% 38%, rgb(120 140 190 / 0.1), transparent 72%),
-      radial-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1.5px);
-    background-position: center, center;
-    background-size: cover, 24px 24px;
-  }
+	/* The deep-space canvas backdrop for empty/loading states: soft central glow + fine dot grid. */
+	.canvas-atmos {
+		background-color: #0a0a0f;
+		background-image:
+			radial-gradient(62% 55% at 50% 38%, rgb(120 140 190 / 0.1), transparent 72%),
+			radial-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1.5px);
+		background-position: center, center;
+		background-size:
+			cover,
+			24px 24px;
+	}
 }

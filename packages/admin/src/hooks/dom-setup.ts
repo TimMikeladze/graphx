@@ -26,63 +26,63 @@
  * leaked happy-dom `Response` fails `Bun.serve`'s "Expected a Response object" check. The fix there
  * (and here) is the same: keep happy-dom's DOM, keep Bun's platform primitives.
  */
-import { notifyManager } from "@tanstack/react-query"
-import { GlobalWindow, PropertySymbol } from "happy-dom"
+import { notifyManager } from '@tanstack/react-query';
+import { GlobalWindow, PropertySymbol } from 'happy-dom';
 
-const IGNORE_LIST = new Set(["constructor", "undefined", "NaN", "global", "globalThis"])
+const IGNORE_LIST = new Set(['constructor', 'undefined', 'NaN', 'global', 'globalThis']);
 
 const PLATFORM_GLOBALS = [
-  "fetch",
-  "Response",
-  "Request",
-  "Headers",
-  "AbortController",
-  "AbortSignal",
-  "WritableStream",
-  "TransformStream",
-  "Blob",
-  "File",
-  "FormData",
-  "URL",
-] as const
+	'fetch',
+	'Response',
+	'Request',
+	'Headers',
+	'AbortController',
+	'AbortSignal',
+	'WritableStream',
+	'TransformStream',
+	'Blob',
+	'File',
+	'FormData',
+	'URL',
+] as const;
 
-const scope = globalThis as unknown as Record<string, unknown>
-const native = new Map<string, unknown>(PLATFORM_GLOBALS.map((key) => [key, scope[key]]))
+const scope = globalThis as unknown as Record<string, unknown>;
+const native = new Map<string, unknown>(PLATFORM_GLOBALS.map((key) => [key, scope[key]]));
 
 if (!(globalThis as { document?: unknown }).document) {
-  const win = new GlobalWindow({ console: globalThis.console }) as unknown as Record<
-    string | symbol,
-    unknown
-  >
+	const win = new GlobalWindow({ console: globalThis.console }) as unknown as Record<
+		string | symbol,
+		unknown
+	>;
 
-  for (const key of Object.keys(Object.getOwnPropertyDescriptors(win))) {
-    if (IGNORE_LIST.has(key)) continue
-    const winDescriptor = Object.getOwnPropertyDescriptor(win, key) as PropertyDescriptor
-    const globalDescriptor = Object.getOwnPropertyDescriptor(globalThis, key)
-    // Same value already — skip. A handful of Bun's own globals are non-configurable, so
-    // re-defining one that already matches (rather than merely being present) throws.
-    if (globalDescriptor?.value !== undefined && globalDescriptor.value === winDescriptor.value)
-      continue
-    if (winDescriptor.value === win) winDescriptor.value = globalThis
-    Object.defineProperty(globalThis, key, { ...winDescriptor, configurable: true })
-  }
+	for (const key of Object.keys(Object.getOwnPropertyDescriptors(win))) {
+		if (IGNORE_LIST.has(key)) continue;
+		const winDescriptor = Object.getOwnPropertyDescriptor(win, key) as PropertyDescriptor;
+		const globalDescriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+		// Same value already — skip. A handful of Bun's own globals are non-configurable, so
+		// re-defining one that already matches (rather than merely being present) throws.
+		if (globalDescriptor?.value !== undefined && globalDescriptor.value === winDescriptor.value)
+			continue;
+		if (winDescriptor.value === win) winDescriptor.value = globalThis;
+		Object.defineProperty(globalThis, key, { ...winDescriptor, configurable: true });
+	}
 
-  for (const sym of Object.getOwnPropertySymbols(win)) {
-    const winDescriptor = Object.getOwnPropertyDescriptor(win, sym)
-    if (!winDescriptor) continue
-    if (winDescriptor.value === win) winDescriptor.value = globalThis
-    Object.defineProperty(globalThis, sym, { ...winDescriptor, configurable: true })
-  }
+	for (const sym of Object.getOwnPropertySymbols(win)) {
+		const winDescriptor = Object.getOwnPropertyDescriptor(win, sym);
+		if (!winDescriptor) continue;
+		if (winDescriptor.value === win) winDescriptor.value = globalThis;
+		Object.defineProperty(globalThis, sym, { ...winDescriptor, configurable: true });
+	}
 
-  // Owner window of `document` must be the global scope, not the discarded `win` object.
-  const doc = (globalThis as unknown as { document: Record<PropertyKey, unknown> }).document
-  doc[(PropertySymbol as unknown as { defaultView: symbol }).defaultView] = globalThis
+	// Owner window of `document` must be the global scope, not the discarded `win` object.
+	const doc = (globalThis as unknown as { document: Record<PropertyKey, unknown> }).document;
+	doc[(PropertySymbol as unknown as { defaultView: symbol }).defaultView] = globalThis;
 }
 
-for (const [key, value] of native) scope[key] = value
+for (const [key, value] of native) scope[key] = value;
 
 // Flush React Query notifications synchronously in tests so background state updates (triggered
 // by mutation invalidation) land inside `act(...)` — no "not wrapped in act" noise.
 notifyManager.setScheduler((cb) => {
-  cb()
-})
+	cb();
+});

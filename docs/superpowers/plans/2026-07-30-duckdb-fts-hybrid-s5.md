@@ -28,6 +28,7 @@ Two deviations from spec §10.2, both deliberate, both ruled by the user:
 ## File Structure
 
 **Created:**
+
 - `packages/core/src/fts/tokenize.ts` — the one tokenizer, used by the writer to index and by the reader to parse a query. Owning both sides is the whole point; if these ever diverge, search silently returns nothing.
 - `packages/core/src/fts/build.ts` — pure, database-free construction of the four index tables from `{ver, body}` rows. Pure so it is testable without DuckDB and so the writer path has no hidden SQL.
 - `packages/core/src/fts/index-tables.ts` — the local DDL, the table-name constants, and the rebuild/export plumbing that connects `build.ts` to a `DbClient`.
@@ -36,6 +37,7 @@ Two deviations from spec §10.2, both deliberate, both ruled by the user:
 - `packages/core/test/fts-tokenize.test.ts`, `fts-build.test.ts`, `fts-bm25.test.ts`, `fts-roundtrip.test.ts`.
 
 **Modified:**
+
 - `packages/core/src/dialect-sql.ts` — `duckdbSchema()` gains the four tables; `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf` gain `duckdb` arms.
 - `packages/core/src/duck-materialize.ts` — load `manifest.indexes` alongside `manifest.tables`.
 - `packages/core/src/duck-commit.ts` — rebuild and export the index when `node_versions` is dirty.
@@ -54,25 +56,28 @@ Everything downstream is written against measured numbers rather than a recalled
 Both references need extensions that the test suite must never require, so this task produces a **committed fixture** and a script that regenerates it.
 
 **Files:**
+
 - Create: `packages/core/scripts/measure-fts-ground-truth.ts`
 - Create: `packages/core/test/fixtures/fts-ground-truth.json`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `fts-ground-truth.json`, shape:
+
   ```ts
   interface FtsGroundTruth {
-    corpus: { ver: number; body: string }[];
-    /** DuckDB fts tables, for structural comparison. */
-    duckdb: {
-      dict: { term: string; df: number }[];
-      docs: { ver: number; len: number }[];
-      stats: { num_docs: number; avgdl: number };
-      /** query -> [{ver, score}] from match_bm25, score DESC. */
-      bm25: Record<string, { ver: number; score: number }[]>;
-    };
-    /** query -> ver[] in FTS5 rank order. The ranking parity target. */
-    libsql: Record<string, number[]>;
+  	corpus: { ver: number; body: string }[];
+  	/** DuckDB fts tables, for structural comparison. */
+  	duckdb: {
+  		dict: { term: string; df: number }[];
+  		docs: { ver: number; len: number }[];
+  		stats: { num_docs: number; avgdl: number };
+  		/** query -> [{ver, score}] from match_bm25, score DESC. */
+  		bm25: Record<string, { ver: number; score: number }[]>;
+  	};
+  	/** query -> ver[] in FTS5 rank order. The ranking parity target. */
+  	libsql: Record<string, number[]>;
   }
   ```
 
@@ -96,88 +101,88 @@ import { createDuckClient } from '../src/duck.ts';
  */
 
 const CORPUS = [
-  { ver: 1, body: 'graph database with temporal edges' },
-  { ver: 2, body: 'temporal graph query language' },
-  { ver: 3, body: 'vector search over a graph' },
-  { ver: 4, body: 'full text search with bm25 ranking' },
-  { ver: 5, body: 'graph graph graph repeated term document' },
-  { ver: 6, body: 'a document about storage and object storage' },
-  { ver: 7, body: 'edges connect nodes in a graph database' },
-  { ver: 8, body: 'nothing in common here' },
+	{ ver: 1, body: 'graph database with temporal edges' },
+	{ ver: 2, body: 'temporal graph query language' },
+	{ ver: 3, body: 'vector search over a graph' },
+	{ ver: 4, body: 'full text search with bm25 ranking' },
+	{ ver: 5, body: 'graph graph graph repeated term document' },
+	{ ver: 6, body: 'a document about storage and object storage' },
+	{ ver: 7, body: 'edges connect nodes in a graph database' },
+	{ ver: 8, body: 'nothing in common here' },
 ];
 
 const QUERIES = ['graph', 'graph database', 'temporal search', 'storage', 'missing'];
 
 async function duckdbTruth() {
-  const c = createDuckClient();
-  await c.execute('INSTALL fts');
-  await c.execute('LOAD fts');
-  await c.execute('CREATE TABLE docs (ver BIGINT, body VARCHAR)');
-  for (const d of CORPUS) {
-    await c.execute({ sql: 'INSERT INTO docs VALUES (?, ?)', args: [d.ver, d.body] });
-  }
-  // Every tokenizer knob is pinned, not just the stemmer. Measured the hard way: passing
-  // stemmer alone leaves `stopwords` defaulting to 'english' (8 of 28 corpus words vanish)
-  // and `ignore` defaulting to a pattern that strips digits ('bm25' becomes 'bm'). The
-  // fixture would then describe a DIFFERENT tokenizer than ours, and every downstream
-  // comparison against it would be measuring tokenization rather than arithmetic.
-  // Note the operator is `=`, not `:=` — this build rejects `:=` here.
-  await c.execute(
-    `PRAGMA create_fts_index('docs', 'ver', 'body',
+	const c = createDuckClient();
+	await c.execute('INSTALL fts');
+	await c.execute('LOAD fts');
+	await c.execute('CREATE TABLE docs (ver BIGINT, body VARCHAR)');
+	for (const d of CORPUS) {
+		await c.execute({ sql: 'INSERT INTO docs VALUES (?, ?)', args: [d.ver, d.body] });
+	}
+	// Every tokenizer knob is pinned, not just the stemmer. Measured the hard way: passing
+	// stemmer alone leaves `stopwords` defaulting to 'english' (8 of 28 corpus words vanish)
+	// and `ignore` defaulting to a pattern that strips digits ('bm25' becomes 'bm'). The
+	// fixture would then describe a DIFFERENT tokenizer than ours, and every downstream
+	// comparison against it would be measuring tokenization rather than arithmetic.
+	// Note the operator is `=`, not `:=` — this build rejects `:=` here.
+	await c.execute(
+		`PRAGMA create_fts_index('docs', 'ver', 'body',
        stemmer='none', stopwords='none', ignore='(\\.|[^a-z0-9])+')`,
-  );
+	);
 
-  const rows = async (sql: string) => (await c.execute(sql)).rows;
-  const dict = (await rows('SELECT term, df FROM fts_main_docs.dict ORDER BY term')).map((r) => ({
-    term: String(r.term),
-    df: Number(r.df),
-  }));
-  // Keyed by `ver`, not DuckDB's `docid`: docid is a 0-based internal row number, so a
-  // fixture keyed on it is off by one against the corpus and every consumer must remember
-  // to shift. `name` carries the value of the id column we indexed.
-  const docs = (await rows('SELECT name, len FROM fts_main_docs.docs ORDER BY len')).map((r) => ({
-    ver: Number(r.name),
-    len: Number(r.len),
-  }));
-  const s = (await rows('SELECT num_docs, avgdl FROM fts_main_docs.stats'))[0];
-  const stats = { num_docs: Number(s?.num_docs), avgdl: Number(s?.avgdl) };
+	const rows = async (sql: string) => (await c.execute(sql)).rows;
+	const dict = (await rows('SELECT term, df FROM fts_main_docs.dict ORDER BY term')).map((r) => ({
+		term: String(r.term),
+		df: Number(r.df),
+	}));
+	// Keyed by `ver`, not DuckDB's `docid`: docid is a 0-based internal row number, so a
+	// fixture keyed on it is off by one against the corpus and every consumer must remember
+	// to shift. `name` carries the value of the id column we indexed.
+	const docs = (await rows('SELECT name, len FROM fts_main_docs.docs ORDER BY len')).map((r) => ({
+		ver: Number(r.name),
+		len: Number(r.len),
+	}));
+	const s = (await rows('SELECT num_docs, avgdl FROM fts_main_docs.stats'))[0];
+	const stats = { num_docs: Number(s?.num_docs), avgdl: Number(s?.avgdl) };
 
-  const bm25: Record<string, { ver: number; score: number }[]> = {};
-  for (const q of QUERIES) {
-    const r = await c.execute({
-      sql: `SELECT ver, fts_main_docs.match_bm25(ver, ?) AS score
+	const bm25: Record<string, { ver: number; score: number }[]> = {};
+	for (const q of QUERIES) {
+		const r = await c.execute({
+			sql: `SELECT ver, fts_main_docs.match_bm25(ver, ?) AS score
             FROM docs
             WHERE score IS NOT NULL
             ORDER BY score DESC, ver`,
-      args: [q],
-    });
-    bm25[q] = r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
-  }
-  await c.end();
-  return { dict, docs, stats, bm25 };
+			args: [q],
+		});
+		bm25[q] = r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
+	}
+	await c.end();
+	return { dict, docs, stats, bm25 };
 }
 
 async function libsqlTruth() {
-  const c = createClient({ url: ':memory:' });
-  await c.execute(`CREATE VIRTUAL TABLE d USING fts5(body)`);
-  for (const doc of CORPUS) {
-    await c.execute({ sql: 'INSERT INTO d(rowid, body) VALUES (?, ?)', args: [doc.ver, doc.body] });
-  }
-  const out: Record<string, number[]> = {};
-  for (const q of QUERIES) {
-    // The same OR-of-quoted-tokens shape sanitizeMatch produces.
-    const match = q
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((t) => `"${t.replace(/"/g, '""')}"`)
-      .join(' OR ');
-    const r = await c.execute({
-      sql: `SELECT rowid FROM d WHERE d MATCH ? ORDER BY rank`,
-      args: [match],
-    });
-    out[q] = r.rows.map((row) => Number(row.rowid));
-  }
-  return out;
+	const c = createClient({ url: ':memory:' });
+	await c.execute(`CREATE VIRTUAL TABLE d USING fts5(body)`);
+	for (const doc of CORPUS) {
+		await c.execute({ sql: 'INSERT INTO d(rowid, body) VALUES (?, ?)', args: [doc.ver, doc.body] });
+	}
+	const out: Record<string, number[]> = {};
+	for (const q of QUERIES) {
+		// The same OR-of-quoted-tokens shape sanitizeMatch produces.
+		const match = q
+			.split(/\s+/)
+			.filter(Boolean)
+			.map((t) => `"${t.replace(/"/g, '""')}"`)
+			.join(' OR ');
+		const r = await c.execute({
+			sql: `SELECT rowid FROM d WHERE d MATCH ? ORDER BY rank`,
+			args: [match],
+		});
+		out[q] = r.rows.map((row) => Number(row.rowid));
+	}
+	return out;
 }
 
 const truth = { corpus: CORPUS, duckdb: await duckdbTruth(), libsql: await libsqlTruth() };
@@ -224,10 +229,12 @@ variable, a mismatch downstream can only be tokenization or arithmetic."
 One module, used by the writer to build the index and by the reader to parse a query. If these ever diverge, search returns nothing and no test outside this file would notice — which is why the module exists at all rather than two inline splits.
 
 **Files:**
+
 - Create: `packages/core/src/fts/tokenize.ts`
 - Test: `packages/core/test/fts-tokenize.test.ts`
 
 **Interfaces:**
+
 - Consumes: `test/fixtures/fts-ground-truth.json` (Task 1).
 - Produces:
   - `export function tokenize(text: string): string[]` — lowercase terms in document order, duplicates kept (the caller counts them).
@@ -242,37 +249,37 @@ import truth from './fixtures/fts-ground-truth.json';
 import { tokenize } from '../src/fts/tokenize.ts';
 
 describe('tokenize', () => {
-  test('lowercases and splits on non-alphanumerics', () => {
-    expect(tokenize('Graph-Database, v2!')).toEqual(['graph', 'database', 'v2']);
-  });
+	test('lowercases and splits on non-alphanumerics', () => {
+		expect(tokenize('Graph-Database, v2!')).toEqual(['graph', 'database', 'v2']);
+	});
 
-  test('keeps duplicates in document order — the caller counts them', () => {
-    expect(tokenize('graph graph node')).toEqual(['graph', 'graph', 'node']);
-  });
+	test('keeps duplicates in document order — the caller counts them', () => {
+		expect(tokenize('graph graph node')).toEqual(['graph', 'graph', 'node']);
+	});
 
-  test('yields nothing for text with no usable characters', () => {
-    expect(tokenize('   ')).toEqual([]);
-    expect(tokenize('!!! ??? ---')).toEqual([]);
-  });
+	test('yields nothing for text with no usable characters', () => {
+		expect(tokenize('   ')).toEqual([]);
+		expect(tokenize('!!! ??? ---')).toEqual([]);
+	});
 
-  test('does not stem — v1 matches libSQL unicode61, which does not either', () => {
-    expect(tokenize('running runs')).toEqual(['running', 'runs']);
-  });
+	test('does not stem — v1 matches libSQL unicode61, which does not either', () => {
+		expect(tokenize('running runs')).toEqual(['running', 'runs']);
+	});
 
-  test('agrees with DuckDB on every document length in the ground truth', () => {
-    // avgdl and len come straight from token counts, so a tokenizer that disagrees
-    // silently shifts every BM25 score. This pins it against a measured reference.
-    const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.ver, d.len]));
-    for (const doc of truth.corpus) {
-      expect(tokenize(doc.body).length).toBe(lenByVer.get(doc.ver) as number);
-    }
-  });
+	test('agrees with DuckDB on every document length in the ground truth', () => {
+		// avgdl and len come straight from token counts, so a tokenizer that disagrees
+		// silently shifts every BM25 score. This pins it against a measured reference.
+		const lenByVer = new Map(truth.duckdb.docs.map((d) => [d.ver, d.len]));
+		for (const doc of truth.corpus) {
+			expect(tokenize(doc.body).length).toBe(lenByVer.get(doc.ver) as number);
+		}
+	});
 
-  test('agrees with DuckDB on the exact vocabulary', () => {
-    const ours = new Set(truth.corpus.flatMap((d) => tokenize(d.body)));
-    const theirs = new Set(truth.duckdb.dict.map((d) => d.term));
-    expect([...ours].sort()).toEqual([...theirs].sort());
-  });
+	test('agrees with DuckDB on the exact vocabulary', () => {
+		const ours = new Set(truth.corpus.flatMap((d) => tokenize(d.body)));
+		const theirs = new Set(truth.duckdb.dict.map((d) => d.term));
+		expect([...ours].sort()).toEqual([...theirs].sort());
+	});
 });
 ```
 
@@ -311,7 +318,10 @@ export const TOKEN_SPLIT = /[^\p{L}\p{N}]+/u;
 
 /** Lowercase terms in document order. Duplicates are kept — term frequency is the caller's. */
 export function tokenize(text: string): string[] {
-  return text.toLowerCase().split(TOKEN_SPLIT).filter((t) => t.length > 0);
+	return text
+		.toLowerCase()
+		.split(TOKEN_SPLIT)
+		.filter((t) => t.length > 0);
 }
 ```
 
@@ -342,22 +352,40 @@ committed golden rankings were measured against."
 Pure and database-free, so the arithmetic is testable without DuckDB and the writer path has no hidden SQL.
 
 **Files:**
+
 - Create: `packages/core/src/fts/build.ts`
 - Test: `packages/core/test/fts-build.test.ts`
 
 **Interfaces:**
+
 - Consumes: `tokenize` (Task 2).
 - Produces:
+
   ```ts
-  export interface FtsDoc { ver: number; len: number; live: boolean }
-  export interface FtsTerm { ver: number; term: string; tf: number; live: boolean }
-  export interface FtsDictEntry { term: string; df: number }
-  export interface FtsStats { num_docs: number; avgdl: number }
+  export interface FtsDoc {
+  	ver: number;
+  	len: number;
+  	live: boolean;
+  }
+  export interface FtsTerm {
+  	ver: number;
+  	term: string;
+  	tf: number;
+  	live: boolean;
+  }
+  export interface FtsDictEntry {
+  	term: string;
+  	df: number;
+  }
+  export interface FtsStats {
+  	num_docs: number;
+  	avgdl: number;
+  }
   export interface FtsIndex {
-    docs: FtsDoc[];
-    terms: FtsTerm[];
-    dict: FtsDictEntry[];
-    stats: FtsStats;
+  	docs: FtsDoc[];
+  	terms: FtsTerm[];
+  	dict: FtsDictEntry[];
+  	stats: FtsStats;
   }
   export function buildIndex(rows: { ver: number; body: string | null; live: boolean }[]): FtsIndex;
   ```
@@ -370,60 +398,60 @@ import { describe, expect, test } from 'bun:test';
 import { buildIndex } from '../src/fts/build.ts';
 
 const rows = [
-  { ver: 1, body: 'graph database', live: true },
-  { ver: 2, body: 'graph graph query', live: true },
-  { ver: 3, body: 'unrelated', live: false },
+	{ ver: 1, body: 'graph database', live: true },
+	{ ver: 2, body: 'graph graph query', live: true },
+	{ ver: 3, body: 'unrelated', live: false },
 ];
 
 describe('buildIndex', () => {
-  test('counts term frequency per version', () => {
-    const ix = buildIndex(rows);
-    const t = ix.terms.find((x) => x.ver === 2 && x.term === 'graph');
-    expect(t?.tf).toBe(2);
-  });
+	test('counts term frequency per version', () => {
+		const ix = buildIndex(rows);
+		const t = ix.terms.find((x) => x.ver === 2 && x.term === 'graph');
+		expect(t?.tf).toBe(2);
+	});
 
-  test('document frequency counts versions, not occurrences', () => {
-    const ix = buildIndex(rows);
-    // 'graph' appears 3 times total but in 2 documents.
-    expect(ix.dict.find((d) => d.term === 'graph')?.df).toBe(2);
-  });
+	test('document frequency counts versions, not occurrences', () => {
+		const ix = buildIndex(rows);
+		// 'graph' appears 3 times total but in 2 documents.
+		expect(ix.dict.find((d) => d.term === 'graph')?.df).toBe(2);
+	});
 
-  test('document length is the token count, including duplicates', () => {
-    const ix = buildIndex(rows);
-    expect(ix.docs.find((d) => d.ver === 2)?.len).toBe(3);
-  });
+	test('document length is the token count, including duplicates', () => {
+		const ix = buildIndex(rows);
+		expect(ix.docs.find((d) => d.ver === 2)?.len).toBe(3);
+	});
 
-  test('stats cover live and history together', () => {
-    const ix = buildIndex(rows);
-    // A per-scope avgdl would make the same document score differently depending on
-    // whether the query was live-only, which is not a property anyone wants.
-    expect(ix.stats.num_docs).toBe(3);
-    expect(ix.stats.avgdl).toBeCloseTo((2 + 3 + 1) / 3, 10);
-  });
+	test('stats cover live and history together', () => {
+		const ix = buildIndex(rows);
+		// A per-scope avgdl would make the same document score differently depending on
+		// whether the query was live-only, which is not a property anyone wants.
+		expect(ix.stats.num_docs).toBe(3);
+		expect(ix.stats.avgdl).toBeCloseTo((2 + 3 + 1) / 3, 10);
+	});
 
-  test('carries the live flag through, so the export can split the files', () => {
-    const ix = buildIndex(rows);
-    expect(ix.docs.find((d) => d.ver === 3)?.live).toBe(false);
-    expect(ix.terms.filter((t) => !t.live).map((t) => t.term)).toEqual(['unrelated']);
-  });
+	test('carries the live flag through, so the export can split the files', () => {
+		const ix = buildIndex(rows);
+		expect(ix.docs.find((d) => d.ver === 3)?.live).toBe(false);
+		expect(ix.terms.filter((t) => !t.live).map((t) => t.term)).toEqual(['unrelated']);
+	});
 
-  test('skips a null body without counting it as a document', () => {
-    const ix = buildIndex([{ ver: 9, body: null, live: true }, ...rows]);
-    expect(ix.stats.num_docs).toBe(3);
-    expect(ix.docs.some((d) => d.ver === 9)).toBe(false);
-  });
+	test('skips a null body without counting it as a document', () => {
+		const ix = buildIndex([{ ver: 9, body: null, live: true }, ...rows]);
+		expect(ix.stats.num_docs).toBe(3);
+		expect(ix.docs.some((d) => d.ver === 9)).toBe(false);
+	});
 
-  test('skips a body with no usable tokens', () => {
-    const ix = buildIndex([{ ver: 9, body: '!!!', live: true }, ...rows]);
-    expect(ix.stats.num_docs).toBe(3);
-  });
+	test('skips a body with no usable tokens', () => {
+		const ix = buildIndex([{ ver: 9, body: '!!!', live: true }, ...rows]);
+		expect(ix.stats.num_docs).toBe(3);
+	});
 
-  test('an empty corpus yields avgdl 0 rather than NaN', () => {
-    // A division by zero here propagates NaN into every BM25 score, and NaN sorts
-    // unpredictably rather than erroring — a silent wrong answer.
-    const ix = buildIndex([]);
-    expect(ix.stats).toEqual({ num_docs: 0, avgdl: 0 });
-  });
+	test('an empty corpus yields avgdl 0 rather than NaN', () => {
+		// A division by zero here propagates NaN into every BM25 score, and NaN sorts
+		// unpredictably rather than erroring — a silent wrong answer.
+		const ix = buildIndex([]);
+		expect(ix.stats).toEqual({ num_docs: 0, avgdl: 0 });
+	});
 });
 ```
 
@@ -451,36 +479,36 @@ import { tokenize } from './tokenize.ts';
 
 /** One indexed document. `live` drives the Parquet file split, not the scoring. */
 export interface FtsDoc {
-  ver: number;
-  len: number;
-  live: boolean;
+	ver: number;
+	len: number;
+	live: boolean;
 }
 
 /** One (document, term) posting. */
 export interface FtsTerm {
-  ver: number;
-  term: string;
-  tf: number;
-  live: boolean;
+	ver: number;
+	term: string;
+	tf: number;
+	live: boolean;
 }
 
 /** Corpus-wide document frequency for a term. */
 export interface FtsDictEntry {
-  term: string;
-  df: number;
+	term: string;
+	df: number;
 }
 
 /** Corpus-wide BM25 normalizers. */
 export interface FtsStats {
-  num_docs: number;
-  avgdl: number;
+	num_docs: number;
+	avgdl: number;
 }
 
 export interface FtsIndex {
-  docs: FtsDoc[];
-  terms: FtsTerm[];
-  dict: FtsDictEntry[];
-  stats: FtsStats;
+	docs: FtsDoc[];
+	terms: FtsTerm[];
+	dict: FtsDictEntry[];
+	stats: FtsStats;
 }
 
 /**
@@ -491,43 +519,41 @@ export interface FtsIndex {
  * as-of results, which is not a property any caller wants and would break the golden rankings
  * the moment history grew.
  */
-export function buildIndex(
-  rows: { ver: number; body: string | null; live: boolean }[],
-): FtsIndex {
-  const docs: FtsDoc[] = [];
-  const terms: FtsTerm[] = [];
-  const df = new Map<string, number>();
-  let totalLen = 0;
+export function buildIndex(rows: { ver: number; body: string | null; live: boolean }[]): FtsIndex {
+	const docs: FtsDoc[] = [];
+	const terms: FtsTerm[] = [];
+	const df = new Map<string, number>();
+	let totalLen = 0;
 
-  for (const row of rows) {
-    if (row.body === null) continue;
-    const tokens = tokenize(row.body);
-    if (tokens.length === 0) continue; // nothing to match; not a document
+	for (const row of rows) {
+		if (row.body === null) continue;
+		const tokens = tokenize(row.body);
+		if (tokens.length === 0) continue; // nothing to match; not a document
 
-    const tf = new Map<string, number>();
-    for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
+		const tf = new Map<string, number>();
+		for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
 
-    docs.push({ ver: row.ver, len: tokens.length, live: row.live });
-    totalLen += tokens.length;
-    for (const [term, n] of tf) {
-      terms.push({ ver: row.ver, term, tf: n, live: row.live });
-      // Once per document, not once per occurrence — df counts documents.
-      df.set(term, (df.get(term) ?? 0) + 1);
-    }
-  }
+		docs.push({ ver: row.ver, len: tokens.length, live: row.live });
+		totalLen += tokens.length;
+		for (const [term, n] of tf) {
+			terms.push({ ver: row.ver, term, tf: n, live: row.live });
+			// Once per document, not once per occurrence — df counts documents.
+			df.set(term, (df.get(term) ?? 0) + 1);
+		}
+	}
 
-  const dict = [...df.entries()]
-    .map(([term, n]) => ({ term, df: n }))
-    .sort((a, b) => (a.term < b.term ? -1 : a.term > b.term ? 1 : 0));
+	const dict = [...df.entries()]
+		.map(([term, n]) => ({ term, df: n }))
+		.sort((a, b) => (a.term < b.term ? -1 : a.term > b.term ? 1 : 0));
 
-  return {
-    docs,
-    terms,
-    dict,
-    // Guard the empty corpus: 0/0 is NaN, and a NaN score sorts unpredictably instead of
-    // erroring, so it would surface as a silently wrong ranking rather than a failure.
-    stats: { num_docs: docs.length, avgdl: docs.length === 0 ? 0 : totalLen / docs.length },
-  };
+	return {
+		docs,
+		terms,
+		dict,
+		// Guard the empty corpus: 0/0 is NaN, and a NaN score sorts unpredictably instead of
+		// erroring, so it would surface as a silently wrong ranking rather than a failure.
+		stats: { num_docs: docs.length, avgdl: docs.length === 0 ? 0 : totalLen / docs.length },
+	};
 }
 ```
 
@@ -552,13 +578,15 @@ depending on whether the caller asked for live or as-of results."
 
 ### Task 4: The BM25 SQL, verified against the ground truth
 
-The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. This task deliberately lands *before* any commit or materialize plumbing, so the arithmetic is proven against a fixture on hand-built tables — with nothing else that could be at fault.
+The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. This task deliberately lands _before_ any commit or materialize plumbing, so the arithmetic is proven against a fixture on hand-built tables — with nothing else that could be at fault.
 
 **Files:**
+
 - Create: `packages/core/src/fts/index-tables.ts`
 - Test: `packages/core/test/fts-bm25.test.ts`
 
 **Interfaces:**
+
 - Consumes: `FtsIndex` (Task 3).
 - Produces:
   - `export const FTS_TABLES: readonly string[]` — `['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats']`.
@@ -579,87 +607,87 @@ import { tokenize } from '../src/fts/tokenize.ts';
 
 /** A DuckDB loaded with our index over the ground-truth corpus. No fts extension involved. */
 async function indexed() {
-  const c = createDuckClient();
-  await c.executeMultiple(FTS_DDL);
-  const ix = buildIndex(truth.corpus.map((d) => ({ ver: d.ver, body: d.body, live: true })));
-  for (const d of ix.docs) {
-    await c.execute({ sql: 'INSERT INTO fts_docs VALUES (?,?,?)', args: [d.ver, d.len, d.live] });
-  }
-  for (const t of ix.terms) {
-    await c.execute({
-      sql: 'INSERT INTO fts_terms VALUES (?,?,?,?)',
-      args: [t.ver, t.term, t.tf, t.live],
-    });
-  }
-  for (const d of ix.dict) {
-    await c.execute({ sql: 'INSERT INTO fts_dict VALUES (?,?)', args: [d.term, d.df] });
-  }
-  await c.execute({
-    sql: 'INSERT INTO fts_stats VALUES (?,?)',
-    args: [ix.stats.num_docs, ix.stats.avgdl],
-  });
-  return c;
+	const c = createDuckClient();
+	await c.executeMultiple(FTS_DDL);
+	const ix = buildIndex(truth.corpus.map((d) => ({ ver: d.ver, body: d.body, live: true })));
+	for (const d of ix.docs) {
+		await c.execute({ sql: 'INSERT INTO fts_docs VALUES (?,?,?)', args: [d.ver, d.len, d.live] });
+	}
+	for (const t of ix.terms) {
+		await c.execute({
+			sql: 'INSERT INTO fts_terms VALUES (?,?,?,?)',
+			args: [t.ver, t.term, t.tf, t.live],
+		});
+	}
+	for (const d of ix.dict) {
+		await c.execute({ sql: 'INSERT INTO fts_dict VALUES (?,?)', args: [d.term, d.df] });
+	}
+	await c.execute({
+		sql: 'INSERT INTO fts_stats VALUES (?,?)',
+		args: [ix.stats.num_docs, ix.stats.avgdl],
+	});
+	return c;
 }
 
 async function score(c: Awaited<ReturnType<typeof indexed>>, query: string) {
-  const r = await c.execute({
-    sql: `WITH scored AS (${bm25Cte('all')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
-    args: [JSON.stringify(tokenize(query))],
-  });
-  return r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
+	const r = await c.execute({
+		sql: `WITH scored AS (${bm25Cte('all')}) SELECT ver, score FROM scored ORDER BY score DESC, ver`,
+		args: [JSON.stringify(tokenize(query))],
+	});
+	return r.rows.map((row) => ({ ver: Number(row.ver), score: Number(row.score) }));
 }
 
 describe('bm25', () => {
-  test('reproduces DuckDB match_bm25 to within floating-point noise', async () => {
-    // The whole reason Task 1 exists. If this drifts, the formula is wrong - not the fixture.
-    const c = await indexed();
-    for (const [query, expected] of Object.entries(truth.duckdb.bm25)) {
-      const got = await score(c, query);
-      expect(got.map((g) => g.ver)).toEqual(expected.map((e) => e.ver));
-      for (let i = 0; i < expected.length; i++) {
-        expect(got[i]?.score).toBeCloseTo(expected[i]?.score as number, 6);
-      }
-    }
-    await c.end();
-  });
+	test('reproduces DuckDB match_bm25 to within floating-point noise', async () => {
+		// The whole reason Task 1 exists. If this drifts, the formula is wrong - not the fixture.
+		const c = await indexed();
+		for (const [query, expected] of Object.entries(truth.duckdb.bm25)) {
+			const got = await score(c, query);
+			expect(got.map((g) => g.ver)).toEqual(expected.map((e) => e.ver));
+			for (let i = 0; i < expected.length; i++) {
+				expect(got[i]?.score).toBeCloseTo(expected[i]?.score as number, 6);
+			}
+		}
+		await c.end();
+	});
 
-  test('a query whose terms are all absent scores nothing rather than erroring', async () => {
-    const c = await indexed();
-    expect(await score(c, 'missing')).toEqual([]);
-    await c.end();
-  });
+	test('a query whose terms are all absent scores nothing rather than erroring', async () => {
+		const c = await indexed();
+		expect(await score(c, 'missing')).toEqual([]);
+		await c.end();
+	});
 
-  test('an empty term list scores nothing', async () => {
-    // sanitizeMatch returns null here and the caller skips the leg, but the SQL must not
-    // blow up if it is ever reached with an empty array.
-    const c = await indexed();
-    const r = await c.execute({
-      sql: `WITH scored AS (${bm25Cte('all')}) SELECT count(*) AS n FROM scored`,
-      args: ['[]'],
-    });
-    expect(r.rows[0]?.n).toBe(0);
-    await c.end();
-  });
+	test('an empty term list scores nothing', async () => {
+		// sanitizeMatch returns null here and the caller skips the leg, but the SQL must not
+		// blow up if it is ever reached with an empty array.
+		const c = await indexed();
+		const r = await c.execute({
+			sql: `WITH scored AS (${bm25Cte('all')}) SELECT count(*) AS n FROM scored`,
+			args: ['[]'],
+		});
+		expect(r.rows[0]?.n).toBe(0);
+		await c.end();
+	});
 
-  test('a repeated term outranks a single mention of it', async () => {
-    const c = await indexed();
-    const ranked = await score(c, 'graph');
-    // ver 5 is 'graph graph graph repeated term document'.
-    expect(ranked[0]?.ver).toBe(5);
-    await c.end();
-  });
+	test('a repeated term outranks a single mention of it', async () => {
+		const c = await indexed();
+		const ranked = await score(c, 'graph');
+		// ver 5 is 'graph graph graph repeated term document'.
+		expect(ranked[0]?.ver).toBe(5);
+		await c.end();
+	});
 
-  test('the live scope excludes history rows', async () => {
-    const c = await indexed();
-    await c.execute(`UPDATE fts_docs SET live = false WHERE ver = 5`);
-    await c.execute(`UPDATE fts_terms SET live = false WHERE ver = 5`);
-    const r = await c.execute({
-      sql: `WITH scored AS (${bm25Cte('live')}) SELECT ver FROM scored ORDER BY score DESC`,
-      args: [JSON.stringify(tokenize('graph'))],
-    });
-    expect(r.rows.map((row) => Number(row.ver))).not.toContain(5);
-    await c.end();
-  });
+	test('the live scope excludes history rows', async () => {
+		const c = await indexed();
+		await c.execute(`UPDATE fts_docs SET live = false WHERE ver = 5`);
+		await c.execute(`UPDATE fts_terms SET live = false WHERE ver = 5`);
+		const r = await c.execute({
+			sql: `WITH scored AS (${bm25Cte('live')}) SELECT ver FROM scored ORDER BY score DESC`,
+			args: [JSON.stringify(tokenize('graph'))],
+		});
+		expect(r.rows.map((row) => Number(row.ver))).not.toContain(5);
+		await c.end();
+	});
 });
 ```
 
@@ -724,8 +752,8 @@ CREATE TABLE IF NOT EXISTS fts_stats (num_docs BIGINT NOT NULL, avgdl DOUBLE NOT
  * `node_versions`, applied outside this CTE.
  */
 export function bm25Cte(scope: 'live' | 'all'): string {
-  const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
-  return `
+	const liveFilter = scope === 'live' ? 'AND t.live AND d.live' : '';
+	return `
   SELECT t.ver AS ver,
          sum(
            log(((s.num_docs - dc.df + 0.5) / (dc.df + 0.5)) + 1)
@@ -769,6 +797,7 @@ shared with libSQL and Postgres, which spend one argument each."
 The round trip. The index becomes part of a snapshot: rebuilt from the local `node_versions` when it is dirty, exported to Parquet under `manifest.indexes`, and loaded back by any reader.
 
 **Files:**
+
 - Modify: `packages/core/src/dialect-sql.ts` (`duckdbSchema` — append `FTS_DDL`)
 - Modify: `packages/core/src/duck-materialize.ts` (load `manifest.indexes`)
 - Modify: `packages/core/src/duck-commit.ts` (rebuild + export)
@@ -776,6 +805,7 @@ The round trip. The index becomes part of a snapshot: rebuilt from the local `no
 - Test: `packages/core/test/fts-roundtrip.test.ts`
 
 **Interfaces:**
+
 - Consumes: `buildIndex` (Task 3); `FTS_TABLES`, `FTS_DDL` (Task 4); `exportTable`, `buildManifest` (stage 4, `duck-commit.ts`); `materialize`, `LoadTarget` (stage 4, `duck-materialize.ts`).
 - Produces:
   - `export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<void>` — in `fts/index-tables.ts`. Truncates and repopulates the four tables from `node_versions`.
@@ -799,92 +829,92 @@ const root = mkdtempSync(join(tmpdir(), 'graphx-fts-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 const SCHEMA = defineGraphSchema({
-  nodes: { Doc: z.object({ slug: z.string().optional() }) },
-  edges: {},
+	nodes: { Doc: z.object({ slug: z.string().optional() }) },
+	edges: {},
 });
 
 function client(store: MemoryObjectStore): DuckClient {
-  return createDuckClient({ store, cacheDir: mkdtempSync(join(root, 'c-')) });
+	return createDuckClient({ store, cacheDir: mkdtempSync(join(root, 'c-')) });
 }
 
 describe('full-text round trip', () => {
-  test('a committed index is readable by a second client', async () => {
-    const store = new MemoryObjectStore();
-    const w = client(store);
-    const g = new Graph(w, SCHEMA);
-    await g.write(async (s) => {
-      await s.addNode({ type: 'Doc', body: 'temporal graph database', data: {} });
-      await s.addNode({ type: 'Doc', body: 'vector search engine', data: {} });
-    });
-    await w.end();
+	test('a committed index is readable by a second client', async () => {
+		const store = new MemoryObjectStore();
+		const w = client(store);
+		const g = new Graph(w, SCHEMA);
+		await g.write(async (s) => {
+			await s.addNode({ type: 'Doc', body: 'temporal graph database', data: {} });
+			await s.addNode({ type: 'Doc', body: 'vector search engine', data: {} });
+		});
+		await w.end();
 
-    const r = client(store);
-    await r.open();
-    const rows = await r.execute({
-      sql: `SELECT count(*) AS n FROM fts_terms WHERE term = ?`,
-      args: ['graph'],
-    });
-    expect(rows.rows[0]?.n).toBe(1);
-    await r.end();
-  });
+		const r = client(store);
+		await r.open();
+		const rows = await r.execute({
+			sql: `SELECT count(*) AS n FROM fts_terms WHERE term = ?`,
+			args: ['graph'],
+		});
+		expect(rows.rows[0]?.n).toBe(1);
+		await r.end();
+	});
 
-  test('the manifest splits live and history index files', async () => {
-    const store = new MemoryObjectStore();
-    const c = client(store);
-    const g = new Graph(c, SCHEMA);
-    const n = await g.addNode({ type: 'Doc', body: 'original text', data: {} });
-    await g.updateNode(n.id, { body: 'replacement text' });
-    const m = c.snapshot();
-    // The superseded version is history; the successor is live. Both are indexed.
-    expect(m?.indexes.fts_live?.fts_docs?.length).toBe(1);
-    expect(m?.indexes.fts_history?.fts_docs?.length).toBe(1);
-    expect(m?.indexes.fts_global?.fts_dict?.length).toBe(1);
-    await c.end();
-  });
+	test('the manifest splits live and history index files', async () => {
+		const store = new MemoryObjectStore();
+		const c = client(store);
+		const g = new Graph(c, SCHEMA);
+		const n = await g.addNode({ type: 'Doc', body: 'original text', data: {} });
+		await g.updateNode(n.id, { body: 'replacement text' });
+		const m = c.snapshot();
+		// The superseded version is history; the successor is live. Both are indexed.
+		expect(m?.indexes.fts_live?.fts_docs?.length).toBe(1);
+		expect(m?.indexes.fts_history?.fts_docs?.length).toBe(1);
+		expect(m?.indexes.fts_global?.fts_dict?.length).toBe(1);
+		await c.end();
+	});
 
-  test('the index tracks an update — the old body stops matching live', async () => {
-    const store = new MemoryObjectStore();
-    const c = client(store);
-    const g = new Graph(c, SCHEMA);
-    const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
-    await g.updateNode(n.id, { body: 'griffin' });
-    const live = await c.execute({
-      sql: `SELECT term FROM fts_terms WHERE live AND term IN ('sphinx','griffin')`,
-    });
-    expect(live.rows.map((r) => String(r.term))).toEqual(['griffin']);
-    // ...but history still carries it, which is what makes as-of lexical search exact.
-    const all = await c.execute({
-      sql: `SELECT count(*) AS n FROM fts_terms WHERE term = 'sphinx'`,
-    });
-    expect(all.rows[0]?.n).toBe(1);
-    await c.end();
-  });
+	test('the index tracks an update — the old body stops matching live', async () => {
+		const store = new MemoryObjectStore();
+		const c = client(store);
+		const g = new Graph(c, SCHEMA);
+		const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
+		await g.updateNode(n.id, { body: 'griffin' });
+		const live = await c.execute({
+			sql: `SELECT term FROM fts_terms WHERE live AND term IN ('sphinx','griffin')`,
+		});
+		expect(live.rows.map((r) => String(r.term))).toEqual(['griffin']);
+		// ...but history still carries it, which is what makes as-of lexical search exact.
+		const all = await c.execute({
+			sql: `SELECT count(*) AS n FROM fts_terms WHERE term = 'sphinx'`,
+		});
+		expect(all.rows[0]?.n).toBe(1);
+		await c.end();
+	});
 
-  test('a commit that does not touch node_versions leaves the index files alone', async () => {
-    const store = new MemoryObjectStore();
-    const c = client(store);
-    await c.open();
-    await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
-    const first = await c.commit(new Set(['node_identity']));
-    await c.execute({
-      sql: 'INSERT INTO archival_state VALUES (?,?,?)',
-      args: ['node_versions', 1, 1],
-    });
-    const second = await c.commit(new Set(['archival_state']));
-    // Rebuilding an index nobody invalidated would make every commit cost the whole corpus.
-    expect(second.indexes).toEqual(first.indexes);
-    await c.end();
-  });
+	test('a commit that does not touch node_versions leaves the index files alone', async () => {
+		const store = new MemoryObjectStore();
+		const c = client(store);
+		await c.open();
+		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
+		const first = await c.commit(new Set(['node_identity']));
+		await c.execute({
+			sql: 'INSERT INTO archival_state VALUES (?,?,?)',
+			args: ['node_versions', 1, 1],
+		});
+		const second = await c.commit(new Set(['archival_state']));
+		// Rebuilding an index nobody invalidated would make every commit cost the whole corpus.
+		expect(second.indexes).toEqual(first.indexes);
+		await c.end();
+	});
 
-  test('an empty corpus commits an index with no files rather than empty ones', async () => {
-    const store = new MemoryObjectStore();
-    const c = client(store);
-    await c.open();
-    await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
-    const m = await c.commit(new Set(['node_versions']));
-    expect(m.indexes.fts_live?.fts_docs ?? []).toEqual([]);
-    await c.end();
-  });
+	test('an empty corpus commits an index with no files rather than empty ones', async () => {
+		const store = new MemoryObjectStore();
+		const c = client(store);
+		await c.open();
+		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
+		const m = await c.commit(new Set(['node_versions']));
+		expect(m.indexes.fts_live?.fts_docs ?? []).toEqual([]);
+		await c.end();
+	});
 });
 ```
 
@@ -928,47 +958,47 @@ import { FOREVER } from '../db.ts';
  * mutation of a local table.
  */
 export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<void> {
-  const r = await client.execute(
-    `SELECT ver, body, valid_to FROM node_versions WHERE body IS NOT NULL`,
-  );
-  const ix = buildIndex(
-    r.rows.map((row) => ({
-      ver: Number(row.ver),
-      body: row.body === null ? null : String(row.body),
-      live: Number(row.valid_to) === FOREVER,
-    })),
-  );
+	const r = await client.execute(
+		`SELECT ver, body, valid_to FROM node_versions WHERE body IS NOT NULL`,
+	);
+	const ix = buildIndex(
+		r.rows.map((row) => ({
+			ver: Number(row.ver),
+			body: row.body === null ? null : String(row.body),
+			live: Number(row.valid_to) === FOREVER,
+		})),
+	);
 
-  for (const t of FTS_TABLES) await client.execute(`DELETE FROM ${t}`);
-  if (ix.docs.length === 0) return; // nothing indexable; leave the tables empty
+	for (const t of FTS_TABLES) await client.execute(`DELETE FROM ${t}`);
+	if (ix.docs.length === 0) return; // nothing indexable; leave the tables empty
 
-  // Chunked multi-row inserts: a statement per posting is thousands of round trips on a
-  // corpus of any size.
-  const chunk = <T>(xs: T[], n: number): T[][] =>
-    Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+	// Chunked multi-row inserts: a statement per posting is thousands of round trips on a
+	// corpus of any size.
+	const chunk = <T>(xs: T[], n: number): T[][] =>
+		Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
-  for (const part of chunk(ix.docs, 500)) {
-    await client.execute({
-      sql: `INSERT INTO fts_docs (ver, len, live) VALUES ${part.map(() => '(?,?,?)').join(',')}`,
-      args: part.flatMap((d) => [d.ver, d.len, d.live]),
-    });
-  }
-  for (const part of chunk(ix.terms, 500)) {
-    await client.execute({
-      sql: `INSERT INTO fts_terms (ver, term, tf, live) VALUES ${part.map(() => '(?,?,?,?)').join(',')}`,
-      args: part.flatMap((t) => [t.ver, t.term, t.tf, t.live]),
-    });
-  }
-  for (const part of chunk(ix.dict, 500)) {
-    await client.execute({
-      sql: `INSERT INTO fts_dict (term, df) VALUES ${part.map(() => '(?,?)').join(',')}`,
-      args: part.flatMap((d) => [d.term, d.df]),
-    });
-  }
-  await client.execute({
-    sql: `INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)`,
-    args: [ix.stats.num_docs, ix.stats.avgdl],
-  });
+	for (const part of chunk(ix.docs, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_docs (ver, len, live) VALUES ${part.map(() => '(?,?,?)').join(',')}`,
+			args: part.flatMap((d) => [d.ver, d.len, d.live]),
+		});
+	}
+	for (const part of chunk(ix.terms, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_terms (ver, term, tf, live) VALUES ${part.map(() => '(?,?,?,?)').join(',')}`,
+			args: part.flatMap((t) => [t.ver, t.term, t.tf, t.live]),
+		});
+	}
+	for (const part of chunk(ix.dict, 500)) {
+		await client.execute({
+			sql: `INSERT INTO fts_dict (term, df) VALUES ${part.map(() => '(?,?)').join(',')}`,
+			args: part.flatMap((d) => [d.term, d.df]),
+		});
+	}
+	await client.execute({
+		sql: `INSERT INTO fts_stats (num_docs, avgdl) VALUES (?,?)`,
+		args: [ix.stats.num_docs, ix.stats.avgdl],
+	});
 }
 ```
 
@@ -988,41 +1018,41 @@ import { FTS_TABLES, rebuildIndex } from './fts/index-tables.ts';
  * corpus regardless of what changed.
  */
 async function buildFtsIndexes(
-  client: ExportSource,
-  base: Manifest | null,
-  cache: FileCache,
-  tmpDir: string,
-  dirty: Set<string>,
+	client: ExportSource,
+	base: Manifest | null,
+	cache: FileCache,
+	tmpDir: string,
+	dirty: Set<string>,
 ): Promise<Manifest['indexes']> {
-  if (!dirty.has('node_versions')) return base?.indexes ?? {};
-  await rebuildIndex(client);
+	if (!dirty.has('node_versions')) return base?.indexes ?? {};
+	await rebuildIndex(client);
 
-  const group = async (
-    where: string | undefined,
-    suffix: string,
-    tables: readonly string[],
-  ): Promise<Record<string, string[]>> => {
-    const out: Record<string, string[]> = {};
-    for (const t of tables) {
-      const key = await exportTable(client, t, cache, tmpDir, where, suffix);
-      out[t] = key === null ? [] : [key];
-    }
-    return out;
-  };
+	const group = async (
+		where: string | undefined,
+		suffix: string,
+		tables: readonly string[],
+	): Promise<Record<string, string[]>> => {
+		const out: Record<string, string[]> = {};
+		for (const t of tables) {
+			const key = await exportTable(client, t, cache, tmpDir, where, suffix);
+			out[t] = key === null ? [] : [key];
+		}
+		return out;
+	};
 
-  return {
-    fts_live: await group('live', 'live', ['fts_docs', 'fts_terms']),
-    fts_history: await group('NOT live', 'history', ['fts_docs', 'fts_terms']),
-    // dict and stats span both scopes — see buildIndex on why avgdl is not per-scope.
-    fts_global: await group(undefined, 'global', ['fts_dict', 'fts_stats']),
-  };
+	return {
+		fts_live: await group('live', 'live', ['fts_docs', 'fts_terms']),
+		fts_history: await group('NOT live', 'history', ['fts_docs', 'fts_terms']),
+		// dict and stats span both scopes — see buildIndex on why avgdl is not per-scope.
+		fts_global: await group(undefined, 'global', ['fts_dict', 'fts_stats']),
+	};
 }
 ```
 
 Then in `buildManifest`, replace `indexes: base?.indexes ?? {},` with a value computed before the `return`:
 
 ```ts
-  const indexes = await buildFtsIndexes(client, base, cache, tmpDir, dirty);
+const indexes = await buildFtsIndexes(client, base, cache, tmpDir, dirty);
 ```
 
 ```ts
@@ -1038,31 +1068,31 @@ Then in `buildManifest`, replace `indexes: base?.indexes ?? {},` with a value co
 In `packages/core/src/duck-materialize.ts`, after the `manifest.tables` loop and before the `emb_dim` restatement:
 
 ```ts
-	// The index groups are flat table->files maps, loaded exactly like the data tables. Live
-	// and history are separate file sets so a remote live-only query need not fetch history
-	// terms; locally they land in one table, distinguished by the `live` column.
-	for (const group of Object.values(manifest.indexes)) {
-		for (const [table, files] of Object.entries(group)) {
-			if (files.length === 0) continue;
-			const paths = await cache.resolve(files);
-			// Plain INSERT, not OR REPLACE. `fts_terms` is a posting list with no primary
-			// key, and DuckDB rejects `INSERT OR REPLACE` against a table with no unique
-			// constraint to conflict on ("There are no UNIQUE/PRIMARY KEY constraints that
-			// refer to this table"). It is also unnecessary: the drop loop below recreates
-			// every index table empty before this runs, so there is nothing to replace.
-			await client.execute(
-				`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
-			);
-		}
+// The index groups are flat table->files maps, loaded exactly like the data tables. Live
+// and history are separate file sets so a remote live-only query need not fetch history
+// terms; locally they land in one table, distinguished by the `live` column.
+for (const group of Object.values(manifest.indexes)) {
+	for (const [table, files] of Object.entries(group)) {
+		if (files.length === 0) continue;
+		const paths = await cache.resolve(files);
+		// Plain INSERT, not OR REPLACE. `fts_terms` is a posting list with no primary
+		// key, and DuckDB rejects `INSERT OR REPLACE` against a table with no unique
+		// constraint to conflict on ("There are no UNIQUE/PRIMARY KEY constraints that
+		// refer to this table"). It is also unnecessary: the drop loop below recreates
+		// every index table empty before this runs, so there is nothing to replace.
+		await client.execute(
+			`INSERT INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
+		);
 	}
+}
 ```
 
 Also add the four tables to the drop loop so a materialize is a load rather than a merge. Change the drop loop to:
 
 ```ts
-	for (const t of [...SNAPSHOT_TABLES, ...FTS_TABLES].reverse()) {
-		await client.execute(`DROP TABLE IF EXISTS ${t}`);
-	}
+for (const t of [...SNAPSHOT_TABLES, ...FTS_TABLES].reverse()) {
+	await client.execute(`DROP TABLE IF EXISTS ${t}`);
+}
 ```
 
 with `import { FTS_TABLES } from './fts/index-tables.ts';` at the top.
@@ -1103,11 +1133,13 @@ temporal scope."
 Replace the three `notYet` throws. Argument counts must match libSQL's exactly.
 
 **Files:**
+
 - Modify: `packages/core/src/dialect-sql.ts` (`ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf`)
 - Modify: `packages/core/test/dialect-sql.test.ts:29` (the assertion that `ftsWhere('duckdb')` throws)
 - Test: `packages/core/test/fts-fragments.test.ts`
 
 **Interfaces:**
+
 - Consumes: `bm25Cte` (Task 4).
 - Produces: `duckdb` arms with these bound-argument contracts, identical in count to libSQL's:
   - `ftsWhere(dialect, alias)` — 1 arg: terms JSON.
@@ -1130,88 +1162,88 @@ const terms = (q: string): string => JSON.stringify(tokenize(q));
 
 /** Two live nodes and one superseded version, indexed. */
 async function seeded(): Promise<DuckClient> {
-  const c = createDuckClient();
-  await c.executeMultiple(duckdbSchema(4));
-  for (const id of ['a', 'b']) {
-    await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
-  }
-  const rows: [number, string, string, number, number][] = [
-    [1, 'a', 'temporal graph database', 0, 100],   // superseded at t=100
-    [2, 'a', 'rewritten beyond recognition', 100, FOREVER],
-    [3, 'b', 'vector search engine', 0, FOREVER],
-  ];
-  for (const [ver, id, body, from, to] of rows) {
-    await c.execute({
-      sql: `INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to)
+	const c = createDuckClient();
+	await c.executeMultiple(duckdbSchema(4));
+	for (const id of ['a', 'b']) {
+		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
+	}
+	const rows: [number, string, string, number, number][] = [
+		[1, 'a', 'temporal graph database', 0, 100], // superseded at t=100
+		[2, 'a', 'rewritten beyond recognition', 100, FOREVER],
+		[3, 'b', 'vector search engine', 0, FOREVER],
+	];
+	for (const [ver, id, body, from, to] of rows) {
+		await c.execute({
+			sql: `INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to)
             VALUES (?,?,?,?,?,?)`,
-      args: [ver, id, 'Doc', body, from, to],
-    });
-  }
-  await rebuildIndex(c);
-  return c;
+			args: [ver, id, 'Doc', body, from, to],
+		});
+	}
+	await rebuildIndex(c);
+	return c;
 }
 
 describe('duckdb fts fragments', () => {
-  test('ftsSeedLive returns live ids best-first', async () => {
-    const c = await seeded();
-    const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('vector search'), 10] });
-    expect(r.rows.map((row) => String(row.id))).toEqual(['b']);
-    await c.end();
-  });
+	test('ftsSeedLive returns live ids best-first', async () => {
+		const c = await seeded();
+		const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('vector search'), 10] });
+		expect(r.rows.map((row) => String(row.id))).toEqual(['b']);
+		await c.end();
+	});
 
-  test('ftsSeedLive does not match a superseded body', async () => {
-    // ver 1 says 'temporal graph database' but is closed; live search must not see it.
-    const c = await seeded();
-    const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('temporal'), 10] });
-    expect(r.rows).toEqual([]);
-    await c.end();
-  });
+	test('ftsSeedLive does not match a superseded body', async () => {
+		// ver 1 says 'temporal graph database' but is closed; live search must not see it.
+		const c = await seeded();
+		const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('temporal'), 10] });
+		expect(r.rows).toEqual([]);
+		await c.end();
+	});
 
-  test('ftsSeedLive honors k', async () => {
-    const c = await seeded();
-    const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('rewritten vector'), 1] });
-    expect(r.rows.length).toBe(1);
-    await c.end();
-  });
+	test('ftsSeedLive honors k', async () => {
+		const c = await seeded();
+		const r = await c.execute({ sql: ftsSeedLive('duckdb'), args: [terms('rewritten vector'), 1] });
+		expect(r.rows.length).toBe(1);
+		await c.end();
+	});
 
-  test('ftsSeedAsOf matches the version live at t — the exactness ANN cannot give', async () => {
-    const c = await seeded();
-    const r = await c.execute({
-      sql: ftsSeedAsOf('duckdb'),
-      args: [terms('temporal'), 50, 50, 10],
-    });
-    expect(r.rows.map((row) => String(row.id))).toEqual(['a']);
-    await c.end();
-  });
+	test('ftsSeedAsOf matches the version live at t — the exactness ANN cannot give', async () => {
+		const c = await seeded();
+		const r = await c.execute({
+			sql: ftsSeedAsOf('duckdb'),
+			args: [terms('temporal'), 50, 50, 10],
+		});
+		expect(r.rows.map((row) => String(row.id))).toEqual(['a']);
+		await c.end();
+	});
 
-  test('ftsSeedAsOf does not match a version that had not been written yet', async () => {
-    const c = await seeded();
-    const r = await c.execute({
-      sql: ftsSeedAsOf('duckdb'),
-      args: [terms('rewritten'), 50, 50, 10],
-    });
-    expect(r.rows).toEqual([]);
-    await c.end();
-  });
+	test('ftsSeedAsOf does not match a version that had not been written yet', async () => {
+		const c = await seeded();
+		const r = await c.execute({
+			sql: ftsSeedAsOf('duckdb'),
+			args: [terms('rewritten'), 50, 50, 10],
+		});
+		expect(r.rows).toEqual([]);
+		await c.end();
+	});
 
-  test('ftsWhere filters a node_versions scan', async () => {
-    const c = await seeded();
-    const r = await c.execute({
-      sql: `SELECT nv.id FROM node_versions nv
+	test('ftsWhere filters a node_versions scan', async () => {
+		const c = await seeded();
+		const r = await c.execute({
+			sql: `SELECT nv.id FROM node_versions nv
             WHERE nv.valid_to = ${FOREVER} AND ${ftsWhere('duckdb', 'nv')}`,
-      args: [terms('vector')],
-    });
-    expect(r.rows.map((row) => String(row.id))).toEqual(['b']);
-    await c.end();
-  });
+			args: [terms('vector')],
+		});
+		expect(r.rows.map((row) => String(row.id))).toEqual(['b']);
+		await c.end();
+	});
 
-  test('every fragment binds the same number of args as the libsql arm', () => {
-    // The callers bind positionally from one code path shared with libSQL and Postgres.
-    const count = (sql: string): number => (sql.match(/\?/g) ?? []).length;
-    expect(count(ftsWhere('duckdb', 'nv'))).toBe(count(ftsWhere('libsql', 'nv')));
-    expect(count(ftsSeedLive('duckdb'))).toBe(count(ftsSeedLive('libsql')));
-    expect(count(ftsSeedAsOf('duckdb'))).toBe(count(ftsSeedAsOf('libsql')));
-  });
+	test('every fragment binds the same number of args as the libsql arm', () => {
+		// The callers bind positionally from one code path shared with libSQL and Postgres.
+		const count = (sql: string): number => (sql.match(/\?/g) ?? []).length;
+		expect(count(ftsWhere('duckdb', 'nv'))).toBe(count(ftsWhere('libsql', 'nv')));
+		expect(count(ftsSeedLive('duckdb'))).toBe(count(ftsSeedLive('libsql')));
+		expect(count(ftsSeedAsOf('duckdb'))).toBe(count(ftsSeedAsOf('libsql')));
+	});
 });
 ```
 
@@ -1264,9 +1296,9 @@ LIMIT ?`;
 `packages/core/test/dialect-sql.test.ts:29` asserts `ftsWhere('duckdb', 'n')` throws. Replace it with an assertion that it no longer does:
 
 ```ts
-	test('ftsWhere has a duckdb arm now that the index exists', () => {
-		expect(ftsWhere('duckdb', 'n')).toContain('fts_terms');
-	});
+test('ftsWhere has a duckdb arm now that the index exists', () => {
+	expect(ftsWhere('duckdb', 'n')).toContain('fts_terms');
+});
 ```
 
 Check the surrounding block for sibling assertions about `ftsSeedLive`/`ftsSeedAsOf`/`ftsTableDDL` throwing and update any that are now wrong. Leave the Postgres `notYet` assertions alone.
@@ -1297,6 +1329,7 @@ index covers every version, not only the live ones."
 Three call sites currently branch with `d === 'postgres' ? query : match`, which silently sends an FTS5 expression to DuckDB. Replace the ternary with a dialect-aware argument builder so a fourth dialect cannot reintroduce the bug.
 
 **Files:**
+
 - Modify: `packages/core/src/hybrid.ts` (`sanitizeMatch` neighborhood, `seedsCurrent`, `seedsAsOf`)
 - Modify: `packages/core/src/graph.ts` (`ftsMatch`, `nodeFilter`)
 - Modify: `packages/core/test/retrieval-legs.ts` (`ftsSeeds`)
@@ -1304,6 +1337,7 @@ Three call sites currently branch with `d === 'postgres' ? query : match`, which
 - Test: `packages/core/test/fts-args.test.ts`
 
 **Interfaces:**
+
 - Consumes: `tokenize` (Task 2).
 - Produces: `export function ftsArg(dialect: Dialect, query: string): string | null` in `hybrid.ts` — the bound argument for every full-text fragment, or `null` when the query has no usable tokens (caller skips the leg entirely).
 
@@ -1315,31 +1349,31 @@ import { describe, expect, test } from 'bun:test';
 import { ftsArg, sanitizeMatch } from '../src/hybrid.ts';
 
 describe('ftsArg', () => {
-  test('libsql gets the FTS5 expression sanitizeMatch already produced', () => {
-    expect(ftsArg('libsql', 'graph db')).toBe(sanitizeMatch('graph db'));
-  });
+	test('libsql gets the FTS5 expression sanitizeMatch already produced', () => {
+		expect(ftsArg('libsql', 'graph db')).toBe(sanitizeMatch('graph db'));
+	});
 
-  test('postgres gets the raw query — tsQueryOr parses it itself', () => {
-    expect(ftsArg('postgres', 'graph db')).toBe('graph db');
-  });
+	test('postgres gets the raw query — tsQueryOr parses it itself', () => {
+		expect(ftsArg('postgres', 'graph db')).toBe('graph db');
+	});
 
-  test('duckdb gets a JSON array of tokens', () => {
-    expect(ftsArg('duckdb', 'Graph DB')).toBe('["graph","db"]');
-  });
+	test('duckdb gets a JSON array of tokens', () => {
+		expect(ftsArg('duckdb', 'Graph DB')).toBe('["graph","db"]');
+	});
 
-  test('every dialect returns null for a query with no usable tokens', () => {
-    // The caller skips the lexical leg entirely on null; returning "[]" instead would run a
-    // scoring join guaranteed to match nothing.
-    for (const d of ['libsql', 'postgres', 'duckdb'] as const) {
-      expect(ftsArg(d, '   ')).toBeNull();
-      expect(ftsArg(d, '!!! ---')).toBeNull();
-    }
-  });
+	test('every dialect returns null for a query with no usable tokens', () => {
+		// The caller skips the lexical leg entirely on null; returning "[]" instead would run a
+		// scoring join guaranteed to match nothing.
+		for (const d of ['libsql', 'postgres', 'duckdb'] as const) {
+			expect(ftsArg(d, '   ')).toBeNull();
+			expect(ftsArg(d, '!!! ---')).toBeNull();
+		}
+	});
 
-  test('duckdb survives hostile input that would be FTS5 syntax', () => {
-    // Operators are not escaped, they are tokenized away — there is no grammar to inject into.
-    expect(ftsArg('duckdb', 'a" OR b NEAR(c)')).toBe('["a","or","b","near","c"]');
-  });
+	test('duckdb survives hostile input that would be FTS5 syntax', () => {
+		// Operators are not escaped, they are tokenized away — there is no grammar to inject into.
+		expect(ftsArg('duckdb', 'a" OR b NEAR(c)')).toBe('["a","or","b","near","c"]');
+	});
 });
 ```
 
@@ -1397,21 +1431,21 @@ Import `assertNever` from wherever `dialect-sql.ts` gets it, or inline the exhau
 In `hybrid.ts`, `seedsCurrent` and `seedsAsOf` both take a `match: string | null` parameter and compute `d === 'postgres' ? query : match`. Change both to take the already-resolved argument. In `seedsCurrent`:
 
 ```ts
-	let ftsIds: string[] = [];
-	if (arg !== null) {
-		const fts = await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
-		ftsIds = fts.rows.map((r) => String(r.id));
-	}
+let ftsIds: string[] = [];
+if (arg !== null) {
+	const fts = await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
+	ftsIds = fts.rows.map((r) => String(r.id));
+}
 ```
 
 and in `seedsAsOf`:
 
 ```ts
-	let ftsIds: string[] = [];
-	if (arg !== null) {
-		const fts = await raw.execute({ sql: ftsSeedAsOf(d), args: [arg, t, t, fetchK] });
-		ftsIds = fts.rows.map((r) => String(r.id));
-	}
+let ftsIds: string[] = [];
+if (arg !== null) {
+	const fts = await raw.execute({ sql: ftsSeedAsOf(d), args: [arg, t, t, fetchK] });
+	ftsIds = fts.rows.map((r) => String(r.id));
+}
 ```
 
 Update their signatures from `(raw, qEmbJson, query, match, fetchK[, t])` to `(raw, qEmbJson, arg, fetchK[, t])` — `query` becomes dead once `arg` carries everything — and update the single caller in `hybridRetrieve` (around `hybrid.ts:386`) to compute `const arg = ftsArg(dialectOf(raw), opts.query);` in place of `const match = sanitizeMatch(opts.query);`.
@@ -1419,13 +1453,13 @@ Update their signatures from `(raw, qEmbJson, query, match, fetchK[, t])` to `(r
 In `graph.ts`, `nodeFilter` becomes:
 
 ```ts
-		if (opts.q !== undefined) {
-			const d = dialectOf(this.raw);
-			const arg = ftsArg(d, opts.q);
-			if (arg === null) return null;
-			where.push(ftsWhere(d, 'nv'));
-			args.push(arg);
-		}
+if (opts.q !== undefined) {
+	const d = dialectOf(this.raw);
+	const arg = ftsArg(d, opts.q);
+	if (arg === null) return null;
+	where.push(ftsWhere(d, 'nv'));
+	args.push(arg);
+}
 ```
 
 and the private `ftsMatch` method is deleted — its only caller was this branch, and `ftsArg` now covers all three dialects. Import `ftsArg` from `./hybrid.ts`; if that reintroduces the import cycle the old comment warned about (hybrid → retrieve → graph), move `ftsArg` and `sanitizeMatch` into `fts/tokenize.ts` instead and re-export both from `hybrid.ts` so the public API is unchanged. Check for the cycle by running the tests — Bun reports it as an undefined import at call time, not at load.
@@ -1496,6 +1530,7 @@ misses exactly the same case. graphx never updates a body in place; it close-and
 both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
 
 **Files:**
+
 - Modify: `packages/core/src/db.ts` (the `FtsIndexOwner` seam)
 - Modify: `packages/core/src/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
 - Modify: `packages/core/src/graph.ts` (mark on mutation, ensure before an FTS read)
@@ -1504,6 +1539,7 @@ both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
 - Test: `packages/core/test/fts-freshness.test.ts`
 
 **Interfaces:**
+
 - Consumes: `rebuildIndex` (Task 5); `managedWriter`'s structural-probe pattern (stage 4, `db.ts`).
 - Produces:
   - `export interface FtsIndexOwner { markFtsStale(): void; ensureFtsFresh(): Promise<void> }`
@@ -1523,58 +1559,58 @@ import { Graph } from '../src/graph.ts';
 const SCHEMA = defineGraphSchema({ nodes: { Doc: z.object({}) }, edges: {} });
 
 async function local() {
-  const c = createDuckClient();
-  await c.executeMultiple(duckdbSchema(4));
-  return c;
+	const c = createDuckClient();
+	await c.executeMultiple(duckdbSchema(4));
+	return c;
 }
 
 describe('full-text freshness on a local duckdb', () => {
-  test('a node written through Graph is findable by full text', async () => {
-    // The whole gap: rebuildIndex only ran inside commit(), and a local client never commits.
-    const c = await local();
-    const g = new Graph(c, SCHEMA);
-    await g.addNode({ type: 'Doc', body: 'mercury venus earth', data: {} });
-    const page = await g.listNodes({ q: 'mercury' });
-    expect(page.rows.length).toBe(1);
-    await c.end();
-  });
+	test('a node written through Graph is findable by full text', async () => {
+		// The whole gap: rebuildIndex only ran inside commit(), and a local client never commits.
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		await g.addNode({ type: 'Doc', body: 'mercury venus earth', data: {} });
+		const page = await g.listNodes({ q: 'mercury' });
+		expect(page.rows.length).toBe(1);
+		await c.end();
+	});
 
-  test('an updated body stops matching its old text and starts matching its new', async () => {
-    const c = await local();
-    const g = new Graph(c, SCHEMA);
-    const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
-    await g.updateNode(n.id, { body: 'griffin' });
-    expect((await g.listNodes({ q: 'griffin' })).rows.length).toBe(1);
-    expect((await g.listNodes({ q: 'sphinx' })).rows.length).toBe(0);
-    await c.end();
-  });
+	test('an updated body stops matching its old text and starts matching its new', async () => {
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		const n = await g.addNode({ type: 'Doc', body: 'sphinx', data: {} });
+		await g.updateNode(n.id, { body: 'griffin' });
+		expect((await g.listNodes({ q: 'griffin' })).rows.length).toBe(1);
+		expect((await g.listNodes({ q: 'sphinx' })).rows.length).toBe(0);
+		await c.end();
+	});
 
-  test('a read-only workload does not rebuild', async () => {
-    // Staleness, not a rebuild per query: the second search must not re-run the build.
-    const c = await local();
-    const g = new Graph(c, SCHEMA);
-    await g.addNode({ type: 'Doc', body: 'mercury', data: {} });
-    await g.listNodes({ q: 'mercury' });
-    const before = (await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n;
-    await c.execute(`DELETE FROM fts_terms`); // sabotage: a rebuild would restore these rows
-    await g.listNodes({ q: 'mercury' });
-    expect((await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n).toBe(0);
-    expect(before).toBeGreaterThan(0);
-    await c.end();
-  });
+	test('a read-only workload does not rebuild', async () => {
+		// Staleness, not a rebuild per query: the second search must not re-run the build.
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		await g.addNode({ type: 'Doc', body: 'mercury', data: {} });
+		await g.listNodes({ q: 'mercury' });
+		const before = (await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n;
+		await c.execute(`DELETE FROM fts_terms`); // sabotage: a rebuild would restore these rows
+		await g.listNodes({ q: 'mercury' });
+		expect((await c.execute('SELECT count(*) AS n FROM fts_terms')).rows[0]?.n).toBe(0);
+		expect(before).toBeGreaterThan(0);
+		await c.end();
+	});
 
-  test('concurrent searches after a write rebuild once, not once each', async () => {
-    const c = await local();
-    const g = new Graph(c, SCHEMA);
-    await g.addNode({ type: 'Doc', body: 'mercury venus', data: {} });
-    const pages = await Promise.all([
-      g.listNodes({ q: 'mercury' }),
-      g.listNodes({ q: 'venus' }),
-      g.listNodes({ q: 'mercury' }),
-    ]);
-    for (const p of pages) expect(p.rows.length).toBe(1);
-    await c.end();
-  });
+	test('concurrent searches after a write rebuild once, not once each', async () => {
+		const c = await local();
+		const g = new Graph(c, SCHEMA);
+		await g.addNode({ type: 'Doc', body: 'mercury venus', data: {} });
+		const pages = await Promise.all([
+			g.listNodes({ q: 'mercury' }),
+			g.listNodes({ q: 'venus' }),
+			g.listNodes({ q: 'mercury' }),
+		]);
+		for (const p of pages) expect(p.rows.length).toBe(1);
+		await c.end();
+	});
 });
 ```
 
@@ -1681,8 +1717,9 @@ In `graph.ts`, resolve the owner once in the constructor beside the existing
 ```ts
 	private readonly fts: FtsIndexOwner | null;
 ```
+
 ```ts
-		this.fts = ftsIndexOwner(raw);
+this.fts = ftsIndexOwner(raw);
 ```
 
 In `touched(...)`, mark whenever the indexed table changed — before the durable-commit branch,
@@ -1703,13 +1740,13 @@ Then ensure freshness before every read that binds a full-text fragment. In `gra
 are `listNodes` and `graphSlice`, guarded on the query being present:
 
 ```ts
-		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
+if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
 ```
 
 In `hybrid.ts`'s `hybridRetrieve`, after computing `arg` and before fetching seeds:
 
 ```ts
-	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
+if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
 ```
 
 In `packages/core/test/retrieval-legs.ts`'s `ftsSeeds`, the same, after the null check.
@@ -1758,10 +1795,12 @@ the same corpus in turn."
 The measurement that says whether stage 5 did what it claimed, and the two artifacts that record it.
 
 **Files:**
+
 - Modify: `docs/DUCKDB_SUPPORT.md`
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
+
 - Consumes: everything above.
 - Produces: an updated parity record and, if the number is zero, a CI job that no longer tolerates failure.
 
@@ -1824,20 +1863,20 @@ that difference is recorded rather than hidden."
 
 **Spec coverage (§10.2, sentence by sentence):**
 
-| Spec requirement | Task |
-|---|---|
-| Own inverted index, not the `fts` extension | 3, 5 |
-| Six-table shape reduced to what we actually query | 4 (`FTS_TABLES`) |
-| BM25 reproduces `match_bm25` | 1, 4 |
-| Built in JavaScript and SQL at commit time | 3, 5 |
-| Golden test against `create_fts_index` | 1 (fixture), 2 (vocabulary + lengths), 4 (scores) |
-| Readers need no extension, no `ATTACH`, no `USE` | 4, 6 |
-| Index covers live and history, keyed on `ver` | 3, 5 |
-| `fts_live`/`fts_history` separate file sets | 5 |
-| `sanitizeMatch`'s FTS5 grammar becomes tokenize | 2, 7 |
-| Disjunctive by default, matching `tsQueryOr`'s OR semantics | 4 (`term IN`/join is a union) |
-| One stemmer on both sides | **Deliberately deferred** — see Scope decisions; v1 has no stemmer, so there are no two sides to disagree |
-| §10.1 brute-force ANN | **Already landed** in Task 10 of the stage 1–4 plan |
+| Spec requirement                                            | Task                                                                                                      |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Own inverted index, not the `fts` extension                 | 3, 5                                                                                                      |
+| Six-table shape reduced to what we actually query           | 4 (`FTS_TABLES`)                                                                                          |
+| BM25 reproduces `match_bm25`                                | 1, 4                                                                                                      |
+| Built in JavaScript and SQL at commit time                  | 3, 5                                                                                                      |
+| Golden test against `create_fts_index`                      | 1 (fixture), 2 (vocabulary + lengths), 4 (scores)                                                         |
+| Readers need no extension, no `ATTACH`, no `USE`            | 4, 6                                                                                                      |
+| Index covers live and history, keyed on `ver`               | 3, 5                                                                                                      |
+| `fts_live`/`fts_history` separate file sets                 | 5                                                                                                         |
+| `sanitizeMatch`'s FTS5 grammar becomes tokenize             | 2, 7                                                                                                      |
+| Disjunctive by default, matching `tsQueryOr`'s OR semantics | 4 (`term IN`/join is a union)                                                                             |
+| One stemmer on both sides                                   | **Deliberately deferred** — see Scope decisions; v1 has no stemmer, so there are no two sides to disagree |
+| §10.1 brute-force ANN                                       | **Already landed** in Task 10 of the stage 1–4 plan                                                       |
 
 **Placeholder scan:** No `TBD`, no "add error handling", no "similar to Task N". Every code step carries the code. Task 8's step 4 is conditional rather than vague — it states the condition and what to do when it does not hold.
 

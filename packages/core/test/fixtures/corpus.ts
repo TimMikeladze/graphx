@@ -128,7 +128,12 @@ export interface GoldenQuery {
 export const GOLDEN: GoldenQuery[] = [
 	{
 		query: 'who designed the analytical engine',
-		relevant: { 'analytical-engine': 2, 'charles-babbage': 2, 'ada-lovelace': 1, 'punched-card': 1 },
+		relevant: {
+			'analytical-engine': 2,
+			'charles-babbage': 2,
+			'ada-lovelace': 1,
+			'punched-card': 1,
+		},
 	},
 	{
 		query: 'wartime codebreaking of intercepted signals',

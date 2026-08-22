@@ -5,7 +5,13 @@ import { hashEmbed } from '../src/retrieve.ts';
 import { type EvalScore, round3, scoreRuns } from './eval-metrics.ts';
 import { GOLDEN, seedCorpus } from './fixtures/corpus.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
-import { annSeedsStable, annWalk, ftsSeeds, fusedSeedsStable, hybridWalk } from './retrieval-legs.ts';
+import {
+	annSeedsStable,
+	annWalk,
+	ftsSeeds,
+	fusedSeedsStable,
+	hybridWalk,
+} from './retrieval-legs.ts';
 
 /**
  * Golden-set scoring and leg ablation.
@@ -86,7 +92,10 @@ test('ablation: every stage of the pipeline earns its place', async () => {
 				{ recall: round3(s.recall), mrr: round3(s.mrr), ndcg: round3(s.ndcg) },
 			]),
 		);
-		writeFileSync(REPORT_PATH, `${JSON.stringify({ driver: TEST_DRIVER, k: K, table }, null, '\t')}\n`);
+		writeFileSync(
+			REPORT_PATH,
+			`${JSON.stringify({ driver: TEST_DRIVER, k: K, table }, null, '\t')}\n`,
+		);
 	}
 
 	// 1. Fusion must rescue the WEAKER leg — that is the claim RRF actually supports, and the

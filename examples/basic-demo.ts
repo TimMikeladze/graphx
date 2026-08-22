@@ -69,7 +69,10 @@ await g.updateNode(gw.id, { data: { firmware: '2.2.0' } });
 
 // 5 — reads
 console.log('getNode   ', await g.getNode(gw.id));
-console.log('neighbors ', (await g.neighbors(gw.id, { rels: ['deployedAt'] })).map((n) => n.data));
+console.log(
+	'neighbors ',
+	(await g.neighbors(gw.id, { rels: ['deployedAt'] })).map((n) => n.data),
+);
 console.log('listNodes ', (await g.listNodes({ type: 'alert' })).nodes.length, 'alerts');
 
 // 6 — pattern match, typed per alias
@@ -79,21 +82,30 @@ const q = await match(schema, db) // NOTE: .select() is async — await it, then
 	.node('a', 'alert')
 	.select('gw', 'a');
 const rows = await q.run();
-console.log('match     ', rows.map((r) => [r.gw.data.name, r.a.data.severity]));
+console.log(
+	'match     ',
+	rows.map((r) => [r.gw.data.name, r.a.data.severity]),
+);
 
 // 7 — retrieval: ANN seeds + time-respecting walk / hybrid vector+FTS with RRF
 console.log('retrieve  ', await retrieve(db, embed, { query: 'overheating', k: 5, maxDepth: 2 }));
 console.log('hybrid    ', await hybridRetrieve(db, embed, { query: 'overheating gw-1', k: 5 }));
 
 // 8 — traversal + algorithms
-console.log('journey   ', await journey(db, { start: gw.id, from: 0, maxDepth: 3, direction: 'forward' }));
+console.log(
+	'journey   ',
+	await journey(db, { start: gw.id, from: 0, maxDepth: 3, direction: 'forward' }),
+);
 console.log('path      ', await shortestPath(db, gw.id, alert.id));
 console.log('pagerank  ', [...(await pagerank(db))]);
 
 // 9 — time travel: every version, and what changed between two instants
 console.log('history   ', (await history(db, gw.id)).length, 'versions');
 const past = await g.listNodes({ type: 'gateway', asOf: t0 });
-console.log('asOf t0   ', past.nodes.map((n) => n.data)); // firmware as it stood before the update
+console.log(
+	'asOf t0   ',
+	past.nodes.map((n) => n.data),
+); // firmware as it stood before the update
 console.log('diff      ', await diff(db, t0, Date.now()));
 
 closeAll();

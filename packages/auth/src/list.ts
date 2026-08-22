@@ -1,5 +1,5 @@
 import { runCheck } from './check.ts';
-import type { DbClient } from '../../core/src/index.ts';
+import type { DbClient } from '@graphx/core';
 import type { AuthModel } from './model.ts';
 
 /** Max candidate objects scanned per page call (governance bound; full §19.2 wiring is P6). */

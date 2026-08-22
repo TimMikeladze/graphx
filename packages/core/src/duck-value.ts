@@ -15,7 +15,9 @@ export function normalizeRow(row: Record<string, unknown>): SqlRow {
 	const out: SqlRow = {};
 	for (const [k, v] of Object.entries(row)) {
 		out[k] =
-			typeof v === 'bigint' && v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+			typeof v === 'bigint' &&
+			v <= BigInt(Number.MAX_SAFE_INTEGER) &&
+			v >= BigInt(Number.MIN_SAFE_INTEGER)
 				? Number(v)
 				: v;
 	}

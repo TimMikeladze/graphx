@@ -30,15 +30,25 @@
   MinIO bucket (`GRAPHX_TEST_S3_ENDPOINT=...`), which is the only configuration that exercises
   the genuine create-if-absent CAS the commit protocol is built on.
 
-| category | count | resolved by |
-|---|---|---|
-| full-text: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, and hybrid retrieval (which fuses a lexical leg) | 0 | stage 5 — done |
-| constraint enforcement is application code, not a DB index — a raw-SQL insert that bypasses `Graph.addNode`/`addEdge` is not rejected (see the parity note below) | 2 | N/A — design, not a gap |
-| `p14-concurrency` — asserted lock contention that does not exist on this backend | 0 | Task 16: gated `sharedWriterOnly`, and the same invariants re-asserted through the write mutex and the manifest CAS in a `duckdbOnly` block |
-| outbox ordering and trigger-runner cursors | 0 | already gated `postgres`-only; none ran or failed under duckdb |
-| auth package read-modify-write idempotency | 0 | `packages/auth` does not import the harness; unaffected by this arm |
-| multi-tenant `getDb` suites needing a bucket per namespace | 0 | already pass — `getDb`'s duckdb factory falls back to one local file per namespace, which is sufficient until stage 4/Task 15 moves it to object storage |
-| libSQL-internals probes | 0 | already skipped by `libsqlOnly` (and the 3 `outbox.test.ts`/1 `cli.test.ts` driver-pinned tests) |
+- **Re-verification, 2026-08-19 (release prep):** all three arms green —
+  libSQL **1206 / 8 skip / 0 fail**, Postgres **1190 / 24 / 0**
+  (`pgvector/pgvector:pg16` container), DuckDB **1184 / 30 / 0**. The two constraint failures
+  above are now **gated rather than failing**: they assert an INDEX-backed rejection of a raw SQL
+  insert, which DuckDB structurally cannot provide, so they run under the new
+  `indexBackedConstraints` harness gate (libSQL + Postgres only) — same reasoning as
+  `sharedWriterOnly`. One further test moved with the data directory: `mcp/test/bin.test.ts` now
+  looks for `mygraph.duckdb` under `.graphx-data/` rather than the process cwd (see
+  `duckDataDir()`).
+
+| category                                                                                                                                                          | count | resolved by                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| full-text: `ftsWhere`/`ftsSeedLive`/`ftsSeedAsOf`, and hybrid retrieval (which fuses a lexical leg)                                                               | 0     | stage 5 — done                                                                                                                                           |
+| constraint enforcement is application code, not a DB index — a raw-SQL insert that bypasses `Graph.addNode`/`addEdge` is not rejected (see the parity note below) | 0     | design, not a gap — gated `indexBackedConstraints` on 2026-08-19 so the arm is green                                                                     |
+| `p14-concurrency` — asserted lock contention that does not exist on this backend                                                                                  | 0     | Task 16: gated `sharedWriterOnly`, and the same invariants re-asserted through the write mutex and the manifest CAS in a `duckdbOnly` block              |
+| outbox ordering and trigger-runner cursors                                                                                                                        | 0     | already gated `postgres`-only; none ran or failed under duckdb                                                                                           |
+| auth package read-modify-write idempotency                                                                                                                        | 0     | `packages/auth` does not import the harness; unaffected by this arm                                                                                      |
+| multi-tenant `getDb` suites needing a bucket per namespace                                                                                                        | 0     | already pass — `getDb`'s duckdb factory falls back to one local file per namespace, which is sufficient until stage 4/Task 15 moves it to object storage |
+| libSQL-internals probes                                                                                                                                           | 0     | already skipped by `libsqlOnly` (and the 3 `outbox.test.ts`/1 `cli.test.ts` driver-pinned tests)                                                         |
 
 Two rows above differ from the plan's expected shape and are explained here:
 
@@ -63,7 +73,7 @@ verified against libSQL and, where applicable, Postgres to confirm no regression
    `node_versions.id`, `edge_versions.id`, `edge_versions.src`, and `edge_versions.dst` had no
    `REFERENCES` clause at all, unlike the libSQL and Postgres schemas — so an edge to a
    non-existent node silently inserted instead of failing (`P11: edge to a non-existent endpoint
-   (FK violation) -> 400, not 500` got a 201). DuckDB enforces `REFERENCES` natively; the fix
+(FK violation) -> 400, not 500` got a 201). DuckDB enforces `REFERENCES` natively; the fix
    just adds the same four clauses libSQL/Postgres already have. This was an oversight in Task
    9, not a documented/intentional gap — nothing in `duckdbSchema`'s own "differences from
    libSQL" doc comment or in `duck-schema.test.ts` claimed FKs were dropped (contrast with the
@@ -71,7 +81,7 @@ verified against libSQL and, where applicable, Postgres to confirm no regression
 2. **`updateNode`'s emb carry-forward threw on DuckDB** (`packages/core/src/graph.ts`). A
    data-only patch (no new `emb`) rebinds the current row's embedding forward via
    `embRebindExpr(dialect)`, which for duckdb is `from_json(?, '["FLOAT"]')` — it expects a JSON
-   *string*. But the value read back from a `FLOAT[]` column comes back as a genuine JS array,
+   _string_. But the value read back from a `FLOAT[]` column comes back as a genuine JS array,
    and binding an array where a string is expected made `@duckdb/node-api` throw "Cannot create
    values of type ANY." Fixed by running the read-back value through `embParam()` (already built
    for exactly this in `duck-value.ts`, previously only used by tests) before binding, mirroring
@@ -87,7 +97,7 @@ verified against libSQL and, where applicable, Postgres to confirm no regression
    (`postgres` vs. everything else) and never learned about the third driver. Added a `duckdb`
    branch using the same `list_cosine_distance(emb, from_json(?, '["FLOAT"]'))` expression
    `dialect-sql.ts` already uses for the real ANN seed queries. Fixed `ANN tie order is NOT
-   stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `ablation`,
+stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `ablation`,
    etc.) still fail, now for the correct reason — `ftsSeedLive` — since they also exercise the
    lexical leg.
 5. **A postgres-only test skip gate silently ran (and broke) under the third driver.**
@@ -127,7 +137,7 @@ This means:
 - **`declareUniqueNodeProp`** only guards writes that go through `Graph`. Raw SQL against
   `node_versions` that bypasses `Graph` is not rejected — libSQL/Postgres reject it via their
   index; DuckDB does not. Pinned by `P14 unique: two (type,prop) pairs that share an
-  underscore-join do NOT collapse to one index`, which inserts via raw SQL specifically to
+underscore-join do NOT collapse to one index`, which inserts via raw SQL specifically to
   probe the DB-level constraint.
 - **`declareSingleValuedRel`** is similarly **inert** unless the schema also marks the rel
   `single: true` (which routes cardinality enforcement through `Graph.addEdge`'s app-level
@@ -145,7 +155,7 @@ DuckDB has neither libSQL's `BEGIN IMMEDIATE` nor Postgres's `SERIALIZABLE`, so 
 database serializes two writers. Two mechanisms stand in:
 
 1. **In-process: a write mutex on the client.** `DuckClient.serializeWrite` chains every
-   mutation and every commit. It lives on the *client*, not on `Graph`, so all `Graph`
+   mutation and every commit. It lives on the _client_, not on `Graph`, so all `Graph`
    instances over one client — including the siblings `withEventSource` mints — share it.
    Without it, two concurrent conditional closes both see `rowsAffected === 1` and both insert
    a successor, leaving two rows with `valid_to = FOREVER`.
@@ -158,12 +168,12 @@ plus that CAS, so committing per mutation is untenable for anything but a single
 throws commits nothing: the local database is a materialization of the last snapshot, so
 `DuckClient.reload()` (discard and re-materialize) is the rollback.
 
-**The limitation:** two writers in *different processes* mutating the *same table* of one
+**The limitation:** two writers in _different processes_ mutating the _same table_ of one
 namespace cannot merge. The loser's rebase would export a local database that never saw the
 winner's rows, silently deleting them. `commitSnapshot` detects exactly that case — a rebase
 where the winner changed a table this commit is also rewriting — and raises
 `SnapshotConflictError` instead. The write does not land, and the caller is told so; reload the
-head snapshot and re-apply. Writers touching *disjoint* tables rebase cleanly and both land.
+head snapshot and re-apply. Writers touching _disjoint_ tables rebase cleanly and both land.
 Retrying inside `isRetryableContention` would not help, because the local mutation has already
 been applied — which is why a lost commit race is deliberately not in that predicate. At the
 HTTP layer, `serve.ts` maps an exhausted contention budget (`…: too much contention`) to **409**
@@ -181,7 +191,7 @@ the snapshot chain is designed around.
 - `packages/core/src/graph.ts` — fixed the `updateNode` emb carry-forward bind for duckdb (bug
   #2).
 - `packages/core/src/admin.ts`, `packages/core/src/serve.ts` — recognize DuckDB's `"Constraint
-  Error:"` message shape (bug #3).
+Error:"` message shape (bug #3).
 - `packages/core/test/retrieval-legs.ts` — duckdb branch for `annScored`'s distance expression
   (bug #4).
 - `packages/cli/test/cli.test.ts` — allowlist the libSQL-only `buildServeApp` skip gate (bug #5).

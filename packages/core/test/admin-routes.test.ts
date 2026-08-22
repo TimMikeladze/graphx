@@ -5,7 +5,13 @@ import { z } from 'zod';
 import type { Principal } from '../src/authz.ts';
 import type { DbClient } from '../src/dialect.ts';
 import { makeTestDb } from './harness.ts';
-import { addMembership, createProject, createTenant, createUser, initControl } from '../src/control-plane.ts';
+import {
+	addMembership,
+	createProject,
+	createTenant,
+	createUser,
+	initControl,
+} from '../src/control-plane.ts';
 import { evict } from '../src/db.ts';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
 import { createApp } from '../src/serve.ts';
@@ -72,7 +78,9 @@ test('GET /nodes lists nodes and filters by type', async () => {
 	const s = await setup();
 	await addNode(s, { type: 'person', data: { name: 'p1' } });
 	const d = await addNode(s, { type: 'device', data: { type: 'router' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?type=device`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?type=device`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	const body = await res.json();
 	expect(body.nodes.map((n: { id: string }) => n.id)).toEqual([d]);
@@ -101,7 +109,9 @@ test('GET /graph returns a {nodes,links,truncated} slice', async () => {
 test('GET /nodes/:id/history returns the version trail', async () => {
 	const s = await setup();
 	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	const body = await res.json();
 	expect(body.versions.length).toBe(1);
@@ -119,7 +129,9 @@ test('GET /nodes/:id/content returns the live body + provenance', async () => {
 		content_type: 'text/markdown',
 		content_hash: 'abc123',
 	});
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	expect(await res.json()).toEqual({
 		body: '# Ada\n\nNotes.',
@@ -133,7 +145,9 @@ test('GET /nodes/:id/content returns the live body + provenance', async () => {
 test('GET /nodes/:id/content nulls the content columns when the node has none', async () => {
 	const s = await setup();
 	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(200);
 	expect(await res.json()).toEqual({ body: null, uri: null, contentType: null, contentHash: null });
 	cleanup(s);
@@ -141,7 +155,9 @@ test('GET /nodes/:id/content nulls the content columns when the node has none', 
 
 test('GET /nodes/:id/content for an unknown id -> 404', async () => {
 	const s = await setup();
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}/content`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}/content`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(404);
 	cleanup(s);
 });
@@ -164,7 +180,9 @@ test('PATCH /nodes/:id {body} appends a version and leaves type/data intact', as
 
 	// Bitemporal: the old version is closed, the successor is live — the History tab's trail.
 	const versions = (
-		await (await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) })).json()
+		await (
+			await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) })
+		).json()
 	).versions;
 	expect(versions.length).toBe(2);
 	expect(versions.map((v: { body: string }) => v.body)).toEqual(['old', '# new']);
@@ -187,7 +205,9 @@ test('PATCH /nodes/:id as a viewer -> 403', async () => {
 
 test('GET /nodes with a malformed cursor -> 400', async () => {
 	const s = await setup();
-	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, { headers: hdr(s) });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, {
+		headers: hdr(s),
+	});
 	expect(res.status).toBe(400);
 	cleanup(s);
 });

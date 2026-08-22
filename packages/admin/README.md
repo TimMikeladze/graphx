@@ -28,9 +28,9 @@ For cross-tenant browsing, the server's `authenticate` should return an **operat
 
 ```ts
 authenticate: (c) =>
-  c.req.header("authorization") === `Bearer ${process.env.ADMIN_TOKEN}`
-    ? { userId: "operator", tenantId: c.req.param("tenant"), operator: true }
-    : verifyNormalPrincipal(c)
+	c.req.header('authorization') === `Bearer ${process.env.ADMIN_TOKEN}`
+		? { userId: 'operator', tenantId: c.req.param('tenant'), operator: true }
+		: verifyNormalPrincipal(c);
 ```
 
 and `createAdminApp`'s `authenticate` should accept the same token.

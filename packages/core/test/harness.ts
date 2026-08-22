@@ -1,4 +1,5 @@
-import { rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { test } from 'bun:test';
@@ -6,6 +7,7 @@ import { ulid } from 'ulidx';
 import { type DbClient, type Dialect, dialectOf } from '../src/dialect.ts';
 import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../src/dialect-sql.ts';
 import { createDuckClient, type DuckClient } from '../src/duck.ts';
+import { duckDataDir } from '../src/duck-pool.ts';
 import { createPgClient, type PgClient } from '../src/pg.ts';
 
 /**
@@ -38,6 +40,94 @@ export interface MakeTestDbOpts {
 	file?: boolean;
 }
 
+/**
+ * Directory holding every scratch database this process creates.
+ *
+ * These names used to be bare relative paths, resolved by the driver against the process
+ * CWD — so a suite run from the repo root left its databases IN the repo root, and each
+ * git worktree grew its own pile. Per-test `teardown()` removes them on the happy path,
+ * but a thrown assertion, a `bun test` cancelled with Ctrl-C, or a crashed child skips it
+ * entirely; the files are gitignored, so the strand grew silently to thousands of files.
+ *
+ * One per-process directory makes the whole strand removable at once, which the exit hook
+ * below does even when individual teardowns were skipped.
+ */
+const SCRATCH_DIR = join(duckDataDir(), `run_${process.pid}`);
+
+/** Absolute path for a scratch database file, creating {@link SCRATCH_DIR} on first use. */
+function scratchPath(name: string): string {
+	mkdirSync(SCRATCH_DIR, { recursive: true });
+	return join(SCRATCH_DIR, name);
+}
+
+/**
+ * Last-resort sweep: drop this run's whole scratch directory when the process ends,
+ * regardless of how individual tests finished. `exit` fires for normal completion and for
+ * a failing suite; the signal handlers cover Ctrl-C and a killed runner, which is how the
+ * largest strands accumulated. Best-effort — a failure here must not fail the suite.
+ */
+let sweptScratch = false;
+function sweepScratch(): void {
+	if (sweptScratch) return;
+	sweptScratch = true;
+	try {
+		rmSync(SCRATCH_DIR, { force: true, recursive: true });
+	} catch {
+		// Nothing useful to do at exit; the start-of-run sweep below is the real guarantee.
+	}
+}
+process.once('exit', sweepScratch);
+// Exit code is the shell's 128 + signal number, so a CI runner that reads the code still
+// sees which signal ended the suite rather than a flat 130 for all three.
+for (const [sig, num] of [
+	['SIGINT', 2],
+	['SIGTERM', 15],
+	['SIGHUP', 1],
+] as const) {
+	process.once(sig, () => {
+		sweepScratch();
+		process.exit(128 + num);
+	});
+}
+
+/**
+ * Sweep scratch directories left by runs that are no longer alive.
+ *
+ * The exit hook above is best-effort: a `SIGKILL`, an OOM, or a runner that terminates
+ * without draining Node's exit handlers all skip it, and those are exactly the runs that
+ * leave the biggest strands behind. Reclaiming at STARTUP instead of relying on shutdown
+ * makes the cleanup self-healing — a crashed run's files survive only until the next one.
+ *
+ * Liveness is probed with `kill(pid, 0)`, which signals nothing and merely tests whether
+ * the process exists; a directory whose PID is still running belongs to a CONCURRENT run
+ * and must be left alone.
+ */
+function sweepStaleScratchDirs(): void {
+	const root = duckDataDir();
+	let entries: string[];
+	try {
+		entries = readdirSync(root);
+	} catch {
+		return; // No data dir yet — nothing to reclaim.
+	}
+	for (const name of entries) {
+		const pid = Number(name.startsWith('run_') ? name.slice(4) : Number.NaN);
+		if (!Number.isInteger(pid) || pid === process.pid) continue;
+		try {
+			process.kill(pid, 0);
+			continue; // Still running: a concurrent suite owns this directory.
+		} catch {
+			// ESRCH — the owner is gone, so its scratch is unreachable and safe to remove.
+		}
+		try {
+			rmSync(join(root, name), { force: true, recursive: true });
+		} catch {
+			// Another runner may be reclaiming the same directory; losing the race is fine.
+		}
+	}
+}
+sweepStaleScratchDirs();
+
 /** Selected backend. `libsql` (default) preserves current behavior; others opt in via env. */
 const DRIVER = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') as Dialect;
 
@@ -64,6 +154,19 @@ export const libsqlOnly = DRIVER === 'libsql' ? test : test.skip;
  * asserted through those mechanisms instead — see the duckdb block in p14-concurrency.
  */
 export const sharedWriterOnly = DRIVER === 'duckdb' ? test.skip : test;
+
+/**
+ * Gate for probes that assert a constraint is enforced by a DATABASE INDEX — a raw INSERT that
+ * bypasses `Graph.addNode`/`addEdge` must still be rejected.
+ *
+ * libSQL and Postgres back `declareUniqueNodeProp` / `declareSingleValuedRel` with a partial
+ * UNIQUE index, so the engine rejects the raw write. DuckDB has no partial unique index at all;
+ * `duck-constraints.ts` enforces the same rules in application code on the `Graph` write path
+ * instead. That is a deliberate difference, not a gap — the user-facing contract (a duplicate
+ * through the SDK is rejected) is covered by cross-backend tests. Only the raw-SQL backstop is
+ * absent, so only these probes are gated.
+ */
+export const indexBackedConstraints = DRIVER === 'duckdb' ? test.skip : test;
 
 /** Runs only under DuckDB — the object-storage writer path. */
 export const duckdbOnly = DRIVER === 'duckdb' ? test : test.skip;
@@ -130,7 +233,7 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 		// A temp file rather than :memory:, so `sibling()` can open a second connection to
 		// the same database — the concurrency suite needs two genuine connections, and an
 		// in-memory DuckDB is private to its instance.
-		const path = `test_${ulid()}.duckdb`;
+		const path = scratchPath(`test_${ulid()}.duckdb`);
 		const main = createDuckClient({ path });
 		const siblings: DuckClient[] = [];
 		return {
@@ -143,7 +246,10 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 			teardown: async () => {
 				for (const s of siblings) await s.end().catch(() => {});
 				await main.end().catch(() => {});
+				// `.tmp` is a DIRECTORY (DuckDB's spill for this database), so it needs
+				// `recursive` — a plain unlink leaves gigabytes behind.
 				for (const sfx of ['', '.wal']) rmSync(`${path}${sfx}`, { force: true });
+				rmSync(`${path}.tmp`, { force: true, recursive: true });
 			},
 		};
 	}
@@ -181,7 +287,7 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 		};
 	}
 	if (opts.file) {
-		const path = `test_${ulid()}.db`;
+		const path = scratchPath(`test_${ulid()}.db`);
 		const client = createClient({ url: `file:${path}` });
 		const siblings: DbClient[] = [];
 		return {

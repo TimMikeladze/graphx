@@ -9,14 +9,23 @@ async function controlWithProject() {
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'Acme' });
 	const ns = `ns_${ulid().toLowerCase()}`;
-	const project = await createProject(control, { tenantId: tenant, name: 'Alpha', dbNamespace: ns });
+	const project = await createProject(control, {
+		tenantId: tenant,
+		name: 'Alpha',
+		dbNamespace: ns,
+	});
 	return { control, tenant, project, ns };
 }
 
 test('operator principal bypasses membership check and resolves the namespace', async () => {
 	const { control, tenant, project, ns } = await controlWithProject();
 	// No membership row exists for this operator user at all.
-	const res = await authorize(control, { userId: 'operator', tenantId: tenant, operator: true }, project, 'write');
+	const res = await authorize(
+		control,
+		{ userId: 'operator', tenantId: tenant, operator: true },
+		project,
+		'write',
+	);
 	expect(res.dbNamespace).toBe(ns);
 	control.close();
 });
@@ -24,7 +33,12 @@ test('operator principal bypasses membership check and resolves the namespace', 
 test('operator still cannot reach a project outside the principal tenant (404, no leak)', async () => {
 	const { control, project } = await controlWithProject();
 	await expect(
-		authorize(control, { userId: 'operator', tenantId: 'some-other-tenant', operator: true }, project, 'read'),
+		authorize(
+			control,
+			{ userId: 'operator', tenantId: 'some-other-tenant', operator: true },
+			project,
+			'read',
+		),
 	).rejects.toBeInstanceOf(AuthzError);
 	control.close();
 });

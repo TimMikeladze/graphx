@@ -11,7 +11,13 @@ import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect
 import { ftsArg } from './hybrid.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
-import { FOREVER, type FtsIndexOwner, ftsIndexOwner, type ManagedWriter, managedWriter } from './db.ts';
+import {
+	FOREVER,
+	type FtsIndexOwner,
+	ftsIndexOwner,
+	type ManagedWriter,
+	managedWriter,
+} from './db.ts';
 import { assertUniqueProps } from './duck-constraints.ts';
 import { embParam } from './duck-value.ts';
 import {

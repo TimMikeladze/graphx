@@ -1,59 +1,59 @@
-import { shortId } from "./format"
-import { colorForType, KIND_PALETTE, type LabelSource } from "./graph-style"
-import type { GraphSlice } from "./types"
+import { shortId } from './format';
+import { colorForType, KIND_PALETTE, type LabelSource } from './graph-style';
+import type { GraphSlice } from './types';
 
 /** A Cosmograph point (node) with a precomputed color + selection flag. */
 export interface CosmoNode {
-  id: string
-  /** Sequential 0-based row index — Cosmograph v2 requires `pointIndexBy`. */
-  index: number
-  type: string
-  color: string
-  selected: boolean
-  /**
-   * The caption columns `pointLabelBy` can be pointed at. All four are materialized up front
-   * because switching the label source must not rebuild the graph — changing `pointLabelBy` to
-   * another existing column is a cheap label-only update, whereas changing the point rows is a
-   * full duckdb re-upload.
-   */
-  /** The node's name/title, falling back to its type when its data carries neither. */
-  label: string
-  /** Abbreviated id, for when the name is ambiguous and the identity is what matters. */
-  labelId: string
-  /** Name and type together. */
-  labelBoth: string
-  /**
-   * Avatar/thumbnail URL for `pointImageUrlBy`, or `""` when the node has none (Cosmograph
-   * loads nothing for an empty cell, leaving the colored dot).
-   */
-  image: string
-  // Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
-  [key: string]: unknown
+	id: string;
+	/** Sequential 0-based row index — Cosmograph v2 requires `pointIndexBy`. */
+	index: number;
+	type: string;
+	color: string;
+	selected: boolean;
+	/**
+	 * The caption columns `pointLabelBy` can be pointed at. All four are materialized up front
+	 * because switching the label source must not rebuild the graph — changing `pointLabelBy` to
+	 * another existing column is a cheap label-only update, whereas changing the point rows is a
+	 * full duckdb re-upload.
+	 */
+	/** The node's name/title, falling back to its type when its data carries neither. */
+	label: string;
+	/** Abbreviated id, for when the name is ambiguous and the identity is what matters. */
+	labelId: string;
+	/** Name and type together. */
+	labelBoth: string;
+	/**
+	 * Avatar/thumbnail URL for `pointImageUrlBy`, or `""` when the node has none (Cosmograph
+	 * loads nothing for an empty cell, leaving the colored dot).
+	 */
+	image: string;
+	// Cosmograph's `CosmographInputData` row type is `Record<string, unknown>`.
+	[key: string]: unknown;
 }
 
 /** A Cosmograph link. Cosmograph keys edges on `source`/`target` point ids + numeric indices. */
 export interface CosmoLink {
-  source: string
-  target: string
-  /** Endpoint row indices — Cosmograph v2 requires `linkSourceIndexBy`/`linkTargetIndexBy`. */
-  sourceIndex: number
-  targetIndex: number
-  rel: string
-  weight: number
-  [key: string]: unknown
+	source: string;
+	target: string;
+	/** Endpoint row indices — Cosmograph v2 requires `linkSourceIndexBy`/`linkTargetIndexBy`. */
+	sourceIndex: number;
+	targetIndex: number;
+	rel: string;
+	weight: number;
+	[key: string]: unknown;
 }
 
 /** The shape `<Cosmograph points={..} links={..} />` consumes. */
 export interface CosmoData {
-  nodes: CosmoNode[]
-  links: CosmoLink[]
+	nodes: CosmoNode[];
+	links: CosmoLink[];
 }
 
 /** Options for {@link toCosmograph}. */
 export interface ToCosmographOpts {
-  /** The currently selected/inspected node id (flagged on its point). */
-  selectedId?: string
-  palette?: readonly string[]
+	/** The currently selected/inspected node id (flagged on its point). */
+	selectedId?: string;
+	palette?: readonly string[];
 }
 
 /**
@@ -67,79 +67,79 @@ export interface ToCosmographOpts {
  * renderer throws on unresolved endpoints, so we stay defensive).
  */
 export function toCosmograph(slice: GraphSlice, opts: ToCosmographOpts = {}): CosmoData {
-  const palette = opts.palette ?? KIND_PALETTE
-  const indexById = new Map<string, number>()
+	const palette = opts.palette ?? KIND_PALETTE;
+	const indexById = new Map<string, number>();
 
-  const nodes: CosmoNode[] = slice.nodes.map((n, index) => {
-    indexById.set(n.id, index)
-    // Cosmograph skips points whose label column is empty, so fall back to the type rather
-    // than leave an untyped hole in the canvas.
-    const label = n.label ?? n.type
-    return {
-      id: n.id,
-      index,
-      type: n.type,
-      color: colorForType(n.type, palette),
-      selected: n.id === opts.selectedId,
-      label,
-      labelId: shortId(n.id, 6, 4),
-      labelBoth: `${label} · ${n.type}`,
-      image: n.image ?? "",
-    }
-  })
+	const nodes: CosmoNode[] = slice.nodes.map((n, index) => {
+		indexById.set(n.id, index);
+		// Cosmograph skips points whose label column is empty, so fall back to the type rather
+		// than leave an untyped hole in the canvas.
+		const label = n.label ?? n.type;
+		return {
+			id: n.id,
+			index,
+			type: n.type,
+			color: colorForType(n.type, palette),
+			selected: n.id === opts.selectedId,
+			label,
+			labelId: shortId(n.id, 6, 4),
+			labelBoth: `${label} · ${n.type}`,
+			image: n.image ?? '',
+		};
+	});
 
-  const links: CosmoLink[] = []
-  for (const l of slice.links) {
-    const sourceIndex = indexById.get(l.source)
-    const targetIndex = indexById.get(l.target)
-    if (sourceIndex === undefined || targetIndex === undefined) continue
-    links.push({
-      source: l.source,
-      target: l.target,
-      sourceIndex,
-      targetIndex,
-      rel: l.rel,
-      weight: l.weight,
-    })
-  }
+	const links: CosmoLink[] = [];
+	for (const l of slice.links) {
+		const sourceIndex = indexById.get(l.source);
+		const targetIndex = indexById.get(l.target);
+		if (sourceIndex === undefined || targetIndex === undefined) continue;
+		links.push({
+			source: l.source,
+			target: l.target,
+			sourceIndex,
+			targetIndex,
+			rel: l.rel,
+			weight: l.weight,
+		});
+	}
 
-  return { nodes, links }
+	return { nodes, links };
 }
 
 /** The {@link CosmoNode} column each source reads, for Cosmograph's `pointLabelBy`. */
-export const LABEL_COLUMN: Record<Exclude<LabelSource, "off">, string> = {
-  name: "label",
-  type: "type",
-  id: "labelId",
-  both: "labelBoth",
-}
+export const LABEL_COLUMN: Record<Exclude<LabelSource, 'off'>, string> = {
+	name: 'label',
+	type: 'type',
+	id: 'labelId',
+	both: 'labelBoth',
+};
 
 /** The {@link CosmoNode} column holding the avatar URL, for Cosmograph's `pointImageUrlBy`. */
-export const IMAGE_COLUMN = "image"
+export const IMAGE_COLUMN = 'image';
 
 /** True when any node in the slice has a picture — the toggle is pointless otherwise. */
 export function sliceHasImages(slice: GraphSlice): boolean {
-  return slice.nodes.some((n) => n.image)
+	return slice.nodes.some((n) => n.image);
 }
 
 /** True when any point carries a picture. The {@link sliceHasImages} equivalent after adapting. */
 export function dataHasImages(data: CosmoData): boolean {
-  return data.nodes.some((n) => n.image !== "")
+	return data.nodes.some((n) => n.image !== '');
 }
 
 /** Row-wise equality for the flat records Cosmograph consumes. */
 function sameRows(a: readonly Record<string, unknown>[], b: readonly Record<string, unknown>[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i]
-    const y = b[i]
-    if (!x || !y) return false
-    const keys = Object.keys(x)
-    if (keys.length !== Object.keys(y).length) return false
-    for (const k of keys) if (x[k] !== y[k]) return false
-  }
-  return true
+	if (a === b) return true;
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		const x = a[i];
+		const y = b[i];
+		if (!x || !y) return false;
+		const keys = Object.keys(x);
+		if (keys.length !== Object.keys(y).length) return false;
+		for (const k of keys) if (x[k] !== y[k]) return false;
+	}
+	return true;
 }
 
 /**
@@ -155,5 +155,5 @@ function sameRows(a: readonly Record<string, unknown>[], b: readonly Record<stri
  * equality the library performs, at the same cost.
  */
 export function sameGraph(a: CosmoData, b: CosmoData): boolean {
-  return sameRows(a.nodes, b.nodes) && sameRows(a.links, b.links)
+	return sameRows(a.nodes, b.nodes) && sameRows(a.links, b.links);
 }

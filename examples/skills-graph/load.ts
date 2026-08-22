@@ -251,7 +251,9 @@ export function buildNodes(db: Database): NodePlan {
 		if (seen === undefined || at < seen) firstSeen.set(code, at);
 	};
 	for (const row of db
-		.query('SELECT from_occupation_external_id, to_occupation_external_id, source_id, timestamp_info FROM career_transitions')
+		.query(
+			'SELECT from_occupation_external_id, to_occupation_external_id, source_id, timestamp_info FROM career_transitions',
+		)
 		.iterate() as IterableIterator<TransitionRow>) {
 		const at = arrivalQuarter(row.timestamp_info) ?? timeOf(row.source_id);
 		noteCode(row.from_occupation_external_id, at);
@@ -455,7 +457,8 @@ export async function streamEdges(
 		}
 
 		// ESCO-Code ⇄ ESCO-Label is not an edge — it is the label on the `occupation_code` node.
-		if (row.system_a !== 'ESCO-Code') skip(`unmodelled crosswalk ${row.system_a} → ${row.system_b}`);
+		if (row.system_a !== 'ESCO-Code')
+			skip(`unmodelled crosswalk ${row.system_a} → ${row.system_b}`);
 	}
 
 	// --- career transitions --------------------------------------------------------------------------

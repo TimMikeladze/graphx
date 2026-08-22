@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineGraphSchema, type EdgeDef, type GraphSchema, type ZObj } from '../../core/src/index.ts';
+import { defineGraphSchema, type EdgeDef, type GraphSchema, type ZObj } from '@graphx/core';
 
 /**
  * A userset rewrite expression.

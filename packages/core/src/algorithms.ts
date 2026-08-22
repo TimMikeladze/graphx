@@ -182,7 +182,11 @@ export function buildCSR(raw: DbClient, opts: { rels?: string[] } = {}): Promise
  * at/after `FOREVER` means "now" and is routed to the live path — never bound into
  * a `:t < valid_to` predicate (which is false for every live row, D3).
  */
-export function snapshotCSR(raw: DbClient, t: number, opts: { rels?: string[] } = {}): Promise<CSR> {
+export function snapshotCSR(
+	raw: DbClient,
+	t: number,
+	opts: { rels?: string[] } = {},
+): Promise<CSR> {
 	const rels = opts.rels?.length ? opts.rels : null;
 	return loadCSR(raw, t >= FOREVER ? null : t, rels);
 }
@@ -405,7 +409,11 @@ export async function shortestPath(
 // ---------------------------------------------------------------------------
 
 /** UPSERT one metric column for many ids into `node_analytics` (chunked batches). */
-async function persist(raw: DbClient, metric: Metric, rows: Array<[string, number]>): Promise<void> {
+async function persist(
+	raw: DbClient,
+	metric: Metric,
+	rows: Array<[string, number]>,
+): Promise<void> {
 	if (rows.length === 0) return;
 	const now = Date.now();
 	const stmts = rows.map(([id, val]) => ({
@@ -458,7 +466,10 @@ function buildUndirected(csr: CSR): { uOff: Int32Array; uTar: Int32Array } {
  * redistributed uniformly so the vector stays a distribution (sums to ~1). Results
  * are persisted to `node_analytics.pagerank` and returned as `id → score`.
  */
-export async function pagerank(raw: DbClient, opts: PageRankOpts = {}): Promise<Map<string, number>> {
+export async function pagerank(
+	raw: DbClient,
+	opts: PageRankOpts = {},
+): Promise<Map<string, number>> {
 	const damping = opts.damping ?? 0.85;
 	const tol = opts.tol ?? 1e-9;
 	const maxIter = opts.maxIter ?? 100;
@@ -512,7 +523,10 @@ export async function pagerank(raw: DbClient, opts: PageRankOpts = {}): Promise<
  * remapped to dense community ids in ascending-node order. Persisted to
  * `node_analytics.community`.
  */
-export async function community(raw: DbClient, opts: CommunityOpts = {}): Promise<Map<string, number>> {
+export async function community(
+	raw: DbClient,
+	opts: CommunityOpts = {},
+): Promise<Map<string, number>> {
 	const maxIter = opts.maxIter ?? 20;
 	const csr = await buildCSR(raw);
 	const { n, idxToId } = csr;
@@ -591,7 +605,11 @@ export async function centrality(
 	}
 	for (let u = 0; u < n; u++) {
 		const val =
-			kind === 'in' ? (inn[u] ?? 0) : kind === 'out' ? (out[u] ?? 0) : (out[u] ?? 0) + (inn[u] ?? 0);
+			kind === 'in'
+				? (inn[u] ?? 0)
+				: kind === 'out'
+					? (out[u] ?? 0)
+					: (out[u] ?? 0) + (inn[u] ?? 0);
 		result.set(idxToId[u] ?? '', val);
 	}
 	await persist(raw, 'degree', [...result]);

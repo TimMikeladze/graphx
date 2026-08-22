@@ -75,7 +75,11 @@ test('emits one node per named row, and skips the unnamed ones', () => {
 });
 
 test('only emits domains a deity claims', () => {
-	expect(ofType(plan, 'domain').map((n) => n.data.label).sort()).toEqual(['marriage', 'sky']);
+	expect(
+		ofType(plan, 'domain')
+			.map((n) => n.data.label)
+			.sort(),
+	).toEqual(['marriage', 'sky']);
 	expect(plan.skipped['domain no deity claims']).toBe(1);
 });
 

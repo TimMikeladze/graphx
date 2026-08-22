@@ -36,7 +36,10 @@ test('iot-fleet UI renders the seeded fleet through an in-process app (appFetch 
 		db,
 		seed: async (graph) => {
 			const site = await graph.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
-			const gw = await graph.addNode({ type: 'gateway', data: { name: 'gw-1', firmware: '2.1.0' } });
+			const gw = await graph.addNode({
+				type: 'gateway',
+				data: { name: 'gw-1', firmware: '2.1.0' },
+			});
 			await graph.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 		},
 	});
@@ -46,7 +49,9 @@ test('iot-fleet UI renders the seeded fleet through an in-process app (appFetch 
 		return createElement(
 			'ul',
 			null,
-			q.data?.pages.flatMap((p) => p.nodes).map((gw) => createElement('li', { key: gw.id }, gw.data.name)),
+			q.data?.pages
+				.flatMap((p) => p.nodes)
+				.map((gw) => createElement('li', { key: gw.id }, gw.data.name)),
 		);
 	}
 
@@ -55,7 +60,11 @@ test('iot-fleet UI renders the seeded fleet through an in-process app (appFetch 
 		createElement(
 			QueryClientProvider,
 			{ client: qc },
-			createElement(GraphProvider, { bootstrap: '/demo', fetch: appFetch(app) }, createElement(Gateways)),
+			createElement(
+				GraphProvider,
+				{ bootstrap: '/demo', fetch: appFetch(app) },
+				createElement(Gateways),
+			),
 		),
 	);
 

@@ -25,12 +25,14 @@ const { app } = await createApp({
 	cors: true,
 	openapi: { title: 'iot-fleet', servers: [{ url: `http://localhost:${PORT}` }] },
 	seed: async (g) => {
-
 		const usEast = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
 		const euWest = await g.addNode({ type: 'site', data: { name: 'eu-west-1', region: 'eu' } });
 
 		const gw1 = await g.addNode({ type: 'gateway', data: { name: 'gw-1', firmware: '2.1.0' } });
-		const gw2 = await g.addNode({ type: 'gateway', data: { name: 'gw-2', firmware: '2.0.5', online: false } });
+		const gw2 = await g.addNode({
+			type: 'gateway',
+			data: { name: 'gw-2', firmware: '2.0.5', online: false },
+		});
 
 		const temp1 = await g.addNode({
 			type: 'device',
@@ -71,4 +73,6 @@ const { app } = await createApp({
 });
 
 Bun.serve({ port: PORT, fetch: app.fetch });
-console.log(`[iot-fleet] http://localhost:${PORT}  (GET /demo for ids, GET /openapi.json for the contract)`);
+console.log(
+	`[iot-fleet] http://localhost:${PORT}  (GET /demo for ids, GET /openapi.json for the contract)`,
+);

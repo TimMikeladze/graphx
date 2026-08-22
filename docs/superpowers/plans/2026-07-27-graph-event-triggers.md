@@ -26,8 +26,9 @@
   ```
 
   A `pgvector/pgvector:pg16` container named `graphx-pg-triggers` is already running on port 5433 with the `vector` extension created. The env var is `GRAPHX_TEST_PG_URL` (the harness's), not `GRAPHX_PG_URL` (the CLI runtime's). Use `test.skipIf(TEST_DRIVER === 'postgres')` only where a probe is genuinely libSQL-specific, and say why in a comment.
+
 - **Formatting:** tabs for indentation, single quotes, semicolons. Run `bun run lint` (oxlint) and `bun run type-check` before every commit; a pre-commit hook runs both and will reject a failing commit.
-- **Doc comments:** this codebase documents *why*, not *what*, and every exported symbol carries a TSDoc comment. New modules open with a header comment explaining the module's role. Match that density.
+- **Doc comments:** this codebase documents _why_, not _what_, and every exported symbol carries a TSDoc comment. New modules open with a header comment explaining the module's role. Match that density.
 - **Commit convention:** `feat(triggers): …`, `test(triggers): …`, `docs(triggers): …`.
 - **Test timeout:** the suite runs with `--timeout 30000`. Keep backoff values tiny in tests (`backoffMs: 1`) so retry tests finish fast.
 
@@ -57,6 +58,7 @@
 Adds the `source` column and the `Graph` plumbing that writes it. Nothing consumes it yet; this task exists on its own because a reviewer can judge the schema change and the `Graph` API independently of the runner.
 
 **Files:**
+
 - Modify: `packages/core/src/schema.ts` (the `graph_outbox` DDL, and `init()`)
 - Modify: `packages/core/src/dialect-sql.ts` (the Postgres `graph_outbox` DDL)
 - Modify: `packages/core/src/events.ts`
@@ -65,6 +67,7 @@ Adds the `source` column and the `Graph` plumbing that writes it. Nothing consum
 - Test: `packages/core/test/outbox.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `GraphEvent.source?: string`; `GraphEventOptions.source?: string`; `Graph.withEventSource(source: string): Graph<S>`.
 
@@ -143,14 +146,14 @@ ALTER TABLE graph_outbox ADD COLUMN IF NOT EXISTS source text;
 libSQL has no `ADD COLUMN IF NOT EXISTS`, so use the existing guard. In `init()` in `schema.ts`, after `await client.executeMultiple(schema(dim));`:
 
 ```ts
-	// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
-	// add it, and without it every outbox INSERT fails on the unknown column.
-	await ensureColumn(
-		client,
-		'graph_outbox',
-		'source',
-		'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
-	);
+// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
+// add it, and without it every outbox INSERT fails on the unknown column.
+await ensureColumn(
+	client,
+	'graph_outbox',
+	'source',
+	'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
+);
 ```
 
 - [ ] **Step 4: Thread `source` through events, Graph, and the tail**
@@ -226,21 +229,21 @@ Stamp the in-proc emit:
 Bind it in `outboxStmt`:
 
 ```ts
-		return {
-			sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts, source)
+return {
+	sql: `INSERT INTO graph_outbox (op, entity, id, label, src, dst, shape, ts, source)
 				VALUES (?,?,?,?,?,?,?,?,?)`,
-			args: [
-				event.op,
-				event.entity,
-				event.id,
-				event.label,
-				event.src ?? null,
-				event.dst ?? null,
-				event.shape,
-				event.ts,
-				this.eventSource ?? null,
-			],
-		};
+	args: [
+		event.op,
+		event.entity,
+		event.id,
+		event.label,
+		event.src ?? null,
+		event.dst ?? null,
+		event.shape,
+		event.ts,
+		this.eventSource ?? null,
+	],
+};
 ```
 
 In `packages/core/src/temporal.ts`, add `source` to `rowToEvent`:
@@ -252,7 +255,7 @@ In `packages/core/src/temporal.ts`, add `source` to `rowToEvent`:
 and to the `outboxTail` SELECT list:
 
 ```ts
-	const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts, source FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
+const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts, source FROM graph_outbox${where} ORDER BY seq LIMIT ?`;
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -283,12 +286,14 @@ git commit -m "feat(events): provenance column on the outbox, Graph.withEventSou
 Creates the two new tables and the read side of the dead-letter API. Independently reviewable: the tables and their query shape are judged before any runner writes to them.
 
 **Files:**
+
 - Modify: `packages/core/src/schema.ts`
 - Modify: `packages/core/src/dialect-sql.ts`
 - Create: `packages/core/src/triggers.ts`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `GraphEvent` from Task 1.
 - Produces: `DeadLetter`, `DeadLetterOpts`, `deadLetters(raw, opts?)`, `pruneDeadLetters(raw, beforeMs)`.
 
@@ -506,10 +511,7 @@ export interface DeadLetterOpts {
 }
 
 /** Read dead letters newest-first — the operator's window into what failed and why. */
-export async function deadLetters(
-	raw: DbClient,
-	opts: DeadLetterOpts = {},
-): Promise<DeadLetter[]> {
+export async function deadLetters(raw: DbClient, opts: DeadLetterOpts = {}): Promise<DeadLetter[]> {
 	const conds: string[] = [];
 	const args: SqlValue[] = [];
 	if (opts.subscription !== undefined) {
@@ -578,10 +580,12 @@ git commit -m "feat(triggers): cursor and dead-letter tables, dead-letter inspec
 A pure function over `GraphEvent`. Separately reviewable because the default-`source` behaviour is the loop guard and deserves its own gate.
 
 **Files:**
+
 - Modify: `packages/core/src/triggers.ts`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `GraphEvent`.
 - Produces: `TriggerMatch`, `matchesTrigger(event: GraphEvent, match: TriggerMatch): boolean`.
 
@@ -712,11 +716,13 @@ git commit -m "feat(triggers): match predicate with a default cascade guard"
 `runOnce()` with cursor seeding, per-event checkpointing, retries, and dead-lettering. Serial only; concurrency lands in Task 5.
 
 **Files:**
+
 - Modify: `packages/core/src/triggers.ts`
 - Modify: `docs/superpowers/specs/2026-07-27-graph-event-triggers-design.md`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `matchesTrigger`, `TriggerMatch`, `deadLetters`, `Graph.withEventSource`, `outboxTail`, `outboxHead`.
 - Produces: `TriggerAction<S>`, `Trigger<S>`, `TriggerRunnerOptions<S>`, `TriggerBatchResult`, `class TriggerRunner<S>` with `runOnce()`.
 
@@ -792,9 +798,7 @@ test('start defaults to now, skipping events that predate the subscription', asy
 	const seen: string[] = [];
 	const runner = new TriggerRunner(g, {
 		name: 'sub-now',
-		triggers: [
-			{ name: 'record', match: {}, action: (e) => void seen.push(e.id) },
-		],
+		triggers: [{ name: 'record', match: {}, action: (e) => void seen.push(e.id) }],
 	});
 
 	const after = await g.addNode({ type: 'person', data: { name: 'after' } });
@@ -1020,8 +1024,13 @@ export class TriggerRunner<S extends GraphSchema> {
 		private readonly graph: Graph<S>,
 		opts: TriggerRunnerOptions<S>,
 	) {
-		if (opts.concurrency !== undefined && (!Number.isInteger(opts.concurrency) || opts.concurrency < 1)) {
-			throw new Error(`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`);
+		if (
+			opts.concurrency !== undefined &&
+			(!Number.isInteger(opts.concurrency) || opts.concurrency < 1)
+		) {
+			throw new Error(
+				`TriggerRunner: concurrency must be a positive integer, got ${opts.concurrency}`,
+			);
 		}
 		this.name = opts.name;
 		this.triggers = opts.triggers;
@@ -1039,11 +1048,7 @@ export class TriggerRunner<S extends GraphSchema> {
 	 */
 	async runOnce(): Promise<TriggerBatchResult> {
 		if (this.cursor === null) this.cursor = await this.seedCursor();
-		const page = await outboxTail(
-			this.graph.raw,
-			{ seq: this.cursor },
-			{ limit: this.batchSize },
-		);
+		const page = await outboxTail(this.graph.raw, { seq: this.cursor }, { limit: this.batchSize });
 		let delivered = 0;
 		let deadLettered = 0;
 		for (const event of page.events) {
@@ -1188,10 +1193,12 @@ git commit -m "feat(triggers): durable runner with retries, dead letters and cur
 Trades strict ordering for throughput above `concurrency: 1`, with batch-end checkpointing.
 
 **Files:**
+
 - Modify: `packages/core/src/triggers.ts`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: the Task 4 runner internals.
 - Produces: no new exports — `TriggerRunnerOptions.concurrency` becomes functional.
 
@@ -1288,32 +1295,32 @@ async function pool<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T
 Replace the loop in `runOnce` with a branch on the bound:
 
 ```ts
-		let delivered = 0;
-		let deadLettered = 0;
-		if (this.concurrency === 1) {
-			// Serial: completions are already in `seq` order, so checkpointing per event is free
-			// correctness — an interrupted cycle resumes at the first event it had not finished.
-			for (const event of page.events) {
-				const outcome = await this.dispatch(event);
-				delivered += outcome.delivered;
-				deadLettered += outcome.deadLettered;
-				this.cursor = event.seq as number;
-				await this.saveCursor(this.cursor);
-			}
-		} else if (page.events.length > 0) {
-			// Parallel: completions are unordered, so the cursor can only move once the whole page
-			// has resolved. An interrupted cycle redelivers the page — at-least-once, `seq` dedupes.
-			const outcomes = await pool(
-				page.events.map((event) => () => this.dispatch(event)),
-				this.concurrency,
-			);
-			for (const outcome of outcomes) {
-				delivered += outcome.delivered;
-				deadLettered += outcome.deadLettered;
-			}
-			this.cursor = page.events[page.events.length - 1]?.seq as number;
-			await this.saveCursor(this.cursor);
-		}
+let delivered = 0;
+let deadLettered = 0;
+if (this.concurrency === 1) {
+	// Serial: completions are already in `seq` order, so checkpointing per event is free
+	// correctness — an interrupted cycle resumes at the first event it had not finished.
+	for (const event of page.events) {
+		const outcome = await this.dispatch(event);
+		delivered += outcome.delivered;
+		deadLettered += outcome.deadLettered;
+		this.cursor = event.seq as number;
+		await this.saveCursor(this.cursor);
+	}
+} else if (page.events.length > 0) {
+	// Parallel: completions are unordered, so the cursor can only move once the whole page
+	// has resolved. An interrupted cycle redelivers the page — at-least-once, `seq` dedupes.
+	const outcomes = await pool(
+		page.events.map((event) => () => this.dispatch(event)),
+		this.concurrency,
+	);
+	for (const outcome of outcomes) {
+		delivered += outcome.delivered;
+		deadLettered += outcome.deadLettered;
+	}
+	this.cursor = page.events[page.events.length - 1]?.seq as number;
+	await this.saveCursor(this.cursor);
+}
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1338,10 +1345,12 @@ git commit -m "feat(triggers): bounded-concurrency dispatch with batch-end check
 `start()`/`stop()` around `runOnce()`.
 
 **Files:**
+
 - Modify: `packages/core/src/triggers.ts`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `runOnce()`.
 - Produces: `TriggerRunner.start(): void`, `TriggerRunner.stop(): Promise<void>`.
 
@@ -1451,10 +1460,12 @@ git commit -m "feat(triggers): background poll loop with start/stop"
 ### Task 7: The webhook action
 
 **Files:**
+
 - Modify: `packages/core/src/triggers.ts`
 - Test: `packages/core/test/triggers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TriggerAction<S>`.
 - Produces: `WebhookOptions`, `webhookAction<S>(opts): TriggerAction<S>`.
 
@@ -1648,11 +1659,13 @@ git commit -m "feat(triggers): signed webhook action"
 ### Task 8: Public exports and the `graphx triggers` command
 
 **Files:**
+
 - Modify: `packages/core/src/index.ts`
 - Modify: `packages/cli/src/cli.ts`
 - Test: `packages/cli/test/cli.test.ts`
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 2–7.
 - Produces: the `@graphx/core` public trigger surface; `parseTriggersArgs(argv): ParsedTriggersArgs`; the `triggers` subcommand.
 

@@ -11,13 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { afterAll, expect, test } from 'bun:test';
-import {
-	arrivalQuarter,
-	buildNodes,
-	type NodePlan,
-	type PlanEdge,
-	streamEdges,
-} from './load.ts';
+import { arrivalQuarter, buildNodes, type NodePlan, type PlanEdge, streamEdges } from './load.ts';
 import { skillsSchema } from './schema.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'skills-load-'));
@@ -44,10 +38,17 @@ function fixture(name: string): Database {
     CREATE TABLE crosswalks (id INTEGER PRIMARY KEY, system_a TEXT, code_a TEXT, system_b TEXT,
       code_b TEXT, source_id INTEGER, match_method TEXT, confidence REAL);
   `);
-	db.run(`INSERT INTO sources VALUES (1,'O*NET Database','https://onetcenter.org','CC BY 4.0','direct_download',?)`, [ONET_AT]);
+	db.run(
+		`INSERT INTO sources VALUES (1,'O*NET Database','https://onetcenter.org','CC BY 4.0','direct_download',?)`,
+		[ONET_AT],
+	);
 	db.run(`INSERT INTO sources VALUES (2,'Nesta',NULL,'MIT','direct_download',?)`, [ONET_AT]);
-	db.run(`INSERT INTO sources VALUES (3,'JobHop',NULL,'CC BY 4.0','direct_download',?)`, [JOBHOP_AT]);
-	db.run(`INSERT INTO occupations VALUES (1,1,'11-1011.00','Chief Executives','runs things','11-1011')`);
+	db.run(`INSERT INTO sources VALUES (3,'JobHop',NULL,'CC BY 4.0','direct_download',?)`, [
+		JOBHOP_AT,
+	]);
+	db.run(
+		`INSERT INTO occupations VALUES (1,1,'11-1011.00','Chief Executives','runs things','11-1011')`,
+	);
 	db.run(`INSERT INTO occupations VALUES (2,1,NULL,'Nameless',NULL,NULL)`); // no code ⇒ skipped
 	db.run(`INSERT INTO skills VALUES (1,1,'2.A.1.a','Reading Comprehension',NULL,'skill')`);
 	db.run(`INSERT INTO skills VALUES (2,2,'6109','reading',NULL,'skill')`);
@@ -55,10 +56,18 @@ function fixture(name: string): Database {
 	db.run(`INSERT INTO career_transitions VALUES (1,3,'1212.2','4416.1',1.0,'Q3 2000 -> Q4 2003')`);
 	db.run(`INSERT INTO career_transitions VALUES (2,3,'4416.1','1212.2',1.0,'Q1 1990 -> Q1 1993')`);
 	db.run(`INSERT INTO career_transitions VALUES (3,3,'4416.1','9999.9',1.0,NULL)`);
-	db.run(`INSERT INTO crosswalks VALUES (1,'ESCO-Code','1212.2','ESCO-Label','human resources manager',3,'official',1.0)`);
-	db.run(`INSERT INTO crosswalks VALUES (2,'ESCO-Code','4416.1','ESCO-Label','human resources assistant',3,'official',1.0)`);
-	db.run(`INSERT INTO crosswalks VALUES (3,'ONET-SOC','11-1011.00','ESCO-Label','human resources manager',1,'fuzzy',0.74)`);
-	db.run(`INSERT INTO crosswalks VALUES (4,'ONET-Element','2.A.1.a','Nesta-SkillId','6109',2,'fuzzy',0.77)`);
+	db.run(
+		`INSERT INTO crosswalks VALUES (1,'ESCO-Code','1212.2','ESCO-Label','human resources manager',3,'official',1.0)`,
+	);
+	db.run(
+		`INSERT INTO crosswalks VALUES (2,'ESCO-Code','4416.1','ESCO-Label','human resources assistant',3,'official',1.0)`,
+	);
+	db.run(
+		`INSERT INTO crosswalks VALUES (3,'ONET-SOC','11-1011.00','ESCO-Label','human resources manager',1,'fuzzy',0.74)`,
+	);
+	db.run(
+		`INSERT INTO crosswalks VALUES (4,'ONET-Element','2.A.1.a','Nesta-SkillId','6109',2,'fuzzy',0.77)`,
+	);
 	db.run(`INSERT INTO crosswalks VALUES (5,'ISCO','1212','SOC','11-1011',1,'official',1.0)`);
 	return db;
 }
@@ -143,7 +152,11 @@ test('counts crosswalk systems it does not model instead of dropping them silent
 });
 
 test('carries the occupation-skill relation type onto the edge', () => {
-	expect(ofRel('requires').map((e) => e.data?.relation).sort()).toEqual(['essential', 'related']);
+	expect(
+		ofRel('requires')
+			.map((e) => e.data?.relation)
+			.sort(),
+	).toEqual(['essential', 'related']);
 });
 
 test('links every sourced row to its dataset, and nothing else', () => {
@@ -212,7 +225,7 @@ test('hands out batches of the requested size, so memory does not track corpus s
 const REAL = process.env.COLLECTOR_DB ?? '../../../skill-collector/skills_graph.db';
 
 test.skipIf(!existsSync(REAL))(
-	'builds the real collector database\'s nodes, and its first edge batch resolves',
+	"builds the real collector database's nodes, and its first edge batch resolves",
 	async () => {
 		const real = new Database(REAL, { readonly: true });
 		const realPlan = buildNodes(real);
@@ -223,10 +236,15 @@ test.skipIf(!existsSync(REAL))(
 		// Stop after the first batch — the full walk is the build's job, not the test suite's.
 		const stop = new Error('enough');
 		let first: PlanEdge[] = [];
-		await streamEdges(real, realPlan, async (batch) => {
-			first = batch;
-			throw stop;
-		}, 5_000).catch((e) => {
+		await streamEdges(
+			real,
+			realPlan,
+			async (batch) => {
+				first = batch;
+				throw stop;
+			},
+			5_000,
+		).catch((e) => {
 			if (e !== stop) throw e;
 		});
 		expect(first.length).toBe(5_000);

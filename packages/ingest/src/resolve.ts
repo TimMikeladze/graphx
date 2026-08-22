@@ -88,7 +88,9 @@ export function buildPathIndex(keys: string[], aliases?: Map<string, string[]>):
 export function resolveLink(link: Link, fromKey: string, index: PathIndex): Resolution {
 	if (link.type === 'path') {
 		const resolved = join(dirname(fromKey), link.target);
-		return index.byPath.has(resolved) ? { status: 'resolved', key: resolved } : { status: 'missing' };
+		return index.byPath.has(resolved)
+			? { status: 'resolved', key: resolved }
+			: { status: 'missing' };
 	}
 	if (link.target.includes('/')) {
 		// Obsidian order: vault-root path first, then a path relative to the linking file.

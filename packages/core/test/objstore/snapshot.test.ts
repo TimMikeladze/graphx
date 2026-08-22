@@ -91,13 +91,13 @@ describe('SnapshotStore', () => {
 		await s.commit(null, async (b) => bump(b));
 		const base = await s.resolveHead();
 		// Right number, wrong parent — a lineage that never happened.
-		await expect(
-			s.commit(base, async (b) => ({ ...bump(b), parent: 99 })),
-		).rejects.toThrow(/ignored its base/);
+		await expect(s.commit(base, async (b) => ({ ...bump(b), parent: 99 }))).rejects.toThrow(
+			/ignored its base/,
+		);
 		// Wrong number.
-		await expect(
-			s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 })),
-		).rejects.toThrow(/ignored its base/);
+		await expect(s.commit(base, async (b) => ({ ...bump(b), snapshot: 7 }))).rejects.toThrow(
+			/ignored its base/,
+		);
 		expect((await s.resolveHead())?.snapshot).toBe(0);
 	});
 

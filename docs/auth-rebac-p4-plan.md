@@ -21,6 +21,7 @@
 ## Expand semantics (the P4 contract)
 
 `expand(object, relation)` returns a `UsersetTree` mirroring the relation's rewrite:
+
 - `self` → `{type:'leaf', subjects, usersets}` — `subjects` = direct edge `src`s (no subjectRelation); `usersets` = `{object: src, relation: subjectRelation}` for userset edges. **Leaf usersets are references, not expanded.**
 - `computed(r)` → `expand(object, r)` (subtree of the other relation on the same object).
 - `ttu(tupleset, computed)` → `{type:'union', children}` — one `expand(parentY, computed)` per parent `Y` (parents = `edgesInto(object, tupleset)` srcs). This recurses up a hierarchy.
@@ -47,12 +48,14 @@ packages/auth/src/
 `edgesInto` is currently a private taking the whole `CheckCtx`. `expand` needs the same query but has a different context, so lift it to a standalone exported helper taking `(raw, asOf, object, relation)`. Pure refactor — no behavior change.
 
 **Files:**
+
 - Modify: `packages/auth/src/check.ts`
 - Test: existing P1–P3 suite is the regression test (no new test).
 
 - [ ] **Step 1: Edit `packages/auth/src/check.ts`**
 
 Replace the private `edgesInto` with an exported standalone helper (note the new signature — `raw`/`asOf` instead of `ctx`):
+
 ```typescript
 /** Edges pointing INTO (object, relation): `subjectRelation` is null for direct grants. */
 export async function edgesInto(
@@ -76,6 +79,7 @@ export async function edgesInto(
 ```
 
 Update the two internal call sites to pass `ctx.raw, ctx.asOf`:
+
 - In `evalSelf`: `for (const { src, subjectRelation } of await edgesInto(ctx.raw, ctx.asOf, object, relation)) {`
 - In the `ttu` case of `evalExpr`: `for (const { src } of await edgesInto(ctx.raw, ctx.asOf, object, expr.tupleset)) {`
 
@@ -98,6 +102,7 @@ git commit -m "refactor(auth): export edgesInto as a standalone reader (P4 prep)
 ## Task 2: `expand.ts` + `Auth.expand` + tests
 
 **Files:**
+
 - Create: `packages/auth/src/expand.ts`
 - Modify: `packages/auth/src/auth.ts`, `packages/auth/src/index.ts`
 - Test: `packages/auth/test/p4-expand.test.ts`
@@ -238,7 +243,11 @@ test('P4: expand respects asOf', async () => {
 		subjects: ['user:alice'],
 		usersets: [],
 	});
-	expect(await auth.expand('doc:42', 'editor')).toEqual({ type: 'leaf', subjects: [], usersets: [] });
+	expect(await auth.expand('doc:42', 'editor')).toEqual({
+		type: 'leaf',
+		subjects: [],
+		usersets: [],
+	});
 	db.close();
 });
 ```
@@ -279,9 +288,7 @@ async function expandSelf(ctx: ExpandCtx, object: string, relation: string): Pro
 		else usersets.push({ object: src, relation: subjectRelation });
 	}
 	subjects.sort();
-	usersets.sort((a, b) =>
-		`${a.object}#${a.relation}`.localeCompare(`${b.object}#${b.relation}`),
-	);
+	usersets.sort((a, b) => `${a.object}#${a.relation}`.localeCompare(`${b.object}#${b.relation}`));
 	return { type: 'leaf', subjects, usersets };
 }
 
@@ -352,11 +359,14 @@ export function runExpand(
 - [ ] **Step 4: Add `Auth.expand` to `packages/auth/src/auth.ts`**
 
 Add the import (with the existing `./check.ts` import — merge the named imports):
+
 ```typescript
 import { runCheck } from './check.ts';
 import { runExpand, type UsersetTree } from './expand.ts';
 ```
+
 Add the method to the `Auth` class (after `check`):
+
 ```typescript
 	/**
 	 * Expand (object, relation) into its userset tree (Zanzibar Expand). Mirrors the rewrite
@@ -366,11 +376,13 @@ Add the method to the `Auth` class (after `check`):
 		return runExpand(this.raw, this.model, object, relation, opts.asOf);
 	}
 ```
+
 (Reuses `CheckOpts` — it carries `asOf`, which is the only expand option.)
 
 - [ ] **Step 5: Export `UsersetTree` from `packages/auth/src/index.ts`**
 
 Add to the existing export block:
+
 ```typescript
 export { type UsersetTree } from './expand.ts';
 ```
@@ -408,7 +420,7 @@ git commit -m "feat(auth): expand(object, relation) → userset tree (P4)"
 
 ## Out of scope for P4 (next plans)
 
-| Next plan | Scope |
-|-----------|-------|
-| P5 | `listObjects(subject, relation, type)` — reverse-expand + verify, keyset-paginated |
-| P6 | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging |
+| Next plan | Scope                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| P5        | `listObjects(subject, relation, type)` — reverse-expand + verify, keyset-paginated                |
+| P6        | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging |

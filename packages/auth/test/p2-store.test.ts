@@ -37,7 +37,12 @@ test('P2: direct and userset tuples on the same (subject,rel,object) are distinc
 
 test('P2: userset writes are idempotent', async () => {
 	const { db, g } = await fresh();
-	const t = { object: 'doc:42', relation: 'viewer', subject: 'group:eng', subjectRelation: 'member' };
+	const t = {
+		object: 'doc:42',
+		relation: 'viewer',
+		subject: 'group:eng',
+		subjectRelation: 'member',
+	};
 	await writeTuple(g, t);
 	await writeTuple(g, t);
 	expect(await liveCount(db, 'group:eng', 'viewer', 'doc:42')).toBe(1);

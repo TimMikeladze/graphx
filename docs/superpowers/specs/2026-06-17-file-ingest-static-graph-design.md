@@ -24,15 +24,15 @@ history of file edits and supports as-of / time-travel queries over the vault.
 
 ## 3. Decisions (resolved during brainstorming)
 
-| Fork | Decision |
-|---|---|
-| Role of files | **Source → ingest into DB.** DB is the truth; files are input. |
-| File → graph mapping | **Convention: 1 file = 1 node** (Obsidian-style). |
-| Re-sync semantics | **Incremental upsert (temporal diff)** keyed on a content hash. |
-| Embeddings | **On.** Inject an `EmbedFn`; populate `emb` so `retrieve` works. |
-| Diff-state location | **Query the graph** each run (no sidecar). The graph can't drift. |
-| Packaging | **New `packages/ingest`** depending on `core`'s public API. |
-| Node identity | **Relative POSIX path** (stored as a prop). Renames orphan (see §2). |
+| Fork                 | Decision                                                             |
+| -------------------- | -------------------------------------------------------------------- |
+| Role of files        | **Source → ingest into DB.** DB is the truth; files are input.       |
+| File → graph mapping | **Convention: 1 file = 1 node** (Obsidian-style).                    |
+| Re-sync semantics    | **Incremental upsert (temporal diff)** keyed on a content hash.      |
+| Embeddings           | **On.** Inject an `EmbedFn`; populate `emb` so `retrieve` works.     |
+| Diff-state location  | **Query the graph** each run (no sidecar). The graph can't drift.    |
+| Packaging            | **New `packages/ingest`** depending on `core`'s public API.          |
+| Node identity        | **Relative POSIX path** (stored as a prop). Renames orphan (see §2). |
 
 ## 4. Package & public API
 
@@ -47,33 +47,31 @@ import type { EmbedFn } from 'core';
 import { Graph, type GraphSchema } from 'core';
 
 export interface IngestOptions<S extends GraphSchema> {
-  /** Local vault root. */
-  dir: string;
-  /** Target graph, already bound to its DbClient + schema. */
-  graph: Graph<S>;
-  /** Embedding function (required in v1 — embeddings-on scope). */
-  embed: EmbedFn;
-  /** File globs. Default: `**\/*.{md,markdown,yml,yaml}`. */
-  include?: string[];
-  /** Override kind resolution. Default: `frontmatter.kind ?? <top-level folder>`. */
-  kindOf?: (file: ParsedFile) => string | undefined;
-  /** Injectable clock for deterministic tests (graphx convention). */
-  now?: number;
+	/** Local vault root. */
+	dir: string;
+	/** Target graph, already bound to its DbClient + schema. */
+	graph: Graph<S>;
+	/** Embedding function (required in v1 — embeddings-on scope). */
+	embed: EmbedFn;
+	/** File globs. Default: `**\/*.{md,markdown,yml,yaml}`. */
+	include?: string[];
+	/** Override kind resolution. Default: `frontmatter.kind ?? <top-level folder>`. */
+	kindOf?: (file: ParsedFile) => string | undefined;
+	/** Injectable clock for deterministic tests (graphx convention). */
+	now?: number;
 }
 
 export interface IngestResult {
-  added: number;
-  updated: number;
-  unchanged: number;
-  edgesAdded: number;
-  edgesClosed: number;
-  /** Files/links skipped, with a reason (unknown kind/rel, unresolved link, parse error). */
-  skipped: Array<{ path: string; reason: string }>;
+	added: number;
+	updated: number;
+	unchanged: number;
+	edgesAdded: number;
+	edgesClosed: number;
+	/** Files/links skipped, with a reason (unknown kind/rel, unresolved link, parse error). */
+	skipped: Array<{ path: string; reason: string }>;
 }
 
-export function ingestDir<S extends GraphSchema>(
-  opts: IngestOptions<S>,
-): Promise<IngestResult>;
+export function ingestDir<S extends GraphSchema>(opts: IngestOptions<S>): Promise<IngestResult>;
 ```
 
 `ingestDir` is the whole public surface for v1. Internals (discover, parse, reconcile)

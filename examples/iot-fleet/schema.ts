@@ -8,7 +8,11 @@ import { z } from 'zod';
 export const schema = defineGraphSchema({
 	nodes: {
 		site: z.object({ name: z.string(), region: z.enum(['us', 'eu', 'apac']) }),
-		gateway: z.object({ name: z.string(), firmware: z.string(), online: z.boolean().default(true) }),
+		gateway: z.object({
+			name: z.string(),
+			firmware: z.string(),
+			online: z.boolean().default(true),
+		}),
 		device: z.object({
 			name: z.string(),
 			category: z.enum(['sensor', 'actuator']),

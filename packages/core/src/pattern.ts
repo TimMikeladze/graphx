@@ -391,7 +391,9 @@ WHERE walk.depth >= ${v.min}`;
 				if (!raw)
 					throw new Error('PatternBuilder.page: no raw client (pass it to match(schema, raw))');
 				if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
-					throw new Error(`PatternBuilder.page: limit must be a positive integer, got ${opts.limit}`);
+					throw new Error(
+						`PatternBuilder.page: limit must be a positive integer, got ${opts.limit}`,
+					);
 				}
 				const maxRows = resolveLimits(opts.limits).maxRows;
 				const pageSize = Math.min(opts.limit ?? maxRows, maxRows);

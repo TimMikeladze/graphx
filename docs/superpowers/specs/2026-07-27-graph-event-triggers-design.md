@@ -113,56 +113,64 @@ All of it in `packages/core/src/triggers.ts`, exported from `@graphx/core`.
 
 ```ts
 interface TriggerMatch {
-  op?: GraphEventOp | GraphEventOp[];
-  entity?: 'node' | 'edge';
-  label?: string | string[];          // node type or edge rel
-  shape?: 'insert' | 'close';
-  source?: 'user' | 'any' | string;   // default 'user'
+	op?: GraphEventOp | GraphEventOp[];
+	entity?: 'node' | 'edge';
+	label?: string | string[]; // node type or edge rel
+	shape?: 'insert' | 'close';
+	source?: 'user' | 'any' | string; // default 'user'
 }
 
-type TriggerAction<S extends GraphSchema> =
-  (event: GraphEvent, graph: Graph<S>) => Promise<void> | void;
+type TriggerAction<S extends GraphSchema> = (
+	event: GraphEvent,
+	graph: Graph<S>,
+) => Promise<void> | void;
 
 interface Trigger<S extends GraphSchema> {
-  name: string;                       // stable — keys dead-letter rows and the source tag
-  match: TriggerMatch;
-  action: TriggerAction<S>;
-  retries?: number;                   // overrides the runner default
+	name: string; // stable — keys dead-letter rows and the source tag
+	match: TriggerMatch;
+	action: TriggerAction<S>;
+	retries?: number; // overrides the runner default
 }
 
 interface TriggerRunnerOptions<S extends GraphSchema> {
-  name: string;                       // subscription name, the cursor key
-  triggers: Trigger<S>[];
-  concurrency?: number;               // default 1 (strict seq order)
-  batchSize?: number;                 // outboxTail page size, default 100
-  pollIntervalMs?: number;            // sleep when drained, default 1000
-  retries?: number;                   // attempts before dead-letter, default 3
-  backoffMs?: number;                 // full-jitter base, default 100
-  start?: 'beginning' | 'now';        // cursor seed when none is persisted, default 'now'
+	name: string; // subscription name, the cursor key
+	triggers: Trigger<S>[];
+	concurrency?: number; // default 1 (strict seq order)
+	batchSize?: number; // outboxTail page size, default 100
+	pollIntervalMs?: number; // sleep when drained, default 1000
+	retries?: number; // attempts before dead-letter, default 3
+	backoffMs?: number; // full-jitter base, default 100
+	start?: 'beginning' | 'now'; // cursor seed when none is persisted, default 'now'
 }
 
 class TriggerRunner<S extends GraphSchema> {
-  constructor(graph: Graph<S>, opts: TriggerRunnerOptions<S>);
-  start(): void;
-  stop(): Promise<void>;              // resolves once the loop has exited and in-flight work drained
-  runOnce(): Promise<{ delivered: number; deadLettered: number; cursor: number; drained: boolean }>;
+	constructor(graph: Graph<S>, opts: TriggerRunnerOptions<S>);
+	start(): void;
+	stop(): Promise<void>; // resolves once the loop has exited and in-flight work drained
+	runOnce(): Promise<{ delivered: number; deadLettered: number; cursor: number; drained: boolean }>;
 }
 
 function webhookAction<S extends GraphSchema>(opts: {
-  url: string;
-  headers?: Record<string, string>;
-  secret?: string;
-  timeoutMs?: number;                 // default 10_000
+	url: string;
+	headers?: Record<string, string>;
+	secret?: string;
+	timeoutMs?: number; // default 10_000
 }): TriggerAction<S>;
 
 interface DeadLetter {
-  id: string; subscription: string; triggerName: string; seq: number;
-  event: GraphEvent; error: string; attempts: number; createdAt: number;
+	id: string;
+	subscription: string;
+	triggerName: string;
+	seq: number;
+	event: GraphEvent;
+	error: string;
+	attempts: number;
+	createdAt: number;
 }
 
 function deadLetters(
-  raw: DbClient,
-  opts?: { subscription?: string; limit?: number; since?: number },
+	raw: DbClient,
+	opts?: { subscription?: string; limit?: number; since?: number },
 ): Promise<DeadLetter[]>;
 
 function pruneDeadLetters(raw: DbClient, beforeMs: number): Promise<number>;

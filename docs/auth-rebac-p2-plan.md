@@ -13,7 +13,7 @@
 ## Conventions (same as P1)
 
 - `bun test`; tests import `{ expect, test } from 'bun:test'`. Import core via `../../core/src/index.ts`; intra-package imports use `.ts`.
-- **isolatedDeclarations ON** — exported decls need explicit return types; return types must reference *exported/nameable* types (this is why `Relation` is an interface that includes the builder methods, not a private class).
+- **isolatedDeclarations ON** — exported decls need explicit return types; return types must reference _exported/nameable_ types (this is why `Relation` is an interface that includes the builder methods, not a private class).
 - Fresh DB: `createClient({ url: ':memory:' })` → `init(client, 4)` → `new Graph(client, model.schema)`.
 - `FOREVER` = `8640000000000000`. JSON props are queried with `json_extract(props, '$.subjectRelation')` (SQLite JSON1, available in libSQL).
 - After each task: `bun test packages/auth` green. **Do not commit** unless the human asks.
@@ -21,6 +21,7 @@
 ## Subject-relation semantics (the P2 data rule)
 
 A tuple `⟨object, relation, subject, subjectRelation?⟩` → edge `{src: subject, rel: relation, dst: object, props}`:
+
 - **direct** (`subjectRelation` absent): `props = {}` → `json_extract(props,'$.subjectRelation')` is `NULL`.
 - **userset** (`subjectRelation = 'member'`): `props = {"subjectRelation":"member"}`.
 
@@ -48,6 +49,7 @@ packages/auth/src/
 `RewriteExpr` grows to a union. `rel()` returns a builder with `.self()` (readability; direct tuples are the default) and `.or('rel')` (computed userset). `defineAuthModel` validates that every computed reference names a declared relation on the same type.
 
 **Files:**
+
 - Modify: `packages/auth/src/model.ts`
 - Test: `packages/auth/test/p2-model.test.ts`
 
@@ -71,7 +73,10 @@ test('P2: .or(rel) compiles to union(self, computed)', () => {
 });
 
 test('P2: .self().or(rel) equals .or(rel)', () => {
-	const m = defineAuthModel({ user: {}, doc: { editor: rel(), viewer: rel().self().or('editor') } });
+	const m = defineAuthModel({
+		user: {},
+		doc: { editor: rel(), viewer: rel().self().or('editor') },
+	});
 	expect(m.rewrite('doc', 'viewer')).toEqual({
 		kind: 'union',
 		children: [{ kind: 'self' }, { kind: 'computed', relation: 'editor' }],
@@ -94,7 +99,12 @@ Expected: FAIL — `.or` is not a function / union shape mismatch.
 
 ```typescript
 import { z } from 'zod';
-import { defineGraphSchema, type EdgeDef, type GraphSchema, type ZObj } from '../../core/src/index.ts';
+import {
+	defineGraphSchema,
+	type EdgeDef,
+	type GraphSchema,
+	type ZObj,
+} from '../../core/src/index.ts';
 
 /**
  * A userset rewrite expression. P1: `self`. P2 adds `computed` + `union`.
@@ -222,6 +232,7 @@ git commit -m "feat(auth): computed usersets — .or() + RewriteExpr union (P2)"
 `writeTuple` stops rejecting userset subjects: it stores `subjectRelation` in edge props and includes it in the idempotency guard. `deleteTuple` takes a `subjectRelation` argument so it revokes the exact tuple. The subject-relation predicate is built as `IS NULL` vs `= ?` (avoids relying on `IS ?` parameter binding).
 
 **Files:**
+
 - Modify: `packages/auth/src/store.ts`
 - Test: `packages/auth/test/p2-store.test.ts`
 
@@ -266,7 +277,12 @@ test('P2: direct and userset tuples on the same (subject,rel,object) are distinc
 
 test('P2: userset writes are idempotent', async () => {
 	const { db, g } = await fresh();
-	const t = { object: 'doc:42', relation: 'viewer', subject: 'group:eng', subjectRelation: 'member' };
+	const t = {
+		object: 'doc:42',
+		relation: 'viewer',
+		subject: 'group:eng',
+		subjectRelation: 'member',
+	};
 	await writeTuple(g, t);
 	await writeTuple(g, t);
 	expect(await liveCount(db, 'group:eng', 'viewer', 'doc:42')).toBe(1);
@@ -296,6 +312,7 @@ Expected: FAIL — `writeTuple` throws on `subjectRelation` (P1 rejection) / `de
 - [ ] **Step 3: Update `packages/auth/src/store.ts`**
 
 Replace the `writeTuple` function with:
+
 ```typescript
 /**
  * Write a tuple as an edge `subject --relation--> object`. A `subjectRelation` (userset
@@ -348,6 +365,7 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 ```
 
 Replace the `deleteTuple` function with:
+
 ```typescript
 /**
  * Revoke a tuple: close the live edge version (`valid_to = ts`), matched on
@@ -407,6 +425,7 @@ git commit -m "feat(auth): subjectRelation-aware tuple write/revoke (P2)"
 A new module: recursive descent over the rewrite tree. `self` reads every edge into `(object, relation)` — a direct edge matches when `src === subject`; a userset edge (`subjectRelation = r`) recurses into `check(src, r, subject)`. `computed` recurses on the same object with another relation. `union` short-circuits. Memoized per `(object, relation, subject)`; a cycle returns `false`; one `asOf` snapshot throughout.
 
 **Files:**
+
 - Create: `packages/auth/src/check.ts`
 - Test: covered by Task 4's `p2-check.test.ts` (the evaluator is exercised through `Auth.check`).
 
@@ -437,8 +456,7 @@ async function edgesInto(
 			? `SELECT src, json_extract(props, '$.subjectRelation') AS sr FROM edges WHERE dst = ? AND rel = ?`
 			: `SELECT src, json_extract(props, '$.subjectRelation') AS sr FROM edge_versions
 				WHERE dst = ? AND rel = ? AND valid_from <= ? AND valid_to > ?`;
-	const args =
-		ctx.asOf === undefined ? [object, relation] : [object, relation, ctx.asOf, ctx.asOf];
+	const args = ctx.asOf === undefined ? [object, relation] : [object, relation, ctx.asOf, ctx.asOf];
 	const r = await ctx.raw.execute({ sql, args });
 	return r.rows.map((row) => ({
 		src: String(row.src),
@@ -483,9 +501,7 @@ async function evalExpr(
 			return false;
 		}
 		default:
-			throw new Error(
-				`auth: rewrite '${(expr as { kind: string }).kind}' not supported until P3`,
-			);
+			throw new Error(`auth: rewrite '${(expr as { kind: string }).kind}' not supported until P3`);
 	}
 }
 
@@ -540,6 +556,7 @@ git commit -m "feat(auth): recursive check evaluator — self/computed/union (P2
 `Auth.check` delegates to `runCheck`. `Auth.write` now accepts userset subjects (validates the subject's `subjectRelation` is a declared relation on the subject's type) and stores them. `Auth.delete` passes `subjectRelation` through.
 
 **Files:**
+
 - Modify: `packages/auth/src/auth.ts`
 - Test: `packages/auth/test/p2-check.test.ts`
 
@@ -705,7 +722,7 @@ export class Auth {
 Run: `bun test packages/auth/test/p2-check.test.ts` then `bun test packages/auth/test/p1-check.test.ts`
 Expected: PASS both. (P1 check tests still green — direct `self` and `asOf` behavior is preserved by the generalized evaluator; the P1 "userset subjects rejected" test was for P1 only — see note below.)
 
-> **P1 test reconciliation:** P1's `p1-check.test.ts` has a test "userset subjects are rejected (P2)" asserting `auth.write([...subjectRelation...])` throws. In P2 that is now *supported*. Update that single P1 test: change it to assert a userset write with a **valid** subjectRelation succeeds, OR remove it (the P2 suite covers userset writes). Make the minimal edit so the suite is internally consistent; note the change in your report.
+> **P1 test reconciliation:** P1's `p1-check.test.ts` has a test "userset subjects are rejected (P2)" asserting `auth.write([...subjectRelation...])` throws. In P2 that is now _supported_. Update that single P1 test: change it to assert a userset write with a **valid** subjectRelation succeeds, OR remove it (the P2 suite covers userset writes). Make the minimal edit so the suite is internally consistent; note the change in your report.
 
 - [ ] **Step 5: Commit** (skip if holding commits)
 
@@ -719,6 +736,7 @@ git commit -m "feat(auth): wire recursive check + userset writes into Auth (P2)"
 ## Task 5: Exports + full green gate
 
 **Files:**
+
 - Modify: `packages/auth/src/index.ts` (only if a new public symbol is needed — `RewriteExpr`/`Relation` are already exported from P1; `runCheck` is internal, not exported)
 - Verify: full suite + type-check + lint + core untouched
 
@@ -766,9 +784,9 @@ git commit -m "chore(auth): P2 complete — computed + group usersets green"
 
 ## Out of scope for P2 (next plans)
 
-| Next plan | Scope |
-|-----------|-------|
-| P3 | tuple-to-userset hierarchy (recursive `.rel()` over a tupleset), set-ops `.and` / `.minus` (intersection / exclusion) |
-| P4 | `expand(object, relation)` → userset tree |
-| P5 | `listObjects(subject, relation, type)` (reverse-expand + verify) |
-| P6 | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging |
+| Next plan | Scope                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------- |
+| P3        | tuple-to-userset hierarchy (recursive `.rel()` over a tupleset), set-ops `.and` / `.minus` (intersection / exclusion) |
+| P4        | `expand(object, relation)` → userset tree                                                                             |
+| P5        | `listObjects(subject, relation, type)` (reverse-expand + verify)                                                      |
+| P6        | consistency tokens, subproblem cache, governance fan-out caps, `mountAuth` HTTP routes, packaging                     |

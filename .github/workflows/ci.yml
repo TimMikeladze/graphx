@@ -95,12 +95,10 @@ jobs:
       GRAPHX_TEST_DRIVER: duckdb
 
     # Full-text/hybrid retrieval and p14-concurrency are closed (see docs/DUCKDB_SUPPORT.md).
-    # Two failures remain permanently by design: raw-SQL constraint-enforcement bypasses that
-    # only libSQL/Postgres reject via a partial index DuckDB has no equivalent of. `bun run
-    # test` has no mechanism to exclude specific tests, so this job cannot go green without
-    # such a filter. Remove continue-on-error only once one exists (or the two tests are
-    # otherwise excluded) and the job genuinely passes.
-    continue-on-error: true
+    # The two raw-SQL constraint-enforcement probes that DuckDB structurally cannot satisfy —
+    # it has no partial UNIQUE index, so `duck-constraints.ts` enforces the same rules in
+    # application code instead — are gated by the `indexBackedConstraints` harness helper
+    # rather than left failing, so this job is a real gate (no continue-on-error).
 
     steps:
       - name: Checkout code

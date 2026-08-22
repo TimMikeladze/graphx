@@ -255,7 +255,10 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER
 	for (let i = 0; i < sides; i++) args.push(...(rels ?? []));
 	args.push(maxDepth);
 	return rowsToNodes(
-		await withTimeout(raw.execute({ sql: applyLimit(sql, limits.maxRows), args }), limits.timeoutMs),
+		await withTimeout(
+			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
+			limits.timeoutMs,
+		),
 	);
 }
 
@@ -295,7 +298,10 @@ SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER
 	for (let i = 0; i < sides; i++) args.push(t, t, ...(rels ?? []));
 	args.push(t, t, t, t, maxDepth);
 	return rowsToNodes(
-		await withTimeout(raw.execute({ sql: applyLimit(sql, limits.maxRows), args }), limits.timeoutMs),
+		await withTimeout(
+			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
+			limits.timeoutMs,
+		),
 	);
 }
 
@@ -444,7 +450,14 @@ export async function hybridRetrieve(
 			isPast,
 			t,
 		);
-		candidates = mmrSelect(candidates, embById, qEmb, rerankScore, opts.mmr.lambda ?? 0.5, opts.mmr.k);
+		candidates = mmrSelect(
+			candidates,
+			embById,
+			qEmb,
+			rerankScore,
+			opts.mmr.lambda ?? 0.5,
+			opts.mmr.k,
+		);
 	}
 
 	return candidates;

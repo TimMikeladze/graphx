@@ -103,8 +103,9 @@ describe('materialize', () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
 		await materialize(c, { ...emptyManifest(384, 'h'), tables: {} }, cache);
-		expect((await c.execute(`SELECT value FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.value)
-			.toBe('384');
+		expect(
+			(await c.execute(`SELECT value FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.value,
+		).toBe('384');
 		await c.end();
 	});
 });

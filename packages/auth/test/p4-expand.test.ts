@@ -161,7 +161,11 @@ test('P4: expand respects asOf', async () => {
 		subjects: ['user:alice'],
 		usersets: [],
 	});
-	expect(await auth.expand('doc:42', 'editor')).toEqual({ type: 'leaf', subjects: [], usersets: [] });
+	expect(await auth.expand('doc:42', 'editor')).toEqual({
+		type: 'leaf',
+		subjects: [],
+		usersets: [],
+	});
 	db.close();
 });
 

@@ -114,9 +114,7 @@ export class S3ObjectStore implements ObjectStore {
 	}
 
 	async put(key: string, body: Uint8Array): Promise<void> {
-		await this.s3.send(
-			new PutObjectCommand({ Bucket: this.bucket, Key: this.k(key), Body: body }),
-		);
+		await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: this.k(key), Body: body }));
 	}
 
 	async putIfAbsent(key: string, body: Uint8Array): Promise<void> {

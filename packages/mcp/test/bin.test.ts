@@ -88,11 +88,15 @@ test('bin: graphx_context hands an agent the ids every other tool needs', async 
 		expect(projects.structuredContent.projects.map((p: any) => p.id)).toContain(project);
 
 		// GRAPHX_DB is a NAMESPACE, not a URL: libSQL writes `./mygraph.db`, DuckDB
-		// `./mygraph.duckdb` (this process inherits whatever GRAPHX_DB_DRIVER the test runner
-		// set); Postgres writes no local file at all.
+		// `./.graphx-data/mygraph.duckdb` (this process inherits whatever GRAPHX_DB_DRIVER the
+		// test runner set); Postgres writes no local file at all. DuckDB nests its file under a
+		// data directory rather than dropping it in the cwd because it also spills temp storage
+		// beside the database — see `duckDataDir()`.
 		const driver = process.env.GRAPHX_DB_DRIVER ?? 'libsql';
-		if (driver !== 'postgres') {
-			expect(await readdir(cwd)).toContain(driver === 'duckdb' ? 'mygraph.duckdb' : 'mygraph.db');
+		if (driver === 'duckdb') {
+			expect(await readdir(join(cwd, '.graphx-data'))).toContain('mygraph.duckdb');
+		} else if (driver !== 'postgres') {
+			expect(await readdir(cwd)).toContain('mygraph.db');
 		}
 
 		bin.stop();

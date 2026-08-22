@@ -15,54 +15,54 @@
  * `bun run dev` wrapper that would orphan it), and every shutdown signal SIGTERMs both children
  * then SIGKILLs any survivor — so no server is left holding a port after Ctrl-C.
  */
-import { dirname, resolve } from "node:path"
-import process from "node:process"
+import { dirname, resolve } from 'node:path';
+import process from 'node:process';
 
-const root = process.cwd()
-const apiScript = resolve(root, process.argv[2] ?? "scripts/admin-api.ts")
-const apiPort = process.argv[3] ?? "8787"
-const procs: Bun.Subprocess[] = []
+const root = process.cwd();
+const apiScript = resolve(root, process.argv[2] ?? 'scripts/admin-api.ts');
+const apiPort = process.argv[3] ?? '8787';
+const procs: Bun.Subprocess[] = [];
 
 function run(cmd: string[], cwd: string): Bun.Subprocess {
-  const p = Bun.spawn({ cmd, cwd, stdout: "inherit", stderr: "inherit", env: process.env })
-  procs.push(p)
-  return p
+	const p = Bun.spawn({ cmd, cwd, stdout: 'inherit', stderr: 'inherit', env: process.env });
+	procs.push(p);
+	return p;
 }
 
-let shuttingDown = false
+let shuttingDown = false;
 function shutdown(code = 0): void {
-  if (shuttingDown) return
-  shuttingDown = true
-  for (const p of procs) {
-    try {
-      p.kill("SIGTERM")
-    } catch {
-      // already gone
-    }
-  }
-  // Escalate: SIGKILL anything that ignored SIGTERM (e.g. a dev server mid-startup).
-  setTimeout(() => {
-    for (const p of procs) {
-      try {
-        p.kill("SIGKILL")
-      } catch {
-        // already gone
-      }
-    }
-    process.exit(code)
-  }, 1200)
+	if (shuttingDown) return;
+	shuttingDown = true;
+	for (const p of procs) {
+		try {
+			p.kill('SIGTERM');
+		} catch {
+			// already gone
+		}
+	}
+	// Escalate: SIGKILL anything that ignored SIGTERM (e.g. a dev server mid-startup).
+	setTimeout(() => {
+		for (const p of procs) {
+			try {
+				p.kill('SIGKILL');
+			} catch {
+				// already gone
+			}
+		}
+		process.exit(code);
+	}, 1200);
 }
 
-for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-  process.on(sig, () => shutdown(0))
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+	process.on(sig, () => shutdown(0));
 }
 
 // Point the UI's dev proxy at whichever API this run started (an explicit override still wins).
-process.env.VITE_API_TARGET ??= `http://localhost:${apiPort}`
+process.env.VITE_API_TARGET ??= `http://localhost:${apiPort}`;
 
-const api = run(["bun", apiScript], dirname(apiScript))
+const api = run(['bun', apiScript], dirname(apiScript));
 // Spawn vite's binary directly (not `bun run dev`) so killing this pid frees port 5173.
-const ui = run([`${root}/node_modules/.bin/vite`], `${root}/packages/admin`)
+const ui = run([`${root}/node_modules/.bin/vite`], `${root}/packages/admin`);
 
 // If either process exits on its own, bring the whole stack down.
-void Promise.race([api.exited, ui.exited]).then(() => shutdown(0))
+void Promise.race([api.exited, ui.exited]).then(() => shutdown(0));

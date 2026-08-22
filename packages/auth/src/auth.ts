@@ -1,4 +1,4 @@
-import type { DbClient, Graph, GraphSchema } from '../../core/src/index.ts';
+import type { DbClient, Graph, GraphSchema } from '@graphx/core';
 import { runCheck } from './check.ts';
 import { runExpand, type UsersetTree } from './expand.ts';
 import { type ListObjectsOpts, type ListObjectsPage, runListObjects } from './list.ts';

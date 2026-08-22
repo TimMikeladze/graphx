@@ -214,7 +214,13 @@ async function rawNode(
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
 	await client.execute({
 		sql: 'INSERT INTO node_versions (id, type, data, valid_from, valid_to) VALUES (?,?,?,?,?)',
-		args: [id, opts.type ?? 'device', JSON.stringify(data), opts.validFrom ?? 0, opts.validTo ?? FOREVER],
+		args: [
+			id,
+			opts.type ?? 'device',
+			JSON.stringify(data),
+			opts.validFrom ?? 0,
+			opts.validTo ?? FOREVER,
+		],
 	});
 	return id;
 }
@@ -502,7 +508,13 @@ test('P12 (asOf DECISION): a CLOSED v1 version read via .asOf() upcasts to lates
 	// a v2 successor live across [100, FOREVER)
 	await client.execute({
 		sql: 'INSERT INTO node_versions (id, type, data, valid_from, valid_to) VALUES (?,?,?,?,?)',
-		args: [id, 'device', JSON.stringify({ name: 'r1', criticality: 9, status: 'online', _v: 2 }), 100, FOREVER],
+		args: [
+			id,
+			'device',
+			JSON.stringify({ name: 'r1', criticality: 9, status: 'online', _v: 2 }),
+			100,
+			FOREVER,
+		],
 	});
 
 	// asOf(50) lands INSIDE the closed v1 era — the live now-view cannot serve this.

@@ -26,12 +26,12 @@ Six forks, resolved.
 1. **Tools mirror the HTTP endpoints one-for-one**, generated from the app's own OpenAPI registry
    rather than hand-curated into agent-shaped verbs. A curated surface would be a second contract to
    keep in sync by hand; reading the registry means the manifest is not checked against the app, it
-   *is* the app. A route added without a tool is not a state the system can reach.
+   _is_ the app. A route added without a tool is not a state the system can reach.
 
 2. **One core, two adapters, behind a one-method seam.** Handlers are never reimplemented. Hono
    dispatches a `Request` to a `Response` without a socket, so the local adapter runs the real
    serving app in-process and the remote adapter is `fetch` against a deployed one. Both go through
-   the same authn, authz, upcasting, and governance path, because both *are* that path.
+   the same authn, authz, upcasting, and governance path, because both _are_ that path.
 
 3. **Tenant and project are tool parameters, not server config.** One server instance reaches every
    project the credential can. The cost is two fields on 26 tool schemas and the risk that an agent
@@ -78,11 +78,11 @@ tree.
 
 ```ts
 export interface Backend {
-  call(
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
-    path: string,
-    init?: { query?: Record<string, string>; body?: unknown },
-  ): Promise<Response>;
+	call(
+		method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+		path: string,
+		init?: { query?: Record<string, string>; body?: unknown },
+	): Promise<Response>;
 }
 ```
 
@@ -92,12 +92,14 @@ port.
 ```ts
 const { app } = await createApp({ schema, embed, db: cfg.db });
 const backend: Backend = {
-  call: (method, path, init) =>
-    app.fetch(new Request(`http://local${path}${qs(init?.query)}`, {
-      method,
-      headers: { 'content-type': 'application/json' },
-      body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-    })),
+	call: (method, path, init) =>
+		app.fetch(
+			new Request(`http://local${path}${qs(init?.query)}`, {
+				method,
+				headers: { 'content-type': 'application/json' },
+				body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+			}),
+		),
 };
 ```
 
@@ -105,12 +107,12 @@ const backend: Backend = {
 
 ```ts
 const backend: Backend = {
-  call: (method, path, init) =>
-    fetch(`${cfg.url}${path}${qs(init?.query)}`, {
-      method,
-      headers: { authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
-      body: init?.body === undefined ? undefined : JSON.stringify(init.body),
-    }),
+	call: (method, path, init) =>
+		fetch(`${cfg.url}${path}${qs(init?.query)}`, {
+			method,
+			headers: { authorization: `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+			body: init?.body === undefined ? undefined : JSON.stringify(init.body),
+		}),
 };
 ```
 
@@ -145,7 +147,7 @@ needs, and both are first-class OpenAPI fields that improve `/openapi.json` for 
 
 1. **`operationId`** — the tool name. Method and path do not yield good names mechanically
    (`GET /nodes/{id}/neighborsPage` is not `get_nodes_id_neighborspage`).
-2. **`tags: ['read']` or `['write']`** — the op. This fact currently exists *only* as the
+2. **`tags: ['read']` or `['write']`** — the op. This fact currently exists _only_ as the
    `requireGraph(cfg, 'read' | 'write')` middleware argument, which is not machine-readable from the
    registry. Read-only mode and the destructive-operation annotations both depend on it, so the tag
    is new information rather than a rename.
@@ -157,33 +159,33 @@ needs, and both are first-class OpenAPI fields that improve `/openapi.json` for 
 Paths below are shown relative to `/t/{tenant}/p/{project}`; the declarations spell them out in
 full. Tool name is the route's `operationId`, op is its tag.
 
-| Method | Path | tag | `operationId` |
-|---|---|---|---|
-| POST | `/nodes` | write | `create_node` |
-| GET | `/nodes` | read | `list_nodes` |
-| GET | `/nodes/{id}` | read | `get_node` |
-| PATCH | `/nodes/{id}` | write | `update_node` |
-| DELETE | `/nodes/{id}` | write | `delete_node` |
-| POST | `/edges` | write | `create_edge` |
-| DELETE | `/edges/{id}` | write | `delete_edge` |
-| GET | `/nodes/{id}/neighbors` | read | `neighbors` |
-| GET | `/nodes/{id}/neighborsPage` | read | `neighbors_page` |
-| GET | `/nodes/{id}/content` | read | `get_node_content` |
-| GET | `/nodes/{id}/history` | read | `node_history` |
-| GET | `/graph` | read | `graph_slice` |
-| GET | `/retrieve` | read | `retrieve` |
-| POST | `/hybrid` | read | `hybrid_search` |
-| POST | `/journey` | read | `journey` |
-| POST | `/match` | read | `match_pattern` |
-| POST | `/bulk` | write | `bulk_load` |
-| GET | `/changes` | read | `change_feed` |
-| GET | `/events` | read | *skipped* |
-| GET | `/diff` | read | `diff` |
-| POST | `/algorithms/shortest-path` | read | `shortest_path` |
-| POST | `/algorithms/pagerank` | write | `pagerank` |
-| POST | `/algorithms/community` | write | `community` |
-| POST | `/algorithms/centrality` | write | `centrality` |
-| GET | `/algorithms/top` | read | `top_nodes` |
+| Method | Path                        | tag   | `operationId`      |
+| ------ | --------------------------- | ----- | ------------------ |
+| POST   | `/nodes`                    | write | `create_node`      |
+| GET    | `/nodes`                    | read  | `list_nodes`       |
+| GET    | `/nodes/{id}`               | read  | `get_node`         |
+| PATCH  | `/nodes/{id}`               | write | `update_node`      |
+| DELETE | `/nodes/{id}`               | write | `delete_node`      |
+| POST   | `/edges`                    | write | `create_edge`      |
+| DELETE | `/edges/{id}`               | write | `delete_edge`      |
+| GET    | `/nodes/{id}/neighbors`     | read  | `neighbors`        |
+| GET    | `/nodes/{id}/neighborsPage` | read  | `neighbors_page`   |
+| GET    | `/nodes/{id}/content`       | read  | `get_node_content` |
+| GET    | `/nodes/{id}/history`       | read  | `node_history`     |
+| GET    | `/graph`                    | read  | `graph_slice`      |
+| GET    | `/retrieve`                 | read  | `retrieve`         |
+| POST   | `/hybrid`                   | read  | `hybrid_search`    |
+| POST   | `/journey`                  | read  | `journey`          |
+| POST   | `/match`                    | read  | `match_pattern`    |
+| POST   | `/bulk`                     | write | `bulk_load`        |
+| GET    | `/changes`                  | read  | `change_feed`      |
+| GET    | `/events`                   | read  | _skipped_          |
+| GET    | `/diff`                     | read  | `diff`             |
+| POST   | `/algorithms/shortest-path` | read  | `shortest_path`    |
+| POST   | `/algorithms/pagerank`      | write | `pagerank`         |
+| POST   | `/algorithms/community`     | write | `community`        |
+| POST   | `/algorithms/centrality`    | write | `centrality`       |
+| GET    | `/algorithms/top`           | read  | `top_nodes`        |
 
 `GET /events` is Server-Sent Events (`text/event-stream`, and 501 without a configured outbox). MCP
 tool results are single values; a live stream belongs behind MCP notifications, which is a separate
@@ -233,13 +235,13 @@ object. 204 responses (`delete_node`, `delete_edge`) return `{ ok: true }`.
 Failure: `isError: true` with a readable message, never a thrown exception — a tool error the agent
 can read and recover from beats a transport error it cannot.
 
-| Status | Message |
-|---|---|
-| 400 | validation failed, with the Zod issues verbatim |
-| 401 | not authenticated |
-| 403 | not authorized for `{op}` on `{project}` |
-| 404 | not found (project or node) |
-| 501 | capability unconfigured, naming which (`embed` for `/retrieve`, outbox for `/events`) |
+| Status | Message                                                                               |
+| ------ | ------------------------------------------------------------------------------------- |
+| 400    | validation failed, with the Zod issues verbatim                                       |
+| 401    | not authenticated                                                                     |
+| 403    | not authorized for `{op}` on `{project}`                                              |
+| 404    | not found (project or node)                                                           |
+| 501    | capability unconfigured, naming which (`embed` for `/retrieve`, outbox for `/events`) |
 
 Only a transport-level failure — the remote host unreachable — throws.
 
@@ -253,11 +255,11 @@ context instead of costing a round trip per agent session.
 
 Schema availability differs by mode, and the difference is user-visible:
 
-| Mode | Has `GraphSchema`? |
-|---|---|
-| local (`createGraphxMcp` bootstraps `createApp`) | yes — the caller imports it |
+| Mode                                              | Has `GraphSchema`?               |
+| ------------------------------------------------- | -------------------------------- |
+| local (`createGraphxMcp` bootstraps `createApp`)  | yes — the caller imports it      |
 | mounted (`createMcpApp` on the caller's Hono app) | yes — same process as `serve.ts` |
-| standalone binary pointed at a foreign URL | no |
+| standalone binary pointed at a foreign URL        | no                               |
 
 The third case degrades rather than failing: `describe_schema` samples distinct `type` values from
 `GET /nodes` and returns them tagged `inferred: true`, with no property schemas. Documented as a
@@ -300,15 +302,15 @@ v1. Left out rather than approximated badly.
 
 ## Surface summary
 
-| | count |
-|---|---|
-| mirrored tools, read (15 existing + `list_projects`) | 16 |
-| mirrored tools, write | 9 |
-| non-mirrored tools (`describe_schema`) | 1 |
-| **total tools** | **26** |
-| total tools, `--read-only` | 17 |
-| resources | 1 |
-| prompts | 0 |
+|                                                      | count  |
+| ---------------------------------------------------- | ------ |
+| mirrored tools, read (15 existing + `list_projects`) | 16     |
+| mirrored tools, write                                | 9      |
+| non-mirrored tools (`describe_schema`)               | 1      |
+| **total tools**                                      | **26** |
+| total tools, `--read-only`                           | 17     |
+| resources                                            | 1      |
+| prompts                                              | 0      |
 
 ## Configuration
 

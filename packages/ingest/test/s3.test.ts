@@ -56,9 +56,7 @@ test('s3Source: list() paginates until IsTruncated is false', async () => {
 });
 
 test('s3Source: list() respects custom include filter', async () => {
-	const client = makeFakeClient([
-		{ contents: ['a.md', 'b.txt', 'c.md'], truncated: false },
-	]);
+	const client = makeFakeClient([{ contents: ['a.md', 'b.txt', 'c.md'], truncated: false }]);
 	const src = s3Source({ client, bucket: 'bucket', include: ['.txt'] });
 	const keys = await src.list();
 	expect(keys).toEqual(['b.txt']);
@@ -85,9 +83,7 @@ test('s3Source: read() fetches key with prefix prepended and returns body', asyn
 });
 
 test('s3Source: list() without prefix returns full key as-is', async () => {
-	const client = makeFakeClient([
-		{ contents: ['notes/a.md', 'notes/b.md'], truncated: false },
-	]);
+	const client = makeFakeClient([{ contents: ['notes/a.md', 'notes/b.md'], truncated: false }]);
 	const src = s3Source({ client, bucket: 'bucket' });
 	const keys = await src.list();
 	expect(keys).toEqual(['notes/a.md', 'notes/b.md']);

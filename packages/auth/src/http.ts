@@ -99,22 +99,40 @@ function onError(err: Error, c: Context): Response {
  */
 export function createAuthApp(cfg: AuthServeConfig): Hono<AuthEnv> {
 	const app = new Hono<AuthEnv>()
-		.post('/check', authn(cfg), requireAuth(cfg, 'read'), zValidator('json', checkBody), async (c) => {
-			const { object, relation, subject, asOf } = c.req.valid('json');
-			const allowed = await c.get('auth').check(object, relation, subject, { asOf });
-			return c.json({ allowed });
-		})
-		.post('/tuples', authn(cfg), requireAuth(cfg, 'write'), zValidator('json', tuplesBody), async (c) => {
-			const { writes, deletes } = c.req.valid('json');
-			const auth = c.get('auth');
-			if (writes.length > 0) await auth.write(writes);
-			if (deletes.length > 0) await auth.delete(deletes);
-			return c.json({ ok: true });
-		})
-		.post('/expand', authn(cfg), requireAuth(cfg, 'read'), zValidator('json', expandBody), async (c) => {
-			const { object, relation, asOf } = c.req.valid('json');
-			return c.json(await c.get('auth').expand(object, relation, { asOf }));
-		})
+		.post(
+			'/check',
+			authn(cfg),
+			requireAuth(cfg, 'read'),
+			zValidator('json', checkBody),
+			async (c) => {
+				const { object, relation, subject, asOf } = c.req.valid('json');
+				const allowed = await c.get('auth').check(object, relation, subject, { asOf });
+				return c.json({ allowed });
+			},
+		)
+		.post(
+			'/tuples',
+			authn(cfg),
+			requireAuth(cfg, 'write'),
+			zValidator('json', tuplesBody),
+			async (c) => {
+				const { writes, deletes } = c.req.valid('json');
+				const auth = c.get('auth');
+				if (writes.length > 0) await auth.write(writes);
+				if (deletes.length > 0) await auth.delete(deletes);
+				return c.json({ ok: true });
+			},
+		)
+		.post(
+			'/expand',
+			authn(cfg),
+			requireAuth(cfg, 'read'),
+			zValidator('json', expandBody),
+			async (c) => {
+				const { object, relation, asOf } = c.req.valid('json');
+				return c.json(await c.get('auth').expand(object, relation, { asOf }));
+			},
+		)
 		.post(
 			'/list-objects',
 			authn(cfg),
@@ -122,7 +140,9 @@ export function createAuthApp(cfg: AuthServeConfig): Hono<AuthEnv> {
 			zValidator('json', listBody),
 			async (c) => {
 				const { subject, relation, type, asOf, limit, cursor } = c.req.valid('json');
-				return c.json(await c.get('auth').listObjects(subject, relation, type, { asOf, limit, cursor }));
+				return c.json(
+					await c.get('auth').listObjects(subject, relation, type, { asOf, limit, cursor }),
+				);
 			},
 		);
 	app.onError(onError);

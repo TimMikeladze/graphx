@@ -25,6 +25,15 @@ export default defineWorkspace([
 		},
 	},
 	{
+		name: 'auth',
+		root: 'packages/auth',
+		// ReBAC layer over core. Single entry — `createAuthApp` and the model builders are all
+		// reachable from `index.ts`; there is no optional peer to isolate behind a subpath.
+		config: {
+			entry: ['src/index.ts'],
+		},
+	},
+	{
 		name: 'cli',
 		root: 'packages/cli',
 		// The shebang makes dist/cli.js directly executable as a bin.

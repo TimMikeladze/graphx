@@ -26,12 +26,12 @@
 
 Routes (paths are relative — the operator mounts under a tenant/project prefix; `resolveAuth` reads `c.req.param(...)` to pick the namespace):
 
-| Method + path | op | body | response |
-|---|---|---|---|
-| `POST /check` | read | `{object, relation, subject, asOf?}` | `{allowed: boolean}` |
-| `POST /expand` | read | `{object, relation, asOf?}` | `UsersetTree` |
-| `POST /list-objects` | read | `{subject, relation, type, asOf?, limit?, cursor?}` | `ListObjectsPage` |
-| `POST /tuples` | write | `{writes?: Tuple[], deletes?: Tuple[]}` | `{ok: true}` |
+| Method + path        | op    | body                                                | response             |
+| -------------------- | ----- | --------------------------------------------------- | -------------------- |
+| `POST /check`        | read  | `{object, relation, subject, asOf?}`                | `{allowed: boolean}` |
+| `POST /expand`       | read  | `{object, relation, asOf?}`                         | `UsersetTree`        |
+| `POST /list-objects` | read  | `{subject, relation, type, asOf?, limit?, cursor?}` | `ListObjectsPage`    |
+| `POST /tuples`       | write | `{writes?: Tuple[], deletes?: Tuple[]}`             | `{ok: true}`         |
 
 Error mapping (`app.onError`): `HTTPException` passthrough; `ZodError` → 400 `{error:'validation', issues}`; any `Error` whose message starts `auth:` (model validation — unknown type/relation, etc.) → 400 `{error}`; else → 500 `{error:'internal'}`.
 
@@ -50,6 +50,7 @@ packages/auth/
 ## Task 1: Package deps + `createAuthApp` skeleton + `/check` + `/tuples`
 
 **Files:**
+
 - Modify: `packages/auth/package.json`
 - Create: `packages/auth/src/http.ts`
 - Test: `packages/auth/test/p6-http.test.ts`
@@ -57,10 +58,12 @@ packages/auth/
 - [ ] **Step 1: Add deps to `packages/auth/package.json`**
 
 Add to `dependencies` (alphabetical), then run `bun install` from repo root:
+
 ```json
 		"@hono/zod-validator": "^0.8.0",
 		"hono": "^4.12.23",
 ```
+
 (Match the versions core uses. After editing, run: `bun install`.)
 
 - [ ] **Step 2: Write the failing test** — `packages/auth/test/p6-http.test.ts`
@@ -109,7 +112,11 @@ test('P6: /tuples writes, then /check reflects it', async () => {
 	expect(w.status).toBe(200);
 	expect(await w.json()).toEqual({ ok: true });
 
-	const r = await post(app, '/check', { object: 'doc:1', relation: 'viewer', subject: 'user:alice' });
+	const r = await post(app, '/check', {
+		object: 'doc:1',
+		relation: 'viewer',
+		subject: 'user:alice',
+	});
 	expect(r.status).toBe(200);
 	expect(await r.json()).toEqual({ allowed: true }); // via editor⇒viewer
 	db.close();
@@ -124,9 +131,14 @@ test('P6: /check is false for a non-grant', async () => {
 
 test('P6: 401 when authn throws (no token)', async () => {
 	const { db, app } = await freshApp();
-	const r = await post(app, '/check', { object: 'doc:1', relation: 'viewer', subject: 'user:a' }, {
-		'content-type': 'application/json',
-	});
+	const r = await post(
+		app,
+		'/check',
+		{ object: 'doc:1', relation: 'viewer', subject: 'user:a' },
+		{
+			'content-type': 'application/json',
+		},
+	);
 	expect(r.status).toBe(401);
 	db.close();
 });
@@ -208,7 +220,11 @@ const checkBody = z.object({
 	subject: z.string(),
 	asOf: z.number().optional(),
 });
-const expandBody = z.object({ object: z.string(), relation: z.string(), asOf: z.number().optional() });
+const expandBody = z.object({
+	object: z.string(),
+	relation: z.string(),
+	asOf: z.number().optional(),
+});
 const listBody = z.object({
 	subject: z.string(),
 	relation: z.string(),
@@ -260,18 +276,30 @@ function onError(err: Error, c: Context): Response {
  */
 export function createAuthApp(cfg: AuthServeConfig): Hono<AuthEnv> {
 	const app = new Hono<AuthEnv>()
-		.post('/check', authn(cfg), requireAuth(cfg, 'read'), zValidator('json', checkBody), async (c) => {
-			const { object, relation, subject, asOf } = c.req.valid('json');
-			const allowed = await c.get('auth').check(object, relation, subject, { asOf });
-			return c.json({ allowed });
-		})
-		.post('/tuples', authn(cfg), requireAuth(cfg, 'write'), zValidator('json', tuplesBody), async (c) => {
-			const { writes, deletes } = c.req.valid('json');
-			const auth = c.get('auth');
-			if (writes.length > 0) await auth.write(writes);
-			if (deletes.length > 0) await auth.delete(deletes);
-			return c.json({ ok: true });
-		});
+		.post(
+			'/check',
+			authn(cfg),
+			requireAuth(cfg, 'read'),
+			zValidator('json', checkBody),
+			async (c) => {
+				const { object, relation, subject, asOf } = c.req.valid('json');
+				const allowed = await c.get('auth').check(object, relation, subject, { asOf });
+				return c.json({ allowed });
+			},
+		)
+		.post(
+			'/tuples',
+			authn(cfg),
+			requireAuth(cfg, 'write'),
+			zValidator('json', tuplesBody),
+			async (c) => {
+				const { writes, deletes } = c.req.valid('json');
+				const auth = c.get('auth');
+				if (writes.length > 0) await auth.write(writes);
+				if (deletes.length > 0) await auth.delete(deletes);
+				return c.json({ ok: true });
+			},
+		);
 	app.onError(onError);
 	return app;
 }
@@ -296,6 +324,7 @@ git commit -m "feat(auth): HTTP serving — createAuthApp + /check + /tuples (P6
 ## Task 2: `/expand` + `/list-objects` routes + exports + green gate
 
 **Files:**
+
 - Modify: `packages/auth/src/http.ts`, `packages/auth/src/index.ts`
 - Test: `packages/auth/test/p6-http.test.ts` (append)
 
@@ -329,7 +358,11 @@ test('P6: /list-objects returns a page', async () => {
 			{ object: 'doc:2', relation: 'editor', subject: 'user:alice' },
 		],
 	});
-	const r = await post(app, '/list-objects', { subject: 'user:alice', relation: 'viewer', type: 'doc' });
+	const r = await post(app, '/list-objects', {
+		subject: 'user:alice',
+		relation: 'viewer',
+		type: 'doc',
+	});
 	expect(r.status).toBe(200);
 	expect(await r.json()).toEqual({ objects: ['doc:1', 'doc:2'], nextCursor: null });
 	db.close();
@@ -343,20 +376,24 @@ test('P6: /list-objects paginates via limit + cursor', async () => {
 			{ object: 'doc:2', relation: 'viewer', subject: 'user:alice' },
 		],
 	});
-	const p1 = await (await post(app, '/list-objects', {
-		subject: 'user:alice',
-		relation: 'viewer',
-		type: 'doc',
-		limit: 1,
-	})).json();
+	const p1 = await (
+		await post(app, '/list-objects', {
+			subject: 'user:alice',
+			relation: 'viewer',
+			type: 'doc',
+			limit: 1,
+		})
+	).json();
 	expect(p1).toEqual({ objects: ['doc:1'], nextCursor: 'doc:1' });
-	const p2 = await (await post(app, '/list-objects', {
-		subject: 'user:alice',
-		relation: 'viewer',
-		type: 'doc',
-		limit: 1,
-		cursor: 'doc:1',
-	})).json();
+	const p2 = await (
+		await post(app, '/list-objects', {
+			subject: 'user:alice',
+			relation: 'viewer',
+			type: 'doc',
+			limit: 1,
+			cursor: 'doc:1',
+		})
+	).json();
 	expect(p2).toEqual({ objects: ['doc:2'], nextCursor: 'doc:2' });
 	db.close();
 });
@@ -372,6 +409,7 @@ Expected: FAIL — `/expand` and `/list-objects` return 404 (not routed).
 - [ ] **Step 3: Add the two routes in `createAuthApp` (`packages/auth/src/http.ts`)**
 
 Chain them onto the app (after `/tuples`, before `app.onError`):
+
 ```typescript
 		.post('/expand', authn(cfg), requireAuth(cfg, 'read'), zValidator('json', expandBody), async (c) => {
 			const { object, relation, asOf } = c.req.valid('json');
@@ -392,6 +430,7 @@ Chain them onto the app (after `/tuples`, before `app.onError`):
 - [ ] **Step 4: Export from `packages/auth/src/index.ts`**
 
 Add:
+
 ```typescript
 export { type AuthEnv, type AuthOp, type AuthServeConfig, createAuthApp } from './http.ts';
 ```
@@ -429,8 +468,8 @@ git commit -m "feat(auth): HTTP serving — /expand + /list-objects (P6a complet
 
 ## Remaining P6 (separate plans)
 
-| Plan | Scope |
-|------|-------|
-| P6b | consistency tokens — opaque snapshot token wrapping `asOf` (read-your-writes / repeatable reads) |
-| P6c | perf — shared memo across `listObjects` candidates; materialized reverse index; wire §19.2 governance fan-out caps into `check`/`edgesInto`/`reachableOfType` |
-| P6d | packaging — publishable `@graphx/auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import) |
+| Plan | Scope                                                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P6b  | consistency tokens — opaque snapshot token wrapping `asOf` (read-your-writes / repeatable reads)                                                              |
+| P6c  | perf — shared memo across `listObjects` candidates; materialized reverse index; wire §19.2 governance fan-out caps into `check`/`edgesInto`/`reachableOfType` |
+| P6d  | packaging — publishable `@graphx/auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import)             |

@@ -29,30 +29,33 @@ libsqlOnly('P0: connection pragmas apply (foreign_keys ON, busy_timeout set)', a
 	c.close();
 });
 
-libsqlOnly('P0 capability: native vectors — F32_BLOB + libsql_vector_idx + vector_top_k', async () => {
-	const c = mem();
-	await c.executeMultiple(
-		`CREATE TABLE items (ver INTEGER PRIMARY KEY, emb F32_BLOB(4));
+libsqlOnly(
+	'P0 capability: native vectors — F32_BLOB + libsql_vector_idx + vector_top_k',
+	async () => {
+		const c = mem();
+		await c.executeMultiple(
+			`CREATE TABLE items (ver INTEGER PRIMARY KEY, emb F32_BLOB(4));
 		 CREATE INDEX items_emb ON items(libsql_vector_idx(emb, 'metric=cosine'));`,
-	);
-	await c.batch(
-		[
-			{ sql: 'INSERT INTO items (ver, emb) VALUES (1, vector(?))', args: ['[1,0,0,0]'] },
-			{ sql: 'INSERT INTO items (ver, emb) VALUES (2, vector(?))', args: ['[0,1,0,0]'] },
-			{ sql: 'INSERT INTO items (ver, emb) VALUES (3, vector(?))', args: ['[0.9,0.1,0,0]'] },
-		],
-		'write',
-	);
-	// vector_top_k returns base-table rowids in column `id`; join on rowid (= ver alias).
-	const r = await c.execute({
-		sql: "SELECT i.ver FROM vector_top_k('items_emb', vector(?), 2) v JOIN items i ON i.rowid = v.id",
-		args: ['[1,0,0,0]'],
-	});
-	const vers = r.rows.map((x) => Number(x.ver));
-	expect(vers.length).toBe(2);
-	expect(vers).toContain(1); // nearest to the query
-	c.close();
-});
+		);
+		await c.batch(
+			[
+				{ sql: 'INSERT INTO items (ver, emb) VALUES (1, vector(?))', args: ['[1,0,0,0]'] },
+				{ sql: 'INSERT INTO items (ver, emb) VALUES (2, vector(?))', args: ['[0,1,0,0]'] },
+				{ sql: 'INSERT INTO items (ver, emb) VALUES (3, vector(?))', args: ['[0.9,0.1,0,0]'] },
+			],
+			'write',
+		);
+		// vector_top_k returns base-table rowids in column `id`; join on rowid (= ver alias).
+		const r = await c.execute({
+			sql: "SELECT i.ver FROM vector_top_k('items_emb', vector(?), 2) v JOIN items i ON i.rowid = v.id",
+			args: ['[1,0,0,0]'],
+		});
+		const vers = r.rows.map((x) => Number(x.ver));
+		expect(vers.length).toBe(2);
+		expect(vers).toContain(1); // nearest to the query
+		c.close();
+	},
+);
 
 libsqlOnly('P0 capability: FTS5 virtual table + MATCH', async () => {
 	const c = mem();

@@ -21,8 +21,8 @@ import { defineGraphSchema } from '@graphx/core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
-  nodes: { person: z.object({ name: z.string() }) },
-  edges: { knows: { from: 'person', to: 'person' } },
+	nodes: { person: z.object({ name: z.string() }) },
+	edges: { knows: { from: 'person', to: 'person' } },
 });
 
 // Call once at module scope. `g` carries the per-schema types.
@@ -31,44 +31,48 @@ export const g = createGraphHooks(schema);
 const queryClient = new QueryClient();
 
 function Root() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <GraphProvider
-        baseUrl="https://api.example.com"
-        tenant="acme"
-        project="alpha"
-        headers={() => ({ authorization: `Bearer ${token}` })}
-      >
-        <App />
-      </GraphProvider>
-    </QueryClientProvider>
-  );
+	return (
+		<QueryClientProvider client={queryClient}>
+			<GraphProvider
+				baseUrl="https://api.example.com"
+				tenant="acme"
+				project="alpha"
+				headers={() => ({ authorization: `Bearer ${token}` })}
+			>
+				<App />
+			</GraphProvider>
+		</QueryClientProvider>
+	);
 }
 
 function NodeCard({ id }: { id: string }) {
-  const { data, isLoading } = g.useNode(id); // data: AnyNode<typeof schema> | null
-  const update = g.useUpdateNode();
-  if (isLoading) return <Spinner />;
-  return <button onClick={() => update.mutate({ id, patch: { data: { name: 'Ada' } } })}>{data?.data.name}</button>;
+	const { data, isLoading } = g.useNode(id); // data: AnyNode<typeof schema> | null
+	const update = g.useUpdateNode();
+	if (isLoading) return <Spinner />;
+	return (
+		<button onClick={() => update.mutate({ id, patch: { data: { name: 'Ada' } } })}>
+			{data?.data.name}
+		</button>
+	);
 }
 ```
 
 `GraphProvider` config:
 
-| Prop | Required | Notes |
-|---|---|---|
-| `baseUrl` | no (default `''`) | Origin the server is mounted at. `''` = same-origin / in-process. |
-| `tenant`, `project` | yes\* | Routes are `/t/:tenant/p/:project/...`. \*Or supply `bootstrap` instead. |
-| `bootstrap` | no | URL returning `{ tenant, project, user }` (e.g. `createApp`'s `/demo`) — fetched on mount, wires the transport + `x-user`/`x-tenant` for you. |
-| `fallback` | no | Rendered while a `bootstrap` fetch is in flight. |
-| `headers` | no | `() => Record<string,string> \| Promise<...>` — re-read per request (refreshed tokens). |
-| `fetch` | no (default global) | Inject for SSR, or `appFetch(app)` to drive an in-process Hono app with no server/port. |
+| Prop                | Required            | Notes                                                                                                                                         |
+| ------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`           | no (default `''`)   | Origin the server is mounted at. `''` = same-origin / in-process.                                                                             |
+| `tenant`, `project` | yes\*               | Routes are `/t/:tenant/p/:project/...`. \*Or supply `bootstrap` instead.                                                                      |
+| `bootstrap`         | no                  | URL returning `{ tenant, project, user }` (e.g. `createApp`'s `/demo`) — fetched on mount, wires the transport + `x-user`/`x-tenant` for you. |
+| `fallback`          | no                  | Rendered while a `bootstrap` fetch is in flight.                                                                                              |
+| `headers`           | no                  | `() => Record<string,string> \| Promise<...>` — re-read per request (refreshed tokens).                                                       |
+| `fetch`             | no (default global) | Inject for SSR, or `appFetch(app)` to drive an in-process Hono app with no server/port.                                                       |
 
 **Dev bootstrap** — against a `createApp` dev server, skip the ids entirely:
 
 ```tsx
 <GraphProvider bootstrap="/demo" fallback={<Spinner />}>
-  <App />
+	<App />
 </GraphProvider>
 ```
 
@@ -81,13 +85,17 @@ mismatched stored type resolves to `null`, so no discriminating). `useHistory`, 
 
 `useMatch` is fully typed per alias — pass the spec inline and each selected alias's row is
 type-narrowed from the pattern:
+
 ```ts
 const m = g.useMatch({
-  steps: [{ node: { alias: 'p', type: 'person' } }, { edge: { rel: 'owns' } },
-          { node: { alias: 'd', type: 'device' } }],
-  select: ['p', 'd'],
+	steps: [
+		{ node: { alias: 'p', type: 'person' } },
+		{ edge: { rel: 'owns' } },
+		{ node: { alias: 'd', type: 'device' } },
+	],
+	select: ['p', 'd'],
 });
-m.data?.rows[0]?.d.data.name;   // ^? typed NodeOf<S,'device'> — node.type & rel are schema-checked
+m.data?.rows[0]?.d.data.name; // ^? typed NodeOf<S,'device'> — node.type & rel are schema-checked
 ```
 
 …or build the same spec fluently (type/rel-checked, same per-alias row types):
@@ -135,15 +143,15 @@ or double-counts.
 
 ```tsx
 function LiveSync() {
-  g.useChangeFeedSync({ intervalMs: 2000 }); // mount once near the root
-  return null;
+	g.useChangeFeedSync({ intervalMs: 2000 }); // mount once near the root
+	return null;
 }
 ```
 
 - `fromNow: true` skips the existing backlog on mount (positions the cursor at the tip) — avoids a
   mount-time invalidation storm over a large graph.
 - The feed is `valid_from`-only: it carries inserts and update-successors, **not** pure closes
-  (`deleteEdge`, single-valued supersession). Edge/node *removals* are reconciled by the mutation
+  (`deleteEdge`, single-valued supersession). Edge/node _removals_ are reconciled by the mutation
   hooks' `onSettled`, so drive deletes through `useDeleteEdge` / `useDeleteNode`.
 
 ## Optimistic updates

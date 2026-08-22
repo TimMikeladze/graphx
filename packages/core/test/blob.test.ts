@@ -29,13 +29,18 @@ function makeFakeS3(
 	const fake = {
 		send(cmd: unknown): Promise<unknown> {
 			if (cmd instanceof PutObjectCommand) {
-				const { Key, Body, ContentType } = (cmd as { input: { Key: string; Body: Uint8Array; ContentType: string } }).input;
+				const { Key, Body, ContentType } = (
+					cmd as { input: { Key: string; Body: Uint8Array; ContentType: string } }
+				).input;
 				const count = (putCount.get(Key) ?? 0) + 1;
 				putCount.set(Key, count);
 				if (throwPreconditionOn.has(Key) && count > 1) {
 					return Promise.reject({ name: 'PreconditionFailed', $metadata: { httpStatusCode: 412 } });
 				}
-				store.set(Key, { body: Body as Uint8Array, contentType: ContentType ?? 'application/octet-stream' });
+				store.set(Key, {
+					body: Body as Uint8Array,
+					contentType: ContentType ?? 'application/octet-stream',
+				});
 				return Promise.resolve({});
 			}
 
@@ -70,7 +75,9 @@ function makeFakeS3(
 				return Promise.resolve({ Deleted: Delete.Objects });
 			}
 
-			return Promise.reject(new Error(`fake S3: unhandled command ${(cmd as object).constructor.name}`));
+			return Promise.reject(
+				new Error(`fake S3: unhandled command ${(cmd as object).constructor.name}`),
+			);
 		},
 	};
 

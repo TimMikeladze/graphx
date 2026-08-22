@@ -217,7 +217,9 @@ test('ingestDir: edgeFields frontmatter field becomes typed edge, field excluded
 	expect(edges.rows.length).toBe(1);
 	expect(String(edges.rows[0]!.rel)).toBe('related');
 	// related field must NOT appear in stored node data
-	const nodes = await client.execute("SELECT data FROM nodes WHERE uri = 'ingest:default:file:a.md'");
+	const nodes = await client.execute(
+		"SELECT data FROM nodes WHERE uri = 'ingest:default:file:a.md'",
+	);
 	const data = JSON.parse(String(nodes.rows[0]!.data));
 	expect(data).not.toHaveProperty('related');
 	await rm(dir, { recursive: true, force: true });
@@ -241,7 +243,8 @@ test('ingestDir: edgeFields array value becomes multiple edges', async () => {
 test('ingestDir: edgeFields object form with weight/data; re-ingest with drift updates edge', async () => {
 	const { g, client } = await graph();
 	const dir = await vault({
-		'a.md': '---\ntype: note\nrelated:\n  target: "[[b]]"\n  weight: 0.5\n  data:\n    note: x\n---\nbody',
+		'a.md':
+			'---\ntype: note\nrelated:\n  target: "[[b]]"\n  weight: 0.5\n  data:\n    note: x\n---\nbody',
 		'b.md': '---\ntype: note\n---\nleaf',
 	});
 	await ingestDir({ dir, graph: g, embed, edgeFields: { related: 'related' } });
@@ -269,7 +272,8 @@ test('ingestDir: edgeFields object form with weight/data; re-ingest with drift u
 test('ingestDir: drift in NESTED edge data is detected and updates the edge', async () => {
 	const { g, client } = await graph();
 	const dir = await vault({
-		'a.md': '---\ntype: note\ntagged:\n  target: "[[b]]"\n  data:\n    meta:\n      score: 1\n---\nbody',
+		'a.md':
+			'---\ntype: note\ntagged:\n  target: "[[b]]"\n  data:\n    meta:\n      score: 1\n---\nbody',
 		'b.md': '---\ntype: note\n---\nleaf',
 	});
 	await ingestDir({ dir, graph: g, embed, edgeFields: { tagged: 'tagged' } });
@@ -371,7 +375,9 @@ test('ingestDir: renaming a file with a stable id preserves the node + history (
 	const { g, client } = await graph();
 	const dir = await vault({ 'foo.md': '---\ntype: note\nid: stable-1\n---\nv1' });
 	await ingestDir({ dir, graph: g, embed });
-	const before = await client.execute("SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'");
+	const before = await client.execute(
+		"SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'",
+	);
 	const nodeId = String(before.rows[0]!.id);
 
 	// rename foo.md -> bar.md (same id), edit body
@@ -382,7 +388,9 @@ test('ingestDir: renaming a file with a stable id preserves the node + history (
 	expect(res.deleted).toBe(0); // identity survived the rename → NOT pruned
 	expect(res.added).toBe(0); // NOT a new node
 	expect(res.updated).toBe(1); // body changed → one new version
-	const after = await client.execute("SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'");
+	const after = await client.execute(
+		"SELECT id FROM nodes WHERE uri = 'ingest:default:id:stable-1'",
+	);
 	expect(after.rows.length).toBe(1);
 	expect(String(after.rows[0]!.id)).toBe(nodeId); // SAME node id
 	const versions = await client.execute({
@@ -442,7 +450,9 @@ test('ingestDir: frontmatter-only edit does NOT re-embed (body unchanged)', asyn
 	expect(embedCalls).toBe(1);
 
 	// Read stored emb before re-ingest
-	const before = await client.execute("SELECT emb FROM nodes WHERE uri = 'ingest:default:file:a.md'");
+	const before = await client.execute(
+		"SELECT emb FROM nodes WHERE uri = 'ingest:default:file:a.md'",
+	);
 	expect(before.rows[0]!.emb).not.toBeNull();
 
 	// Re-ingest after changing ONLY frontmatter (body unchanged) → no re-embed, result.updated=1
@@ -512,7 +522,9 @@ test('ingestDir: foreign edges (authored outside ingest) survive a reconcile of 
 	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\nstill links [[b]] after an edit');
 	await ingestDir({ dir, graph: g, embed });
 
-	const rels = (await client.execute('SELECT rel FROM edges ORDER BY rel')).rows.map((r) => String(r.rel));
+	const rels = (await client.execute('SELECT rel FROM edges ORDER BY rel')).rows.map((r) =>
+		String(r.rel),
+	);
 	expect(rels).toEqual(['links_to', 'related']); // ingest's own edge + the surviving foreign edge
 	await rm(dir, { recursive: true, force: true });
 	client.close();
@@ -581,7 +593,9 @@ test('ingestDir: accepts a custom in-memory Source (no dir)', async () => {
 test('ingestDir: throws when neither dir nor fileSource is provided', async () => {
 	const { g, client } = await graph();
 	// @ts-expect-error intentionally omitting required dir/fileSource
-	await expect(ingestDir({ graph: g, embed })).rejects.toThrow('ingestDir: requires `dir` or `fileSource`');
+	await expect(ingestDir({ graph: g, embed })).rejects.toThrow(
+		'ingestDir: requires `dir` or `fileSource`',
+	);
 	client.close();
 });
 
@@ -592,12 +606,14 @@ test('ingestDir: an image embed becomes an asset node + embeds edge (assets opt-
 	const dir = await vault({ 'doc.md': '---\ntype: note\n---\nsee ![alt](./img/pic.png)' });
 	const res = await ingestDir({ dir, graph: g, embed, assets: { type: 'asset' } });
 	expect(res.edgesAdded).toBe(1);
-	const asset = await client.execute("SELECT uri, content_type, data FROM nodes WHERE type = 'asset'");
+	const asset = await client.execute(
+		"SELECT uri, content_type, data FROM nodes WHERE type = 'asset'",
+	);
 	expect(asset.rows.length).toBe(1);
 	expect(String(asset.rows[0]!.uri)).toBe('ingest:default:asset:img/pic.png');
 	expect(String(asset.rows[0]!.content_type)).toBe('image/png');
 	expect(JSON.parse(String(asset.rows[0]!.data)).path).toBe('img/pic.png');
-	const edge = await client.execute("SELECT rel FROM edges");
+	const edge = await client.execute('SELECT rel FROM edges');
 	expect(edge.rows.length).toBe(1);
 	expect(String(edge.rows[0]!.rel)).toBe('embeds');
 	await rm(dir, { recursive: true, force: true });
@@ -650,15 +666,19 @@ test('ingestDir: removing an embed closes its edge; asset node survives prune', 
 	const { g, client } = await graph();
 	const dir = await vault({ 'doc.md': '---\ntype: note\n---\n![](./pic.png)' });
 	await ingestDir({ dir, graph: g, embed, assets: { type: 'asset' } });
-	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM edges")).rows[0]!.c)).toBe(1);
+	expect(Number((await client.execute('SELECT COUNT(*) AS c FROM edges')).rows[0]!.c)).toBe(1);
 
 	// remove the embed AND prune — the embeds edge closes, but the asset node is never pruned
 	await writeFile(join(dir, 'doc.md'), '---\ntype: note\n---\nno embed now');
 	const res = await ingestDir({ dir, graph: g, embed, assets: { type: 'asset' }, prune: true });
 	expect(res.edgesClosed).toBeGreaterThanOrEqual(1);
 	expect(res.deleted).toBe(0); // doc still present; asset never pruned
-	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM edges")).rows[0]!.c)).toBe(0);
-	expect(Number((await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'asset'")).rows[0]!.c)).toBe(1);
+	expect(Number((await client.execute('SELECT COUNT(*) AS c FROM edges')).rows[0]!.c)).toBe(0);
+	expect(
+		Number(
+			(await client.execute("SELECT COUNT(*) AS c FROM nodes WHERE type = 'asset'")).rows[0]!.c,
+		),
+	).toBe(1);
 	await rm(dir, { recursive: true, force: true });
 	client.close();
 });
@@ -916,7 +936,7 @@ test('ingestDir: writing the missing note re-points the link at the real node', 
 	await writeFile(join(dir, 'a.md'), '---\ntype: note\n---\n[[ghost]] (edited)');
 	await ingestDir({ dir, graph: g, embed, dangling: { type: 'stub' } });
 	const edges = await client.execute(
-		"SELECT n.type AS t FROM edges e JOIN nodes n ON n.id = e.dst",
+		'SELECT n.type AS t FROM edges e JOIN nodes n ON n.id = e.dst',
 	);
 	expect(edges.rows.map((r) => String(r.t))).toEqual(['note']);
 	await rm(dir, { recursive: true, force: true });

@@ -33,8 +33,16 @@ test('listProjects is scoped to one tenant', async () => {
 	const control = await freshControl();
 	const a = await createTenant(control, { name: 'A' });
 	const b = await createTenant(control, { name: 'B' });
-	await createProject(control, { tenantId: a, name: 'Alpha', dbNamespace: `ns_${ulid().toLowerCase()}` });
-	await createProject(control, { tenantId: b, name: 'Beta', dbNamespace: `ns_${ulid().toLowerCase()}` });
+	await createProject(control, {
+		tenantId: a,
+		name: 'Alpha',
+		dbNamespace: `ns_${ulid().toLowerCase()}`,
+	});
+	await createProject(control, {
+		tenantId: b,
+		name: 'Beta',
+		dbNamespace: `ns_${ulid().toLowerCase()}`,
+	});
 	const projA = await listProjects(control, a);
 	expect(projA.map((p) => p.name)).toEqual(['Alpha']);
 	expect(projA[0].dbNamespace.startsWith('ns_')).toBe(true);

@@ -1,4 +1,4 @@
-import type { SchemaEdgeRel } from "./types"
+import type { SchemaEdgeRel } from './types';
 
 /**
  * Which relations may join two nodes, per the declared schema. A rel with `from`/`to` constrains
@@ -9,20 +9,17 @@ import type { SchemaEdgeRel } from "./types"
  * and it also enforces things this cannot see (single-valued rels, per-rel data schemas).
  */
 export function relsFor(
-  rels: SchemaEdgeRel[],
-  srcType?: string,
-  dstType?: string,
+	rels: SchemaEdgeRel[],
+	srcType?: string,
+	dstType?: string,
 ): SchemaEdgeRel[] {
-  return rels.filter(
-    (rel) =>
-      accepts(rel.from, srcType) && accepts(rel.to, dstType),
-  )
+	return rels.filter((rel) => accepts(rel.from, srcType) && accepts(rel.to, dstType));
 }
 
 /** `null` ⇒ unconstrained. An unknown endpoint type cannot be ruled out, so it passes. */
 function accepts(allowed: string[] | null, type?: string): boolean {
-  if (allowed === null || type === undefined) return true
-  return allowed.includes(type)
+	if (allowed === null || type === undefined) return true;
+	return allowed.includes(type);
 }
 
 /**
@@ -30,11 +27,11 @@ function accepts(allowed: string[] | null, type?: string): boolean {
  * when at least one rel matches.
  */
 export function noRelReason(
-  rels: SchemaEdgeRel[],
-  srcType?: string,
-  dstType?: string,
+	rels: SchemaEdgeRel[],
+	srcType?: string,
+	dstType?: string,
 ): string | undefined {
-  if (relsFor(rels, srcType, dstType).length > 0) return undefined
-  if (rels.length === 0) return "This project declares no relations."
-  return `No declared relation goes from ${srcType ?? "this type"} to ${dstType ?? "that type"}.`
+	if (relsFor(rels, srcType, dstType).length > 0) return undefined;
+	if (rels.length === 0) return 'This project declares no relations.';
+	return `No declared relation goes from ${srcType ?? 'this type'} to ${dstType ?? 'that type'}.`;
 }

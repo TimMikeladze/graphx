@@ -2,13 +2,25 @@
 	"name": "@graphx/cli",
 	"version": "0.1.0",
 	"description": "graphx CLI — scaffold, ingest, serve, and run triggers over a graphx graph",
+	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/cli#readme",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
 	"license": "MIT",
-	"type": "module",
-	"module": "./dist/cli.js",
-	"types": "./dist/cli.d.ts",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "packages/cli"
+	},
 	"bin": {
 		"graphx": "./dist/cli.js"
 	},
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"module": "./dist/cli.js",
+	"types": "./dist/cli.d.ts",
 	"exports": {
 		".": {
 			"import": {
@@ -21,6 +33,11 @@
 	"scripts": {
 		"type-check": "tsc --noEmit"
 	},
+	"devDependencies": {
+		"@graphx/core": "workspace:*",
+		"@graphx/ingest": "workspace:*",
+		"@types/node": "^25.9.1"
+	},
 	"peerDependencies": {
 		"@graphx/core": "workspace:*",
 		"@graphx/ingest": "workspace:*",
@@ -30,10 +47,5 @@
 		"typescript": {
 			"optional": true
 		}
-	},
-	"devDependencies": {
-		"@types/node": "^25.9.1",
-		"@graphx/core": "workspace:*",
-		"@graphx/ingest": "workspace:*"
 	}
 }

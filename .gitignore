@@ -43,3 +43,6 @@ yarn-error.log*
 
 # Playwright MCP scratch: snapshots, console logs and screenshots from driving the admin UI.
 .playwright-mcp/
+
+# DuckDB scratch databases + spill (see duck-pool.ts duckDataDir)
+.graphx-data/

@@ -6,7 +6,8 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/TimMikeladze/graphx.git"
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "packages/core"
 	},
 	"files": [
 		"dist"

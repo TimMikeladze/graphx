@@ -18,7 +18,11 @@ import { init } from '../src/schema.ts';
 
 const SCHEMA = defineGraphSchema({
 	nodes: {
-		Doc: z.object({ slug: z.string().optional(), rank: z.number().optional(), i: z.number().optional() }),
+		Doc: z.object({
+			slug: z.string().optional(),
+			rank: z.number().optional(),
+			i: z.number().optional(),
+		}),
 	},
 	edges: {
 		links: { from: 'Doc', to: 'Doc' },
@@ -138,7 +142,11 @@ describe('duckdb query paths', () => {
 		const seenPairs: string[] = [];
 		let cursor: string | undefined;
 		for (let page = 0; page < 10; page++) {
-			const q = await match(SCHEMA, client).node('a', 'Doc').out('next').node('b', 'Doc').select('a', 'b');
+			const q = await match(SCHEMA, client)
+				.node('a', 'Doc')
+				.out('next')
+				.node('b', 'Doc')
+				.select('a', 'b');
 			const p = await q.page({ limit: 2, cursor });
 			for (const row of p.rows) {
 				expect(row.a.id).toBe(hub.id);

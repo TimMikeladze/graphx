@@ -1,287 +1,268 @@
 {
-  "corpus": [
-    {
-      "ver": 1,
-      "body": "graph database with temporal edges"
-    },
-    {
-      "ver": 2,
-      "body": "temporal graph query language"
-    },
-    {
-      "ver": 3,
-      "body": "vector search over a graph"
-    },
-    {
-      "ver": 4,
-      "body": "full text search with bm25 ranking"
-    },
-    {
-      "ver": 5,
-      "body": "graph graph graph repeated term document"
-    },
-    {
-      "ver": 6,
-      "body": "a document about storage and object storage"
-    },
-    {
-      "ver": 7,
-      "body": "edges connect nodes in a graph database"
-    },
-    {
-      "ver": 8,
-      "body": "nothing in common here"
-    }
-  ],
-  "duckdb": {
-    "dict": [
-      {
-        "term": "a",
-        "df": 3
-      },
-      {
-        "term": "about",
-        "df": 1
-      },
-      {
-        "term": "and",
-        "df": 1
-      },
-      {
-        "term": "bm25",
-        "df": 1
-      },
-      {
-        "term": "common",
-        "df": 1
-      },
-      {
-        "term": "connect",
-        "df": 1
-      },
-      {
-        "term": "database",
-        "df": 2
-      },
-      {
-        "term": "document",
-        "df": 2
-      },
-      {
-        "term": "edges",
-        "df": 2
-      },
-      {
-        "term": "full",
-        "df": 1
-      },
-      {
-        "term": "graph",
-        "df": 5
-      },
-      {
-        "term": "here",
-        "df": 1
-      },
-      {
-        "term": "in",
-        "df": 2
-      },
-      {
-        "term": "language",
-        "df": 1
-      },
-      {
-        "term": "nodes",
-        "df": 1
-      },
-      {
-        "term": "nothing",
-        "df": 1
-      },
-      {
-        "term": "object",
-        "df": 1
-      },
-      {
-        "term": "over",
-        "df": 1
-      },
-      {
-        "term": "query",
-        "df": 1
-      },
-      {
-        "term": "ranking",
-        "df": 1
-      },
-      {
-        "term": "repeated",
-        "df": 1
-      },
-      {
-        "term": "search",
-        "df": 2
-      },
-      {
-        "term": "storage",
-        "df": 1
-      },
-      {
-        "term": "temporal",
-        "df": 2
-      },
-      {
-        "term": "term",
-        "df": 1
-      },
-      {
-        "term": "text",
-        "df": 1
-      },
-      {
-        "term": "vector",
-        "df": 1
-      },
-      {
-        "term": "with",
-        "df": 2
-      }
-    ],
-    "docs": [
-      {
-        "ver": 2,
-        "len": 4
-      },
-      {
-        "ver": 8,
-        "len": 4
-      },
-      {
-        "ver": 1,
-        "len": 5
-      },
-      {
-        "ver": 3,
-        "len": 5
-      },
-      {
-        "ver": 4,
-        "len": 6
-      },
-      {
-        "ver": 5,
-        "len": 6
-      },
-      {
-        "ver": 6,
-        "len": 7
-      },
-      {
-        "ver": 7,
-        "len": 7
-      }
-    ],
-    "stats": {
-      "num_docs": 8,
-      "avgdl": 5.5
-    },
-    "bm25": {
-      "graph": [
-        {
-          "ver": 5,
-          "score": 0.32967462692171723
-        },
-        {
-          "ver": 2,
-          "score": 0.2407391461707423
-        },
-        {
-          "ver": 1,
-          "score": 0.2221412722176378
-        },
-        {
-          "ver": 3,
-          "score": 0.2221412722176378
-        },
-        {
-          "ver": 7,
-          "score": 0.19241232872382752
-        }
-      ],
-      "graph database": [
-        {
-          "ver": 1,
-          "score": 0.7999318524137045
-        },
-        {
-          "ver": 7,
-          "score": 0.6928777755107551
-        },
-        {
-          "ver": 5,
-          "score": 0.32967462692171723
-        },
-        {
-          "ver": 2,
-          "score": 0.2407391461707423
-        },
-        {
-          "ver": 3,
-          "score": 0.2221412722176378
-        }
-      ],
-      "temporal search": [
-        {
-          "ver": 2,
-          "score": 0.6261637450496907
-        },
-        {
-          "ver": 1,
-          "score": 0.5777905801960667
-        },
-        {
-          "ver": 3,
-          "score": 0.5777905801960667
-        },
-        {
-          "ver": 4,
-          "score": 0.5363553991461496
-        }
-      ],
-      "storage": [
-        {
-          "ver": 6,
-          "score": 0.9937340506218565
-        }
-      ],
-      "missing": []
-    }
-  },
-  "libsql": {
-    "graph": [
-      5,
-      2,
-      1,
-      3,
-      7
-    ],
-    "graph database": [
-      1,
-      7,
-      5,
-      2,
-      3
-    ],
-    "temporal search": [
-      2,
-      1,
-      3,
-      4
-    ],
-    "storage": [
-      6
-    ],
-    "missing": []
-  }
+	"corpus": [
+		{
+			"ver": 1,
+			"body": "graph database with temporal edges"
+		},
+		{
+			"ver": 2,
+			"body": "temporal graph query language"
+		},
+		{
+			"ver": 3,
+			"body": "vector search over a graph"
+		},
+		{
+			"ver": 4,
+			"body": "full text search with bm25 ranking"
+		},
+		{
+			"ver": 5,
+			"body": "graph graph graph repeated term document"
+		},
+		{
+			"ver": 6,
+			"body": "a document about storage and object storage"
+		},
+		{
+			"ver": 7,
+			"body": "edges connect nodes in a graph database"
+		},
+		{
+			"ver": 8,
+			"body": "nothing in common here"
+		}
+	],
+	"duckdb": {
+		"dict": [
+			{
+				"term": "a",
+				"df": 3
+			},
+			{
+				"term": "about",
+				"df": 1
+			},
+			{
+				"term": "and",
+				"df": 1
+			},
+			{
+				"term": "bm25",
+				"df": 1
+			},
+			{
+				"term": "common",
+				"df": 1
+			},
+			{
+				"term": "connect",
+				"df": 1
+			},
+			{
+				"term": "database",
+				"df": 2
+			},
+			{
+				"term": "document",
+				"df": 2
+			},
+			{
+				"term": "edges",
+				"df": 2
+			},
+			{
+				"term": "full",
+				"df": 1
+			},
+			{
+				"term": "graph",
+				"df": 5
+			},
+			{
+				"term": "here",
+				"df": 1
+			},
+			{
+				"term": "in",
+				"df": 2
+			},
+			{
+				"term": "language",
+				"df": 1
+			},
+			{
+				"term": "nodes",
+				"df": 1
+			},
+			{
+				"term": "nothing",
+				"df": 1
+			},
+			{
+				"term": "object",
+				"df": 1
+			},
+			{
+				"term": "over",
+				"df": 1
+			},
+			{
+				"term": "query",
+				"df": 1
+			},
+			{
+				"term": "ranking",
+				"df": 1
+			},
+			{
+				"term": "repeated",
+				"df": 1
+			},
+			{
+				"term": "search",
+				"df": 2
+			},
+			{
+				"term": "storage",
+				"df": 1
+			},
+			{
+				"term": "temporal",
+				"df": 2
+			},
+			{
+				"term": "term",
+				"df": 1
+			},
+			{
+				"term": "text",
+				"df": 1
+			},
+			{
+				"term": "vector",
+				"df": 1
+			},
+			{
+				"term": "with",
+				"df": 2
+			}
+		],
+		"docs": [
+			{
+				"ver": 2,
+				"len": 4
+			},
+			{
+				"ver": 8,
+				"len": 4
+			},
+			{
+				"ver": 1,
+				"len": 5
+			},
+			{
+				"ver": 3,
+				"len": 5
+			},
+			{
+				"ver": 4,
+				"len": 6
+			},
+			{
+				"ver": 5,
+				"len": 6
+			},
+			{
+				"ver": 6,
+				"len": 7
+			},
+			{
+				"ver": 7,
+				"len": 7
+			}
+		],
+		"stats": {
+			"num_docs": 8,
+			"avgdl": 5.5
+		},
+		"bm25": {
+			"graph": [
+				{
+					"ver": 5,
+					"score": 0.32967462692171723
+				},
+				{
+					"ver": 2,
+					"score": 0.2407391461707423
+				},
+				{
+					"ver": 1,
+					"score": 0.2221412722176378
+				},
+				{
+					"ver": 3,
+					"score": 0.2221412722176378
+				},
+				{
+					"ver": 7,
+					"score": 0.19241232872382752
+				}
+			],
+			"graph database": [
+				{
+					"ver": 1,
+					"score": 0.7999318524137045
+				},
+				{
+					"ver": 7,
+					"score": 0.6928777755107551
+				},
+				{
+					"ver": 5,
+					"score": 0.32967462692171723
+				},
+				{
+					"ver": 2,
+					"score": 0.2407391461707423
+				},
+				{
+					"ver": 3,
+					"score": 0.2221412722176378
+				}
+			],
+			"temporal search": [
+				{
+					"ver": 2,
+					"score": 0.6261637450496907
+				},
+				{
+					"ver": 1,
+					"score": 0.5777905801960667
+				},
+				{
+					"ver": 3,
+					"score": 0.5777905801960667
+				},
+				{
+					"ver": 4,
+					"score": 0.5363553991461496
+				}
+			],
+			"storage": [
+				{
+					"ver": 6,
+					"score": 0.9937340506218565
+				}
+			],
+			"missing": []
+		}
+	},
+	"libsql": {
+		"graph": [5, 2, 1, 3, 7],
+		"graph database": [1, 7, 5, 2, 3],
+		"temporal search": [2, 1, 3, 4],
+		"storage": [6],
+		"missing": []
+	}
 }

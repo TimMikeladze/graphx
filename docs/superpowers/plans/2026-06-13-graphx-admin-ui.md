@@ -9,6 +9,7 @@
 **Tech Stack:** Vite 8, React 19, TanStack Query 5 + Router 1, `@cosmograph/react` 2, shadcn, Tailwind 4, Vitest (pure-function unit tests).
 
 **Deviations from spec `2026-06-12-graphx-admin-ui-design.md`:**
+
 - **D-UI-4:** wire DTOs are defined locally in `src/lib/types.ts` (mirror the API shapes) instead of importing from `core` — `core` ships no `dist/` build, so a type import would not resolve in the Vite app. Normal for a REST client; revisit if `core` starts publishing types.
 - **Tests:** v1 covers pure units (cosmograph adapter, search-param codec, api URL building) with Vitest. DOM/component tests (filter→URL render, Sheet open) deferred — they need jsdom + router/query harness and are brittle; the pure units cover the risky logic.
 

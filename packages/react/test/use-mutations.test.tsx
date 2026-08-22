@@ -158,9 +158,9 @@ test('useDeleteNode: a retracted node drops from other nodes neighbor lists', as
 		await del.result.current.mutateAsync({ id: a });
 	});
 	await waitFor(() =>
-		expect(
-			nbrs.result.current.data!.pages.flatMap((p) => p.rows.map((r) => r.id)),
-		).not.toContain(a),
+		expect(nbrs.result.current.data!.pages.flatMap((p) => p.rows.map((r) => r.id))).not.toContain(
+			a,
+		),
 	);
 	h.cleanup();
 });
@@ -173,9 +173,7 @@ test('useUpdateNode: invalidates listNodes so list views show the new data', asy
 	const list = renderHook(() => hooks.useListNodes(), { wrapper: Wrapper });
 	const upd = renderHook(() => hooks.useUpdateNode(), { wrapper: Wrapper });
 	const crit = () =>
-		list.result.current
-			.data!.pages.flatMap((p) => p.nodes)
-			.find((n) => n.id === id)?.data.crit;
+		list.result.current.data!.pages.flatMap((p) => p.nodes).find((n) => n.id === id)?.data.crit;
 	await waitFor(() => expect(crit()).toBe(1));
 
 	await act(async () => {

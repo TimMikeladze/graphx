@@ -69,7 +69,12 @@ async function setup(): Promise<Setup> {
 	const nsA = `ns_${ulid().toLowerCase()}`;
 	const pA = await createProject(control, { tenantId: tenantA, name: 'Alpha', dbNamespace: nsA });
 	// embed: a deterministic one-hot keyed off the query length so /hybrid has a real embedder.
-	const app = createApp({ control, schema: SCHEMA, authenticate, embed: async (q) => vec(q.length) });
+	const app = createApp({
+		control,
+		schema: SCHEMA,
+		authenticate,
+		embed: async (q) => vec(q.length),
+	});
 	return { control, app, tenantA, editor, viewer, pA, nsA };
 }
 
@@ -567,10 +572,9 @@ test('algorithms: top by a persisted metric (viewer read)', async () => {
 	await chain(s);
 	await post(s, s.editor, 'algorithms/pagerank', {}); // persist pagerank first
 
-	const res = await s.app.request(
-		`/t/${s.tenantA}/p/${s.pA}/algorithms/top?by=pagerank&limit=2`,
-		{ headers: hdr(s.viewer, s.tenantA) },
-	);
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/algorithms/top?by=pagerank&limit=2`, {
+		headers: hdr(s.viewer, s.tenantA),
+	});
 	expect(res.status).toBe(200);
 	const rows = await res.json();
 	expect(rows.length).toBe(2);
@@ -599,10 +603,9 @@ test('neighborsPage: keyset-paginates neighbors via cursor (viewer read)', async
 	await mkEdge(s, s.editor, 'knows', p1, p3);
 
 	const seen = new Set<string>();
-	const first = await s.app.request(
-		`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighborsPage?limit=1`,
-		{ headers: hdr(s.viewer, s.tenantA) },
-	);
+	const first = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${p1}/neighborsPage?limit=1`, {
+		headers: hdr(s.viewer, s.tenantA),
+	});
 	expect(first.status).toBe(200);
 	const page1 = await first.json();
 	expect(page1.rows.length).toBe(1);

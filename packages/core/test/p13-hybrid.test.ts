@@ -96,7 +96,10 @@ libsqlOnly('P13 sanitize: malicious FTS5 syntax never errors or escapes the quer
 		// and the sanitized form is directly usable as a MATCH expression
 		const m = sanitizeMatch(q);
 		if (m !== null) {
-			await client.execute({ sql: 'SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?', args: [m] });
+			await client.execute({
+				sql: 'SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?',
+				args: [m],
+			});
 		}
 	}
 	client.close();
@@ -177,7 +180,11 @@ test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/tempor
 
 	// as-of 150 'phoenix' → v1 is the version valid at :t → X seeded with the v1 body
 	// (proves the FTS index covers historical versions and as-of resolves the right ver).
-	const pastPhoenix = await hybridRetrieve(client, stubEmbed, { query: 'phoenix', k: 10, asOf: 150 });
+	const pastPhoenix = await hybridRetrieve(client, stubEmbed, {
+		query: 'phoenix',
+		k: 10,
+		asOf: 150,
+	});
 	const pastX = pastPhoenix.find((r) => r.id === x);
 	expect(pastX).toBeDefined();
 	expect(pastX!.body).toBe('phoenix');
@@ -216,9 +223,7 @@ test('P13 rerank: caller-provided reranker reorders and drops unscored candidate
 		query: 'red',
 		k: 10,
 		rerank: async (_q, cands) =>
-			cands
-				.filter((x) => x.id !== c.id)
-				.map((x) => ({ id: x.id, score: x.id === b.id ? 2 : 1 })),
+			cands.filter((x) => x.id !== c.id).map((x) => ({ id: x.id, score: x.id === b.id ? 2 : 1 })),
 	});
 	expect(res.map((r) => r.id)).toEqual([b.id, a.id]);
 	expect(res.some((r) => r.id === c.id)).toBe(false);
@@ -227,9 +232,24 @@ test('P13 rerank: caller-provided reranker reorders and drops unscored candidate
 
 test('P13 MMR: diversifies, dropping a near-duplicate for a distinct doc (λ, k configurable)', async () => {
 	const { client, g } = await freshGraph();
-	const d1 = await g.addNode({ type: 'doc', data: { title: 'd1' }, body: 'red', emb: [1, 0, 0, 0] });
-	const d2 = await g.addNode({ type: 'doc', data: { title: 'd2' }, body: 'red', emb: [1, 0, 0, 0] }); // dup of d1
-	const d3 = await g.addNode({ type: 'doc', data: { title: 'd3' }, body: 'red', emb: [0, 1, 0, 0] }); // distinct
+	const d1 = await g.addNode({
+		type: 'doc',
+		data: { title: 'd1' },
+		body: 'red',
+		emb: [1, 0, 0, 0],
+	});
+	const d2 = await g.addNode({
+		type: 'doc',
+		data: { title: 'd2' },
+		body: 'red',
+		emb: [1, 0, 0, 0],
+	}); // dup of d1
+	const d3 = await g.addNode({
+		type: 'doc',
+		data: { title: 'd3' },
+		body: 'red',
+		emb: [0, 1, 0, 0],
+	}); // distinct
 
 	// λ=0.3 favors diversity: after picking d1, the distinct d3 beats the near-dup d2.
 	const res = await hybridRetrieve(client, stubEmbed, {
@@ -249,11 +269,20 @@ test('P13 MMR: diversifies, dropping a near-duplicate for a distinct doc (λ, k 
 
 test('P13 MMR: tolerates a candidate with no stored embedding (rel→0, no NaN/crash)', async () => {
 	const { client, g } = await freshGraph();
-	const e1 = await g.addNode({ type: 'doc', data: { title: 'e1' }, body: 'red', emb: [1, 0, 0, 0] });
+	const e1 = await g.addNode({
+		type: 'doc',
+		data: { title: 'e1' },
+		body: 'red',
+		emb: [1, 0, 0, 0],
+	});
 	// e2 has a matching lexical body but NULL emb — it must not crash MMR (cosine→0).
 	await g.addNode({ type: 'doc', data: { title: 'e2' }, body: 'red' });
 
-	const res = await hybridRetrieve(client, stubEmbed, { query: 'red', k: 10, mmr: { k: 2, lambda: 0.5 } });
+	const res = await hybridRetrieve(client, stubEmbed, {
+		query: 'red',
+		k: 10,
+		mmr: { k: 2, lambda: 0.5 },
+	});
 	// the embedded doc is selected; the run completes without NaN poisoning selection.
 	expect(res.some((r) => r.id === e1.id)).toBe(true);
 	expect(res.length).toBeGreaterThanOrEqual(1);

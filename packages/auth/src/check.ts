@@ -1,5 +1,4 @@
-import { jsonField } from '../../core/src/dialect-sql.ts';
-import { type DbClient, dialectOf } from '../../core/src/index.ts';
+import { type DbClient, dialectOf, jsonField } from '@graphx/core';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 

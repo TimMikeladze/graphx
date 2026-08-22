@@ -116,9 +116,7 @@ describe('snapshot commit', () => {
 		// Both halves come back, so the split is a storage layout and nothing else.
 		const reader = createDuckClient({ store, cacheDir: cacheDir() });
 		await reader.open();
-		expect(
-			(await reader.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n,
-		).toBe(2);
+		expect((await reader.execute('SELECT count(*) AS n FROM node_versions')).rows[0]?.n).toBe(2);
 		await reader.end();
 		await c.end();
 	});

@@ -1,9 +1,9 @@
 {
 	"name": "@graphx/example-pantheon-graph",
-	"private": true,
 	"version": "0.0.0",
-	"type": "module",
+	"private": true,
 	"description": "A cross-cultural graph of deities, built from pantheon-collector's SQLite database and browsed in @graphx/admin",
+	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",
 		"test": "bun test",

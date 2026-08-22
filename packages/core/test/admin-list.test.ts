@@ -40,7 +40,11 @@ test('listNodes filters by type', async () => {
 
 test('listNodes full-text filters on body via FTS', async () => {
 	const g = await graph();
-	const hit = await g.addNode({ type: 'device', data: { type: 'router' }, body: 'mercury gateway' });
+	const hit = await g.addNode({
+		type: 'device',
+		data: { type: 'router' },
+		body: 'mercury gateway',
+	});
 	await g.addNode({ type: 'device', data: { type: 'switch' }, body: 'venus relay' });
 	const page = await g.listNodes({ q: 'mercury' });
 	expect(page.nodes.map((n) => n.id)).toEqual([hit.id]);
@@ -50,7 +54,8 @@ test('listNodes full-text filters on body via FTS', async () => {
 test('listNodes keyset-paginates with cursor', async () => {
 	const g = await graph();
 	const ids: string[] = [];
-	for (let i = 0; i < 3; i++) ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
+	for (let i = 0; i < 3; i++)
+		ids.push((await g.addNode({ type: 'person', data: { name: `p${i}` } })).id);
 	ids.sort();
 	const p1 = await g.listNodes({ limit: 2 });
 	expect(p1.nodes.map((n) => n.id)).toEqual(ids.slice(0, 2));
@@ -197,7 +202,10 @@ test('graphSlice drops image URLs that are not http(s), and over-long ones', asy
 		type: 'person',
 		data: { name: 'x', image: 'data:image/png;base64,iVBORw0KGgo=' },
 	});
-	const relative = await g.addNode({ type: 'person', data: { name: 'x', image: '/avatars/a.png' } });
+	const relative = await g.addNode({
+		type: 'person',
+		data: { name: 'x', image: '/avatars/a.png' },
+	});
 	const long = await g.addNode({
 		type: 'person',
 		data: { name: 'x', image: `https://cdn.example/${'x'.repeat(600)}.png` },

@@ -119,10 +119,7 @@ describe('DuckClient', () => {
 		// Each of these would silently corrupt schema DDL if mis-split: a dropped
 		// statement, a merged one, or a literal cut in half.
 		expect(splitStatements('SELECT 1; SELECT 2')).toEqual(['SELECT 1', 'SELECT 2']);
-		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual([
-			"SELECT ';' AS a",
-			'SELECT 2',
-		]);
+		expect(splitStatements("SELECT ';' AS a; SELECT 2")).toEqual(["SELECT ';' AS a", 'SELECT 2']);
 		expect(splitStatements("SELECT 'a''b;c' AS a")).toEqual(["SELECT 'a''b;c' AS a"]);
 		expect(splitStatements('SELECT 1; -- trailing; comment\nSELECT 2')).toEqual([
 			'SELECT 1',
