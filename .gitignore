@@ -46,3 +46,4 @@ yarn-error.log*
 
 # DuckDB scratch databases + spill (see duck-pool.ts duckDataDir)
 .graphx-data/
+.vercel
