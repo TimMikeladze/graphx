@@ -20,6 +20,10 @@ Thank you for your interest in contributing to our project! This guide will help
 
 This project uses a monorepo structure with Bun workspaces. All packages are located in the `packages/` directory.
 
+The landing page in `site/` is deliberately outside the workspaces: it has its own lockfile and its
+own `bun install`. It renders the root `README.md` into static HTML at build time, so a change to
+the README is a change to the site — see [`site/README.md`](./site/README.md).
+
 ## Development Workflow
 
 1. Create a new branch: `git checkout -b feature/your-feature-name`
