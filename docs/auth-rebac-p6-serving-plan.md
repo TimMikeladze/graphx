@@ -1,4 +1,4 @@
-# @graphx/auth — P6a (HTTP Serving) Implementation Plan
+# graphx-auth — P6a (HTTP Serving) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -472,4 +472,4 @@ git commit -m "feat(auth): HTTP serving — /expand + /list-objects (P6a complet
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P6b  | consistency tokens — opaque snapshot token wrapping `asOf` (read-your-writes / repeatable reads)                                                              |
 | P6c  | perf — shared memo across `listObjects` candidates; materialized reverse index; wire §19.2 governance fan-out caps into `check`/`edgesInto`/`reachableOfType` |
-| P6d  | packaging — publishable `@graphx/auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import)             |
+| P6d  | packaging — publishable `graphx-auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import)              |

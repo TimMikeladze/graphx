@@ -1,7 +1,7 @@
 {
 	"name": "graphx-monorepo",
 	"private": true,
-	"homepage": "https://github.com/TimMikeladze/graphx#readme",
+	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},

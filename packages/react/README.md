@@ -1,4 +1,4 @@
-# @graphx/react
+# graphx-react
 
 Inference-only [React Query](https://tanstack.com/query) hooks for [graphx](../core) — typed query,
 mutation, and infinite-scroll hooks plus **CDC-driven live cache sync**, with **no codegen**. Types
@@ -7,17 +7,17 @@ are inferred from the same `defineGraphSchema(...)` that validates writes server
 ## Install
 
 ```sh
-bun add @graphx/react @tanstack/react-query react
+bun add graphx-react @tanstack/react-query react
 ```
 
-`@tanstack/react-query`, `react`, and `@graphx/core` are peer dependencies.
+`@tanstack/react-query`, `react`, and `graphx-core` are peer dependencies.
 
 ## Quickstart
 
 ```tsx
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createGraphHooks, GraphProvider } from '@graphx/react';
-import { defineGraphSchema } from '@graphx/core';
+import { createGraphHooks, GraphProvider } from 'graphx-react';
+import { defineGraphSchema } from 'graphx-core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({

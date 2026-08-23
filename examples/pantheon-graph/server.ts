@@ -1,6 +1,6 @@
 /**
  * Dev API for the pantheon example — serves the graph built from `pantheon-collector`'s SQLite
- * database to `@graphx/admin`.
+ * database to `graphx-admin`.
  *
  *   bun run server.ts            # :8788, then: bun run admin  (Vite on :5173, proxied here)
  *
@@ -32,7 +32,7 @@ import {
 	init,
 	initControl,
 	type Principal,
-} from '@graphx/core';
+} from 'graphx-core';
 import { loadPantheon } from './load.ts';
 import { PANTHEON_SCHEMA_VERSION, pantheonSchema } from './schema.ts';
 

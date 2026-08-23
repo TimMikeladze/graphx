@@ -1,6 +1,6 @@
-# @graphx/mcp
+# graphx-mcp
 
-An MCP server for [graphx](../core) — every route on the serving app (`@graphx/core`'s
+An MCP server for [graphx](../core) — every route on the serving app (`graphx-core`'s
 `createApp`) mirrored as an MCP tool, generated from the app's own OpenAPI registry rather than
 hand-curated. A route added to `serve.ts` is a tool an agent can reach; a route removed is a tool
 that stops existing. There is no second manifest to keep in sync.
@@ -8,7 +8,7 @@ that stops existing. There is no second manifest to keep in sync.
 ## Install
 
 ```sh
-bun add @graphx/mcp
+bun add graphx-mcp
 ```
 
 ## Claude Desktop / Claude Code config
@@ -21,7 +21,7 @@ Code's `.mcp.json`, or equivalent):
 	"mcpServers": {
 		"graphx": {
 			"command": "npx",
-			"args": ["-y", "@graphx/mcp"],
+			"args": ["-y", "graphx-mcp"],
 			"env": {
 				"GRAPHX_MCP_MODE": "local",
 				"GRAPHX_DB": "mygraph",
@@ -69,8 +69,8 @@ The schema-aware path, and the one worth recommending: bootstrap `createApp` you
 result to `createGraphxMcp`, so the server sees the same `GraphSchema` your routes validate against.
 
 ```ts
-import { createApp, defineGraphSchema, hashEmbed } from '@graphx/core';
-import { createGraphxMcp, localBackend } from '@graphx/mcp';
+import { createApp, defineGraphSchema, hashEmbed } from 'graphx-core';
+import { createGraphxMcp, localBackend } from 'graphx-mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
@@ -106,8 +106,8 @@ process — no separate server to run.
 > a fixed `Backend` serves every caller as the one principal baked in at mount time.
 
 ```ts
-import { createApp, defineGraphSchema, hashEmbed } from '@graphx/core';
-import { createMcpApp, localBackend } from '@graphx/mcp';
+import { createApp, defineGraphSchema, hashEmbed } from 'graphx-core';
+import { createMcpApp, localBackend } from 'graphx-mcp';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 
@@ -281,7 +281,7 @@ for clients that don't implement resources.
   empty one is used for nothing but the route registry. Point `GRAPHX_SCHEMA` at a schema file
   (above) to write to a local graph without embedding the server as a library.
 - **The binary is libSQL only.** `GRAPHX_DB_DRIVER=postgres` selects the Postgres dialect, but
-  `graphx-mcp` never imports `@graphx/core/pg`, so it exits at startup with `getDb: postgres driver
+  `graphx-mcp` never imports `graphx-core/pg`, so it exits at startup with `getDb: postgres driver
 selected but the pg adapter is not registered`.
 - **The binary defaults to `hashEmbed`.** `retrieve` and `hybrid_search` need an embedder;
   `hashEmbed()` is lexical and deterministic, not semantic, and the binary logs one line to stderr

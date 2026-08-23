@@ -12,10 +12,10 @@
 
 ## Global Constraints
 
-- **No new dependencies.** WebCrypto (`crypto.subtle`), `fetch`, and `AbortSignal.timeout` are runtime built-ins. `ulidx` is already a `@graphx/core` dependency.
+- **No new dependencies.** WebCrypto (`crypto.subtle`), `fetch`, and `AbortSignal.timeout` are runtime built-ins. `ulidx` is already a `graphx-core` dependency.
 - **Every schema change is mirrored in both dialects:** `packages/core/src/schema.ts` (libSQL) and `packages/core/src/dialect-sql.ts` (Postgres). A change to one without the other is a bug.
 - **Tests obtain databases only from `packages/core/test/harness.ts`** via `makeTestDb`. Never call `createClient` directly.
-- **Build before testing.** `packages/cli` imports `@graphx/core` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/core/src` and before `bun test`, or the CLI tests fail with `Cannot find module '@graphx/core'`.
+- **Build before testing.** `packages/cli` imports `graphx-core` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/core/src` and before `bun test`, or the CLI tests fail with `Cannot find module 'graphx-core'`.
 - **Always run the suite as `bun run test`, never bare `bun test`.** The script is `bun test --timeout 30000`; Bun's bare default is 5s, under which a large part of the suite times out and looks like flakiness. CI runs `bun run test` too. A focused file is `bun run test <path>`.
 - **Both drivers must pass.** Default run: `bun run test`. Postgres run:
 
@@ -1667,7 +1667,7 @@ git commit -m "feat(triggers): signed webhook action"
 **Interfaces:**
 
 - Consumes: everything from Tasks 2–7.
-- Produces: the `@graphx/core` public trigger surface; `parseTriggersArgs(argv): ParsedTriggersArgs`; the `triggers` subcommand.
+- Produces: the `graphx-core` public trigger surface; `parseTriggersArgs(argv): ParsedTriggersArgs`; the `triggers` subcommand.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1683,7 +1683,7 @@ test('parseTriggersArgs defaults the config path and honours -c', () => {
 });
 ```
 
-Add `parseTriggersArgs` to the existing `@graphx/cli` / `../src/cli.ts` import in that file.
+Add `parseTriggersArgs` to the existing `graphx-cli` / `../src/cli.ts` import in that file.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1715,7 +1715,7 @@ export {
 
 - [ ] **Step 4: Add the CLI command**
 
-In `packages/cli/src/cli.ts`, extend the `@graphx/core` imports with `TriggerRunner`, `type Trigger`, and `type TriggerRunnerOptions`.
+In `packages/cli/src/cli.ts`, extend the `graphx-core` imports with `TriggerRunner`, `type Trigger`, and `type TriggerRunnerOptions`.
 
 Add the arg parser beside `parseServeArgs`:
 

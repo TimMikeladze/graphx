@@ -58,7 +58,7 @@ jobs:
       # each manifest to the concrete version being released. npm has no idea what that protocol
       # means and would publish it verbatim, breaking every consumer's install.
       #
-      # `@graphx/admin` is `"private": true` — it is the operator SPA, not a library. `bun pm pack`
+      # `graphx-admin` is `"private": true` — it is the operator SPA, not a library. `bun pm pack`
       # packs it happily, so the private check has to be explicit here or `npm publish` aborts the
       # whole loop on the first (alphabetically first!) directory.
       #

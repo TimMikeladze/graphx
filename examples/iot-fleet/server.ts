@@ -7,7 +7,7 @@
  */
 import { rmSync } from 'node:fs';
 import process from 'node:process';
-import { createApp, hashEmbed } from '@graphx/core';
+import { createApp, hashEmbed } from 'graphx-core';
 import { schema } from './schema.ts';
 
 const PORT = Number(process.env.PORT ?? 8899);

@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/cli",
+	"name": "graphx-cli",
 	"version": "0.1.0",
 	"description": "graphx CLI — scaffold, ingest, serve, and run triggers over a graphx graph",
-	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/cli#readme",
+	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
@@ -34,13 +34,13 @@
 		"type-check": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@graphx/core": "workspace:*",
-		"@graphx/ingest": "workspace:*",
-		"@types/node": "^25.9.1"
+		"@types/node": "^25.9.1",
+		"graphx-core": "workspace:*",
+		"graphx-ingest": "workspace:*"
 	},
 	"peerDependencies": {
-		"@graphx/core": "workspace:*",
-		"@graphx/ingest": "workspace:*",
+		"graphx-core": "workspace:*",
+		"graphx-ingest": "workspace:*",
 		"typescript": ">=4.5.0"
 	},
 	"peerDependenciesMeta": {

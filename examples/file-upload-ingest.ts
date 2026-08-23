@@ -7,12 +7,12 @@
  * the storage backend is injected as a `put` function, exactly the same way
  * `EmbedFn` and `RerankFn` are injected (core bundles no SDKs).
  *
- * This file is userland, NOT part of @graphx/core. Copy it into your app.
+ * This file is userland, NOT part of graphx-core. Copy it into your app.
  */
 
 import { createClient } from '@libsql/client';
 import { z } from 'zod';
-// Published consumers import from the package root (eventual name: '@graphx/core').
+// Published consumers import from the package root (eventual name: 'graphx-core').
 // In-repo this resolves to the workspace source so the demo runs as-is.
 import {
 	bulkLoad,

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship `@graphx/mcp`, an MCP server exposing every graphx serving route as a tool, generated from the app's own OpenAPI registry.
+**Goal:** Ship `graphx-mcp`, an MCP server exposing every graphx serving route as a tool, generated from the app's own OpenAPI registry.
 
-**Architecture:** Each route in `serve.ts` gains an `operationId` (the tool name) and a `read`/`write` tag (the op). `@graphx/mcp` reads `app.openAPIRegistry.definitions`, merges each route's Zod `params`/`query`/`body` into one flat input shape, and registers it on an `McpServer`. Tool calls become HTTP requests through a one-method `Backend` seam: locally that is `app.fetch` on an in-process Hono app, remotely it is `fetch` against a deployed one. Handlers are never reimplemented.
+**Architecture:** Each route in `serve.ts` gains an `operationId` (the tool name) and a `read`/`write` tag (the op). `graphx-mcp` reads `app.openAPIRegistry.definitions`, merges each route's Zod `params`/`query`/`body` into one flat input shape, and registers it on an `McpServer`. Tool calls become HTTP requests through a one-method `Backend` seam: locally that is `app.fetch` on an in-process Hono app, remotely it is `fetch` against a deployed one. Handlers are never reimplemented.
 
 **Tech Stack:** Bun, TypeScript (`isolatedDeclarations`), Hono, `@hono/zod-openapi`, Zod 4, `@modelcontextprotocol/sdk`, `@hono/mcp`.
 
@@ -17,7 +17,7 @@
 - Imports of local files carry the `.ts` extension: `import { x } from './backend.ts'`. This is the established repo style.
 - Formatting is `oxfmt`, linting is `oxlint`. Tabs for indent, single quotes, semicolons. The pre-commit hook runs `bun run lint && bun run type-check` — both must pass before any commit lands.
 - `@modelcontextprotocol/sdk` pins to `^1.29.0`. `@hono/mcp@0.3.1` peer-depends on `^1.29.0`, and the local registry policy blocks releases newer than 7 days.
-- Zod comes from `@hono/zod-openapi`'s re-exported `z` inside `serve.ts`; `@graphx/mcp` imports plain `zod` (same underlying v4 instance).
+- Zod comes from `@hono/zod-openapi`'s re-exported `z` inside `serve.ts`; `graphx-mcp` imports plain `zod` (same underlying v4 instance).
 - Core tests run against both backends via `GRAPHX_TEST_DRIVER=libsql` (default) and `GRAPHX_TEST_DRIVER=postgres`.
 - Commits are conventional and scoped: `feat(mcp):`, `feat(core):`, `test(mcp):`.
 - Never widen a tool surface silently. A route without an `operationId` is not mirrored — that is the opt-out.
@@ -384,7 +384,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 
 ```json
 {
-	"name": "@graphx/mcp",
+	"name": "graphx-mcp",
 	"version": "0.1.0",
 	"description": "graphx MCP server — every serving route as an MCP tool",
 	"license": "MIT",
@@ -413,7 +413,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 		"zod": "^4.4.3"
 	},
 	"peerDependencies": {
-		"@graphx/core": "workspace:*",
+		"graphx-core": "workspace:*",
 		"hono": "^4.12.23",
 		"typescript": ">=4.5.0"
 	},
@@ -423,7 +423,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 		}
 	},
 	"devDependencies": {
-		"@graphx/core": "workspace:*",
+		"graphx-core": "workspace:*",
 		"@types/node": "^25.9.1"
 	}
 }
@@ -465,7 +465,7 @@ In `bunup.config.ts`, add a workspace entry after the `cli` block:
 
 Run: `bun install`
 
-Expected: `@graphx/mcp` linked into the workspace; `@modelcontextprotocol/sdk` and `@hono/mcp` installed.
+Expected: `graphx-mcp` linked into the workspace; `@modelcontextprotocol/sdk` and `@hono/mcp` installed.
 
 - [ ] **Step 4: Write the failing test**
 
@@ -1071,7 +1071,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { createApp, defineGraphSchema, hashEmbed } from '@graphx/core';
+import { createApp, defineGraphSchema, hashEmbed } from 'graphx-core';
 import { localBackend } from '../src/backend.ts';
 import { createGraphxMcp } from '../src/server.ts';
 
@@ -1236,7 +1236,7 @@ test('server: list_projects reaches the tenant-scoped route', async () => {
 });
 ```
 
-If `@graphx/core` does not resolve from the test, import from the source path (`../../core/src/index.ts`) the way sibling packages do — check `packages/cli/test/cli.test.ts` for the established convention and match it.
+If `graphx-core` does not resolve from the test, import from the source path (`../../core/src/index.ts`) the way sibling packages do — check `packages/cli/test/cli.test.ts` for the established convention and match it.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1370,7 +1370,7 @@ export function createGraphxMcp(opts: GraphxMcpOptions): McpServer {
 `packages/mcp/src/index.ts`:
 
 ```ts
-// Public API for @graphx/mcp — every graphx serving route as an MCP tool.
+// Public API for graphx-mcp — every graphx serving route as an MCP tool.
 
 export {
 	type Backend,
@@ -1447,7 +1447,7 @@ Without this, an agent writing to an empty graph is guessing type names. The res
 ```ts
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { defineGraphSchema } from '@graphx/core';
+import { defineGraphSchema } from 'graphx-core';
 import { schemaDoc } from '../src/resources.ts';
 
 const SCHEMA = defineGraphSchema({
@@ -1820,7 +1820,7 @@ Expected: PASS.
 ```ts
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import process from 'node:process';
-import { createApp, hashEmbed } from '@graphx/core';
+import { createApp, hashEmbed } from 'graphx-core';
 import { localBackend, remoteBackend } from './backend.ts';
 import { createGraphxMcp } from './server.ts';
 
@@ -1882,7 +1882,7 @@ main().catch((err: unknown) => {
 });
 ```
 
-If `createApp`'s dev overload rejects an empty schema, pass `defineGraphSchema({ nodes: {}, edges: {} })` instead and import it from `@graphx/core`.
+If `createApp`'s dev overload rejects an empty schema, pass `defineGraphSchema({ nodes: {}, edges: {} })` instead and import it from `graphx-core`.
 
 - [ ] **Step 6: Smoke-test the binary**
 
@@ -1948,7 +1948,7 @@ Paste the output into the README's tool table. Do not hand-write it — a stale 
 `packages/mcp/README.md` covering, in order:
 
 1. One paragraph: what it is — every graphx serving route as an MCP tool, generated from the app's OpenAPI registry.
-2. **Install**: `bun add @graphx/mcp`.
+2. **Install**: `bun add graphx-mcp`.
 3. **Claude Desktop / Claude Code config** — a real `mcpServers` JSON block:
 
 ```json
@@ -1956,7 +1956,7 @@ Paste the output into the README's tool table. Do not hand-write it — a stale 
 	"mcpServers": {
 		"graphx": {
 			"command": "npx",
-			"args": ["-y", "@graphx/mcp"],
+			"args": ["-y", "graphx-mcp"],
 			"env": {
 				"GRAPHX_MCP_MODE": "local",
 				"GRAPHX_DB": "file:./graph.db"
@@ -1969,8 +1969,8 @@ Paste the output into the README's tool table. Do not hand-write it — a stale 
 4. **Library usage** — the schema-aware path, which is the one worth recommending:
 
 ```ts
-import { createApp, hashEmbed } from '@graphx/core';
-import { createGraphxMcp, localBackend } from '@graphx/mcp';
+import { createApp, hashEmbed } from 'graphx-core';
+import { createGraphxMcp, localBackend } from 'graphx-mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { schema } from './my-schema.ts';
 

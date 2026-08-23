@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/example-pantheon-graph",
+	"name": "graphx-example-pantheon-graph",
 	"version": "0.0.0",
 	"private": true,
-	"description": "A cross-cultural graph of deities, built from pantheon-collector's SQLite database and browsed in @graphx/admin",
+	"description": "A cross-cultural graph of deities, built from pantheon-collector's SQLite database and browsed in graphx-admin",
 	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",
@@ -10,8 +10,8 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@graphx/core": "workspace:*",
 		"@libsql/client": "^0.17.3",
+		"graphx-core": "workspace:*",
 		"hono": "^4.12.23",
 		"zod": "^4.4.3"
 	},

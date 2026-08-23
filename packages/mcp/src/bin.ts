@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
-import { createApp, type DbClient, type GraphSchema, hashEmbed } from '@graphx/core';
+import { createApp, type DbClient, type GraphSchema, hashEmbed } from 'graphx-core';
 import { localBackend, remoteBackend } from './backend.ts';
 import { parseSchemaFile } from './schema-file.ts';
 import { createGraphxMcp } from './server.ts';
@@ -103,8 +103,8 @@ async function main(): Promise<void> {
 		// a side effect of importing their subpath (each an optional peer, so neither loads for
 		// consumers who never select it). Mirrors the config-driven import in `cli.ts`'s
 		// `loadConfig`, keyed off the env var here since local mode has no config file.
-		if (process.env.GRAPHX_DB_DRIVER === 'postgres') await import('@graphx/core/pg');
-		if (process.env.GRAPHX_DB_DRIVER === 'duckdb') await import('@graphx/core/duck');
+		if (process.env.GRAPHX_DB_DRIVER === 'postgres') await import('graphx-core/pg');
+		if (process.env.GRAPHX_DB_DRIVER === 'duckdb') await import('graphx-core/duck');
 		const schemaPath = process.env.GRAPHX_SCHEMA;
 		schema = loadSchema(schemaPath);
 		const dev = await createApp({

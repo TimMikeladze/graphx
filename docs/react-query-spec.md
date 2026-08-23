@@ -1,4 +1,4 @@
-# `@graphx/react` — React Query integration
+# `graphx-react` — React Query integration
 
 > Status: **IMPLEMENTED** (`packages/react`, 2026-06-29). Net-new package layered over the existing
 > SDK + Hono serving layer. Hooks for the whole HTTP surface (the "Everything" scope), CDC live-sync,
@@ -258,7 +258,7 @@ No infra required — everything is local (libSQL `:memory:`/`file:` + in-proces
    resumes the tail). v1: in-memory; flag for persistence.
 3. **Polling vs SSE/WebSocket for CDC** — v1 polls `/changes` (no new infra). A push transport is a
    later optimisation; the cursor contract is unchanged.
-4. **Package boundary** — `@graphx/react` depends on `@tanstack/react-query` (peer) + the core types
+4. **Package boundary** — `graphx-react` depends on `@tanstack/react-query` (peer) + the core types
    only (no runtime core import beyond types). Keep React out of `core`.
 
 ## 12. Out of scope (v1)
@@ -270,7 +270,7 @@ server-derived shapes; SSE/WebSocket transport; GraphQL.
 
 - **R0** ✅ DONE — HTTP surface expansion (§4): `neighborsPage`, `updateNode`, `deleteEdge`,
   `history`, `changes`, `diff` (+ `hybrid`/`bulk`/`match`/`algorithms`) routes + wire schemas + tests.
-- **R1** ✅ DONE — `@graphx/react` package: provider, `keys`, query hooks, infinite neighbors,
+- **R1** ✅ DONE — `graphx-react` package: provider, `keys`, query hooks, infinite neighbors,
   mutation hooks + invalidation matrix. TDD with the in-process app (real routes/zod/CDC keyset).
 - **R2** ✅ DONE — `useChangeFeedSync` live invalidation + the close-handling policy (closes
   reconciled via mutation `onSettled`).

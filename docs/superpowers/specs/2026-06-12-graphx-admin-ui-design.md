@@ -1,8 +1,8 @@
-# `@graphx/admin` — Administrative UI (design spec)
+# `graphx-admin` — Administrative UI (design spec)
 
 > Status: **APPROVED design.** Date: 2026-06-12. Net-new Vite SPA package + supporting
-> backend routes layered over the existing `@graphx/core` SDK and Hono serving layer.
-> No `initial_spec.md` phase number; layered like the `@graphx/react` draft.
+> backend routes layered over the existing `graphx-core` SDK and Hono serving layer.
+> No `initial_spec.md` phase number; layered like the `graphx-react` draft.
 
 ## 1. Goal
 
@@ -24,7 +24,7 @@ a **detail inspector** (Sheet) on node click. Operators can also manage the cont
 ### Non-goals (deferred, named so they are not silently dropped)
 
 - match / hybridRetrieve / algorithm (pagerank, centrality, community) visualizations.
-- CDC live-sync (`useChangeFeedSync` — the `@graphx/react` change-feed story).
+- CDC live-sync (`useChangeFeedSync` — the `graphx-react` change-feed story).
 - Edge creation/editing from the canvas; multi-project overlay.
 - RBAC finer than operator-impersonation; production operator SSO.
 - End-to-end browser tests.
@@ -40,12 +40,12 @@ a **detail inspector** (Sheet) on node click. Operators can also manage the cont
   `{nodes, links}` slice for the current filter set; double-click a node expands via `neighbors`.
   Filters are authoritative server-side and respect §19.2 governance caps.
 - **D-UI-4 — Standalone typed client.** The UI imports core's exported domain types directly and uses
-  a thin typed `fetch` client; it does **not** depend on the DRAFT `@graphx/react` (control-plane types
+  a thin typed `fetch` client; it does **not** depend on the DRAFT `graphx-react` (control-plane types
   are out of that package's scope). May converge later.
 
 ## 3. Architecture & package layout
 
-New package `packages/admin` (`@graphx/admin`, `"private": true`, no `dist` export), scaffolded by the
+New package `packages/admin` (`graphx-admin`, `"private": true`, no `dist` export), scaffolded by the
 shadcn vite init. The root workspace already globs `packages/*`.
 
 Process topology (one Hono process, two auth realms):
@@ -82,7 +82,7 @@ Build/dev: core stays `bunup`; admin uses Vite. Admin dev server proxies `/t` an
 process (Vite `server.proxy`) → no CORS in dev.
 
 Data path: SPA → TanStack Query → typed fetch client → Hono. UI imports `AnyNode`, `EdgeRef`,
-`NodeOf`, etc. from `@graphx/core` for compile-time shape.
+`NodeOf`, etc. from `graphx-core` for compile-time shape.
 
 ## 4. The operator-auth gap and its resolution
 

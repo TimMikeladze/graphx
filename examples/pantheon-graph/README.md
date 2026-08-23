@@ -1,7 +1,7 @@
 # pantheon-graph
 
 A cross-cultural graph of gods, built from [`pantheon-collector`](https://github.com/TimMikeladze/pantheon-collector)'s
-SQLite database and browsed in `@graphx/admin`.
+SQLite database and browsed in `graphx-admin`.
 
 The collector scrapes Wikidata, DBpedia, Wikipedia's lists of deities, the Greek Myth API and
 `greek-mythology-data` into one database, and deliberately reconciles nothing: where two sources
@@ -93,7 +93,7 @@ sample is an even stride over the load order.
 | ----------- | ---------------------------------------------------------------------------------- |
 | `schema.ts` | The graph schema — four node types, seven relations                                |
 | `load.ts`   | Reads the collector database and returns a load plan; no writes, so it is testable |
-| `server.ts` | Builds the graph (cached) and serves it to `@graphx/admin` with a dev token        |
+| `server.ts` | Builds the graph (cached) and serves it to `graphx-admin` with a dev token         |
 
 `bun test` covers the loader against a hand-built miniature collector database, so it runs without
 the real 30MB corpus — and additionally against the real one when it happens to be present.

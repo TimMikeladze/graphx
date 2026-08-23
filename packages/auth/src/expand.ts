@@ -1,5 +1,5 @@
 import { edgesInto } from './check.ts';
-import type { DbClient } from '@graphx/core';
+import type { DbClient } from 'graphx-core';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 

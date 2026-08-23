@@ -1,5 +1,5 @@
 /**
- * Dev API server for @graphx/admin — seeds an in-memory control plane + a generated demo graph
+ * Dev API server for graphx-admin — seeds an in-memory control plane + a generated demo graph
  * across three tenants and five projects, mounts the tenant-scoped graph routes (createApp) and
  * the operator sub-app (createAdminApp), and serves on :8787. Auth is a single dev bearer token
  * (ADMIN_TOKEN, default "dev") that the operator presents; the `authenticate` impl turns it into

@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/ingest",
+	"name": "graphx-ingest",
 	"version": "0.1.0",
 	"description": "Ingest a YAML/markdown vault into a graphx graph",
-	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/ingest#readme",
+	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
@@ -41,13 +41,13 @@
 	},
 	"devDependencies": {
 		"@aws-sdk/client-s3": "^3.0.0",
-		"@graphx/core": "workspace:*",
 		"@types/node": "^25.9.1",
+		"graphx-core": "workspace:*",
 		"zod": "^4.4.3"
 	},
 	"peerDependencies": {
 		"@aws-sdk/client-s3": "^3.0.0",
-		"@graphx/core": "workspace:*",
+		"graphx-core": "workspace:*",
 		"typescript": ">=4.5.0"
 	},
 	"peerDependenciesMeta": {

@@ -2,7 +2,7 @@
 
 Occupations, the skills they need, and 2.7 million observed job moves — built from
 [`skill-collector`](https://github.com/TimMikeladze/skill-collector)'s SQLite database and browsed
-in `@graphx/admin`.
+in `graphx-admin`.
 
 This is the example with real time in it. Every career transition is loaded as its own temporal
 edge, dated by the quarter the move landed in, so the as-of scrubber walks a labour market from
@@ -119,7 +119,7 @@ over the load order.
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `schema.ts` | The graph schema — four node types, five relations                                                                                                                     |
 | `load.ts`   | Reads the collector database. `buildNodes` materializes the ~21k nodes; `streamEdges` walks the 2.9M edges in fixed-size batches, so memory does not track corpus size |
-| `server.ts` | Builds the graph (cached) and serves it to `@graphx/admin` with a dev token                                                                                            |
+| `server.ts` | Builds the graph (cached) and serves it to `graphx-admin` with a dev token                                                                                             |
 
 `bun test` covers the loader against a hand-built miniature collector database, so it runs without
 the real corpus — and additionally against the real one's node pass and first edge batch when it

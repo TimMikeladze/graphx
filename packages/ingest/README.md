@@ -1,10 +1,10 @@
-# ingest
+# graphx-ingest
 
 Ingest a local YAML/markdown vault into a [graphx](../core) graph: **1 file = 1 node**,
 links become edges, re-runs reconcile incrementally using graphx's bitemporal model.
 
 ```ts
-import { defineGraphSchema, Graph, getDb, init } from '@graphx/core';
+import { defineGraphSchema, Graph, getDb, init } from 'graphx-core';
 import { ingestDir } from 'ingest';
 import { z } from 'zod';
 

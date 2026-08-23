@@ -1,4 +1,4 @@
-import type { EmbedFn, Graph, GraphSchema } from '@graphx/core';
+import type { EmbedFn, Graph, GraphSchema } from 'graphx-core';
 import type { Source } from './source.ts';
 
 /** A parsed source file. `key` is the relative POSIX path from the vault root. */

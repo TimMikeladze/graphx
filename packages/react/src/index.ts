@@ -1,4 +1,4 @@
-// @graphx/react — inference-only React Query hooks over the core HTTP surface (no codegen).
+// graphx-react — inference-only React Query hooks over the core HTTP surface (no codegen).
 
 export { createGraphHooks, MatchBuilder } from './create-hooks.ts';
 // Input/result types for the hooks, so consumers can type their own args/results.

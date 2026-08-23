@@ -1,4 +1,4 @@
-# @graphx/auth — P5 (`listObjects`) Implementation Plan
+# graphx-auth — P5 (`listObjects`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -401,6 +401,6 @@ git commit -m "feat(auth): keyset pagination for listObjects (P5 complete)"
 
 ## Out of scope for P5 (final phase)
 
-| Next plan | Scope                                                                                                                                                                                                                                  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P6        | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `@graphx/auth`, replace the relative `../../core/src` import) |
+| Next plan | Scope                                                                                                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P6        | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `graphx-auth`, replace the relative `../../core/src` import) |

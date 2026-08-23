@@ -81,9 +81,9 @@ Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the ke
 
 ---
 
-## 3. `@graphx/react` — ✅ BUILT (2026-06-29)
+## 3. `graphx-react` — ✅ BUILT (2026-06-29)
 
-`packages/react` (`@graphx/react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
+`packages/react` (`graphx-react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
 
 - `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen) — single closure binding `S`.
 - Query hooks: `useNode`, `useNeighbors` (infinite), `useListNodes` (infinite), `useGraphSlice`, `useHistory`, `useRetrieve`, `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
@@ -151,5 +151,5 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 2. ~~**`packages/core` README**~~ — ✅ DONE (2026-06-29). ~~`packages/auth` README + root README~~ ✅ DONE (2026-08-19); every published package now has one.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. ~~**Expose `hybridRetrieve` + `retrieve` UI in admin**~~ — ✅ DONE; the explorer calls both (`lib/explorer-search.ts`). `journey` / `match` / algorithm visualizations are what is left.
-5. ~~**`@graphx/react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
+5. ~~**`graphx-react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
 6. **P10 tiering** — the DuckDB/Parquet substrate now exists (2026-08-19 correction above); what remains is the hot→cold watermark job. Only when graph size demands it.

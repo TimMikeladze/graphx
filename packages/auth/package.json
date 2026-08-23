@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/auth",
+	"name": "graphx-auth",
 	"version": "0.1.0",
 	"description": "Relationship-based access control (ReBAC) on graphx",
-	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/auth#readme",
+	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
@@ -31,9 +31,9 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@graphx/core": "workspace:*",
 		"@hono/zod-validator": "^0.9.0",
 		"@libsql/client": "^0.17.3",
+		"graphx-core": "workspace:*",
 		"hono": "^4.12.23",
 		"ulidx": "^2.4.1",
 		"zod": "^4.4.3"

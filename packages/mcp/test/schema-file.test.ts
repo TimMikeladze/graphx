@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { defineGraphSchema } from '@graphx/core';
+import { defineGraphSchema } from 'graphx-core';
 import { parseSchemaFile } from '../src/schema-file.ts';
 
 const DOC = {

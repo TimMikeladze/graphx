@@ -29,7 +29,7 @@ export interface RequestOpts {
 }
 
 /** The subset of a Hono app the {@link appFetch} adapter needs (kept structural so this package
- * pulls in no `hono` / `@graphx/core` runtime — pass any object with a `request` method). */
+ * pulls in no `hono` / `graphx-core` runtime — pass any object with a `request` method). */
 export interface RequestLike {
 	request(input: string | URL | Request, init?: RequestInit): Response | Promise<Response>;
 }

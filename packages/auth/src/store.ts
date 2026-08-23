@@ -7,7 +7,7 @@ import {
 	type GraphSchema,
 	insertOrIgnore,
 	jsonField,
-} from '@graphx/core';
+} from 'graphx-core';
 import type { Tuple } from './types.ts';
 import { typeOf } from './types.ts';
 

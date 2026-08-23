@@ -1,5 +1,5 @@
 import { watch } from 'node:fs';
-import type { GraphSchema } from '@graphx/core';
+import type { GraphSchema } from 'graphx-core';
 import { ingestDir } from './ingest.ts';
 import type { IngestOptions, IngestResult } from './types.ts';
 

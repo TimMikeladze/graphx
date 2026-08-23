@@ -213,7 +213,7 @@ instead of a silent data-loss mode under contention.
 
 ## 8. Runtime architecture
 
-A new subpath export `@graphx/core/duck`, mirroring `./pg`: importing it calls
+A new subpath export `graphx-core/duck`, mirroring `./pg`: importing it calls
 `registerDuckDriver()` as a side effect, which keeps the 123MB `@duckdb/node-api` an optional
 peer dependency.
 

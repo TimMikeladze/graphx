@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/mcp",
+	"name": "graphx-mcp",
 	"version": "0.1.0",
 	"description": "graphx MCP server — every serving route as an MCP tool",
-	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/mcp#readme",
+	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
@@ -39,13 +39,13 @@
 		"zod": "^4.4.3"
 	},
 	"devDependencies": {
-		"@graphx/core": "workspace:*",
 		"@hono/zod-openapi": "^1.5.1",
 		"@types/node": "^25.9.1",
+		"graphx-core": "workspace:*",
 		"hono": "^4.12.23"
 	},
 	"peerDependencies": {
-		"@graphx/core": "workspace:*",
+		"graphx-core": "workspace:*",
 		"hono": "^4.12.23",
 		"typescript": ">=4.5.0"
 	},

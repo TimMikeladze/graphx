@@ -3,7 +3,7 @@
 > Latent risks in code that **is built and green-tested**, as of audit on 2026-06-19 (`main` @ `1c38d09`).
 > Scope: `packages/ingest`, `packages/cli`, and the `packages/core` read/write/schema paths they drive.
 >
-> Companion to [`GAPS.md`](./GAPS.md). GAPS.md catalogs **unbuilt features** (P10 tiering, missing HTTP routes, `@graphx/react`, admin write UI, READMEs). `.dual-db-findings.json` catalogs SQLite→Postgres porting hazards. This doc is the third axis: **correctness/safety risks in shipped code** — silent data loss, races, scaling cliffs, and trust-boundary holes that the test suite is green against because no test exercises them.
+> Companion to [`GAPS.md`](./GAPS.md). GAPS.md catalogs **unbuilt features** (P10 tiering, missing HTTP routes, `graphx-react`, admin write UI, READMEs). `.dual-db-findings.json` catalogs SQLite→Postgres porting hazards. This doc is the third axis: **correctness/safety risks in shipped code** — silent data loss, races, scaling cliffs, and trust-boundary holes that the test suite is green against because no test exercises them.
 
 Each finding was produced by an adversarial finder reading the actual source, then independently re-verified against that source (claims that didn't survive re-read are in [§7](#7-investigated-and-dismissed)). `file:line` references are from the audited tip.
 

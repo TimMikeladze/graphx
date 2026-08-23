@@ -1,4 +1,4 @@
-// Public API for @graphx/mcp — every graphx serving route as an MCP tool.
+// Public API for graphx-mcp — every graphx serving route as an MCP tool.
 
 export {
 	type Backend,

@@ -96,7 +96,7 @@ jobs:
           bun-version: latest
 
       # No build step: the harness imports core through relative `src/` paths, not through the
-      # `@graphx/*` exports map, so nothing here needs `dist`.
+      # `graphx-*` exports map, so nothing here needs `dist`.
       - name: Install dependencies (head)
         working-directory: head
         run: bun install --frozen-lockfile

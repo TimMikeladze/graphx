@@ -113,8 +113,8 @@ stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `
    `pgvector` container — same root cause, same 13 tests), so it predates this branch and is not
    duckdb-specific, but it was fixed here because it was blocking an honest parity read:
    - `packages/mcp/src/bin.ts` (production): the local-mode bootstrap now imports
-     `@graphx/core/pg` or `@graphx/core/duck` based on `GRAPHX_DB_DRIVER`, mirroring the
-     config-driven `await import('@graphx/core/pg')` `packages/cli/src/cli.ts`'s `loadConfig`
+     `graphx-core/pg` or `graphx-core/duck` based on `GRAPHX_DB_DRIVER`, mirroring the
+     config-driven `await import('graphx-core/pg')` `packages/cli/src/cli.ts`'s `loadConfig`
      already does for postgres configs.
    - `packages/mcp/test/server.test.ts`: added unconditional side-effect imports of both
      adapter subpaths (test-only; both are already dev dependencies of the workspace), mirroring

@@ -1424,7 +1424,7 @@ Expected: PASS.
 
 - [ ] **Step 10: Type-check**
 
-Run: `bun run --filter '@graphx/admin' type-check`
+Run: `bun run --filter 'graphx-admin' type-check`
 Expected: exit 0.
 
 - [ ] **Step 11: Commit**
@@ -1910,7 +1910,7 @@ Expected: the exact exported names, including the `PlayIcon`/`PauseIcon` that Ta
 
 - [ ] **Step 4: Type-check**
 
-Run: `bun run --filter '@graphx/admin' type-check`
+Run: `bun run --filter 'graphx-admin' type-check`
 Expected: exit 0. Nothing renders the bar yet — that is Task 9.
 
 - [ ] **Step 5: Lint**
@@ -2050,7 +2050,7 @@ Expected: no output.
 
 - [ ] **Step 6: Type-check and lint**
 
-Run: `bun run --filter '@graphx/admin' type-check && bun run lint`
+Run: `bun run --filter 'graphx-admin' type-check && bun run lint`
 Expected: exit 0 for both.
 
 - [ ] **Step 7: Verify in the running app**
@@ -2173,7 +2173,7 @@ Two controls open the editor, and both need `disabled={readOnly}`: the **Add con
 
 - [ ] **Step 4: Type-check and lint**
 
-Run: `bun run --filter '@graphx/admin' type-check && bun run lint`
+Run: `bun run --filter 'graphx-admin' type-check && bun run lint`
 Expected: exit 0 for both.
 
 - [ ] **Step 5: Verify in the running app**
@@ -2296,7 +2296,7 @@ pass `pinSimulation={playing}` to `<GraphShell>` and `onPlayingChange={setPlayin
 
 - [ ] **Step 4: Type-check and lint**
 
-Run: `bun run --filter '@graphx/admin' type-check && bun run lint`
+Run: `bun run --filter 'graphx-admin' type-check && bun run lint`
 Expected: exit 0 for both.
 
 - [ ] **Step 5: Verify in the running app**
@@ -2446,7 +2446,7 @@ The track needs no change: it already renders `data.from`/`data.to`, which echo 
 
 - [ ] **Step 7: Verify and commit**
 
-`bun test packages/admin`, `bun run --filter '@graphx/admin' type-check`, root `bun run lint`, and `bun test --timeout 30000`.
+`bun test packages/admin`, `bun run --filter 'graphx-admin' type-check`, root `bun run lint`, and `bun test --timeout 30000`.
 
 ```bash
 git add packages/core/src/timeline.ts packages/core/test/timeline.test.ts packages/admin/src/lib/timeline-window.ts packages/admin/src/lib/timeline-window.test.ts packages/admin/src/components/timeline/timeline-bar.tsx

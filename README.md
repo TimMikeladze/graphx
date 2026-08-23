@@ -1,5 +1,7 @@
 # graphx
 
+[graphx.sh](https://graphx.sh)
+
 Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB. Define a graph once with Zod, then get typed
 mutations, bitemporal history, vector + full-text retrieval, pattern matching, traversal, graph
 algorithms, an HTTP API with a generated OpenAPI contract, React Query hooks, and an MCP server —
@@ -7,23 +9,23 @@ no codegen anywhere.
 
 ## Packages
 
-| Package          | What it is                                                                   |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `@graphx/core`   | The SDK: schema, data layer, retrieval, temporal reads, algorithms, serving  |
-| `@graphx/cli`    | `graphx` binary — `new`, `ingest`, `serve`, `triggers`                       |
-| `@graphx/ingest` | Ingest a YAML/markdown vault (or S3 bucket) into a graph                     |
-| `@graphx/react`  | Inference-only React Query hooks + CDC live-sync                             |
-| `@graphx/mcp`    | `graphx-mcp` — every serving route exposed as an MCP tool                    |
-| `@graphx/auth`   | Relationship-based access control (ReBAC) on graphx                          |
-| `@graphx/admin`  | Admin SPA (Vite + shadcn; Cosmograph / xyflow canvas, node + edge authoring) |
+| Package         | What it is                                                                   |
+| --------------- | ---------------------------------------------------------------------------- |
+| `graphx-core`   | The SDK: schema, data layer, retrieval, temporal reads, algorithms, serving  |
+| `graphx-cli`    | `graphx` binary — `new`, `ingest`, `serve`, `triggers`                       |
+| `graphx-ingest` | Ingest a YAML/markdown vault (or S3 bucket) into a graph                     |
+| `graphx-react`  | Inference-only React Query hooks + CDC live-sync                             |
+| `graphx-mcp`    | `graphx-mcp` — every serving route exposed as an MCP tool                    |
+| `graphx-auth`   | Relationship-based access control (ReBAC) on graphx                          |
+| `graphx-admin`  | Admin SPA (Vite + shadcn; Cosmograph / xyflow canvas, node + edge authoring) |
 
 ```sh
-bun add @graphx/core          # the SDK
-bun add @graphx/react         # + React Query hooks
-bun add -d @graphx/cli        # + the `graphx` binary
+bun add graphx-core          # the SDK
+bun add graphx-react         # + React Query hooks
+bun add -d graphx-cli        # + the `graphx` binary
 ```
 
-`@graphx/admin` is not published — it is the operator SPA, run from this repo (`bun run dev:admin`).
+`graphx-admin` is not published — it is the operator SPA, run from this repo (`bun run dev:admin`).
 
 To hack on graphx itself, work inside this repo: `bun install` from the root, and add your app's
 path to the root `package.json` `workspaces` array so the `workspace:` deps resolve.
@@ -31,14 +33,14 @@ path to the root `package.json` `workspaces` array so the `workspace:` deps reso
 ## Quickstart
 
 ```sh
-bunx @graphx/cli new my-app
+bunx graphx-cli new my-app
 ```
 
 That writes a runnable `graphx.config.ts`, `package.json`, and README. The config is the whole
 contract — schema, embedder, dimension, backend:
 
 ```ts
-import { defineGraphSchema, hashEmbed } from '@graphx/core';
+import { defineGraphSchema, hashEmbed } from 'graphx-core';
 import { z } from 'zod';
 
 export const schema = defineGraphSchema({
@@ -72,7 +74,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 ## Using the SDK
 
 ```ts
-import { getDb, init, Graph, defineGraphSchema, hashEmbed } from '@graphx/core';
+import { getDb, init, Graph, defineGraphSchema, hashEmbed } from 'graphx-core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -131,7 +133,7 @@ import {
 	diff,
 	shortestPath,
 	pagerank,
-} from '@graphx/core';
+} from 'graphx-core';
 
 // GraphRAG: ANN seeds, then a time-respecting walk out from them
 await retrieve(db, embed, { query: 'overheating sensor', k: 10, maxDepth: 2, rels: ['raised'] });
@@ -166,7 +168,7 @@ Read paths accept `asOf` (point-in-time), `limits` (row cap, fan-out guard, time
 which mints an in-memory control plane plus one tenant/project/user and seeds the graph:
 
 ```ts
-import { createApp, hashEmbed } from '@graphx/core';
+import { createApp, hashEmbed } from 'graphx-core';
 import { schema } from './schema.ts';
 
 const { app, tenant, project, user } = await createApp({
@@ -191,7 +193,7 @@ reference at `GET /docs` (set `docs: false` to disable).
 Hooks are typed from the schema _type_ alone, so the browser bundle carries no SDK runtime:
 
 ```tsx
-import { GraphProvider, createGraphHooks } from '@graphx/react';
+import { GraphProvider, createGraphHooks } from 'graphx-react';
 import type { Schema } from './schema.ts';
 
 const g = createGraphHooks<Schema>();
@@ -235,7 +237,7 @@ Connections come from `getDb(namespace, config)`, which caches one client per pr
 ### libSQL (default)
 
 ```ts
-import { getDb } from '@graphx/core';
+import { getDb } from 'graphx-core';
 
 const db = getDb('acme__alpha'); // file:acme__alpha.db
 ```
@@ -247,8 +249,8 @@ No `driver` is needed. For embedded-replica mode, set `SQLD_URL` / `SQLD_TOKEN` 
 Import the `core/pg` subpath once to register the Postgres adapter with `getDb`. This is a side effect, and it keeps `pg` an optional peer dependency — loaded only by consumers who opt in:
 
 ```ts
-import '@graphx/core/pg'; // registers the Postgres driver (side effect)
-import { getDb } from '@graphx/core';
+import 'graphx-core/pg'; // registers the Postgres driver (side effect)
+import { getDb } from 'graphx-core';
 
 const db = getDb('acme__alpha', {
 	driver: 'postgres',
@@ -258,7 +260,7 @@ const db = getDb('acme__alpha', {
 });
 ```
 
-Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import '@graphx/core/pg'` once, or `getDb` throws.
+Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import 'graphx-core/pg'` once, or `getDb` throws.
 
 **Tenant model.** Each namespace maps to a Postgres **schema** on a shared connection pool, created lazily — one server credential serves every tenant. (libSQL uses one file/replica per namespace instead.)
 
@@ -277,8 +279,8 @@ See [docs/POSTGRES_SUPPORT.md](./docs/POSTGRES_SUPPORT.md) for the full dual-bac
 A third adapter, registered the same way. Its durable state is a chain of immutable snapshots in an object store (S3 or a local directory): each commit writes content-addressed Parquet files and claims the next numbered manifest with a create-if-absent PUT, so the bucket is the database and the local DuckDB file is a materialization of one snapshot.
 
 ```ts
-import '@graphx/core/duck'; // registers the DuckDB driver (side effect)
-import { getDb } from '@graphx/core';
+import 'graphx-core/duck'; // registers the DuckDB driver (side effect)
+import { getDb } from 'graphx-core';
 
 const db = getDb('acme__alpha', { driver: 'duckdb' });
 ```

@@ -9,7 +9,7 @@
  * the plan rather than streaming it.
  */
 import { Database } from 'bun:sqlite';
-import type { BulkEdgeRow, BulkRow } from '@graphx/core';
+import type { BulkEdgeRow, BulkRow } from 'graphx-core';
 import type { PantheonSchema } from './schema.ts';
 
 export type PlanNode = BulkRow<PantheonSchema> & { id: string; validFrom: number };

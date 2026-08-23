@@ -1,4 +1,4 @@
-// Public API for @graphx/core — Temporal GraphRAG on libSQL (P0–P7).
+// Public API for graphx-core — Temporal GraphRAG on libSQL (P0–P7).
 
 // P0 — connection / pragmas
 export {
@@ -25,7 +25,7 @@ export {
 } from './dialect.ts';
 
 // Dialect SQL fragments that packages layered on core need to write portable SQL of their
-// own. `@graphx/auth` stores its tuples as edges and queries them directly, so it needs the
+// own. `graphx-auth` stores its tuples as edges and queries them directly, so it needs the
 // same `->>` / `INSERT OR IGNORE` forms core uses internally. Exported deliberately and
 // narrowly — the rest of `dialect-sql.ts` stays private.
 export { insertOrIgnore, jsonField } from './dialect-sql.ts';

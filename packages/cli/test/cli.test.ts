@@ -129,9 +129,9 @@ test('run: `new <dir>` scaffolds a runnable project', async () => {
 		const pkg = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
 		expect(pkg.scripts.serve).toBe('graphx serve');
 		// Deps pin the CLI's real version, not the misleading `latest`.
-		expect(pkg.dependencies['@graphx/core']).not.toBe('latest');
-		expect(pkg.dependencies['@graphx/core']).toMatch(/^\^\d/);
-		expect(pkg.dependencies['@graphx/cli']).toMatch(/^\^\d/);
+		expect(pkg.dependencies['graphx-core']).not.toBe('latest');
+		expect(pkg.dependencies['graphx-core']).toMatch(/^\^\d/);
+		expect(pkg.dependencies['graphx-cli']).toMatch(/^\^\d/);
 		expect(await readFile(join(dir, 'README.md'), 'utf8')).toContain('bun run serve');
 	} finally {
 		await rm(base, { recursive: true, force: true });

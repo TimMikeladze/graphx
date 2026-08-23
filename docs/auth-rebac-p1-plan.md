@@ -1,4 +1,4 @@
-# @graphx/auth — P1 (Foundation) Implementation Plan
+# graphx-auth — P1 (Foundation) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -138,7 +138,7 @@ Expected: PASS (1 test).
 
 ```bash
 git add packages/auth/package.json packages/auth/tsconfig.json packages/auth/src/index.ts packages/auth/test/p1-smoke.test.ts
-git commit -m "feat(auth): scaffold @graphx/auth package (ReBAC P1)"
+git commit -m "feat(auth): scaffold graphx-auth package (ReBAC P1)"
 ```
 
 ---

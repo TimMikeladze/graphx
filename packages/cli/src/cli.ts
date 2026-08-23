@@ -9,10 +9,10 @@ import type {
 	DbConfig,
 	Trigger,
 	TriggerRunnerOptions,
-} from '@graphx/core';
-import { getDb, init, Graph, createApp, TriggerRunner } from '@graphx/core';
-import { ingestDir, watchDir } from '@graphx/ingest';
-import type { IngestResult } from '@graphx/ingest';
+} from 'graphx-core';
+import { getDb, init, Graph, createApp, TriggerRunner } from 'graphx-core';
+import { ingestDir, watchDir } from 'graphx-ingest';
+import type { IngestResult } from 'graphx-ingest';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Arg parsing (exported for unit tests)
@@ -155,7 +155,7 @@ interface GraphxConfig {
 async function loadConfig(configPath: string): Promise<GraphxConfig> {
 	const configUrl = pathToFileURL(resolve(configPath)).href;
 	const cfg: GraphxConfig = (await import(configUrl)).default;
-	if (cfg.db?.driver === 'postgres') await import('@graphx/core/pg');
+	if (cfg.db?.driver === 'postgres') await import('graphx-core/pg');
 	return cfg;
 }
 
@@ -433,7 +433,7 @@ async function runNew(argv: string[]): Promise<void> {
 	console.log(
 		`Scaffolded graphx project in ${dir}/\n\n` +
 			`  cd ${dir}\n` +
-			`  bun install        # pulls @graphx/core and @graphx/cli from npm\n` +
+			`  bun install        # pulls graphx-core and graphx-cli from npm\n` +
 			`  bun run serve      # http://localhost:8899\n`,
 	);
 }
@@ -450,8 +450,8 @@ function scaffoldPkg(range: string): string {
 				ingest: 'graphx ingest ./vault',
 			},
 			dependencies: {
-				'@graphx/core': range,
-				'@graphx/cli': range,
+				'graphx-core': range,
+				'graphx-cli': range,
 				zod: '^4',
 			},
 		},
@@ -460,7 +460,7 @@ function scaffoldPkg(range: string): string {
 	)}\n`;
 }
 
-const SCAFFOLD_CONFIG = `import { defineGraphSchema, hashEmbed } from '@graphx/core';
+const SCAFFOLD_CONFIG = `import { defineGraphSchema, hashEmbed } from 'graphx-core';
 import { z } from 'zod';
 
 // Your graph's shape — types (node types) and rels (edge types).
@@ -485,7 +485,7 @@ export default {
 const SCAFFOLD_README = `# graphx app
 
 \`\`\`sh
-bun install              # pulls @graphx/core and @graphx/cli from npm
+bun install              # pulls graphx-core and graphx-cli from npm
 bun run serve            # http://localhost:8899  (GET /demo, GET /docs, GET /openapi.json)
 bun run ingest           # ingest ./vault into the graph
 \`\`\`
@@ -495,7 +495,7 @@ protocol, so they can't be \`file:\`-linked — develop this app **inside the gr
 path to the repo's root \`package.json\` \`workspaces\` array, then \`bun install\` from the repo
 root.
 
-Edit \`graphx.config.ts\` to shape your graph. Point a \`@graphx/react\` client at the server with
+Edit \`graphx.config.ts\` to shape your graph. Point a \`graphx-react\` client at the server with
 \`<GraphProvider bootstrap="/demo" fetch={...} />\`.
 `;
 

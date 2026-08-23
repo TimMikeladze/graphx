@@ -1,8 +1,8 @@
 {
-	"name": "@graphx/react",
+	"name": "graphx-react",
 	"version": "0.1.0",
 	"description": "Inference-only React Query hooks for graphx — typed query/mutation/infinite hooks + CDC live-sync, no codegen",
-	"homepage": "https://github.com/TimMikeladze/graphx/tree/main/packages/react#readme",
+	"homepage": "https://graphx.sh",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -28,20 +28,20 @@
 		"type-check": "tsc --noEmit"
 	},
 	"devDependencies": {
-		"@graphx/core": "workspace:*",
 		"@happy-dom/global-registrator": "^16.5.3",
 		"@tanstack/react-query": "^5.101.0",
 		"@testing-library/react": "^16.1.0",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
+		"graphx-core": "workspace:*",
 		"happy-dom": "^16.5.3",
 		"react": "^19.2.6",
 		"react-dom": "^19.2.6",
 		"zod": "^4.4.3"
 	},
 	"peerDependencies": {
-		"@graphx/core": "workspace:*",
 		"@tanstack/react-query": "^5.0.0",
+		"graphx-core": "workspace:*",
 		"react": "^18 || ^19",
 		"typescript": ">=4.5.0"
 	},

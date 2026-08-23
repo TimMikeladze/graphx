@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { defineGraphSchema } from '@graphx/core';
+import { defineGraphSchema } from 'graphx-core';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Backend } from '../src/backend.ts';
 import { inferSchemaDoc, registerSchema, schemaDoc } from '../src/resources.ts';

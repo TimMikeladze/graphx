@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Backend selection is config-only.** Every public type, method signature, route shape, and JSON wire contract stays byte-stable. Same constraint Postgres shipped under (`docs/POSTGRES_SUPPORT.md` §0).
-- **`@duckdb/node-api` is an OPTIONAL peer dependency.** It must only load when a consumer imports the `@graphx/core/duck` subpath. Never from `src/index.ts`.
+- **`@duckdb/node-api` is an OPTIONAL peer dependency.** It must only load when a consumer imports the `graphx-core/duck` subpath. Never from `src/index.ts`.
 - **Pinned versions:** `@duckdb/node-api@1.5.5-r.2` (wraps DuckDB v1.5.5). Do not use the `lts-v1.4` tag — `USING KEY` recursive-CTE syntax differs incompatibly between the 1.4 and 1.5 lines.
 - **FOREVER sentinel is `8640000000000000`.** DuckDB `INTEGER` is 32-bit and overflows it; every temporal column and cast is `BIGINT`.
 - **Never call `listValue()` or `arrayValue()` without an explicit type.** They infer element type from the first element alone and silently truncate floats. Embeddings bind as `JSON.stringify(vec)` with a `::FLOAT[dim]` cast.
@@ -1743,7 +1743,7 @@ reader later."
 
 ## Task 7: Package wiring and the DuckDB connection pool
 
-`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `@graphx/core/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but _shared_: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
+`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `graphx-core/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but _shared_: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
 
 **Files:**
 
@@ -2818,14 +2818,14 @@ let client: DbClient;
 if (driver === 'postgres') {
 	if (!pgFactory) {
 		throw new Error(
-			"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
+			"getDb: postgres driver selected but the pg adapter is not registered — import 'graphx-core/pg'",
 		);
 	}
 	client = pgFactory(namespace, cfg);
 } else if (driver === 'duckdb') {
 	if (!duckFactory) {
 		throw new Error(
-			"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
+			"getDb: duckdb driver selected but the duck adapter is not registered — import 'graphx-core/duck'",
 		);
 	}
 	client = duckFactory(namespace, cfg);

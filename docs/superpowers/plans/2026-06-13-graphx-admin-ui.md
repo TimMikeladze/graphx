@@ -1,4 +1,4 @@
-# @graphx/admin UI Implementation Plan (Plan 2)
+# graphx-admin UI Implementation Plan (Plan 2)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:executing-plans. Steps use checkbox (`- [ ]`).
 

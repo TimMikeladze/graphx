@@ -1,8 +1,8 @@
-# @graphx/admin Backend API Implementation Plan
+# graphx-admin Backend API Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the HTTP/SDK surface the `@graphx/admin` UI needs — operator-scoped control-plane CRUD, governed node list/graph-slice reads, and node history — all on the existing `@graphx/core` Hono app.
+**Goal:** Add the HTTP/SDK surface the `graphx-admin` UI needs — operator-scoped control-plane CRUD, governed node list/graph-slice reads, and node history — all on the existing `graphx-core` Hono app.
 
 **Architecture:** Two auth realms in one process. (1) A new mounted Hono sub-app (`createAdminApp`) gates control-plane registry CRUD behind an operator credential. (2) New tenant-scoped read routes (`/nodes`, `/graph`, `/nodes/:id/history`) reuse the existing `requireGraph('read')` middleware; cross-tenant operator browsing works via a one-field `Principal.operator` bypass in `authorize`. New read primitives are `Graph` methods (`listNodes`, `graphSlice`) reusing the class's private parsing/upcasting — not a separate file (spec §3 said `list.ts`; methods are more consistent with `neighbors`/`neighborsPage` and reach `rowToNode`).
 

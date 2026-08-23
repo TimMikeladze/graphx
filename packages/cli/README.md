@@ -1,19 +1,19 @@
-# @graphx/cli
+# graphx-cli
 
 The `graphx` binary — scaffold a project, ingest a vault, serve the graph over HTTP, and run
-declarative triggers. A thin driver over [`@graphx/core`](../core) and
-[`@graphx/ingest`](../ingest); everything it does is reachable from the SDK too.
+declarative triggers. A thin driver over [`graphx-core`](../core) and
+[`graphx-ingest`](../ingest); everything it does is reachable from the SDK too.
 
 ## Install
 
 ```sh
-bunx @graphx/cli new my-app     # no install needed to scaffold
+bunx graphx-cli new my-app     # no install needed to scaffold
 ```
 
 or as a dev dependency of a project:
 
 ```sh
-bun add -d @graphx/cli
+bun add -d graphx-cli
 ```
 
 The shebang is `#!/usr/bin/env bun` — the binary runs under Bun, and it imports your
@@ -51,7 +51,7 @@ schema or dimension mismatch rejecting every file) is visible rather than hidden
 Every command except `new` loads this file. It is the whole contract:
 
 ```ts
-import { defineGraphSchema, hashEmbed } from '@graphx/core';
+import { defineGraphSchema, hashEmbed } from 'graphx-core';
 import { z } from 'zod';
 
 export const schema = defineGraphSchema({
@@ -74,7 +74,7 @@ export default {
 vector column the first time the schema is created and cannot be changed afterwards — a wrong
 value rejects every subsequent insert.
 
-Setting `db.driver: 'postgres'` is enough: the CLI imports `@graphx/core/pg` for you when it sees
+Setting `db.driver: 'postgres'` is enough: the CLI imports `graphx-core/pg` for you when it sees
 that driver, so the optional `pg` peer stays off the path for everyone else.
 
 Trigger _actions are functions_, which is why they live in this config module rather than in a

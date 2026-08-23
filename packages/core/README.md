@@ -1,4 +1,4 @@
-# core (graphx)
+# graphx-core
 
 A **temporal GraphRAG SDK** — a bitemporal property graph with native vector + full-text retrieval,
 multi-tenant isolation, and a typed HTTP serving layer. Runs on **libSQL** or **Postgres** behind a
@@ -16,16 +16,16 @@ single dialect seam.
 ## Install
 
 ```sh
-bun add @graphx/core zod
+bun add graphx-core zod
 ```
 
-Optional subpaths pull optional peers only when imported: `@graphx/core/pg` (Postgres, peer `pg`),
-`@graphx/core/blob` (content-addressed blob store, peer `@aws-sdk/client-s3`).
+Optional subpaths pull optional peers only when imported: `graphx-core/pg` (Postgres, peer `pg`),
+`graphx-core/blob` (content-addressed blob store, peer `@aws-sdk/client-s3`).
 
 ## Quickstart
 
 ```ts
-import { getDb, init, defineGraphSchema, Graph, hashEmbed } from '@graphx/core';
+import { getDb, init, defineGraphSchema, Graph, hashEmbed } from 'graphx-core';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -63,7 +63,7 @@ seeds behind `retrieve` never do. The serving layer and `bulkLoad` embed for you
 ### Retrieval
 
 ```ts
-import { retrieve, hybridRetrieve, hashEmbed } from '@graphx/core';
+import { retrieve, hybridRetrieve, hashEmbed } from 'graphx-core';
 
 // Your embedding model in production; `hashEmbed()` is a deterministic, model-free stand-in for
 // dev/tests/demos (its default width is 768, matching `init`'s — no dimension bookkeeping).
@@ -79,7 +79,7 @@ const hybrid = await hybridRetrieve(client, embed, { query: 'computing', k: 10, 
 ### Time travel
 
 ```ts
-import { history, diff, changeFeed, retrieve } from '@graphx/core';
+import { history, diff, changeFeed, retrieve } from 'graphx-core';
 
 const versions = await history(client, id); // full immutable version trail for an id
 const delta = await diff(client, t1, t2); // what changed in (t1, t2]
@@ -100,7 +100,7 @@ traversal), `bulkLoad()` (batch ingest), graph algorithms (`shortestPath`, `page
 control plane, seeds, and serves. One call:
 
 ```ts
-import { createApp } from '@graphx/core';
+import { createApp } from 'graphx-core';
 
 const { app, tenant, project, user } = await createApp({
 	schema,
@@ -114,7 +114,7 @@ const { app, tenant, project, user } = await createApp({
 export default { fetch: app.fetch }; // GET /demo returns { tenant, project, user }
 ```
 
-Or skip the file entirely: `bunx @graphx/cli new my-app && cd my-app && bun run serve` scaffolds a
+Or skip the file entirely: `bunx graphx-cli new my-app && cd my-app && bun run serve` scaffolds a
 project and `graphx serve` (loads `graphx.config.ts`) exposes the graph — the same one `graphx
 ingest` writes to.
 
@@ -137,11 +137,11 @@ Routes mount under `/t/:tenant/p/:project/...`: nodes/edges CRUD (`POST`/`GET`/`
 returns the project's declared node types and rels as JSON Schema (derived from your zod schema) —
 what a client needs to render typed editors without hard-coding your shapes. Errors map to `{ error,
 issues? }` JSON (400 validation/constraint, 401 authn, 403 authz, 404 not-found/cross-tenant). Pair
-it with [`@graphx/react`](../react) for typed hooks.
+it with [`graphx-react`](../react) for typed hooks.
 
 > Typed client caveat: under isolated declarations the published `AppType` is env-level only, so
 > `hc<AppType>` is runtime-correct but statically `unknown` — consume the source for precise route
-> types, or use `@graphx/react`.
+> types, or use `graphx-react`.
 
 ### Machine-readable contract
 
@@ -168,7 +168,7 @@ Two models — know which a route uses:
 
 ## Backends
 
-Default is libSQL. For Postgres, import `@graphx/core/pg` once (registers the driver) and select it via
+Default is libSQL. For Postgres, import `graphx-core/pg` once (registers the driver) and select it via
 `getDb(ns, { driver: 'postgres', connectionString })` or `GRAPHX_DB_DRIVER=postgres`. The namespace
 becomes a libSQL DB file or a Postgres schema. A few libSQL-native probes (FTS5 internals, `F32_BLOB`)
 have no Postgres analog; the user-facing contracts run on both.

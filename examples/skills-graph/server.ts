@@ -1,6 +1,6 @@
 /**
  * Dev API for the skills example — serves the graph built from `skill-collector`'s SQLite
- * database to `@graphx/admin`.
+ * database to `graphx-admin`.
  *
  *   bun run server.ts            # :8789, then: bun run dev:skills from the repo root
  *
@@ -36,7 +36,7 @@ import {
 	init,
 	initControl,
 	type Principal,
-} from '@graphx/core';
+} from 'graphx-core';
 import { buildNodes, streamEdges } from './load.ts';
 import { SKILLS_SCHEMA_VERSION, skillsSchema } from './schema.ts';
 

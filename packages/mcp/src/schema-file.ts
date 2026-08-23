@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { GraphSchema } from '@graphx/core';
+import type { GraphSchema } from 'graphx-core';
 
 /**
  * `GRAPHX_SCHEMA` — the file format that lets the standalone binary validate writes.

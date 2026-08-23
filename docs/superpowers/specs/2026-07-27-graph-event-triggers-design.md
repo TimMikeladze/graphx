@@ -109,7 +109,7 @@ Four small ones:
 
 ## API
 
-All of it in `packages/core/src/triggers.ts`, exported from `@graphx/core`.
+All of it in `packages/core/src/triggers.ts`, exported from `graphx-core`.
 
 ```ts
 interface TriggerMatch {
@@ -267,7 +267,7 @@ Stated so they do not leak into the implementation:
 
 - Triggers declared in the database or the graph schema. `match` is serializable so this can be
   added later without reshaping anything.
-- `@graphx/auth` gating what a trigger's derived writes may touch. Trigger actions run privileged;
+- `graphx-auth` gating what a trigger's derived writes may touch. Trigger actions run privileged;
   the docs say so.
 - Replaying a dead letter. Inspection is the acceptance criterion; replay is not.
 - `serve()` auto-hosting a runner.

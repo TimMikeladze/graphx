@@ -1,4 +1,4 @@
-import { type DbClient, dialectOf, jsonField } from '@graphx/core';
+import { type DbClient, dialectOf, jsonField } from 'graphx-core';
 import type { AuthModel, RewriteExpr } from './model.ts';
 import { typeOf } from './types.ts';
 

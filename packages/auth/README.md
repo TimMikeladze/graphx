@@ -1,4 +1,4 @@
-# @graphx/auth
+# graphx-auth
 
 Relationship-based access control (ReBAC) on [graphx](../core), in the Google Zanzibar / OpenFGA
 mould. Permissions **are** graph edges: a tuple `⟨object, relation, subject⟩` is stored as an edge,
@@ -10,10 +10,10 @@ had access at time T_, which is Zanzibar's snapshot consistency without a zookie
 
 ## Two permission layers — do not conflate
 
-| Layer  | Module                      | Governs                                                                                                         |
-| ------ | --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| **L1** | `@graphx/core`'s `authz.ts` | who may call the graphx API for a project — the _app's_ service credential. Coarse RBAC over the control plane. |
-| **L2** | **this package**            | the ReBAC model the _app_ defines over its own users and resources.                                             |
+| Layer  | Module                     | Governs                                                                                                         |
+| ------ | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **L1** | `graphx-core`'s `authz.ts` | who may call the graphx API for a project — the _app's_ service credential. Coarse RBAC over the control plane. |
+| **L2** | **this package**           | the ReBAC model the _app_ defines over its own users and resources.                                             |
 
 The app authenticates to graphx (L1), then asks graphx ReBAC questions about its own users and
 resources (L2). The app — never the end user — calls `check`. Tenant/project isolation is unchanged.
@@ -23,7 +23,7 @@ See [`docs/auth-rebac-spec.md`](../../docs/auth-rebac-spec.md) for the full desi
 ## Install
 
 ```sh
-bun add @graphx/auth @graphx/core
+bun add graphx-auth graphx-core
 ```
 
 ## Usage
@@ -31,8 +31,8 @@ bun add @graphx/auth @graphx/core
 Declare the model, hand it a `Graph`, then write tuples and ask questions.
 
 ```ts
-import { Graph, getDb, init } from '@graphx/core';
-import { Auth, defineAuthModel, rel, tupleToUserset } from '@graphx/auth';
+import { Graph, getDb, init } from 'graphx-core';
+import { Auth, defineAuthModel, rel, tupleToUserset } from 'graphx-auth';
 
 const model = defineAuthModel({
 	user: {},
@@ -111,7 +111,7 @@ resolution from a request to the `Auth` engine it should run against — that is
 → namespace mapping and operator-level write gating live.
 
 ```ts
-import { createAuthApp } from '@graphx/auth';
+import { createAuthApp } from 'graphx-auth';
 import { Hono } from 'hono';
 
 const api = new Hono();

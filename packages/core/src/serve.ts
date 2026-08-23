@@ -709,7 +709,7 @@ function requireGraph<S extends GraphSchema>(
 function onError(err: Error, c: Context) {
 	// Normalize HTTPException to the same JSON `{ error }` shape every other branch uses.
 	// Hono's default getResponse() emits a text/plain body, which clients parsing JSON (e.g.
-	// @graphx/react) can't read — so 401/404/501 messages would be lost. Status is preserved.
+	// graphx-react) can't read — so 401/404/501 messages would be lost. Status is preserved.
 	if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
 	if (err instanceof AuthzError) return c.json({ error: err.message }, err.status);
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
@@ -757,7 +757,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	const base = new OpenAPIHono<ServeEnv<S>>({
 		// Wire-validation failures answer with the SAME `{ error, issues }` body every other failure
 		// branch uses (see `onError`), which is what the 400 response schema documents and what
-		// `@graphx/react` parses. The wrapper's default hook would emit `{ success, error }` instead.
+		// `graphx-react` parses. The wrapper's default hook would emit `{ success, error }` instead.
 		defaultHook: (result, c) =>
 			result.success
 				? undefined

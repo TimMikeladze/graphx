@@ -56,7 +56,7 @@ Six forks, resolved.
 
 ## Package
 
-New workspace package `packages/mcp`, published as `@graphx/mcp`.
+New workspace package `packages/mcp`, published as `graphx-mcp`.
 
 ```
 packages/mcp/src/
@@ -68,7 +68,7 @@ packages/mcp/src/
 ```
 
 Dependencies: `@modelcontextprotocol/sdk@^1.30`, `@hono/mcp@^0.3`, `zod@^4`. Peer dependency on
-`@graphx/core`, matching how `@graphx/cli` depends on core today.
+`graphx-core`, matching how `graphx-cli` depends on core today.
 
 The SDK takes `zod@^3.25 || ^4.0`, so the repo's zod 4 works unmodified. `@hono/mcp@0.3.1`
 peer-depends on the SDK rather than vendoring it, so there is one protocol implementation in the

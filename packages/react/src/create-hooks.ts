@@ -28,7 +28,7 @@ import type {
 	ShortestPathResult,
 	TemporalDiff,
 	TopNode,
-} from '@graphx/core';
+} from 'graphx-core';
 import { useEffect, useRef } from 'react';
 import { GraphError } from './errors.ts';
 import { graphKeys } from './keys.ts';
@@ -336,9 +336,9 @@ export class MatchBuilder<
 }
 
 /**
- * Encode a keyset cursor as base64(JSON array) — byte-identical to `@graphx/core`'s `encodeCursor`
+ * Encode a keyset cursor as base64(JSON array) — byte-identical to `graphx-core`'s `encodeCursor`
  * for the ASCII numeric-string parts a feed cursor holds, but via `btoa` so this package pulls in
- * NO `@graphx/core` runtime (only erased types) and stays browser-safe.
+ * NO `graphx-core` runtime (only erased types) and stays browser-safe.
  */
 function encodeCursor(parts: string[]): string {
 	return btoa(JSON.stringify(parts));
@@ -368,7 +368,7 @@ function advanceCursor(
  * The value is used ONLY for inference — you can either `createGraphHooks(schema)` (infer `S` from
  * the arg) or, in a browser bundle that shouldn't ship the SDK/schema runtime, pass the type
  * explicitly and omit the value: `createGraphHooks<typeof schema>()`. This package pulls in NO
- * `@graphx/core` runtime, so the client stays SDK-free — it's typed by `S` alone (the "no codegen").
+ * `graphx-core` runtime, so the client stays SDK-free — it's typed by `S` alone (the "no codegen").
  */
 export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: CreateHooksOptions) {
 	/**

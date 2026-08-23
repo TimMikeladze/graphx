@@ -149,14 +149,14 @@ export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	if (driver === 'postgres') {
 		if (!pgFactory) {
 			throw new Error(
-				"getDb: postgres driver selected but the pg adapter is not registered — import '@graphx/core/pg'",
+				"getDb: postgres driver selected but the pg adapter is not registered — import 'graphx-core/pg'",
 			);
 		}
 		client = pgFactory(namespace, cfg);
 	} else if (driver === 'duckdb') {
 		if (!duckFactory) {
 			throw new Error(
-				"getDb: duckdb driver selected but the duck adapter is not registered — import '@graphx/core/duck'",
+				"getDb: duckdb driver selected but the duck adapter is not registered — import 'graphx-core/duck'",
 			);
 		}
 		client = duckFactory(namespace, cfg);

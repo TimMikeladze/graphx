@@ -12,7 +12,7 @@
  * No `single: true` rels — `bulkEdges` refuses them (it cannot close a predecessor edge).
  */
 import { z } from 'zod';
-import { defineGraphSchema } from '@graphx/core';
+import { defineGraphSchema } from 'graphx-core';
 
 export const pantheonSchema = defineGraphSchema({
 	nodes: {
