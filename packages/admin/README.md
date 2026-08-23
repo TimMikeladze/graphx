@@ -19,7 +19,7 @@ Writes are bitemporal: an edit opens a successor version and a delete closes the
 
 ## Prerequisites
 
-A running graphx Hono server (from `graphx-core`) that:
+A running graphx Hono server (from `graphx`) that:
 
 - mounts `createApp(cfg)` (serves `/t/:tenant/p/:project/*` — the `/nodes`, `/graph`, `/schema`, `/nodes/:id/history` reads, and the `POST /nodes`, `PATCH /nodes/:id`, `DELETE /nodes/:id`, `POST /edges`, `DELETE /edges/:id` writes the editor uses), and
 - mounts the operator sub-app: `app.route('/admin', createAdminApp({ control, authenticate }))`.

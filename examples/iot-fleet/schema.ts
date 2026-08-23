@@ -1,4 +1,4 @@
-import { defineGraphSchema } from 'graphx-core';
+import { defineGraphSchema } from 'graphx';
 import { z } from 'zod';
 
 /**

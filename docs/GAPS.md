@@ -1,9 +1,9 @@
 # graphx — Gaps & Missing Work
 
 > What is spec'd or implied but **not built**. Original audit 2026-06-14 (`main` @ d1e459d, plus the unmerged `examples/file-ingest` admin work); **re-verified 2026-06-29** (`fix/ingest-top3-risks`).
-> Scope: `packages/core`, `packages/auth`, `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
+> Scope: `packages/graphx`, `packages/auth`, `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
 >
-> **2026-06-29 corrections:** §1 P9 (blob layer) is now **BUILT** (`packages/core/src/blob.ts`, commit `bc3b467`) — the original "MISSING" below was stale. §2 (SDK ops with no HTTP route) is **RESOLVED** — every listed op, including `neighborsPage`, is now in `serve.ts`. The full react-query R0 HTTP surface is live.
+> **2026-06-29 corrections:** §1 P9 (blob layer) is now **BUILT** (`packages/graphx/src/core/blob.ts`, commit `bc3b467`) — the original "MISSING" below was stale. §2 (SDK ops with no HTTP route) is **RESOLVED** — every listed op, including `neighborsPage`, is now in `serve.ts`. The full react-query R0 HTTP surface is live.
 
 Code hygiene is clean — no abandoned `TODO`/`FIXME`, no skipped tests, no stubbed `throw new Error('not implemented')`. The gaps below are **whole features that were never started** or **SDK capabilities not yet reachable from a client**, not half-finished code.
 
@@ -15,7 +15,7 @@ Code hygiene is clean — no abandoned `TODO`/`FIXME`, no skipped tests, no stub
 
 ### P9 — Blob layer (§12) — ✅ BUILT (2026-06-29 correction)
 
-`packages/core/src/blob.ts` (commit `bc3b467`, `core/blob` subpath) ships this. The "MISSING" text below is the original stale audit, retained for context.
+`packages/graphx/src/core/blob.ts` (commit `bc3b467`, `core/blob` subpath) ships this. The "MISSING" text below is the original stale audit, retained for context.
 
 Content-addressed object storage. Promised:
 
@@ -81,9 +81,9 @@ Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the ke
 
 ---
 
-## 3. `graphx-react` — ✅ BUILT (2026-06-29)
+## 3. `graphx/react` — ✅ BUILT (2026-06-29)
 
-`packages/react` (`graphx-react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
+`packages/react` (`graphx/react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
 
 - `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen) — single closure binding `S`.
 - Query hooks: `useNode`, `useNeighbors` (infinite), `useListNodes` (infinite), `useGraphSlice`, `useHistory`, `useRetrieve`, `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
@@ -136,7 +136,7 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 
 ## 5. Documentation gaps
 
-- ~~**`packages/core` — no README.**~~ ✅ written 2026-06-29.
+- ~~**`packages/graphx` — no README.**~~ ✅ written 2026-06-29.
 - ~~**`packages/react` — no README.**~~ ✅ written 2026-06-29 (with the package).
 - ~~**`packages/auth` — no README.**~~ ✅ written 2026-08-19 (release prep).
 - ~~**`packages/cli` — no README.**~~ ✅ written 2026-08-19 (release prep) — this one was never listed here.
@@ -148,8 +148,8 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 ## Priority shortlist
 
 1. ~~**`/changes` + PATCH/DELETE + the rest of §2**~~ — ✅ DONE (2026-06-29): changeFeed/diff/hybrid/bulk/match/algorithms **and** neighborsPage. Full react-query R0 HTTP surface is live.
-2. ~~**`packages/core` README**~~ — ✅ DONE (2026-06-29). ~~`packages/auth` README + root README~~ ✅ DONE (2026-08-19); every published package now has one.
+2. ~~**`packages/graphx` README**~~ — ✅ DONE (2026-06-29). ~~`packages/auth` README + root README~~ ✅ DONE (2026-08-19); every published package now has one.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. ~~**Expose `hybridRetrieve` + `retrieve` UI in admin**~~ — ✅ DONE; the explorer calls both (`lib/explorer-search.ts`). `journey` / `match` / algorithm visualizations are what is left.
-5. ~~**`graphx-react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
+5. ~~**`graphx/react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).
 6. **P10 tiering** — the DuckDB/Parquet substrate now exists (2026-08-19 correction above); what remains is the hot→cold watermark job. Only when graph size demands it.

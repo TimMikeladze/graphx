@@ -1,0 +1,13 @@
+{
+	// The core SDK keeps `isolatedDeclarations` — it is what stops an exported symbol from
+	// depending on whole-program inference to describe itself. The React hooks cannot satisfy
+	// it (the generic `createGraphHooks` return is inference-only), so the package-wide
+	// `tsconfig.json` relaxes it and this narrower config re-imposes it on `src/core` alone.
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"declaration": true,
+		"isolatedDeclarations": true,
+		"types": ["node"]
+	},
+	"include": ["src/core/**/*"]
+}

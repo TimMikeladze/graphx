@@ -1,4 +1,4 @@
-# graphx-auth — P2 (Computed + Group Usersets) Implementation Plan
+# graphx/auth — P2 (Computed + Group Usersets) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -30,7 +30,7 @@ Direct and userset tuples with the same `(subject, relation, object)` are **dist
 ## Files changed
 
 ```
-packages/auth/src/
+packages/graphx/src/auth/
   model.ts    — MODIFY: RewriteExpr union; Relation gains .self()/.or(); validate computed refs
   store.ts    — MODIFY: writeTuple stores subjectRelation + guards on it; deleteTuple takes subjectRelation
   check.ts    — CREATE: recursive evaluator (self/computed/union) + memo + cycle guard + asOf
@@ -50,10 +50,10 @@ packages/auth/src/
 
 **Files:**
 
-- Modify: `packages/auth/src/model.ts`
-- Test: `packages/auth/test/p2-model.test.ts`
+- Modify: `packages/graphx/src/auth/model.ts`
+- Test: `packages/graphx/test/auth/p2-model.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p2-model.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p2-model.test.ts`
 
 ```typescript
 import { expect, test } from 'bun:test';
@@ -92,10 +92,10 @@ test('P2: defineAuthModel rejects a computed ref to an undeclared relation', () 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p2-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-model.test.ts`
 Expected: FAIL — `.or` is not a function / union shape mismatch.
 
-- [ ] **Step 3: Replace `packages/auth/src/model.ts`**
+- [ ] **Step 3: Replace `packages/graphx/src/auth/model.ts`**
 
 ```typescript
 import { z } from 'zod';
@@ -215,13 +215,13 @@ export function defineAuthModel(spec: ModelSpec): AuthModel {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p2-model.test.ts` then `bun test packages/auth/test/p1-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-model.test.ts` then `bun test packages/graphx/test/auth/p1-model.test.ts`
 Expected: PASS both (P1 model tests still green — `rel()` → `{kind:'self'}` unchanged).
 
 - [ ] **Step 5: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/model.ts packages/auth/test/p2-model.test.ts
+git add packages/graphx/src/auth/model.ts packages/graphx/test/auth/p2-model.test.ts
 git commit -m "feat(auth): computed usersets — .or() + RewriteExpr union (P2)"
 ```
 
@@ -233,10 +233,10 @@ git commit -m "feat(auth): computed usersets — .or() + RewriteExpr union (P2)"
 
 **Files:**
 
-- Modify: `packages/auth/src/store.ts`
-- Test: `packages/auth/test/p2-store.test.ts`
+- Modify: `packages/graphx/src/auth/store.ts`
+- Test: `packages/graphx/test/auth/p2-store.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p2-store.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p2-store.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -306,10 +306,10 @@ test('P2: deleteTuple revokes only the matching subjectRelation', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p2-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-store.test.ts`
 Expected: FAIL — `writeTuple` throws on `subjectRelation` (P1 rejection) / `deleteTuple` arity.
 
-- [ ] **Step 3: Update `packages/auth/src/store.ts`**
+- [ ] **Step 3: Update `packages/graphx/src/auth/store.ts`**
 
 Replace the `writeTuple` function with:
 
@@ -408,13 +408,13 @@ export async function deleteTuple(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p2-store.test.ts` then `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-store.test.ts` then `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: PASS both (P1 store tests still green — direct tuples write `props='{}'`, guard uses `IS NULL`).
 
 - [ ] **Step 5: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/store.ts packages/auth/test/p2-store.test.ts
+git add packages/graphx/src/auth/store.ts packages/graphx/test/auth/p2-store.test.ts
 git commit -m "feat(auth): subjectRelation-aware tuple write/revoke (P2)"
 ```
 
@@ -426,10 +426,10 @@ A new module: recursive descent over the rewrite tree. `self` reads every edge i
 
 **Files:**
 
-- Create: `packages/auth/src/check.ts`
+- Create: `packages/graphx/src/auth/check.ts`
 - Test: covered by Task 4's `p2-check.test.ts` (the evaluator is exercised through `Auth.check`).
 
-- [ ] **Step 1: Create `packages/auth/src/check.ts`**
+- [ ] **Step 1: Create `packages/graphx/src/auth/check.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -545,7 +545,7 @@ Expected: clean. (If isolatedDeclarations flags `runCheck`, confirm its explicit
 - [ ] **Step 3: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/check.ts
+git add packages/graphx/src/auth/check.ts
 git commit -m "feat(auth): recursive check evaluator — self/computed/union (P2)"
 ```
 
@@ -557,10 +557,10 @@ git commit -m "feat(auth): recursive check evaluator — self/computed/union (P2
 
 **Files:**
 
-- Modify: `packages/auth/src/auth.ts`
-- Test: `packages/auth/test/p2-check.test.ts`
+- Modify: `packages/graphx/src/auth/auth.ts`
+- Test: `packages/graphx/test/auth/p2-check.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p2-check.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p2-check.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -650,10 +650,10 @@ test('P2: write rejects a userset whose subjectRelation is undeclared on the sub
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p2-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-check.test.ts`
 Expected: FAIL — `check` is still P1 (throws on `union`/`computed`) and `write` still rejects `subjectRelation`.
 
-- [ ] **Step 3: Replace `packages/auth/src/auth.ts`**
+- [ ] **Step 3: Replace `packages/graphx/src/auth/auth.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -719,7 +719,7 @@ export class Auth {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p2-check.test.ts` then `bun test packages/auth/test/p1-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p2-check.test.ts` then `bun test packages/graphx/test/auth/p1-check.test.ts`
 Expected: PASS both. (P1 check tests still green — direct `self` and `asOf` behavior is preserved by the generalized evaluator; the P1 "userset subjects rejected" test was for P1 only — see note below.)
 
 > **P1 test reconciliation:** P1's `p1-check.test.ts` has a test "userset subjects are rejected (P2)" asserting `auth.write([...subjectRelation...])` throws. In P2 that is now _supported_. Update that single P1 test: change it to assert a userset write with a **valid** subjectRelation succeeds, OR remove it (the P2 suite covers userset writes). Make the minimal edit so the suite is internally consistent; note the change in your report.
@@ -727,7 +727,7 @@ Expected: PASS both. (P1 check tests still green — direct `self` and `asOf` be
 - [ ] **Step 5: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/auth.ts packages/auth/test/p2-check.test.ts packages/auth/test/p1-check.test.ts
+git add packages/graphx/src/auth/auth.ts packages/graphx/test/auth/p2-check.test.ts packages/graphx/test/auth/p1-check.test.ts
 git commit -m "feat(auth): wire recursive check + userset writes into Auth (P2)"
 ```
 
@@ -737,7 +737,7 @@ git commit -m "feat(auth): wire recursive check + userset writes into Auth (P2)"
 
 **Files:**
 
-- Modify: `packages/auth/src/index.ts` (only if a new public symbol is needed — `RewriteExpr`/`Relation` are already exported from P1; `runCheck` is internal, not exported)
+- Modify: `packages/graphx/src/auth/index.ts` (only if a new public symbol is needed — `RewriteExpr`/`Relation` are already exported from P1; `runCheck` is internal, not exported)
 - Verify: full suite + type-check + lint + core untouched
 
 - [ ] **Step 1: Confirm exports**
@@ -757,17 +757,17 @@ Expected: no errors.
 - [ ] **Step 4: Lint (do NOT run the whole-repo formatter)**
 
 Run: `bun run lint`
-Expected: clean. **Do not run `bun run format`** — it reformats the whole repo and dirties `packages/core` (a known oxfmt drift). If you must format, format only the auth files: `bunx oxfmt packages/auth`.
+Expected: clean. **Do not run `bun run format`** — it reformats the whole repo and dirties `packages/graphx` (a known oxfmt drift). If you must format, format only the auth files: `bunx oxfmt packages/auth`.
 
 - [ ] **Step 5: Confirm core is untouched**
 
-Run: `git diff --name-only -- packages/core`
+Run: `git diff --name-only -- packages/graphx`
 Expected: empty.
 
 - [ ] **Step 6: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/index.ts
+git add packages/graphx/src/auth/index.ts
 git commit -m "chore(auth): P2 complete — computed + group usersets green"
 ```
 

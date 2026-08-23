@@ -3,8 +3,8 @@
  * graph's shape happened in `generate.ts` / `temporal.ts`, and this just embeds the bodies and
  * hands the rows to the bulk loaders.
  */
-import type { DbClient, EmbedFn } from '../../packages/core/src/index.ts';
-import { bulkEdges, bulkLoad } from '../../packages/core/src/index.ts';
+import type { DbClient, EmbedFn } from '../../packages/graphx/src/core/index.ts';
+import { bulkEdges, bulkLoad } from '../../packages/graphx/src/core/index.ts';
 import type { Plan } from './generate.ts';
 import { demoSchema } from './schema.ts';
 

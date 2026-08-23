@@ -13,7 +13,7 @@ feature that is both wrong and undiscoverable: set an as-of time and the node li
 jump to the past while the inspector keeps showing live data, with nothing on screen saying
 which time you are looking at.
 
-This slice fixes the leak in `packages/core` and replaces the input with a timeline bar.
+This slice fixes the leak in `packages/graphx` and replaces the input with a timeline bar.
 
 ## 2. Non-goals (this slice)
 
@@ -29,13 +29,13 @@ Each is a separate spec, in rough priority order:
 
 ## 3. Decisions (resolved during brainstorming)
 
-| Fork                       | Decision                                                                                                                                                                                    |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fix the `asOf` leak where? | **In `packages/core`.** Neighbors at an as-of time cannot be derived client-side — the graph slice is type/`q`-filtered and row-capped, so a derived neighbor list would be silently wrong. |
-| Control placement          | **Docked timeline bar** under the canvas. Always visible; a popover hides the one thing the user said was missing.                                                                          |
-| Timeline data              | **One new `GET /timeline`** returning range + buckets + ticks, windowable by `from`/`to`.                                                                                                   |
-| Editing while in the past  | **Read-only mode.** A write from a historical view lands on the live version — a silent footgun.                                                                                            |
-| v1 bar controls            | Scrub + snap, density histogram, prev/next step, play. All four.                                                                                                                            |
+| Fork                       | Decision                                                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fix the `asOf` leak where? | **In `packages/graphx`.** Neighbors at an as-of time cannot be derived client-side — the graph slice is type/`q`-filtered and row-capped, so a derived neighbor list would be silently wrong. |
+| Control placement          | **Docked timeline bar** under the canvas. Always visible; a popover hides the one thing the user said was missing.                                                                            |
+| Timeline data              | **One new `GET /timeline`** returning range + buckets + ticks, windowable by `from`/`to`.                                                                                                     |
+| Editing while in the past  | **Read-only mode.** A write from a historical view lands on the live version — a silent footgun.                                                                                              |
+| v1 bar controls            | Scrub + snap, density histogram, prev/next step, play. All four.                                                                                                                              |
 
 ## 4. Change points
 
@@ -55,7 +55,7 @@ this feature.
 
 ## 5. Core: `asOf` plumbing
 
-`packages/core/src/graph.ts` — four read methods gain `asOf?: number`:
+`packages/graphx/src/core/graph.ts` — four read methods gain `asOf?: number`:
 
 | Method           | Today                                    | Change                                                                                     |
 | ---------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -76,14 +76,14 @@ Conventions to follow, already established in this codebase:
   `temporal.ts` already spells it; reuse it rather than re-typing the SQL.
 - The `nv_asof` and `ev_src_asof`/`ev_dst_asof` indexes already cover these lookups.
 
-`packages/core/src/serve.ts` — `neighborQuerySchema` gains `asOf: numQuery.optional()`
+`packages/graphx/src/core/serve.ts` — `neighborQuerySchema` gains `asOf: numQuery.optional()`
 (`neighborPageQuerySchema` extends it, so it inherits). `GET /nodes/{id}` and
 `GET /nodes/{id}/content` currently declare no query schema; each gains
 `z.object({ asOf: numQuery.optional() })`. Handlers pass it straight through.
 
 ## 6. Core: `GET /timeline`
 
-New module `packages/core/src/timeline.ts`, exported through `index.ts`, routed in `serve.ts`
+New module `packages/graphx/src/core/timeline.ts`, exported through `index.ts`, routed in `serve.ts`
 as `GET /t/{tenant}/p/{project}/timeline` (tag `read`, `requireGraph(cfg, 'read')`, same
 `READ_ERRORS` set as its neighbours).
 

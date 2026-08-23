@@ -4,63 +4,51 @@ import { defineWorkspace } from 'bunup';
 
 export default defineWorkspace([
 	{
-		name: 'core',
-		root: 'packages/core',
-		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
-		// one registers that driver with `getDb` (side effect). They stay separate entries
-		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
-		// who opt into those backends — `@duckdb/node-api` is ~123MB installed.
+		name: 'graphx',
+		root: 'packages/graphx',
+		// One published package, many entry points — every entry below is reachable as a
+		// `graphx/<subpath>` export (see the `exports` map in package.json). They stay SEPARATE
+		// entries rather than one barrel so an optional peer is only pulled onto the import path
+		// of a consumer who opted into that subpath: `pg` by `graphx/pg`, `@duckdb/node-api`
+		// (~123MB installed) by `graphx/duck`, `@aws-sdk/client-s3` by `graphx/ingest/s3` and
+		// `graphx/blob`, `@modelcontextprotocol/sdk` by `graphx/mcp`, and React + React Query by
+		// `graphx/react`. A single bundled entry would drag all of them in for everyone.
+		//
+		// `dts.inferTypes` makes bunup EMIT declarations with TypeScript's compiler instead of
+		// isolated declarations — the generic `createGraphHooks` return (the whole hook set)
+		// can't be expressed under isolated declarations, so without this the published `.d.ts`
+		// for `graphx/react` collapses it to `{}`.
 		config: {
-			entry: ['src/index.ts', 'src/pg.ts', 'src/duck.ts', 'src/blob.ts'],
+			entry: [
+				'src/core/index.ts',
+				'src/core/pg.ts',
+				'src/core/duck.ts',
+				'src/core/blob.ts',
+				'src/react/index.ts',
+				'src/mcp/index.ts',
+				'src/ingest/index.ts',
+				'src/ingest/s3.ts',
+				'src/auth/index.ts',
+			],
+			sourceBase: './src',
+			dts: { inferTypes: true },
 		},
 	},
 	{
-		name: 'ingest',
-		root: 'packages/ingest',
-		// `s3.ts` ships as the `ingest/s3` subpath: importing it once brings in the
-		// S3 source. It stays a separate entry so the optional `@aws-sdk/client-s3`
-		// peer is only pulled in by consumers that opt into S3 (mirrors core/pg).
+		// The two executables (`graphx`, `graphx-mcp`), built separately ONLY so the shebang
+		// banner lands on them and not on every library entry above.
+		//
+		// `clean: false` is load-bearing: this group shares `packages/graphx/dist` with the group
+		// above, and bunup cleans the output directory by default — so a cleaning second pass
+		// deletes everything the first pass just wrote and ships a package whose `exports` map
+		// points at missing files.
+		name: 'graphx-bin',
+		root: 'packages/graphx',
 		config: {
-			entry: ['src/index.ts', 'src/s3.ts'],
-		},
-	},
-	{
-		name: 'auth',
-		root: 'packages/auth',
-		// ReBAC layer over core. Single entry — `createAuthApp` and the model builders are all
-		// reachable from `index.ts`; there is no optional peer to isolate behind a subpath.
-		config: {
-			entry: ['src/index.ts'],
-		},
-	},
-	{
-		name: 'cli',
-		root: 'packages/cli',
-		// The shebang makes dist/cli.js directly executable as a bin.
-		config: {
-			entry: ['src/cli.ts'],
+			entry: ['src/cli.ts', 'src/mcp/bin.ts'],
 			banner: '#!/usr/bin/env bun',
-		},
-	},
-	{
-		name: 'mcp',
-		root: 'packages/mcp',
-		// `bin.ts` is a separate entry so `dist/bin.js` is the executable the `graphx-mcp`
-		// bin points at; the shebang makes it runnable directly (mirrors cli).
-		config: {
-			entry: ['src/index.ts', 'src/bin.ts'],
-			banner: '#!/usr/bin/env bun',
-		},
-	},
-	{
-		name: 'react',
-		root: 'packages/react',
-		// React Query hooks layered over core's HTTP surface. `dts.inferTypes` makes bunup use
-		// TypeScript's compiler (not isolated declarations) to EMIT the inferred types — the
-		// generic `createGraphHooks` return (the whole hook set) can't be expressed under isolated
-		// declarations, so without this the published `.d.ts` collapses it to `{}`.
-		config: {
-			entry: ['src/index.ts'],
+			sourceBase: './src',
+			clean: false,
 			dts: { inferTypes: true },
 		},
 	},

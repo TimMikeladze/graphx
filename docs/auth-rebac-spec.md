@@ -1,12 +1,12 @@
-# graphx-auth — Relationship-Based Access Control (ReBAC) on graphx
+# graphx/auth — Relationship-Based Access Control (ReBAC) on graphx
 
 - **Status:** Draft design — 2026-06-12
 - **Author:** Tim Mikeladze
-- **Depends on:** `graphx-core` (Graph, pattern `match()`, temporal `asOf`, serve.ts, §19.2 governance)
+- **Depends on:** `graphx` (Graph, pattern `match()`, temporal `asOf`, serve.ts, §19.2 governance)
 
 ## Summary
 
-`graphx-auth` turns graphx into a self-hosted authorization engine in the Google
+`graphx/auth` turns graphx into a self-hosted authorization engine in the Google
 Zanzibar / OpenFGA mould. Applications store permission relationships ("tuples") and
 ask graphx `check(object, relation, subject)`. Permissions _are_ graph edges; a check
 is a reachability evaluation over a relationship-rewrite model.
@@ -21,13 +21,13 @@ access as-of T") for free.
 | Layer  | Module              | Governs                                                                                                 | Status            |
 | ------ | ------------------- | ------------------------------------------------------------------------------------------------------- | ----------------- |
 | **L1** | existing `authz.ts` | who may call the graphx API for a project — the _app's_ service credential. Coarse RBAC, control-plane. | exists, untouched |
-| **L2** | new `graphx-auth`   | the ReBAC model the _app_ defines for _its own_ users/resources.                                        | this spec         |
+| **L2** | new `graphx/auth`   | the ReBAC model the _app_ defines for _its own_ users/resources.                                        | this spec         |
 
 The app authenticates to graphx (L1), then asks graphx ReBAC checks about its own
 users and resources (L2). The app — never the end-user — calls `check`. Existing
 tenant/project isolation is unchanged.
 
-> Naming: the existing L1 module stays `authz.ts`. The new L2 package is `graphx-auth`.
+> Naming: the existing L1 module stays `authz.ts`. The new L2 package is `graphx/auth`.
 > No symbol collision — different package, different layer.
 
 ## Goals
@@ -220,7 +220,7 @@ POST /t/:tenant/p/:project/auth/list-objects  listObjects   (op: read)
 
 ## Section 5 — Packaging + isolation
 
-- New package **`graphx-auth`**, depends on `graphx-core`. Exports `defineAuthModel`,
+- New package **`graphx/auth`**, depends on `graphx`. Exports `defineAuthModel`,
   `rel`, `tupleToUserset`, `Auth`, and `mountAuth(app, cfg)` which adds the routes to a
   core Hono app.
 - The auth graph (tuples + model) lives in a **dedicated companion namespace per

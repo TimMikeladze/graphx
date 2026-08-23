@@ -1,0 +1,173 @@
+{
+	"name": "graphx",
+	"version": "0.1.0",
+	"description": "Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB — typed schema, bitemporal graph, vector + FTS retrieval, a served HTTP API, React Query hooks, and an MCP server",
+	"keywords": [
+		"bitemporal",
+		"duckdb",
+		"graph",
+		"graphrag",
+		"libsql",
+		"mcp",
+		"postgres",
+		"rag",
+		"sqlite",
+		"temporal",
+		"vector-search"
+	],
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "packages/graphx"
+	},
+	"bin": {
+		"graphx": "./dist/cli.js",
+		"graphx-mcp": "./dist/mcp/bin.js"
+	},
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"module": "./dist/core/index.js",
+	"types": "./dist/core/index.d.ts",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/core/index.d.ts",
+				"default": "./dist/core/index.js"
+			}
+		},
+		"./pg": {
+			"import": {
+				"types": "./dist/core/pg.d.ts",
+				"default": "./dist/core/pg.js"
+			}
+		},
+		"./duck": {
+			"import": {
+				"types": "./dist/core/duck.d.ts",
+				"default": "./dist/core/duck.js"
+			}
+		},
+		"./blob": {
+			"import": {
+				"types": "./dist/core/blob.d.ts",
+				"default": "./dist/core/blob.js"
+			}
+		},
+		"./cli": {
+			"import": {
+				"types": "./dist/cli.d.ts",
+				"default": "./dist/cli.js"
+			}
+		},
+		"./react": {
+			"import": {
+				"types": "./dist/react/index.d.ts",
+				"default": "./dist/react/index.js"
+			}
+		},
+		"./mcp": {
+			"import": {
+				"types": "./dist/mcp/index.d.ts",
+				"default": "./dist/mcp/index.js"
+			}
+		},
+		"./ingest": {
+			"import": {
+				"types": "./dist/ingest/index.d.ts",
+				"default": "./dist/ingest/index.js"
+			}
+		},
+		"./ingest/s3": {
+			"import": {
+				"types": "./dist/ingest/s3.d.ts",
+				"default": "./dist/ingest/s3.js"
+			}
+		},
+		"./auth": {
+			"import": {
+				"types": "./dist/auth/index.d.ts",
+				"default": "./dist/auth/index.js"
+			}
+		},
+		"./package.json": "./package.json"
+	},
+	"scripts": {
+		"type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.core.json"
+	},
+	"dependencies": {
+		"@hono/zod-openapi": "^1.5.1",
+		"@hono/zod-validator": "^0.9.0",
+		"@libsql/client": "^0.17.3",
+		"gray-matter": "^4.0.3",
+		"hono": "^4.12.23",
+		"ulidx": "^2.4.1",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@aws-sdk/client-s3": "^3.0.0",
+		"@aws-sdk/s3-request-presigner": "^3.0.0",
+		"@duckdb/node-api": "1.5.5-r.2",
+		"@happy-dom/global-registrator": "^16.5.3",
+		"@hono/mcp": "^0.3.1",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@seriousme/openapi-schema-validator": "^2.9.0",
+		"@tanstack/react-query": "^5.101.0",
+		"@testing-library/react": "^16.1.0",
+		"@types/node": "^25.9.1",
+		"@types/pg": "^8.11.10",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"ajv": "^8.20.0",
+		"happy-dom": "^16.5.3",
+		"pg": "^8.13.1",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6"
+	},
+	"peerDependencies": {
+		"@aws-sdk/client-s3": "^3.0.0",
+		"@aws-sdk/s3-request-presigner": "^3.0.0",
+		"@duckdb/node-api": "^1.5.5-r.2",
+		"@hono/mcp": "^0.3.1",
+		"@modelcontextprotocol/sdk": "^1.29.0",
+		"@tanstack/react-query": "^5.0.0",
+		"pg": "^8.11.0",
+		"react": "^18 || ^19",
+		"typescript": ">=4.5.0"
+	},
+	"peerDependenciesMeta": {
+		"@aws-sdk/client-s3": {
+			"optional": true
+		},
+		"@aws-sdk/s3-request-presigner": {
+			"optional": true
+		},
+		"@duckdb/node-api": {
+			"optional": true
+		},
+		"@hono/mcp": {
+			"optional": true
+		},
+		"@modelcontextprotocol/sdk": {
+			"optional": true
+		},
+		"@tanstack/react-query": {
+			"optional": true
+		},
+		"pg": {
+			"optional": true
+		},
+		"react": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
+		}
+	}
+}

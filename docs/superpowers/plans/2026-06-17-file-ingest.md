@@ -27,8 +27,8 @@
 
 - Create: `packages/ingest/package.json`
 - Create: `packages/ingest/tsconfig.json`
-- Create: `packages/ingest/src/types.ts`
-- Create: `packages/ingest/src/index.ts`
+- Create: `packages/graphx/src/ingest/types.ts`
+- Create: `packages/graphx/src/ingest/index.ts`
 - Modify: `bunup.config.ts`
 
 **Interfaces:**
@@ -95,7 +95,7 @@
 }
 ```
 
-- [ ] **Step 3: Create `packages/ingest/src/types.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/ingest/types.ts`**
 
 ```ts
 import type { EmbedFn, Graph, GraphSchema } from 'core';
@@ -137,7 +137,7 @@ export interface IngestResult {
 }
 ```
 
-- [ ] **Step 4: Create `packages/ingest/src/index.ts` (stub)**
+- [ ] **Step 4: Create `packages/graphx/src/ingest/index.ts` (stub)**
 
 ```ts
 import type { GraphSchema } from 'core';
@@ -188,15 +188,15 @@ git commit -m "feat(ingest): scaffold package (types + stub ingestDir)"
 
 **Files:**
 
-- Create: `packages/ingest/src/parse.ts`
-- Test: `packages/ingest/test/parse.test.ts`
+- Create: `packages/graphx/src/ingest/parse.ts`
+- Test: `packages/graphx/test/ingest/parse.test.ts`
 
 **Interfaces:**
 
 - Consumes: `ParsedFile` from `./types.ts`.
 - Produces: `export function parseFile(key: string, raw: string): ParsedFile`.
 
-- [ ] **Step 1: Write the failing test — `packages/ingest/test/parse.test.ts`**
+- [ ] **Step 1: Write the failing test — `packages/graphx/test/ingest/parse.test.ts`**
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -225,10 +225,10 @@ test('parseFile: same bytes hash identically, different bytes differ', () => {
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `bun test packages/ingest/test/parse.test.ts`
+Run: `bun test packages/graphx/test/ingest/parse.test.ts`
 Expected: FAIL — `Cannot find module '../src/parse.ts'`.
 
-- [ ] **Step 3: Implement `packages/ingest/src/parse.ts`**
+- [ ] **Step 3: Implement `packages/graphx/src/ingest/parse.ts`**
 
 ```ts
 import { createHash } from 'node:crypto';
@@ -258,13 +258,13 @@ export function parseFile(key: string, raw: string): ParsedFile {
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `bun test packages/ingest/test/parse.test.ts`
+Run: `bun test packages/graphx/test/ingest/parse.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ingest/src/parse.ts packages/ingest/test/parse.test.ts
+git add packages/graphx/src/ingest/parse.ts packages/graphx/test/ingest/parse.test.ts
 git commit -m "feat(ingest): parseFile (frontmatter/body/hash)"
 ```
 
@@ -274,14 +274,14 @@ git commit -m "feat(ingest): parseFile (frontmatter/body/hash)"
 
 **Files:**
 
-- Create: `packages/ingest/src/links.ts`
-- Test: `packages/ingest/test/links.test.ts`
+- Create: `packages/graphx/src/ingest/links.ts`
+- Test: `packages/graphx/test/ingest/links.test.ts`
 
 **Interfaces:**
 
 - Produces: `export interface Link { kind: 'wiki' | 'path'; target: string }` and `export function extractLinks(body: string): Link[]`.
 
-- [ ] **Step 1: Write the failing test — `packages/ingest/test/links.test.ts`**
+- [ ] **Step 1: Write the failing test — `packages/graphx/test/ingest/links.test.ts`**
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -308,10 +308,10 @@ test('extractLinks: none', () => {
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `bun test packages/ingest/test/links.test.ts`
+Run: `bun test packages/graphx/test/ingest/links.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `packages/ingest/src/links.ts`**
+- [ ] **Step 3: Implement `packages/graphx/src/ingest/links.ts`**
 
 ```ts
 /** A link found in a node body. `wiki` resolves by basename; `path` by relative path. */
@@ -342,13 +342,13 @@ export function extractLinks(body: string): Link[] {
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `bun test packages/ingest/test/links.test.ts`
+Run: `bun test packages/graphx/test/ingest/links.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ingest/src/links.ts packages/ingest/test/links.test.ts
+git add packages/graphx/src/ingest/links.ts packages/graphx/test/ingest/links.test.ts
 git commit -m "feat(ingest): extractLinks (wikilinks + relative md links)"
 ```
 
@@ -358,15 +358,15 @@ git commit -m "feat(ingest): extractLinks (wikilinks + relative md links)"
 
 **Files:**
 
-- Create: `packages/ingest/src/resolve.ts`
-- Test: `packages/ingest/test/resolve.test.ts`
+- Create: `packages/graphx/src/ingest/resolve.ts`
+- Test: `packages/graphx/test/ingest/resolve.test.ts`
 
 **Interfaces:**
 
 - Consumes: `Link` from `./links.ts`.
 - Produces: `export interface PathIndex { byPath: Set<string>; byBasename: Map<string, string[]> }`, `export function buildPathIndex(keys: string[]): PathIndex`, `export function resolveLink(link: Link, fromKey: string, index: PathIndex): string | null`.
 
-- [ ] **Step 1: Write the failing test — `packages/ingest/test/resolve.test.ts`**
+- [ ] **Step 1: Write the failing test — `packages/graphx/test/ingest/resolve.test.ts`**
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -395,10 +395,10 @@ test('resolveLink: missing target and ambiguous basename return null', () => {
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `bun test packages/ingest/test/resolve.test.ts`
+Run: `bun test packages/graphx/test/ingest/resolve.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `packages/ingest/src/resolve.ts`**
+- [ ] **Step 3: Implement `packages/graphx/src/ingest/resolve.ts`**
 
 ```ts
 import { basename, dirname, extname, join } from 'node:path/posix';
@@ -439,13 +439,13 @@ export function resolveLink(link: Link, fromKey: string, index: PathIndex): stri
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `bun test packages/ingest/test/resolve.test.ts`
+Run: `bun test packages/graphx/test/ingest/resolve.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ingest/src/resolve.ts packages/ingest/test/resolve.test.ts
+git add packages/graphx/src/ingest/resolve.ts packages/graphx/test/ingest/resolve.test.ts
 git commit -m "feat(ingest): path index + link resolution"
 ```
 
@@ -455,14 +455,14 @@ git commit -m "feat(ingest): path index + link resolution"
 
 **Files:**
 
-- Create: `packages/ingest/src/discover.ts`
-- Test: `packages/ingest/test/discover.test.ts`
+- Create: `packages/graphx/src/ingest/discover.ts`
+- Test: `packages/graphx/test/ingest/discover.test.ts`
 
 **Interfaces:**
 
 - Produces: `export const DEFAULT_INCLUDE: string[]` and `export async function discover(dir: string, include: string[]): Promise<string[]>` (sorted relative POSIX keys).
 
-- [ ] **Step 1: Write the failing test — `packages/ingest/test/discover.test.ts`**
+- [ ] **Step 1: Write the failing test — `packages/graphx/test/ingest/discover.test.ts`**
 
 ```ts
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -497,10 +497,10 @@ test('discover: returns sorted POSIX keys for included extensions only', async (
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `bun test packages/ingest/test/discover.test.ts`
+Run: `bun test packages/graphx/test/ingest/discover.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `packages/ingest/src/discover.ts`**
+- [ ] **Step 3: Implement `packages/graphx/src/ingest/discover.ts`**
 
 ```ts
 import { readdir } from 'node:fs/promises';
@@ -522,13 +522,13 @@ export async function discover(dir: string, include: string[]): Promise<string[]
 
 - [ ] **Step 4: Run the test to confirm it passes**
 
-Run: `bun test packages/ingest/test/discover.test.ts`
+Run: `bun test packages/graphx/test/ingest/discover.test.ts`
 Expected: PASS (1 test).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/ingest/src/discover.ts packages/ingest/test/discover.test.ts
+git add packages/graphx/src/ingest/discover.ts packages/graphx/test/ingest/discover.test.ts
 git commit -m "feat(ingest): recursive file discovery by extension"
 ```
 
@@ -538,16 +538,16 @@ git commit -m "feat(ingest): recursive file discovery by extension"
 
 **Files:**
 
-- Create: `packages/ingest/src/ingest.ts`
-- Modify: `packages/ingest/src/index.ts` (re-export from `./ingest.ts`, drop the stub)
-- Test: `packages/ingest/test/ingest.test.ts`
+- Create: `packages/graphx/src/ingest/ingest.ts`
+- Modify: `packages/graphx/src/ingest/index.ts` (re-export from `./ingest.ts`, drop the stub)
+- Test: `packages/graphx/test/ingest/ingest.test.ts`
 
 **Interfaces:**
 
 - Consumes: `parseFile` (Task 2), `discover`/`DEFAULT_INCLUDE` (Task 5), types (Task 1).
 - Produces: `export async function ingestDir<S extends GraphSchema>(opts: IngestOptions<S>): Promise<IngestResult>`. Edge reconciliation is added in Task 7 — this task leaves `edgesAdded`/`edgesClosed` at 0.
 
-- [ ] **Step 1: Write the failing test — `packages/ingest/test/ingest.test.ts`**
+- [ ] **Step 1: Write the failing test — `packages/graphx/test/ingest/ingest.test.ts`**
 
 This test uses `core`'s source directly (relative imports) plus the dual-backend harness, exactly like `core`'s own tests.
 
@@ -638,10 +638,10 @@ test('ingestDir: a file with no resolvable kind is skipped', async () => {
 
 - [ ] **Step 2: Run it to confirm it fails**
 
-Run: `bun test packages/ingest/test/ingest.test.ts`
+Run: `bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: FAIL — `ingestDir: not implemented` (the Task 1 stub).
 
-- [ ] **Step 3: Implement `packages/ingest/src/ingest.ts`**
+- [ ] **Step 3: Implement `packages/graphx/src/ingest/ingest.ts`**
 
 `LooseGraph` is the structural slice of `Graph` that `ingestDir` calls, with loosened (non-generic) signatures — the file's dynamic `kind`/`props` can't satisfy `Graph`'s literal-kind generics, so the typed graph is cast to it once.
 
@@ -786,7 +786,7 @@ export async function ingestDir<S extends GraphSchema>(
 }
 ```
 
-- [ ] **Step 4: Replace `packages/ingest/src/index.ts` with the real re-export**
+- [ ] **Step 4: Replace `packages/graphx/src/ingest/index.ts` with the real re-export**
 
 ```ts
 export { ingestDir } from './ingest.ts';
@@ -795,12 +795,12 @@ export type { IngestOptions, IngestResult, ParsedFile } from './types.ts';
 
 - [ ] **Step 5: Run the test on libSQL**
 
-Run: `bun test packages/ingest/test/ingest.test.ts`
+Run: `bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Run the test on Postgres**
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/ingest/test/ingest.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: PASS (4 tests). (Container `graphx-pgtest` must be up.)
 
 - [ ] **Step 7: Type-check**
@@ -811,7 +811,7 @@ Expected: all packages exit 0.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/ingest/src/ingest.ts packages/ingest/src/index.ts packages/ingest/test/ingest.test.ts
+git add packages/graphx/src/ingest/ingest.ts packages/graphx/src/ingest/index.ts packages/graphx/test/ingest/ingest.test.ts
 git commit -m "feat(ingest): ingestDir node reconciliation (add/idempotent/update)"
 ```
 
@@ -821,15 +821,15 @@ git commit -m "feat(ingest): ingestDir node reconciliation (add/idempotent/updat
 
 **Files:**
 
-- Modify: `packages/ingest/src/ingest.ts`
-- Test: `packages/ingest/test/ingest.test.ts` (add cases)
+- Modify: `packages/graphx/src/ingest/ingest.ts`
+- Test: `packages/graphx/test/ingest/ingest.test.ts` (add cases)
 
 **Interfaces:**
 
 - Consumes: `extractLinks`/`Link` (Task 3), `buildPathIndex`/`resolveLink` (Task 4).
 - Produces: edge counts in `IngestResult`; `links_to` edges between file nodes.
 
-- [ ] **Step 1: Add failing tests to `packages/ingest/test/ingest.test.ts`**
+- [ ] **Step 1: Add failing tests to `packages/graphx/test/ingest/ingest.test.ts`**
 
 ```ts
 test('ingestDir: links become edges; removing a link closes the edge', async () => {
@@ -867,10 +867,10 @@ test('ingestDir: a link to a missing file is skipped, not fatal', async () => {
 
 - [ ] **Step 2: Run to confirm the new cases fail**
 
-Run: `bun test packages/ingest/test/ingest.test.ts`
+Run: `bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: FAIL — `edgesAdded` is 0 (no edge logic yet).
 
-- [ ] **Step 3: Extend `packages/ingest/src/ingest.ts`**
+- [ ] **Step 3: Extend `packages/graphx/src/ingest/ingest.ts`**
 
 Add imports at the top:
 
@@ -954,18 +954,18 @@ return result;
 
 - [ ] **Step 4: Run the full ingest test on libSQL**
 
-Run: `bun test packages/ingest/test/ingest.test.ts`
+Run: `bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Run on Postgres**
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/ingest/test/ingest.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/ingest/ingest.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/ingest/src/ingest.ts packages/ingest/test/ingest.test.ts
+git add packages/graphx/src/ingest/ingest.ts packages/graphx/test/ingest/ingest.test.ts
 git commit -m "feat(ingest): edge reconciliation (links_to add/close)"
 ```
 
@@ -1035,7 +1035,7 @@ Run each and confirm:
 - `bun run build` → emits `packages/ingest/dist/index.js` + `index.d.ts`
 - `bun run type-check` → all packages exit 0
 - `bun run lint` → exit 0
-- `bun test` → libSQL suite green, including all `packages/ingest/test/*` (parse 3, links 3, resolve 3, discover 1, ingest 6)
+- `bun test` → libSQL suite green, including all `packages/graphx/test/ingest/*` (parse 3, links 3, resolve 3, discover 1, ingest 6)
 - `GRAPHX_TEST_DRIVER=postgres bun test` → PG suite green (ingest tests included)
 
 - [ ] **Step 3: Commit**

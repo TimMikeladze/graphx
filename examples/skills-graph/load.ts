@@ -10,7 +10,7 @@
  * Nothing is written here, so the shape of the graph is testable without a graphx database.
  */
 import type { Database } from 'bun:sqlite';
-import type { BulkEdgeRow, BulkRow } from 'graphx-core';
+import type { BulkEdgeRow, BulkRow } from 'graphx';
 import type { SkillsSchema } from './schema.ts';
 
 export type PlanNode = BulkRow<SkillsSchema> & { id: string; validFrom: number };

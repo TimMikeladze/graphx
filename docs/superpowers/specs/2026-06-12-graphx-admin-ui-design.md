@@ -1,8 +1,8 @@
 # `graphx-admin` — Administrative UI (design spec)
 
 > Status: **APPROVED design.** Date: 2026-06-12. Net-new Vite SPA package + supporting
-> backend routes layered over the existing `graphx-core` SDK and Hono serving layer.
-> No `initial_spec.md` phase number; layered like the `graphx-react` draft.
+> backend routes layered over the existing `graphx` SDK and Hono serving layer.
+> No `initial_spec.md` phase number; layered like the `graphx/react` draft.
 
 ## 1. Goal
 
@@ -24,7 +24,7 @@ a **detail inspector** (Sheet) on node click. Operators can also manage the cont
 ### Non-goals (deferred, named so they are not silently dropped)
 
 - match / hybridRetrieve / algorithm (pagerank, centrality, community) visualizations.
-- CDC live-sync (`useChangeFeedSync` — the `graphx-react` change-feed story).
+- CDC live-sync (`useChangeFeedSync` — the `graphx/react` change-feed story).
 - Edge creation/editing from the canvas; multi-project overlay.
 - RBAC finer than operator-impersonation; production operator SSO.
 - End-to-end browser tests.
@@ -40,7 +40,7 @@ a **detail inspector** (Sheet) on node click. Operators can also manage the cont
   `{nodes, links}` slice for the current filter set; double-click a node expands via `neighbors`.
   Filters are authoritative server-side and respect §19.2 governance caps.
 - **D-UI-4 — Standalone typed client.** The UI imports core's exported domain types directly and uses
-  a thin typed `fetch` client; it does **not** depend on the DRAFT `graphx-react` (control-plane types
+  a thin typed `fetch` client; it does **not** depend on the DRAFT `graphx/react` (control-plane types
   are out of that package's scope). May converge later.
 
 ## 3. Architecture & package layout
@@ -69,20 +69,20 @@ Bun.serve({ fetch: app.fetch })
 
 New core files (keep `serve.ts` focused):
 
-- `packages/core/src/admin.ts` — `createAdminApp(cfg)`: operator sub-app, `adminAuthenticate` hook,
+- `packages/graphx/src/core/admin.ts` — `createAdminApp(cfg)`: operator sub-app, `adminAuthenticate` hook,
   control-plane CRUD handlers wrapping existing `control-plane.ts` functions.
 - `Graph.listNodes(opts)` and `Graph.graphSlice(opts)` — new read primitives added as **methods on
-  the `Graph` class** in `packages/core/src/graph.ts` (today only `getNode` by id exists). Read-only,
+  the `Graph` class** in `packages/graphx/src/core/graph.ts` (today only `getNode` by id exists). Read-only,
   governed, temporal-aware. (Refinement: spec originally proposed a standalone `src/list.ts`; methods
   reuse the class's private `rowToNode`/upcaster and sit beside `neighbors`/`neighborsPage`.)
-- `packages/core/src/serve.ts` — add the three tenant-scoped graph-explore routes to the existing
+- `packages/graphx/src/core/serve.ts` — add the three tenant-scoped graph-explore routes to the existing
   `createApp` chain (reuse `requireGraph('read')`, `onError`, metrics sink).
 
 Build/dev: core stays `bunup`; admin uses Vite. Admin dev server proxies `/t` and `/admin` to the Hono
 process (Vite `server.proxy`) → no CORS in dev.
 
 Data path: SPA → TanStack Query → typed fetch client → Hono. UI imports `AnyNode`, `EdgeRef`,
-`NodeOf`, etc. from `graphx-core` for compile-time shape.
+`NodeOf`, etc. from `graphx` for compile-time shape.
 
 ## 4. The operator-auth gap and its resolution
 

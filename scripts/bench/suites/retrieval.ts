@@ -9,10 +9,10 @@
  * The vector index is a fixed 5k rows at every scale (see `corpus.ts`), so what grows across the
  * ladder here is the graph the seeds expand into, not the seed lookup.
  */
-import { hybridRetrieve, retrieve } from '../../../packages/core/src/index.ts';
+import { hybridRetrieve, retrieve } from '../../../packages/graphx/src/core/index.ts';
 // `rrf` is internal to the hybrid module rather than public API, but the fusion step is exactly
 // what this case exists to price, so it is imported directly.
-import { rrf } from '../../../packages/core/src/hybrid.ts';
+import { rrf } from '../../../packages/graphx/src/core/hybrid.ts';
 import { embed } from '../corpus.ts';
 import { defineCase, pick, type Suite } from '../types.ts';
 

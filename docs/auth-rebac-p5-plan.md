@@ -1,4 +1,4 @@
-# graphx-auth — P5 (`listObjects`) Implementation Plan
+# graphx/auth — P5 (`listObjects`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - `bun test`; `{ expect, test } from 'bun:test'`. Import core via `../../core/src/index.ts`; `.ts` extensions.
 - **isolatedDeclarations ON** — exported decls need explicit return types referencing exported/nameable types.
 - Fresh DB: `createClient({ url: ':memory:' })` → `init(client, 4)` → `new Graph(client, model.schema)`.
-- **Do NOT run `bun run format`** (dirties `packages/core`). Use `bun run lint`; format only the package if needed.
+- **Do NOT run `bun run format`** (dirties `packages/graphx`). Use `bun run lint`; format only the package if needed.
 - After each task: `bun test packages/auth` green. **Do not commit** unless the human asks.
 
 ## Why reachability + verify is correct
@@ -34,7 +34,7 @@ So forward-reachable-from-subject is a **superset** of granted objects. Exclusio
 ## Files changed
 
 ```
-packages/auth/src/
+packages/graphx/src/auth/
   list.ts     — CREATE: ListObjectsOpts/ListObjectsPage, reachableOfType (CTE), runListObjects (verify + paginate)
   auth.ts     — MODIFY: add Auth.listObjects
   index.ts    — MODIFY: export ListObjectsOpts, ListObjectsPage
@@ -50,11 +50,11 @@ Implement the reachability CTE + verify loop. The public shape (`ListObjectsPage
 
 **Files:**
 
-- Create: `packages/auth/src/list.ts`
-- Modify: `packages/auth/src/auth.ts`, `packages/auth/src/index.ts`
-- Test: `packages/auth/test/p5-list.test.ts`
+- Create: `packages/graphx/src/auth/list.ts`
+- Modify: `packages/graphx/src/auth/auth.ts`, `packages/graphx/src/auth/index.ts`
+- Test: `packages/graphx/test/auth/p5-list.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p5-list.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p5-list.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -138,10 +138,10 @@ test('P5: respects asOf — a revoked grant is gone live but present in the past
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p5-list.test.ts`
+Run: `bun test packages/graphx/test/auth/p5-list.test.ts`
 Expected: FAIL — `auth.listObjects` / `list.ts` not present.
 
-- [ ] **Step 3: Create `packages/auth/src/list.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/list.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -235,7 +235,7 @@ export async function runListObjects(
 }
 ```
 
-- [ ] **Step 4: Add `Auth.listObjects` to `packages/auth/src/auth.ts`**
+- [ ] **Step 4: Add `Auth.listObjects` to `packages/graphx/src/auth/auth.ts`**
 
 Add the import (merge with existing imports):
 
@@ -260,7 +260,7 @@ Add the method to the `Auth` class (after `expand`):
 	}
 ```
 
-- [ ] **Step 5: Export the new types from `packages/auth/src/index.ts`**
+- [ ] **Step 5: Export the new types from `packages/graphx/src/auth/index.ts`**
 
 Add to the existing export block:
 
@@ -270,13 +270,13 @@ export { type ListObjectsOpts, type ListObjectsPage } from './list.ts';
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p5-list.test.ts`
+Run: `bun test packages/graphx/test/auth/p5-list.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 7: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/list.ts packages/auth/src/auth.ts packages/auth/src/index.ts packages/auth/test/p5-list.test.ts
+git add packages/graphx/src/auth/list.ts packages/graphx/src/auth/auth.ts packages/graphx/src/auth/index.ts packages/graphx/test/auth/p5-list.test.ts
 git commit -m "feat(auth): listObjects — reachability candidates + verify (P5, unpaginated)"
 ```
 
@@ -288,10 +288,10 @@ Wire `limit` + `cursor` into `runListObjects`. Iterate candidates (already `> cu
 
 **Files:**
 
-- Modify: `packages/auth/src/list.ts`
-- Test: `packages/auth/test/p5-list.test.ts` (append)
+- Modify: `packages/graphx/src/auth/list.ts`
+- Test: `packages/graphx/test/auth/p5-list.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p5-list.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p5-list.test.ts`
 
 ```typescript
 test('P5: paginates by object id — limit then cursor walks the rest', async () => {
@@ -329,10 +329,10 @@ test('P5: limit ≥ result count returns everything with a null cursor', async (
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p5-list.test.ts`
+Run: `bun test packages/graphx/test/auth/p5-list.test.ts`
 Expected: FAIL — Task 1 ignores `limit`/`cursor`, so `p1.objects` has 3 items and `nextCursor` is null.
 
-- [ ] **Step 3: Replace `runListObjects` in `packages/auth/src/list.ts`**
+- [ ] **Step 3: Replace `runListObjects` in `packages/graphx/src/auth/list.ts`**
 
 ```typescript
 export async function runListObjects(
@@ -369,7 +369,7 @@ export async function runListObjects(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p5-list.test.ts`
+Run: `bun test packages/graphx/test/auth/p5-list.test.ts`
 Expected: PASS (6 tests — the 4 from Task 1 still green; `nextCursor` is null in those since results < default limit).
 
 - [ ] **Step 5: Full suite + type-check + lint + scope check**
@@ -377,12 +377,12 @@ Expected: PASS (6 tests — the 4 from Task 1 still green; `nextCursor` is null 
 Run: `bun test packages/auth` → all P1–P5 green.
 Run: `cd packages/auth && tsc --noEmit` → clean.
 Run: `bun run lint` → clean (NOT `bun run format`).
-Run: `git diff --name-only -- packages/core packages/auth/src/store.ts packages/auth/src/check.ts` → empty (P5 doesn't touch core, store, or check).
+Run: `git diff --name-only -- packages/graphx packages/graphx/src/auth/store.ts packages/graphx/src/auth/check.ts` → empty (P5 doesn't touch core, store, or check).
 
 - [ ] **Step 6: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/list.ts packages/auth/test/p5-list.test.ts
+git add packages/graphx/src/auth/list.ts packages/graphx/test/auth/p5-list.test.ts
 git commit -m "feat(auth): keyset pagination for listObjects (P5 complete)"
 ```
 
@@ -403,4 +403,4 @@ git commit -m "feat(auth): keyset pagination for listObjects (P5 complete)"
 
 | Next plan | Scope                                                                                                                                                                                                                                 |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P6        | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `graphx-auth`, replace the relative `../../core/src` import) |
+| P6        | consistency tokens; subproblem cache + materialized reverse index (perf); governance fan-out caps; `mountAuth` HTTP routes on the serve.ts spine; packaging (publishable `graphx/auth`, replace the relative `../../core/src` import) |

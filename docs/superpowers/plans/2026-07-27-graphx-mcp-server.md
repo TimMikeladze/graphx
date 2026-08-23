@@ -28,29 +28,29 @@
 
 **Created:**
 
-| File                                  | Responsibility                                                     |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `packages/mcp/package.json`           | package manifest, `graphx-mcp` bin, deps                           |
-| `packages/mcp/tsconfig.json`          | extends the base config, matches `packages/cli`                    |
-| `packages/mcp/src/backend.ts`         | the `Backend` seam and its two implementations                     |
-| `packages/mcp/src/tools.ts`           | registry → `ToolDescriptor[]`; args → HTTP request parts           |
-| `packages/mcp/src/resources.ts`       | `graphx://schema` content, from a `GraphSchema` or inferred        |
-| `packages/mcp/src/server.ts`          | `McpServer` construction: registers tools + resource, maps results |
-| `packages/mcp/src/index.ts`           | public exports                                                     |
-| `packages/mcp/src/bin.ts`             | stdio entry point, env config parsing                              |
-| `packages/mcp/test/tools.test.ts`     | descriptor extraction, arg splitting                               |
-| `packages/mcp/test/backend.test.ts`   | URL building, header injection                                     |
-| `packages/mcp/test/server.test.ts`    | end-to-end over `InMemoryTransport`                                |
-| `packages/mcp/test/resources.test.ts` | schema resource + `describe_schema`                                |
-| `packages/mcp/README.md`              | install, configure, tool list                                      |
+| File                                         | Responsibility                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `packages/mcp/package.json`                  | package manifest, `graphx-mcp` bin, deps                           |
+| `packages/mcp/tsconfig.json`                 | extends the base config, matches `packages/cli`                    |
+| `packages/graphx/src/mcp/backend.ts`         | the `Backend` seam and its two implementations                     |
+| `packages/graphx/src/mcp/tools.ts`           | registry → `ToolDescriptor[]`; args → HTTP request parts           |
+| `packages/graphx/src/mcp/resources.ts`       | `graphx://schema` content, from a `GraphSchema` or inferred        |
+| `packages/graphx/src/mcp/server.ts`          | `McpServer` construction: registers tools + resource, maps results |
+| `packages/graphx/src/mcp/index.ts`           | public exports                                                     |
+| `packages/graphx/src/mcp/bin.ts`             | stdio entry point, env config parsing                              |
+| `packages/graphx/test/mcp/tools.test.ts`     | descriptor extraction, arg splitting                               |
+| `packages/graphx/test/mcp/backend.test.ts`   | URL building, header injection                                     |
+| `packages/graphx/test/mcp/server.test.ts`    | end-to-end over `InMemoryTransport`                                |
+| `packages/graphx/test/mcp/resources.test.ts` | schema resource + `describe_schema`                                |
+| `packages/mcp/README.md`                     | install, configure, tool list                                      |
 
 **Modified:**
 
-| File                                 | Change                                                                                          |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `packages/core/src/serve.ts`         | `operationId` + `tags` on 25 routes; new `GET /t/{tenant}/projects`; widen the authn middleware |
-| `packages/core/test/openapi.test.ts` | coverage assertions for `operationId` and tags                                                  |
-| `bunup.config.ts`                    | build entry for the new package                                                                 |
+| File                                        | Change                                                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `packages/graphx/src/core/serve.ts`         | `operationId` + `tags` on 25 routes; new `GET /t/{tenant}/projects`; widen the authn middleware |
+| `packages/graphx/test/core/openapi.test.ts` | coverage assertions for `operationId` and tags                                                  |
+| `bunup.config.ts`                           | build entry for the new package                                                                 |
 
 ---
 
@@ -60,8 +60,8 @@ Adds the two facts MCP needs to `serve.ts`'s route declarations. The read/write 
 
 **Files:**
 
-- Modify: `packages/core/src/serve.ts` (the 25 tenant `createRoute` calls, lines 727–1320)
-- Test: `packages/core/test/openapi.test.ts`
+- Modify: `packages/graphx/src/core/serve.ts` (the 25 tenant `createRoute` calls, lines 727–1320)
+- Test: `packages/graphx/test/core/openapi.test.ts`
 
 **Interfaces:**
 
@@ -104,7 +104,7 @@ Line numbers drift as edits are applied — match on the `path:` string, not the
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/core/test/openapi.test.ts`:
+Append to `packages/graphx/test/core/openapi.test.ts`:
 
 ```ts
 test('openapi: every tenant operation is tagged read or write', async () => {
@@ -153,7 +153,7 @@ test('openapi: ops routes are not mirrored', async () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/openapi.test.ts -t "tagged read or write"`
+Run: `bun test packages/graphx/test/core/openapi.test.ts -t "tagged read or write"`
 
 Expected: FAIL — `offenders` lists all 25 tenant operations, since none carry tags yet.
 
@@ -182,20 +182,20 @@ The tag always matches the `requireGraph(cfg, …)` argument on the same route. 
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/openapi.test.ts`
+Run: `bun test packages/graphx/test/core/openapi.test.ts`
 
 Expected: PASS, all tests in the file including the pre-existing document-shape and validator tests.
 
 - [ ] **Step 5: Verify the whole core suite still passes**
 
-Run: `bun test packages/core --timeout 30000`
+Run: `bun test packages/graphx --timeout 30000`
 
 Expected: PASS. Adding `operationId`/`tags` is additive to the document; no existing assertion reads either field.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/serve.ts packages/core/test/openapi.test.ts
+git add packages/graphx/src/core/serve.ts packages/graphx/test/core/openapi.test.ts
 git commit -m "feat(core): declare operationId and read/write tags on the tenant routes
 
 The read/write distinction lived only in the requireGraph() middleware
@@ -212,8 +212,8 @@ The only way an agent learns which projects it can address. The existing control
 
 **Files:**
 
-- Modify: `packages/core/src/serve.ts`
-- Test: `packages/core/test/p11-serving.test.ts`
+- Modify: `packages/graphx/src/core/serve.ts`
+- Test: `packages/graphx/test/core/p11-serving.test.ts`
 
 **Interfaces:**
 
@@ -222,7 +222,7 @@ The only way an agent learns which projects it can address. The existing control
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/core/test/p11-serving.test.ts`. Read the top of that file first — it already builds a control plane, two tenants, and an app; reuse its existing setup helper rather than writing a new one. The test body:
+Append to `packages/graphx/test/core/p11-serving.test.ts`. Read the top of that file first — it already builds a control plane, two tenants, and an app; reuse its existing setup helper rather than writing a new one. The test body:
 
 ```ts
 test('serving: list_projects returns the caller tenant projects, without db namespaces', async () => {
@@ -260,13 +260,13 @@ If the file's existing setup helper returns different names, adapt the destructu
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/core/test/p11-serving.test.ts -t "list_projects"`
+Run: `bun test packages/graphx/test/core/p11-serving.test.ts -t "list_projects"`
 
 Expected: FAIL with status 404 — the route does not exist, so Hono's not-found handler answers.
 
 - [ ] **Step 3: Widen the authn middleware**
 
-In `packages/core/src/serve.ts`, find this line in `buildApp` (just above the route chain):
+In `packages/graphx/src/core/serve.ts`, find this line in `buildApp` (just above the route chain):
 
 ```ts
 base.use('/t/:tenant/p/:project/*', authn(cfg));
@@ -330,7 +330,7 @@ Add `listProjects` to the existing `./control-plane.ts` import at the top of `se
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `bun test packages/core/test/p11-serving.test.ts -t "list_projects"`
+Run: `bun test packages/graphx/test/core/p11-serving.test.ts -t "list_projects"`
 
 Expected: PASS.
 
@@ -339,8 +339,8 @@ Expected: PASS.
 Run:
 
 ```bash
-bun test packages/core --timeout 30000
-GRAPHX_TEST_DRIVER=postgres bun test packages/core --timeout 30000
+bun test packages/graphx --timeout 30000
+GRAPHX_TEST_DRIVER=postgres bun test packages/graphx --timeout 30000
 ```
 
 Expected: PASS on both. Task 1's coverage tests now also see `list_projects`.
@@ -348,7 +348,7 @@ Expected: PASS on both. Task 1's coverage tests now also see `list_projects`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/serve.ts packages/core/test/p11-serving.test.ts
+git add packages/graphx/src/core/serve.ts packages/graphx/test/core/p11-serving.test.ts
 git commit -m "feat(core): member-scoped GET /t/{tenant}/projects
 
 The admin sub-app's project listing is operator-gated, so a tenant
@@ -364,9 +364,9 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 
 **Files:**
 
-- Create: `packages/mcp/package.json`, `packages/mcp/tsconfig.json`, `packages/mcp/src/backend.ts`
+- Create: `packages/mcp/package.json`, `packages/mcp/tsconfig.json`, `packages/graphx/src/mcp/backend.ts`
 - Modify: `bunup.config.ts`
-- Test: `packages/mcp/test/backend.test.ts`
+- Test: `packages/graphx/test/mcp/backend.test.ts`
 
 **Interfaces:**
 
@@ -413,7 +413,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 		"zod": "^4.4.3"
 	},
 	"peerDependencies": {
-		"graphx-core": "workspace:*",
+		"graphx": "workspace:*",
 		"hono": "^4.12.23",
 		"typescript": ">=4.5.0"
 	},
@@ -423,7 +423,7 @@ The seam is one method. Everything downstream depends on it, and nothing in it k
 		}
 	},
 	"devDependencies": {
-		"graphx-core": "workspace:*",
+		"graphx": "workspace:*",
 		"@types/node": "^25.9.1"
 	}
 }
@@ -469,7 +469,7 @@ Expected: `graphx-mcp` linked into the workspace; `@modelcontextprotocol/sdk` an
 
 - [ ] **Step 4: Write the failing test**
 
-`packages/mcp/test/backend.test.ts`:
+`packages/graphx/test/mcp/backend.test.ts`:
 
 ```ts
 import { expect, test } from 'bun:test';
@@ -554,13 +554,13 @@ test('backend: remote tolerates a base url with a trailing slash', async () => {
 
 - [ ] **Step 5: Run the test to verify it fails**
 
-Run: `bun test packages/mcp/test/backend.test.ts`
+Run: `bun test packages/graphx/test/mcp/backend.test.ts`
 
 Expected: FAIL — `Cannot find module '../src/backend.ts'`.
 
 - [ ] **Step 6: Implement `backend.ts`**
 
-`packages/mcp/src/backend.ts`:
+`packages/graphx/src/mcp/backend.ts`:
 
 ```ts
 /**
@@ -660,7 +660,7 @@ export function remoteBackend(cfg: RemoteBackendConfig): Backend {
 
 - [ ] **Step 7: Run the tests to verify they pass**
 
-Run: `bun test packages/mcp/test/backend.test.ts`
+Run: `bun test packages/graphx/test/mcp/backend.test.ts`
 
 Expected: PASS, 5 tests.
 
@@ -689,8 +689,8 @@ Reads the app's own OpenAPI registry and turns each declared route into everythi
 
 **Files:**
 
-- Create: `packages/mcp/src/tools.ts`
-- Test: `packages/mcp/test/tools.test.ts`
+- Create: `packages/graphx/src/mcp/tools.ts`
+- Test: `packages/graphx/test/mcp/tools.test.ts`
 
 **Interfaces:**
 
@@ -704,7 +704,7 @@ Reads the app's own OpenAPI registry and turns each declared route into everythi
 
 - [ ] **Step 1: Write the failing test**
 
-`packages/mcp/test/tools.test.ts`:
+`packages/graphx/test/mcp/tools.test.ts`:
 
 ```ts
 import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
@@ -866,13 +866,13 @@ test('buildCall: omits undefined query fields and url-encodes path values', () =
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/mcp/test/tools.test.ts`
+Run: `bun test packages/graphx/test/mcp/tools.test.ts`
 
 Expected: FAIL — `Cannot find module '../src/tools.ts'`.
 
 - [ ] **Step 3: Implement `tools.ts`**
 
-`packages/mcp/src/tools.ts`:
+`packages/graphx/src/mcp/tools.ts`:
 
 ```ts
 import type { ZodType } from 'zod';
@@ -1019,7 +1019,7 @@ export function buildCall(
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/mcp/test/tools.test.ts`
+Run: `bun test packages/graphx/test/mcp/tools.test.ts`
 
 Expected: PASS, 7 tests.
 
@@ -1049,8 +1049,8 @@ Wires descriptors to the backend and maps HTTP responses onto MCP results. This 
 
 **Files:**
 
-- Create: `packages/mcp/src/server.ts`, `packages/mcp/src/index.ts`
-- Test: `packages/mcp/test/server.test.ts`
+- Create: `packages/graphx/src/mcp/server.ts`, `packages/graphx/src/mcp/index.ts`
+- Test: `packages/graphx/test/mcp/server.test.ts`
 
 **Interfaces:**
 
@@ -1064,14 +1064,14 @@ Wires descriptors to the backend and maps HTTP responses onto MCP results. This 
 
 - [ ] **Step 1: Write the failing test**
 
-`packages/mcp/test/server.test.ts`:
+`packages/graphx/test/mcp/server.test.ts`:
 
 ```ts
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { createApp, defineGraphSchema, hashEmbed } from 'graphx-core';
+import { createApp, defineGraphSchema, hashEmbed } from 'graphx';
 import { localBackend } from '../src/backend.ts';
 import { createGraphxMcp } from '../src/server.ts';
 
@@ -1236,17 +1236,17 @@ test('server: list_projects reaches the tenant-scoped route', async () => {
 });
 ```
 
-If `graphx-core` does not resolve from the test, import from the source path (`../../core/src/index.ts`) the way sibling packages do — check `packages/cli/test/cli.test.ts` for the established convention and match it.
+If `graphx` does not resolve from the test, import from the source path (`../../core/src/index.ts`) the way sibling packages do — check `packages/graphx/test/cli/cli.test.ts` for the established convention and match it.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/mcp/test/server.test.ts`
+Run: `bun test packages/graphx/test/mcp/server.test.ts`
 
 Expected: FAIL — `Cannot find module '../src/server.ts'`.
 
 - [ ] **Step 3: Implement `server.ts`**
 
-`packages/mcp/src/server.ts`:
+`packages/graphx/src/mcp/server.ts`:
 
 ```ts
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -1367,7 +1367,7 @@ export function createGraphxMcp(opts: GraphxMcpOptions): McpServer {
 
 - [ ] **Step 4: Write `index.ts`**
 
-`packages/mcp/src/index.ts`:
+`packages/graphx/src/mcp/index.ts`:
 
 ```ts
 // Public API for graphx-mcp — every graphx serving route as an MCP tool.
@@ -1397,7 +1397,7 @@ export {
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun test packages/mcp/test/server.test.ts`
+Run: `bun test packages/graphx/test/mcp/server.test.ts`
 
 Expected: PASS, 7 tests. If `list_projects` fails, Task 2 did not land — check it before touching this file.
 
@@ -1427,9 +1427,9 @@ Without this, an agent writing to an empty graph is guessing type names. The res
 
 **Files:**
 
-- Create: `packages/mcp/src/resources.ts`
-- Modify: `packages/mcp/src/server.ts`, `packages/mcp/src/index.ts`
-- Test: `packages/mcp/test/resources.test.ts`
+- Create: `packages/graphx/src/mcp/resources.ts`
+- Modify: `packages/graphx/src/mcp/server.ts`, `packages/graphx/src/mcp/index.ts`
+- Test: `packages/graphx/test/mcp/resources.test.ts`
 
 **Interfaces:**
 
@@ -1442,12 +1442,12 @@ Without this, an agent writing to an empty graph is guessing type names. The res
 
 - [ ] **Step 1: Write the failing test**
 
-`packages/mcp/test/resources.test.ts`:
+`packages/graphx/test/mcp/resources.test.ts`:
 
 ```ts
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import { defineGraphSchema } from 'graphx-core';
+import { defineGraphSchema } from 'graphx';
 import { schemaDoc } from '../src/resources.ts';
 
 const SCHEMA = defineGraphSchema({
@@ -1482,7 +1482,7 @@ test('resources: relations carry their endpoint constraints', () => {
 });
 ```
 
-Then add to `packages/mcp/test/server.test.ts` (the `harness` there already passes `schema: SCHEMA`):
+Then add to `packages/graphx/test/mcp/server.test.ts` (the `harness` there already passes `schema: SCHEMA`):
 
 ```ts
 test('server: exposes the schema as a resource and as a tool', async () => {
@@ -1510,13 +1510,13 @@ test('server: exposes the schema as a resource and as a tool', async () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/mcp/test/resources.test.ts`
+Run: `bun test packages/graphx/test/mcp/resources.test.ts`
 
 Expected: FAIL — `Cannot find module '../src/resources.ts'`.
 
 - [ ] **Step 3: Implement `resources.ts`**
 
-`packages/mcp/src/resources.ts`:
+`packages/graphx/src/mcp/resources.ts`:
 
 ```ts
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -1640,7 +1640,7 @@ export function registerSchema(
 
 - [ ] **Step 4: Wire it into `createGraphxMcp`**
 
-In `packages/mcp/src/server.ts`, add the import:
+In `packages/graphx/src/mcp/server.ts`, add the import:
 
 ```ts
 import { registerSchema } from './resources.ts';
@@ -1658,7 +1658,7 @@ registerSchema(server, { schema: opts.schema, backend: opts.backend });
 return server;
 ```
 
-Add to `packages/mcp/src/index.ts`:
+Add to `packages/graphx/src/mcp/index.ts`:
 
 ```ts
 export {
@@ -1697,9 +1697,9 @@ Two ways to reach the server: a process a desktop client spawns, and a route on 
 
 **Files:**
 
-- Create: `packages/mcp/src/bin.ts`
-- Modify: `packages/mcp/src/index.ts`
-- Test: `packages/mcp/test/server.test.ts` (mount test appended)
+- Create: `packages/graphx/src/mcp/bin.ts`
+- Modify: `packages/graphx/src/mcp/index.ts`
+- Test: `packages/graphx/test/mcp/server.test.ts` (mount test appended)
 
 **Interfaces:**
 
@@ -1708,7 +1708,7 @@ Two ways to reach the server: a process a desktop client spawns, and a route on 
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/mcp/test/server.test.ts`:
+Append to `packages/graphx/test/mcp/server.test.ts`:
 
 ```ts
 test('server: mounts on a Hono app and answers an MCP initialize', async () => {
@@ -1750,13 +1750,13 @@ test('server: mounts on a Hono app and answers an MCP initialize', async () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/mcp/test/server.test.ts -t "mounts on a Hono app"`
+Run: `bun test packages/graphx/test/mcp/server.test.ts -t "mounts on a Hono app"`
 
 Expected: FAIL — `createMcpApp` is not exported.
 
 - [ ] **Step 3: Implement `createMcpApp`**
 
-Append to `packages/mcp/src/server.ts`:
+Append to `packages/graphx/src/mcp/server.ts`:
 
 > **Corrected after the whole-branch review.** This step originally shared one `McpServer` and
 > one `StreamableHTTPTransport` across every request, on the claim that this "is what Streamable
@@ -1795,7 +1795,7 @@ export function createMcpApp(opts: McpAppOptions): Hono {
 }
 ```
 
-Add to `packages/mcp/src/index.ts` — extend the existing `./server.ts` export block:
+Add to `packages/graphx/src/mcp/index.ts` — extend the existing `./server.ts` export block:
 
 ```ts
 export {
@@ -1809,18 +1809,18 @@ export {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `bun test packages/mcp/test/server.test.ts -t "mounts on a Hono app"`
+Run: `bun test packages/graphx/test/mcp/server.test.ts -t "mounts on a Hono app"`
 
 Expected: PASS.
 
 - [ ] **Step 5: Implement the stdio binary**
 
-`packages/mcp/src/bin.ts`:
+`packages/graphx/src/mcp/bin.ts`:
 
 ```ts
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import process from 'node:process';
-import { createApp, hashEmbed } from 'graphx-core';
+import { createApp, hashEmbed } from 'graphx';
 import { localBackend, remoteBackend } from './backend.ts';
 import { createGraphxMcp } from './server.ts';
 
@@ -1882,14 +1882,14 @@ main().catch((err: unknown) => {
 });
 ```
 
-If `createApp`'s dev overload rejects an empty schema, pass `defineGraphSchema({ nodes: {}, edges: {} })` instead and import it from `graphx-core`.
+If `createApp`'s dev overload rejects an empty schema, pass `defineGraphSchema({ nodes: {}, edges: {} })` instead and import it from `graphx`.
 
 - [ ] **Step 6: Smoke-test the binary**
 
 Run:
 
 ```bash
-GRAPHX_DB=mcp_smoke bun run packages/mcp/src/bin.ts <<'EOF'
+GRAPHX_DB=mcp_smoke bun run packages/graphx/src/mcp/bin.ts <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"1"}}}
 EOF
 ```
@@ -1933,8 +1933,8 @@ Run:
 
 ```bash
 bun -e '
-import { createApp, defineGraphSchema } from "./packages/core/src/serve.ts";
-import { toolsFrom } from "./packages/mcp/src/tools.ts";
+import { createApp, defineGraphSchema } from "./packages/graphx/src/core/serve.ts";
+import { toolsFrom } from "./packages/graphx/src/mcp/tools.ts";
 const dev = await createApp({ schema: { nodes: {}, edges: {} }, db: "doc_gen" });
 for (const t of toolsFrom(dev.app)) console.log(`| \`${t.name}\` | ${t.readOnly ? "read" : "write"} | ${t.description} |`);
 process.exit(0);
@@ -1969,7 +1969,7 @@ Paste the output into the README's tool table. Do not hand-write it — a stale 
 4. **Library usage** — the schema-aware path, which is the one worth recommending:
 
 ```ts
-import { createApp, hashEmbed } from 'graphx-core';
+import { createApp, hashEmbed } from 'graphx';
 import { createGraphxMcp, localBackend } from 'graphx-mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { schema } from './my-schema.ts';

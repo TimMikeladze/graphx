@@ -32,8 +32,8 @@ PRNG seed, `SEED_EMBED` the embedding cap, and `SEED_FRESH=1` forces a rebuild.
 
 ## Part 1 — core bulk primitives
 
-`bulkLoad` (`packages/core/src/bulk.ts`) loads nodes only. Edges have no bulk path, and
-`Graph.addEdge` (`packages/core/src/graph.ts:379`) costs two endpoint SELECTs plus a write batch
+`bulkLoad` (`packages/graphx/src/core/bulk.ts`) loads nodes only. Edges have no bulk path, and
+`Graph.addEdge` (`packages/graphx/src/core/graph.ts:379`) costs two endpoint SELECTs plus a write batch
 per edge — about 240,000 round trips for 80,000 edges. The seed needs a bulk edge path.
 
 ### `bulkEdges(raw, schema, rows, opts)`
@@ -77,7 +77,7 @@ It duplicates schema knowledge outside core and rots the moment the DDL changes.
 
 ### Tests
 
-Extend `packages/core/test/p13-bulk.test.ts`, which runs under both drivers via
+Extend `packages/graphx/test/core/p13-bulk.test.ts`, which runs under both drivers via
 `GRAPHX_TEST_DRIVER`:
 
 - `bulkEdges` inserts the expected count, and the edges read back through the `edges` view.

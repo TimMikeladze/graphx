@@ -32,7 +32,7 @@ import {
 	init,
 	initControl,
 	type Principal,
-} from 'graphx-core';
+} from 'graphx';
 import { loadPantheon } from './load.ts';
 import { PANTHEON_SCHEMA_VERSION, pantheonSchema } from './schema.ts';
 

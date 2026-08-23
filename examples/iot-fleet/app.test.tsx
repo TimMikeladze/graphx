@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-import { createApp, evict, hashEmbed } from 'graphx-core';
-import { appFetch, createGraphHooks, GraphProvider } from 'graphx-react';
+import { createApp, evict, hashEmbed } from 'graphx';
+import { appFetch, createGraphHooks, GraphProvider } from 'graphx/react';
 import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
 import { createElement } from 'react';

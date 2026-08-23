@@ -1,4 +1,4 @@
-# graphx-auth — P4 (`expand`) Implementation Plan
+# graphx/auth — P4 (`expand`) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - `bun test`; `{ expect, test } from 'bun:test'`. Import core via `../../core/src/index.ts`; `.ts` extensions.
 - **isolatedDeclarations ON** — exported decls need explicit return types referencing exported/nameable types.
 - Fresh DB: `createClient({ url: ':memory:' })` → `init(client, 4)` → `new Graph(client, model.schema)`.
-- **Do NOT run `bun run format`** (dirties `packages/core`). Use `bun run lint`; format only the package if needed (`bunx oxfmt packages/auth`).
+- **Do NOT run `bun run format`** (dirties `packages/graphx`). Use `bun run lint`; format only the package if needed (`bunx oxfmt packages/auth`).
 - After each task: `bun test packages/auth` green. **Do not commit** unless the human asks.
 
 ## Expand semantics (the P4 contract)
@@ -32,7 +32,7 @@ Cycle guard: a `(object#relation)` already on the expansion path expands to an *
 ## Files changed
 
 ```
-packages/auth/src/
+packages/graphx/src/auth/
   check.ts    — MODIFY: extract + export `edgesInto(raw, asOf, object, relation)` (was a ctx-bound private)
   expand.ts   — CREATE: UsersetTree type + runExpand (recursive expansion + cycle guard)
   auth.ts     — MODIFY: add `Auth.expand(object, relation, opts?)`
@@ -49,10 +49,10 @@ packages/auth/src/
 
 **Files:**
 
-- Modify: `packages/auth/src/check.ts`
+- Modify: `packages/graphx/src/auth/check.ts`
 - Test: existing P1–P3 suite is the regression test (no new test).
 
-- [ ] **Step 1: Edit `packages/auth/src/check.ts`**
+- [ ] **Step 1: Edit `packages/graphx/src/auth/check.ts`**
 
 Replace the private `edgesInto` with an exported standalone helper (note the new signature — `raw`/`asOf` instead of `ctx`):
 
@@ -93,7 +93,7 @@ Expected: PASS (47 tests, unchanged) and clean type-check. (This is a pure refac
 - [ ] **Step 3: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/check.ts
+git add packages/graphx/src/auth/check.ts
 git commit -m "refactor(auth): export edgesInto as a standalone reader (P4 prep)"
 ```
 
@@ -103,11 +103,11 @@ git commit -m "refactor(auth): export edgesInto as a standalone reader (P4 prep)
 
 **Files:**
 
-- Create: `packages/auth/src/expand.ts`
-- Modify: `packages/auth/src/auth.ts`, `packages/auth/src/index.ts`
-- Test: `packages/auth/test/p4-expand.test.ts`
+- Create: `packages/graphx/src/auth/expand.ts`
+- Modify: `packages/graphx/src/auth/auth.ts`, `packages/graphx/src/auth/index.ts`
+- Test: `packages/graphx/test/auth/p4-expand.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p4-expand.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p4-expand.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -254,10 +254,10 @@ test('P4: expand respects asOf', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p4-expand.test.ts`
+Run: `bun test packages/graphx/test/auth/p4-expand.test.ts`
 Expected: FAIL — `auth.expand` / `expand.ts` not present.
 
-- [ ] **Step 3: Create `packages/auth/src/expand.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/expand.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -356,7 +356,7 @@ export function runExpand(
 }
 ```
 
-- [ ] **Step 4: Add `Auth.expand` to `packages/auth/src/auth.ts`**
+- [ ] **Step 4: Add `Auth.expand` to `packages/graphx/src/auth/auth.ts`**
 
 Add the import (with the existing `./check.ts` import — merge the named imports):
 
@@ -379,7 +379,7 @@ Add the method to the `Auth` class (after `check`):
 
 (Reuses `CheckOpts` — it carries `asOf`, which is the only expand option.)
 
-- [ ] **Step 5: Export `UsersetTree` from `packages/auth/src/index.ts`**
+- [ ] **Step 5: Export `UsersetTree` from `packages/graphx/src/auth/index.ts`**
 
 Add to the existing export block:
 
@@ -389,7 +389,7 @@ export { type UsersetTree } from './expand.ts';
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p4-expand.test.ts`
+Run: `bun test packages/graphx/test/auth/p4-expand.test.ts`
 Expected: PASS (7 tests). If the big `doc.viewer` tree assertion fails, compare the actual tree to the expected structure in the test — the union child order follows the rewrite (`self`, then `.or` terms in declaration order), and ttu parents/leaf arrays are sorted.
 
 - [ ] **Step 7: Full suite + type-check + lint + core untouched**
@@ -397,12 +397,12 @@ Expected: PASS (7 tests). If the big `doc.viewer` tree assertion fails, compare 
 Run: `bun test packages/auth` → all P1–P4 green.
 Run: `cd packages/auth && tsc --noEmit` → clean.
 Run: `bun run lint` → clean (NOT `bun run format`).
-Run: `git diff --name-only -- packages/core packages/auth/src/store.ts` → empty (P4 doesn't touch core or store).
+Run: `git diff --name-only -- packages/graphx packages/graphx/src/auth/store.ts` → empty (P4 doesn't touch core or store).
 
 - [ ] **Step 8: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/expand.ts packages/auth/src/auth.ts packages/auth/src/index.ts packages/auth/test/p4-expand.test.ts
+git add packages/graphx/src/auth/expand.ts packages/graphx/src/auth/auth.ts packages/graphx/src/auth/index.ts packages/graphx/test/auth/p4-expand.test.ts
 git commit -m "feat(auth): expand(object, relation) → userset tree (P4)"
 ```
 

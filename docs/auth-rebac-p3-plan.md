@@ -1,4 +1,4 @@
-# graphx-auth — P3 (Hierarchy + Set-Ops) Implementation Plan
+# graphx/auth — P3 (Hierarchy + Set-Ops) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -15,7 +15,7 @@
 - `bun test`; `{ expect, test } from 'bun:test'`. Import core via `../../core/src/index.ts`; `.ts` extensions.
 - **isolatedDeclarations ON** — exported decls need explicit return types referencing exported/nameable types.
 - Fresh DB: `createClient({ url: ':memory:' })` → `init(client, 4)` → `new Graph(client, model.schema)`.
-- **Do NOT run `bun run format`** (whole-repo oxfmt dirties `packages/core`). Use `bun run lint`; format only the package if needed: `bunx oxfmt packages/auth`.
+- **Do NOT run `bun run format`** (whole-repo oxfmt dirties `packages/graphx`). Use `bun run lint`; format only the package if needed: `bunx oxfmt packages/auth`.
 - After each task: `bun test packages/auth` green. **Do not commit** unless the human asks.
 
 ## Tuple→edge recap (the ttu direction — get this right)
@@ -25,7 +25,7 @@ Tuple `doc:42#parent@folder:1` (object=`doc:42`, relation=`parent`, subject=`fol
 ## Files changed
 
 ```
-packages/auth/src/
+packages/graphx/src/auth/
   model.ts    — MODIFY: RewriteExpr += ttu/intersection/exclusion; builder .and/.minus + .or(ttu); tupleToUserset(); validation
   check.ts    — MODIFY: evalExpr handles ttu / intersection / exclusion
   index.ts    — MODIFY: export tupleToUserset + Operand type
@@ -44,10 +44,10 @@ packages/auth/src/
 
 **Files:**
 
-- Modify: `packages/auth/src/model.ts`
-- Test: `packages/auth/test/p3-model.test.ts`
+- Modify: `packages/graphx/src/auth/model.ts`
+- Test: `packages/graphx/test/auth/p3-model.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p3-model.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p3-model.test.ts`
 
 ```typescript
 import { expect, test } from 'bun:test';
@@ -112,10 +112,10 @@ test('P3: validation — computed operand to an unknown relation still throws', 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p3-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p3-model.test.ts`
 Expected: FAIL — `tupleToUserset`/`.and`/`.minus` not exported / shapes mismatch.
 
-- [ ] **Step 3: Replace `packages/auth/src/model.ts`**
+- [ ] **Step 3: Replace `packages/graphx/src/auth/model.ts`**
 
 ```typescript
 import { z } from 'zod';
@@ -289,13 +289,13 @@ export function defineAuthModel(spec: ModelSpec): AuthModel {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p3-model.test.ts` then `bun test packages/auth/test/p1-model.test.ts packages/auth/test/p2-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p3-model.test.ts` then `bun test packages/graphx/test/auth/p1-model.test.ts packages/graphx/test/auth/p2-model.test.ts`
 Expected: PASS all (P1/P2 model behavior preserved — bare `rel()`→`{kind:'self'}`, `.or('x')`→union(self,computed)).
 
 - [ ] **Step 5: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/model.ts packages/auth/test/p3-model.test.ts
+git add packages/graphx/src/auth/model.ts packages/graphx/test/auth/p3-model.test.ts
 git commit -m "feat(auth): tuple-to-userset + set-ops in model DSL (P3)"
 ```
 
@@ -307,10 +307,10 @@ Three new `evalExpr` cases. `ttu` collects parents (`edgesInto(object, tupleset)
 
 **Files:**
 
-- Modify: `packages/auth/src/check.ts`
+- Modify: `packages/graphx/src/auth/check.ts`
 - Test: covered by Task 3's `p3-check.test.ts` (exercised through `Auth.check`).
 
-- [ ] **Step 1: Update `evalExpr` in `packages/auth/src/check.ts`**
+- [ ] **Step 1: Update `evalExpr` in `packages/graphx/src/auth/check.ts`**
 
 Replace the `evalExpr` function with (adds `ttu`/`intersection`/`exclusion`; keeps `self`/`computed`/`union`):
 
@@ -368,7 +368,7 @@ Expected: clean.
 - [ ] **Step 3: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/check.ts
+git add packages/graphx/src/auth/check.ts
 git commit -m "feat(auth): evaluate ttu / intersection / exclusion (P3)"
 ```
 
@@ -380,10 +380,10 @@ Exercise hierarchy inheritance (single + recursive), exclusion (deny + non-over-
 
 **Files:**
 
-- Modify: `packages/auth/src/index.ts`
-- Test: `packages/auth/test/p3-check.test.ts`
+- Modify: `packages/graphx/src/auth/index.ts`
+- Test: `packages/graphx/test/auth/p3-check.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p3-check.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p3-check.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -486,10 +486,10 @@ test('P3: ttu + asOf — inheritance visible before the parent link is revoked',
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p3-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p3-check.test.ts`
 Expected: FAIL — `tupleToUserset` not exported from where the test imports it (it's imported from `../src/model.ts`, so this should resolve; the real first failure will be that `evalExpr` already handles the kinds — if Task 2 is done, these should PASS). If Task 2 is complete, run this step to CONFIRM green; if any test fails, it's a real evaluator bug — investigate, do not weaken the test.
 
-- [ ] **Step 3: Update `packages/auth/src/index.ts`**
+- [ ] **Step 3: Update `packages/graphx/src/auth/index.ts`**
 
 Add the new public symbols to the existing export block:
 
@@ -521,13 +521,13 @@ Expected: clean.
 
 - [ ] **Step 5: Confirm core untouched**
 
-Run: `git diff --name-only -- packages/core`
+Run: `git diff --name-only -- packages/graphx`
 Expected: empty.
 
 - [ ] **Step 6: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/index.ts packages/auth/test/p3-check.test.ts
+git add packages/graphx/src/auth/index.ts packages/graphx/test/auth/p3-check.test.ts
 git commit -m "feat(auth): P3 complete — hierarchy inheritance + set-ops green"
 ```
 

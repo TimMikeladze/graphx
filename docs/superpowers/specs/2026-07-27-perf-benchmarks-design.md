@@ -5,7 +5,7 @@ Date: 2026-07-27
 ## Purpose
 
 Find where graphx is slow. The repo has a retrieval-_quality_ harness
-(`packages/core/test/eval-golden.test.ts`, `eval-metrics.ts`) but nothing that
+(`packages/graphx/test/core/eval-golden.test.ts`, `eval-metrics.ts`) but nothing that
 measures time. This spec covers a performance harness whose job is to expose
 bottlenecks — missing indexes, N+1 query shapes, walk blowups, superlinear
 index builds — at three graph sizes.
@@ -142,7 +142,7 @@ Write cases mutate, so each needs independent, repeatable starting state:
 ## Backends
 
 `GRAPHX_BENCH_DRIVER` selects the backend, mirroring the existing
-`GRAPHX_TEST_DRIVER` pattern in `packages/core/test/harness.ts`.
+`GRAPHX_TEST_DRIVER` pattern in `packages/graphx/test/core/harness.ts`.
 
 - `libsql` (default) — **file-backed, not `:memory:`**. An in-memory database
   hides IO cost entirely and gives a write path that does not resemble

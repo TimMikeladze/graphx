@@ -12,7 +12,7 @@
 
 - **Stage 4 is merged and green on `main` at `b121d2e`.** libSQL 1133 pass / 6 skip / 0 fail, Postgres 1117 / 22 / 0, DuckDB 1090 / 26 / 23. This plan must not regress libSQL or Postgres — both are verified after every task that touches shared code.
 - **The 23 DuckDB failures are 21 full-text + 2 documented raw-SQL constraint bypasses.** This plan closes the 21. The 2 are permanent and documented in `docs/DUCKDB_SUPPORT.md`; do not attempt to close them.
-- **No new runtime dependency in `packages/core`.** It is a published library with 6 dependencies. The `fts` DuckDB extension is excluded on evidence (spec §10.2): it cannot index a view or `read_parquet`, never updates incrementally, and its documented tuning parameters do not exist in any released build.
+- **No new runtime dependency in `packages/graphx`.** It is a published library with 6 dependencies. The `fts` DuckDB extension is excluded on evidence (spec §10.2): it cannot index a view or `read_parquet`, never updates incrementally, and its documented tuning parameters do not exist in any released build.
 - **Test with `GRAPHX_TEST_DRIVER=duckdb`.** Postgres needs a dedicated fresh container on port 5455 (`pgvector/pgvector:pg17`); a shared one produces spurious timeouts (Task 13 of the stage 1–4 plan established this).
 - **Bound-argument counts must match libSQL's exactly** for every fragment, because `hybrid.ts` and `retrieval-legs.ts` bind positionally from one code path for all three dialects.
 - **`ver` is the document key**, not `id`. One node has many versions; the index covers every one, which is what makes as-of lexical search exact.
@@ -29,22 +29,22 @@ Two deviations from spec §10.2, both deliberate, both ruled by the user:
 
 **Created:**
 
-- `packages/core/src/fts/tokenize.ts` — the one tokenizer, used by the writer to index and by the reader to parse a query. Owning both sides is the whole point; if these ever diverge, search silently returns nothing.
-- `packages/core/src/fts/build.ts` — pure, database-free construction of the four index tables from `{ver, body}` rows. Pure so it is testable without DuckDB and so the writer path has no hidden SQL.
-- `packages/core/src/fts/index-tables.ts` — the local DDL, the table-name constants, and the rebuild/export plumbing that connects `build.ts` to a `DbClient`.
-- `packages/core/test/fixtures/fts-ground-truth.json` — measured BM25 scores and rank orders from DuckDB's own `fts` extension and from libSQL FTS5. Committed so the suite never needs either extension at test time.
-- `packages/core/scripts/measure-fts-ground-truth.ts` — regenerates that fixture. Run by hand, not by CI.
-- `packages/core/test/fts-tokenize.test.ts`, `fts-build.test.ts`, `fts-bm25.test.ts`, `fts-roundtrip.test.ts`.
+- `packages/graphx/src/core/fts/tokenize.ts` — the one tokenizer, used by the writer to index and by the reader to parse a query. Owning both sides is the whole point; if these ever diverge, search silently returns nothing.
+- `packages/graphx/src/core/fts/build.ts` — pure, database-free construction of the four index tables from `{ver, body}` rows. Pure so it is testable without DuckDB and so the writer path has no hidden SQL.
+- `packages/graphx/src/core/fts/index-tables.ts` — the local DDL, the table-name constants, and the rebuild/export plumbing that connects `build.ts` to a `DbClient`.
+- `packages/graphx/test/core/fixtures/fts-ground-truth.json` — measured BM25 scores and rank orders from DuckDB's own `fts` extension and from libSQL FTS5. Committed so the suite never needs either extension at test time.
+- `packages/graphx/scripts/measure-fts-ground-truth.ts` — regenerates that fixture. Run by hand, not by CI.
+- `packages/graphx/test/core/fts-tokenize.test.ts`, `fts-build.test.ts`, `fts-bm25.test.ts`, `fts-roundtrip.test.ts`.
 
 **Modified:**
 
-- `packages/core/src/dialect-sql.ts` — `duckdbSchema()` gains the four tables; `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf` gain `duckdb` arms.
-- `packages/core/src/duck-materialize.ts` — load `manifest.indexes` alongside `manifest.tables`.
-- `packages/core/src/duck-commit.ts` — rebuild and export the index when `node_versions` is dirty.
-- `packages/core/src/hybrid.ts` — `ftsArg(dialect, query)` replaces the two-way `d === 'postgres' ? query : match` ternaries.
-- `packages/core/src/graph.ts` — `nodeFilter` uses `ftsArg`.
-- `packages/core/test/retrieval-legs.ts` — same.
-- `packages/core/src/index.ts` — export `ftsArg`.
+- `packages/graphx/src/core/dialect-sql.ts` — `duckdbSchema()` gains the four tables; `ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf` gain `duckdb` arms.
+- `packages/graphx/src/core/duck-materialize.ts` — load `manifest.indexes` alongside `manifest.tables`.
+- `packages/graphx/src/core/duck-commit.ts` — rebuild and export the index when `node_versions` is dirty.
+- `packages/graphx/src/core/hybrid.ts` — `ftsArg(dialect, query)` replaces the two-way `d === 'postgres' ? query : match` ternaries.
+- `packages/graphx/src/core/graph.ts` — `nodeFilter` uses `ftsArg`.
+- `packages/graphx/test/core/retrieval-legs.ts` — same.
+- `packages/graphx/src/core/index.ts` — export `ftsArg`.
 - `docs/DUCKDB_SUPPORT.md`, `.github/workflows/ci.yml` — final parity record and the CI gate.
 
 ---
@@ -57,8 +57,8 @@ Both references need extensions that the test suite must never require, so this 
 
 **Files:**
 
-- Create: `packages/core/scripts/measure-fts-ground-truth.ts`
-- Create: `packages/core/test/fixtures/fts-ground-truth.json`
+- Create: `packages/graphx/scripts/measure-fts-ground-truth.ts`
+- Create: `packages/graphx/test/core/fixtures/fts-ground-truth.json`
 
 **Interfaces:**
 
@@ -86,7 +86,7 @@ Both references need extensions that the test suite must never require, so this 
 The corpus is deliberately stem-invariant — every word is already its own stem — so the two engines' tokenizers agree and the only variable left is the BM25 arithmetic. Terms repeat at different frequencies so `tf`, `df`, and `len` all vary.
 
 ```ts
-// packages/core/scripts/measure-fts-ground-truth.ts
+// packages/graphx/scripts/measure-fts-ground-truth.ts
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClient } from '@libsql/client';
@@ -95,7 +95,7 @@ import { createDuckClient } from '../src/duck.ts';
 /**
  * Regenerate test/fixtures/fts-ground-truth.json.
  *
- * Run by hand (`bun packages/core/scripts/measure-fts-ground-truth.ts`), never by CI: it
+ * Run by hand (`bun packages/graphx/scripts/measure-fts-ground-truth.ts`), never by CI: it
  * needs DuckDB's `fts` extension, which downloads on first use. The whole point of
  * committing the output is that the suite needs neither extension.
  */
@@ -194,8 +194,8 @@ console.log(`wrote ${path}`);
 - [ ] **Step 2: Run it**
 
 ```bash
-mkdir -p packages/core/test/fixtures
-bun packages/core/scripts/measure-fts-ground-truth.ts
+mkdir -p packages/graphx/test/core/fixtures
+bun packages/graphx/scripts/measure-fts-ground-truth.ts
 ```
 
 Expected: the file is written. If `INSTALL fts` fails (no network), stop and report — do not hand-write the fixture. A fabricated ground truth is worse than none, because every downstream task would be verified against a guess.
@@ -214,7 +214,7 @@ Write what you found into the task report. Task 4 derives the BM25 constants fro
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/core/scripts/measure-fts-ground-truth.ts packages/core/test/fixtures/fts-ground-truth.json
+git add packages/graphx/scripts/measure-fts-ground-truth.ts packages/graphx/test/core/fixtures/fts-ground-truth.json
 git commit -m "test(core): measure DuckDB and libSQL full-text ground truth
 
 Committed so the suite never needs either engine's FTS extension. The
@@ -230,8 +230,8 @@ One module, used by the writer to build the index and by the reader to parse a q
 
 **Files:**
 
-- Create: `packages/core/src/fts/tokenize.ts`
-- Test: `packages/core/test/fts-tokenize.test.ts`
+- Create: `packages/graphx/src/core/fts/tokenize.ts`
+- Test: `packages/graphx/test/core/fts-tokenize.test.ts`
 
 **Interfaces:**
 
@@ -243,7 +243,7 @@ One module, used by the writer to build the index and by the reader to parse a q
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-tokenize.test.ts
+// packages/graphx/test/core/fts-tokenize.test.ts
 import { describe, expect, test } from 'bun:test';
 import truth from './fixtures/fts-ground-truth.json';
 import { tokenize } from '../src/fts/tokenize.ts';
@@ -285,13 +285,13 @@ describe('tokenize', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-tokenize.test.ts`
+Run: `bun test packages/graphx/test/core/fts-tokenize.test.ts`
 Expected: FAIL — `Cannot find module '../src/fts/tokenize.ts'`.
 
 - [ ] **Step 3: Write the tokenizer**
 
 ```ts
-// packages/core/src/fts/tokenize.ts
+// packages/graphx/src/core/fts/tokenize.ts
 /**
  * The one tokenizer, shared by the writer that builds the index and the reader that parses
  * a query.
@@ -327,7 +327,7 @@ export function tokenize(text: string): string[] {
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/fts-tokenize.test.ts`
+Run: `bun test packages/graphx/test/core/fts-tokenize.test.ts`
 Expected: PASS, 6 tests.
 
 If the two ground-truth tests fail, the tokenizer disagrees with DuckDB — fix the tokenizer, never the fixture. Common cause: DuckDB strips diacritics, so `café` becomes `cafe`. If the fixture shows that, add `.normalize('NFD').replace(/\p{M}+/gu, '')` before lowercasing and note it in the module comment.
@@ -335,7 +335,7 @@ If the two ground-truth tests fail, the tokenizer disagrees with DuckDB — fix 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/fts/tokenize.ts packages/core/test/fts-tokenize.test.ts
+git add packages/graphx/src/core/fts/tokenize.ts packages/graphx/test/core/fts-tokenize.test.ts
 git commit -m "feat(core): add the shared full-text tokenizer
 
 One tokenizer for the writer and the reader. Divergence between the two
@@ -353,8 +353,8 @@ Pure and database-free, so the arithmetic is testable without DuckDB and the wri
 
 **Files:**
 
-- Create: `packages/core/src/fts/build.ts`
-- Test: `packages/core/test/fts-build.test.ts`
+- Create: `packages/graphx/src/core/fts/build.ts`
+- Test: `packages/graphx/test/core/fts-build.test.ts`
 
 **Interfaces:**
 
@@ -393,7 +393,7 @@ Pure and database-free, so the arithmetic is testable without DuckDB and the wri
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-build.test.ts
+// packages/graphx/test/core/fts-build.test.ts
 import { describe, expect, test } from 'bun:test';
 import { buildIndex } from '../src/fts/build.ts';
 
@@ -457,13 +457,13 @@ describe('buildIndex', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-build.test.ts`
+Run: `bun test packages/graphx/test/core/fts-build.test.ts`
 Expected: FAIL — `Cannot find module '../src/fts/build.ts'`.
 
 - [ ] **Step 3: Write the builder**
 
 ```ts
-// packages/core/src/fts/build.ts
+// packages/graphx/src/core/fts/build.ts
 import { tokenize } from './tokenize.ts';
 
 /**
@@ -559,13 +559,13 @@ export function buildIndex(rows: { ver: number; body: string | null; live: boole
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/fts-build.test.ts`
+Run: `bun test packages/graphx/test/core/fts-build.test.ts`
 Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/fts/build.ts packages/core/test/fts-build.test.ts
+git add packages/graphx/src/core/fts/build.ts packages/graphx/test/core/fts-build.test.ts
 git commit -m "feat(core): build the full-text index tables in memory
 
 Pure and database-free, so the arithmetic behind every ranking is
@@ -582,8 +582,8 @@ The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. 
 
 **Files:**
 
-- Create: `packages/core/src/fts/index-tables.ts`
-- Test: `packages/core/test/fts-bm25.test.ts`
+- Create: `packages/graphx/src/core/fts/index-tables.ts`
+- Test: `packages/graphx/test/core/fts-bm25.test.ts`
 
 **Interfaces:**
 
@@ -597,7 +597,7 @@ The scoring join, checked against DuckDB's own `match_bm25` output from Task 1. 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-bm25.test.ts
+// packages/graphx/test/core/fts-bm25.test.ts
 import { describe, expect, test } from 'bun:test';
 import truth from './fixtures/fts-ground-truth.json';
 import { createDuckClient } from '../src/duck.ts';
@@ -693,13 +693,13 @@ describe('bm25', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-bm25.test.ts`
+Run: `bun test packages/graphx/test/core/fts-bm25.test.ts`
 Expected: FAIL — `Cannot find module '../src/fts/index-tables.ts'`.
 
 - [ ] **Step 3: Write the DDL and the scoring CTE**
 
 ```ts
-// packages/core/src/fts/index-tables.ts
+// packages/graphx/src/core/fts/index-tables.ts
 /**
  * The local shape of the full-text index, and the BM25 join that reads it.
  *
@@ -772,7 +772,7 @@ export function bm25Cte(scope: 'live' | 'all'): string {
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/fts-bm25.test.ts`
+Run: `bun test packages/graphx/test/core/fts-bm25.test.ts`
 Expected: PASS, 5 tests.
 
 If the first test fails on scores while the rank order matches, the constants or the IDF form are wrong. Fit them from the fixture rather than guessing: a single-term query over a document of known `len` reduces the formula to one unknown at a time. Do NOT relax `toBeCloseTo` to make it pass — the tolerance is what makes this test worth having.
@@ -780,7 +780,7 @@ If the first test fails on scores while the rank order matches, the constants or
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/fts/index-tables.ts packages/core/test/fts-bm25.test.ts
+git add packages/graphx/src/core/fts/index-tables.ts packages/graphx/test/core/fts-bm25.test.ts
 git commit -m "feat(core): add the BM25 scoring join over our own index
 
 Verified against DuckDB's own match_bm25 output on a committed fixture,
@@ -798,11 +798,11 @@ The round trip. The index becomes part of a snapshot: rebuilt from the local `no
 
 **Files:**
 
-- Modify: `packages/core/src/dialect-sql.ts` (`duckdbSchema` — append `FTS_DDL`)
-- Modify: `packages/core/src/duck-materialize.ts` (load `manifest.indexes`)
-- Modify: `packages/core/src/duck-commit.ts` (rebuild + export)
-- Modify: `packages/core/src/fts/index-tables.ts` (add `rebuildIndex`)
-- Test: `packages/core/test/fts-roundtrip.test.ts`
+- Modify: `packages/graphx/src/core/dialect-sql.ts` (`duckdbSchema` — append `FTS_DDL`)
+- Modify: `packages/graphx/src/core/duck-materialize.ts` (load `manifest.indexes`)
+- Modify: `packages/graphx/src/core/duck-commit.ts` (rebuild + export)
+- Modify: `packages/graphx/src/core/fts/index-tables.ts` (add `rebuildIndex`)
+- Test: `packages/graphx/test/core/fts-roundtrip.test.ts`
 
 **Interfaces:**
 
@@ -814,7 +814,7 @@ The round trip. The index becomes part of a snapshot: rebuilt from the local `no
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-roundtrip.test.ts
+// packages/graphx/test/core/fts-roundtrip.test.ts
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -920,12 +920,12 @@ describe('full-text round trip', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/core/test/fts-roundtrip.test.ts`
+Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/graphx/test/core/fts-roundtrip.test.ts`
 Expected: FAIL — `Catalog Error: Table with name fts_terms does not exist`.
 
 - [ ] **Step 3: Add the tables to the local schema**
 
-In `packages/core/src/dialect-sql.ts`, import the DDL and append it to `duckdbSchema`'s returned string, just before the closing backtick:
+In `packages/graphx/src/core/dialect-sql.ts`, import the DDL and append it to `duckdbSchema`'s returned string, just before the closing backtick:
 
 ```ts
 import { FTS_DDL } from './fts/index-tables.ts';
@@ -940,7 +940,7 @@ ${FTS_DDL}
 
 - [ ] **Step 4: Add the rebuild**
 
-Append to `packages/core/src/fts/index-tables.ts`:
+Append to `packages/graphx/src/core/fts/index-tables.ts`:
 
 ```ts
 import type { DbClient } from '../dialect.ts';
@@ -1004,7 +1004,7 @@ export async function rebuildIndex(client: Pick<DbClient, 'execute'>): Promise<v
 
 - [ ] **Step 5: Export the index on commit**
 
-In `packages/core/src/duck-commit.ts`, add the import and a helper, then call it from `buildManifest`:
+In `packages/graphx/src/core/duck-commit.ts`, add the import and a helper, then call it from `buildManifest`:
 
 ```ts
 import { FTS_TABLES, rebuildIndex } from './fts/index-tables.ts';
@@ -1065,7 +1065,7 @@ const indexes = await buildFtsIndexes(client, base, cache, tmpDir, dirty);
 
 - [ ] **Step 6: Load the index on materialize**
 
-In `packages/core/src/duck-materialize.ts`, after the `manifest.tables` loop and before the `emb_dim` restatement:
+In `packages/graphx/src/core/duck-materialize.ts`, after the `manifest.tables` loop and before the `emb_dim` restatement:
 
 ```ts
 // The index groups are flat table->files maps, loaded exactly like the data tables. Live
@@ -1099,20 +1099,20 @@ with `import { FTS_TABLES } from './fts/index-tables.ts';` at the top.
 
 - [ ] **Step 7: Run the tests**
 
-Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/core/test/fts-roundtrip.test.ts`
+Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/graphx/test/core/fts-roundtrip.test.ts`
 Expected: PASS, 5 tests.
 
 Then confirm nothing in stage 4 regressed:
 
-Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/core/test/duck-*.test.ts packages/core/test/objstore`
+Run: `GRAPHX_TEST_DRIVER=duckdb bun test packages/graphx/test/core/duck-*.test.ts packages/graphx/test/core/objstore`
 Expected: PASS, no failures.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/core/src/fts/index-tables.ts packages/core/src/dialect-sql.ts \
-  packages/core/src/duck-commit.ts packages/core/src/duck-materialize.ts \
-  packages/core/test/fts-roundtrip.test.ts
+git add packages/graphx/src/core/fts/index-tables.ts packages/graphx/src/core/dialect-sql.ts \
+  packages/graphx/src/core/duck-commit.ts packages/graphx/src/core/duck-materialize.ts \
+  packages/graphx/test/core/fts-roundtrip.test.ts
 git commit -m "feat(core): publish the full-text index with the snapshot
 
 The index becomes part of a snapshot: rebuilt from node_versions when it
@@ -1134,9 +1134,9 @@ Replace the three `notYet` throws. Argument counts must match libSQL's exactly.
 
 **Files:**
 
-- Modify: `packages/core/src/dialect-sql.ts` (`ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf`)
-- Modify: `packages/core/test/dialect-sql.test.ts:29` (the assertion that `ftsWhere('duckdb')` throws)
-- Test: `packages/core/test/fts-fragments.test.ts`
+- Modify: `packages/graphx/src/core/dialect-sql.ts` (`ftsWhere`, `ftsSeedLive`, `ftsSeedAsOf`)
+- Modify: `packages/graphx/test/core/dialect-sql.test.ts:29` (the assertion that `ftsWhere('duckdb')` throws)
+- Test: `packages/graphx/test/core/fts-fragments.test.ts`
 
 **Interfaces:**
 
@@ -1149,7 +1149,7 @@ Replace the three `notYet` throws. Argument counts must match libSQL's exactly.
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-fragments.test.ts
+// packages/graphx/test/core/fts-fragments.test.ts
 import { describe, expect, test } from 'bun:test';
 import { FOREVER } from '../src/db.ts';
 import { ftsSeedAsOf, ftsSeedLive, ftsWhere } from '../src/dialect-sql.ts';
@@ -1249,12 +1249,12 @@ describe('duckdb fts fragments', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-fragments.test.ts`
+Run: `bun test packages/graphx/test/core/fts-fragments.test.ts`
 Expected: FAIL — `dialect-sql: ftsSeedLive(duckdb) not implemented yet`.
 
 - [ ] **Step 3: Write the three arms**
 
-In `packages/core/src/dialect-sql.ts`, add `import { bm25Cte } from './fts/index-tables.ts';` and replace each `notYet` call:
+In `packages/graphx/src/core/dialect-sql.ts`, add `import { bm25Cte } from './fts/index-tables.ts';` and replace each `notYet` call:
 
 ```ts
 		// Membership only — no scoring. This is a filter on a scan the caller already
@@ -1293,7 +1293,7 @@ LIMIT ?`;
 
 - [ ] **Step 4: Update the stale assertion**
 
-`packages/core/test/dialect-sql.test.ts:29` asserts `ftsWhere('duckdb', 'n')` throws. Replace it with an assertion that it no longer does:
+`packages/graphx/test/core/dialect-sql.test.ts:29` asserts `ftsWhere('duckdb', 'n')` throws. Replace it with an assertion that it no longer does:
 
 ```ts
 test('ftsWhere has a duckdb arm now that the index exists', () => {
@@ -1305,14 +1305,14 @@ Check the surrounding block for sibling assertions about `ftsSeedLive`/`ftsSeedA
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/fts-fragments.test.ts packages/core/test/dialect-sql.test.ts`
+Run: `bun test packages/graphx/test/core/fts-fragments.test.ts packages/graphx/test/core/dialect-sql.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/dialect-sql.ts packages/core/test/fts-fragments.test.ts \
-  packages/core/test/dialect-sql.test.ts
+git add packages/graphx/src/core/dialect-sql.ts packages/graphx/test/core/fts-fragments.test.ts \
+  packages/graphx/test/core/dialect-sql.test.ts
 git commit -m "feat(core): fill in the duckdb full-text fragments
 
 ftsWhere, ftsSeedLive, and ftsSeedAsOf stop throwing notYet. Argument
@@ -1330,11 +1330,11 @@ Three call sites currently branch with `d === 'postgres' ? query : match`, which
 
 **Files:**
 
-- Modify: `packages/core/src/hybrid.ts` (`sanitizeMatch` neighborhood, `seedsCurrent`, `seedsAsOf`)
-- Modify: `packages/core/src/graph.ts` (`ftsMatch`, `nodeFilter`)
-- Modify: `packages/core/test/retrieval-legs.ts` (`ftsSeeds`)
-- Modify: `packages/core/src/index.ts` (export `ftsArg`)
-- Test: `packages/core/test/fts-args.test.ts`
+- Modify: `packages/graphx/src/core/hybrid.ts` (`sanitizeMatch` neighborhood, `seedsCurrent`, `seedsAsOf`)
+- Modify: `packages/graphx/src/core/graph.ts` (`ftsMatch`, `nodeFilter`)
+- Modify: `packages/graphx/test/core/retrieval-legs.ts` (`ftsSeeds`)
+- Modify: `packages/graphx/src/core/index.ts` (export `ftsArg`)
+- Test: `packages/graphx/test/core/fts-args.test.ts`
 
 **Interfaces:**
 
@@ -1344,7 +1344,7 @@ Three call sites currently branch with `d === 'postgres' ? query : match`, which
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-args.test.ts
+// packages/graphx/test/core/fts-args.test.ts
 import { describe, expect, test } from 'bun:test';
 import { ftsArg, sanitizeMatch } from '../src/hybrid.ts';
 
@@ -1379,12 +1379,12 @@ describe('ftsArg', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-args.test.ts`
+Run: `bun test packages/graphx/test/core/fts-args.test.ts`
 Expected: FAIL — `ftsArg is not a function`.
 
 - [ ] **Step 3: Add `ftsArg`**
 
-In `packages/core/src/hybrid.ts`, below `sanitizeMatch`:
+In `packages/graphx/src/core/hybrid.ts`, below `sanitizeMatch`:
 
 ```ts
 import { tokenize } from './fts/tokenize.ts';
@@ -1464,7 +1464,7 @@ if (opts.q !== undefined) {
 
 and the private `ftsMatch` method is deleted — its only caller was this branch, and `ftsArg` now covers all three dialects. Import `ftsArg` from `./hybrid.ts`; if that reintroduces the import cycle the old comment warned about (hybrid → retrieve → graph), move `ftsArg` and `sanitizeMatch` into `fts/tokenize.ts` instead and re-export both from `hybrid.ts` so the public API is unchanged. Check for the cycle by running the tests — Bun reports it as an undefined import at call time, not at load.
 
-In `packages/core/test/retrieval-legs.ts`, `ftsSeeds` becomes:
+In `packages/graphx/test/core/retrieval-legs.ts`, `ftsSeeds` becomes:
 
 ```ts
 export async function ftsSeeds(raw: DbClient, query: string, k: number): Promise<string[]> {
@@ -1476,11 +1476,11 @@ export async function ftsSeeds(raw: DbClient, query: string, k: number): Promise
 }
 ```
 
-In `packages/core/src/index.ts`, add `ftsArg` beside the existing `sanitizeMatch` export (line ~183).
+In `packages/graphx/src/core/index.ts`, add `ftsArg` beside the existing `sanitizeMatch` export (line ~183).
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/fts-args.test.ts`
+Run: `bun test packages/graphx/test/core/fts-args.test.ts`
 Expected: PASS, 5 tests.
 
 Run: `bun test --timeout 30000`
@@ -1489,8 +1489,8 @@ Expected: libSQL unchanged — 1133 pass / 6 skip / 0 fail. The ternary replacem
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/hybrid.ts packages/core/src/graph.ts packages/core/src/index.ts \
-  packages/core/test/retrieval-legs.ts packages/core/test/fts-args.test.ts
+git add packages/graphx/src/core/hybrid.ts packages/graphx/src/core/graph.ts packages/graphx/src/core/index.ts \
+  packages/graphx/test/core/retrieval-legs.ts packages/graphx/test/core/fts-args.test.ts
 git commit -m "feat(core): resolve the full-text bound arg by dialect
 
 The call sites spelled this as 'd === postgres ? query : match', which
@@ -1531,12 +1531,12 @@ both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
 
 **Files:**
 
-- Modify: `packages/core/src/db.ts` (the `FtsIndexOwner` seam)
-- Modify: `packages/core/src/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
-- Modify: `packages/core/src/graph.ts` (mark on mutation, ensure before an FTS read)
-- Modify: `packages/core/src/hybrid.ts`, `packages/core/test/retrieval-legs.ts` (ensure before the lexical leg)
-- Modify: `packages/core/src/bulk.ts` (mark after a bulk load)
-- Test: `packages/core/test/fts-freshness.test.ts`
+- Modify: `packages/graphx/src/core/db.ts` (the `FtsIndexOwner` seam)
+- Modify: `packages/graphx/src/core/duck.ts` (flag, `markFtsStale`, `ensureFtsFresh`)
+- Modify: `packages/graphx/src/core/graph.ts` (mark on mutation, ensure before an FTS read)
+- Modify: `packages/graphx/src/core/hybrid.ts`, `packages/graphx/test/core/retrieval-legs.ts` (ensure before the lexical leg)
+- Modify: `packages/graphx/src/core/bulk.ts` (mark after a bulk load)
+- Test: `packages/graphx/test/core/fts-freshness.test.ts`
 
 **Interfaces:**
 
@@ -1548,7 +1548,7 @@ both mechanisms catch. Two cheap aggregates per full-text query, no body scan.
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// packages/core/test/fts-freshness.test.ts
+// packages/graphx/test/core/fts-freshness.test.ts
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../src/define-graph-schema.ts';
@@ -1616,7 +1616,7 @@ describe('full-text freshness on a local duckdb', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/fts-freshness.test.ts`
+Run: `bun test packages/graphx/test/core/fts-freshness.test.ts`
 Expected: FAIL — the first test returns 0 rows, because nothing ever built the index.
 
 - [ ] **Step 3: Add the seam to `db.ts`**
@@ -1749,7 +1749,7 @@ In `hybrid.ts`'s `hybridRetrieve`, after computing `arg` and before fetching see
 if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
 ```
 
-In `packages/core/test/retrieval-legs.ts`'s `ftsSeeds`, the same, after the null check.
+In `packages/graphx/test/core/retrieval-legs.ts`'s `ftsSeeds`, the same, after the null check.
 
 In `bulk.ts`'s `publish` helper, mark stale when `node_versions` is among the tables — a bulk
 load changes the corpus exactly as individual writes do.
@@ -1759,7 +1759,7 @@ missed, add it and say so in your report.
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/fts-freshness.test.ts`
+Run: `bun test packages/graphx/test/core/fts-freshness.test.ts`
 Expected: PASS, 4 tests.
 
 Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 60000`
@@ -1772,9 +1772,9 @@ and `bulk.ts`, which all three backends share, so the libSQL run is the regressi
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/db.ts packages/core/src/duck.ts packages/core/src/graph.ts \
-  packages/core/src/hybrid.ts packages/core/src/bulk.ts \
-  packages/core/test/retrieval-legs.ts packages/core/test/fts-freshness.test.ts
+git add packages/graphx/src/core/db.ts packages/graphx/src/core/duck.ts packages/graphx/src/core/graph.ts \
+  packages/graphx/src/core/hybrid.ts packages/graphx/src/core/bulk.ts \
+  packages/graphx/test/core/retrieval-legs.ts packages/graphx/test/core/fts-freshness.test.ts
 git commit -m "feat(core): keep the local duckdb full-text index fresh
 
 The index was built only inside commit(), and touched() only commits when

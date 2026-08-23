@@ -36,7 +36,7 @@ import {
 	init,
 	initControl,
 	type Principal,
-} from 'graphx-core';
+} from 'graphx';
 import { buildNodes, streamEdges } from './load.ts';
 import { SKILLS_SCHEMA_VERSION, skillsSchema } from './schema.ts';
 

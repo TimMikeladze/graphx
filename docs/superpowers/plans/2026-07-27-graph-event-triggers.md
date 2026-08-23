@@ -4,7 +4,7 @@
 
 **Goal:** Ship declarative triggers — code-declared rules that match `GraphEvent`s off the durable outbox and run an action — with a restart-safe runner, retries, dead letters, and a `graphx triggers` command.
 
-**Architecture:** A new `packages/core/src/triggers.ts` owns a pure matcher, a `TriggerRunner` that polls `outboxTail` from a persisted per-subscription cursor, and a `webhookAction` factory. Provenance rides on a new `source` column on `graph_outbox`; a trigger's own writes go through `graph.withEventSource('trigger:<name>')` and are excluded by the matcher's default, which is what stops cascades. The runner is constructed from a `Graph`, holds no module-global state, and is embedded by apps or hosted by the CLI.
+**Architecture:** A new `packages/graphx/src/core/triggers.ts` owns a pure matcher, a `TriggerRunner` that polls `outboxTail` from a persisted per-subscription cursor, and a `webhookAction` factory. Provenance rides on a new `source` column on `graph_outbox`; a trigger's own writes go through `graph.withEventSource('trigger:<name>')` and are excluded by the matcher's default, which is what stops cascades. The runner is constructed from a `Graph`, holds no module-global state, and is embedded by apps or hosted by the CLI.
 
 **Tech Stack:** TypeScript, Bun (test runner and runtime), libSQL and Postgres behind the existing dialect seam, `zod` for schemas in tests, `ulidx` for dead-letter ids. WebCrypto and `fetch` are runtime built-ins.
 
@@ -12,10 +12,10 @@
 
 ## Global Constraints
 
-- **No new dependencies.** WebCrypto (`crypto.subtle`), `fetch`, and `AbortSignal.timeout` are runtime built-ins. `ulidx` is already a `graphx-core` dependency.
-- **Every schema change is mirrored in both dialects:** `packages/core/src/schema.ts` (libSQL) and `packages/core/src/dialect-sql.ts` (Postgres). A change to one without the other is a bug.
-- **Tests obtain databases only from `packages/core/test/harness.ts`** via `makeTestDb`. Never call `createClient` directly.
-- **Build before testing.** `packages/cli` imports `graphx-core` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/core/src` and before `bun test`, or the CLI tests fail with `Cannot find module 'graphx-core'`.
+- **No new dependencies.** WebCrypto (`crypto.subtle`), `fetch`, and `AbortSignal.timeout` are runtime built-ins. `ulidx` is already a `graphx` dependency.
+- **Every schema change is mirrored in both dialects:** `packages/graphx/src/core/schema.ts` (libSQL) and `packages/graphx/src/core/dialect-sql.ts` (Postgres). A change to one without the other is a bug.
+- **Tests obtain databases only from `packages/graphx/test/core/harness.ts`** via `makeTestDb`. Never call `createClient` directly.
+- **Build before testing.** `packages/cli` imports `graphx` through its `exports` map, i.e. from `dist/`, which is git-ignored. Run `bun run build` after changing anything under `packages/graphx/src/core` and before `bun test`, or the CLI tests fail with `Cannot find module 'graphx'`.
 - **Always run the suite as `bun run test`, never bare `bun test`.** The script is `bun test --timeout 30000`; Bun's bare default is 5s, under which a large part of the suite times out and looks like flakiness. CI runs `bun run test` too. A focused file is `bun run test <path>`.
 - **Both drivers must pass.** Default run: `bun run test`. Postgres run:
 
@@ -36,20 +36,20 @@
 
 **Created:**
 
-- `packages/core/src/triggers.ts` — the whole feature: `TriggerMatch`/`Trigger` types, `matchesTrigger`, `TriggerRunner`, `webhookAction`, `deadLetters`, `pruneDeadLetters`. One module because these pieces share the runner's private state and the dead-letter table; splitting them would export internals for no gain.
-- `packages/core/test/triggers.test.ts` — matcher, runner, dead-letter, and webhook tests.
+- `packages/graphx/src/core/triggers.ts` — the whole feature: `TriggerMatch`/`Trigger` types, `matchesTrigger`, `TriggerRunner`, `webhookAction`, `deadLetters`, `pruneDeadLetters`. One module because these pieces share the runner's private state and the dead-letter table; splitting them would export internals for no gain.
+- `packages/graphx/test/core/triggers.test.ts` — matcher, runner, dead-letter, and webhook tests.
 
 **Modified:**
 
-- `packages/core/src/schema.ts` — `graph_outbox.source` column, `trigger_cursors` and `trigger_dead_letters` tables, `ensureColumn` call in `init()`.
-- `packages/core/src/dialect-sql.ts` — the Postgres counterparts of all three.
-- `packages/core/src/events.ts` — `GraphEvent.source`, `GraphEventOptions.source`.
-- `packages/core/src/graph.ts` — retain the `UpcasterRegistry`, stamp `source` on emits and outbox rows, add `withEventSource`.
-- `packages/core/src/temporal.ts` — select and map the `source` column in `outboxTail`.
-- `packages/core/src/index.ts` — export the trigger surface.
-- `packages/core/test/outbox.test.ts` — provenance tests.
-- `packages/cli/src/cli.ts` — `parseTriggersArgs`, `runTriggers`, `GraphxConfig` fields, `USAGE`.
-- `packages/cli/test/cli.test.ts` — `parseTriggersArgs` tests.
+- `packages/graphx/src/core/schema.ts` — `graph_outbox.source` column, `trigger_cursors` and `trigger_dead_letters` tables, `ensureColumn` call in `init()`.
+- `packages/graphx/src/core/dialect-sql.ts` — the Postgres counterparts of all three.
+- `packages/graphx/src/core/events.ts` — `GraphEvent.source`, `GraphEventOptions.source`.
+- `packages/graphx/src/core/graph.ts` — retain the `UpcasterRegistry`, stamp `source` on emits and outbox rows, add `withEventSource`.
+- `packages/graphx/src/core/temporal.ts` — select and map the `source` column in `outboxTail`.
+- `packages/graphx/src/core/index.ts` — export the trigger surface.
+- `packages/graphx/test/core/outbox.test.ts` — provenance tests.
+- `packages/graphx/src/cli.ts` — `parseTriggersArgs`, `runTriggers`, `GraphxConfig` fields, `USAGE`.
+- `packages/graphx/test/cli/cli.test.ts` — `parseTriggersArgs` tests.
 
 ---
 
@@ -59,12 +59,12 @@ Adds the `source` column and the `Graph` plumbing that writes it. Nothing consum
 
 **Files:**
 
-- Modify: `packages/core/src/schema.ts` (the `graph_outbox` DDL, and `init()`)
-- Modify: `packages/core/src/dialect-sql.ts` (the Postgres `graph_outbox` DDL)
-- Modify: `packages/core/src/events.ts`
-- Modify: `packages/core/src/graph.ts`
-- Modify: `packages/core/src/temporal.ts`
-- Test: `packages/core/test/outbox.test.ts`
+- Modify: `packages/graphx/src/core/schema.ts` (the `graph_outbox` DDL, and `init()`)
+- Modify: `packages/graphx/src/core/dialect-sql.ts` (the Postgres `graph_outbox` DDL)
+- Modify: `packages/graphx/src/core/events.ts`
+- Modify: `packages/graphx/src/core/graph.ts`
+- Modify: `packages/graphx/src/core/temporal.ts`
+- Test: `packages/graphx/test/core/outbox.test.ts`
 
 **Interfaces:**
 
@@ -73,7 +73,7 @@ Adds the `source` column and the `Graph` plumbing that writes it. Nothing consum
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/outbox.test.ts`. `makeGraph` and `teardowns` already exist at the top of that file; do not redefine them.
+Append to `packages/graphx/test/core/outbox.test.ts`. `makeGraph` and `teardowns` already exist at the top of that file; do not redefine them.
 
 ```ts
 test('outbox rows carry provenance and default to null for user writes', async () => {
@@ -109,12 +109,12 @@ Add `InMemoryEvents` to the existing `../src/events.ts` import at the top of the
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/outbox.test.ts -t provenance`
+Run: `bun test packages/graphx/test/core/outbox.test.ts -t provenance`
 Expected: FAIL — `g.withEventSource is not a function`.
 
 - [ ] **Step 3: Add the column to both dialects**
 
-In `packages/core/src/schema.ts`, add `source` as the last column of `graph_outbox` and extend the comment above it:
+In `packages/graphx/src/core/schema.ts`, add `source` as the last column of `graph_outbox` and extend the comment above it:
 
 ```sql
 -- Eventing (Layer 2): durable, totally-ordered, delete-inclusive event log co-written into
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS graph_outbox (
 );
 ```
 
-In `packages/core/src/dialect-sql.ts`, add `source text` as the last column of the Postgres `graph_outbox`, and immediately after that `CREATE TABLE` statement add the idempotent upgrade for databases created before this change:
+In `packages/graphx/src/core/dialect-sql.ts`, add `source text` as the last column of the Postgres `graph_outbox`, and immediately after that `CREATE TABLE` statement add the idempotent upgrade for databases created before this change:
 
 ```sql
 ALTER TABLE graph_outbox ADD COLUMN IF NOT EXISTS source text;
@@ -158,7 +158,7 @@ await ensureColumn(
 
 - [ ] **Step 4: Thread `source` through events, Graph, and the tail**
 
-In `packages/core/src/events.ts`, add to `GraphEvent` (after `dst`):
+In `packages/graphx/src/core/events.ts`, add to `GraphEvent` (after `dst`):
 
 ```ts
 	/** Provenance: absent on a user write, `trigger:<name>` on a write made by a trigger action. */
@@ -176,7 +176,7 @@ and to `GraphEventOptions`:
 	source?: string;
 ```
 
-In `packages/core/src/graph.ts`, add two fields beside the existing `outbox` field:
+In `packages/graphx/src/core/graph.ts`, add two fields beside the existing `outbox` field:
 
 ```ts
 	/** Retained so {@link withEventSource} can build a sibling without losing read-time upcasting. */
@@ -246,7 +246,7 @@ return {
 };
 ```
 
-In `packages/core/src/temporal.ts`, add `source` to `rowToEvent`:
+In `packages/graphx/src/core/temporal.ts`, add `source` to `rowToEvent`:
 
 ```ts
 		source: row.source == null ? undefined : String(row.source),
@@ -260,10 +260,10 @@ const sql = `SELECT seq, op, entity, id, label, src, dst, shape, ts, source FROM
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/outbox.test.ts`
+Run: `bun test packages/graphx/test/core/outbox.test.ts`
 Expected: PASS, including the pre-existing tests.
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/outbox.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/outbox.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Run the full suite for regressions**
@@ -274,8 +274,8 @@ Expected: PASS. `graph.ts` is touched by nearly every test, so a green full suit
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/schema.ts packages/core/src/dialect-sql.ts packages/core/src/events.ts \
-        packages/core/src/graph.ts packages/core/src/temporal.ts packages/core/test/outbox.test.ts
+git add packages/graphx/src/core/schema.ts packages/graphx/src/core/dialect-sql.ts packages/graphx/src/core/events.ts \
+        packages/graphx/src/core/graph.ts packages/graphx/src/core/temporal.ts packages/graphx/test/core/outbox.test.ts
 git commit -m "feat(events): provenance column on the outbox, Graph.withEventSource"
 ```
 
@@ -287,10 +287,10 @@ Creates the two new tables and the read side of the dead-letter API. Independent
 
 **Files:**
 
-- Modify: `packages/core/src/schema.ts`
-- Modify: `packages/core/src/dialect-sql.ts`
-- Create: `packages/core/src/triggers.ts`
-- Test: `packages/core/test/triggers.test.ts`
+- Modify: `packages/graphx/src/core/schema.ts`
+- Modify: `packages/graphx/src/core/dialect-sql.ts`
+- Create: `packages/graphx/src/core/triggers.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -299,7 +299,7 @@ Creates the two new tables and the read side of the dead-letter API. Independent
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `packages/core/test/triggers.test.ts`:
+Create `packages/graphx/test/core/triggers.test.ts`:
 
 ```ts
 import { afterAll, expect, test } from 'bun:test';
@@ -400,12 +400,12 @@ test('pruneDeadLetters drops rows older than the watermark', async () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: FAIL — cannot resolve `../src/triggers.ts`.
 
 - [ ] **Step 3: Add the tables to both dialects**
 
-In `packages/core/src/schema.ts`, after the `graph_outbox` block:
+In `packages/graphx/src/core/schema.ts`, after the `graph_outbox` block:
 
 ```sql
 -- Eventing (Layer 3): trigger runner state. One cursor row per subscription name — the runner
@@ -434,7 +434,7 @@ CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
   ON trigger_dead_letters(subscription, created_at DESC);
 ```
 
-The Postgres counterpart in `packages/core/src/dialect-sql.ts`, same comments:
+The Postgres counterpart in `packages/graphx/src/core/dialect-sql.ts`, same comments:
 
 ```sql
 CREATE TABLE IF NOT EXISTS trigger_cursors (
@@ -459,7 +459,7 @@ CREATE INDEX IF NOT EXISTS idx_dead_letters_sub
 
 - [ ] **Step 4: Write the module and the dead-letter API**
 
-Create `packages/core/src/triggers.ts`:
+Create `packages/graphx/src/core/triggers.ts`:
 
 ```ts
 /**
@@ -559,17 +559,17 @@ export async function pruneDeadLetters(raw: DbClient, beforeMs: number): Promise
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (2 tests).
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/triggers.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/schema.ts packages/core/src/dialect-sql.ts \
-        packages/core/src/triggers.ts packages/core/test/triggers.test.ts
+git add packages/graphx/src/core/schema.ts packages/graphx/src/core/dialect-sql.ts \
+        packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts
 git commit -m "feat(triggers): cursor and dead-letter tables, dead-letter inspection"
 ```
 
@@ -581,8 +581,8 @@ A pure function over `GraphEvent`. Separately reviewable because the default-`so
 
 **Files:**
 
-- Modify: `packages/core/src/triggers.ts`
-- Test: `packages/core/test/triggers.test.ts`
+- Modify: `packages/graphx/src/core/triggers.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -591,7 +591,7 @@ A pure function over `GraphEvent`. Separately reviewable because the default-`so
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/triggers.test.ts`, and add `matchesTrigger` to the existing `../src/triggers.ts` import (the `TriggerMatch` type is inferred at each call site — importing it unused would trip oxlint):
+Append to `packages/graphx/test/core/triggers.test.ts`, and add `matchesTrigger` to the existing `../src/triggers.ts` import (the `TriggerMatch` type is inferred at each call site — importing it unused would trip oxlint):
 
 ```ts
 const EDGE_CLOSE: GraphEvent = {
@@ -648,12 +648,12 @@ test('every clause must hold, not just one', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/triggers.test.ts -t match`
+Run: `bun test packages/graphx/test/core/triggers.test.ts -t match`
 Expected: FAIL — `matchesTrigger` is not exported by `../src/triggers.ts`.
 
 - [ ] **Step 3: Implement the matcher**
 
-Add to `packages/core/src/triggers.ts`, importing `GraphEventOp` alongside `GraphEvent`:
+Add to `packages/graphx/src/core/triggers.ts`, importing `GraphEventOp` alongside `GraphEvent`:
 
 ```ts
 /**
@@ -699,13 +699,13 @@ export function matchesTrigger(event: GraphEvent, match: TriggerMatch): boolean 
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/triggers.ts packages/core/test/triggers.test.ts
+git add packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts
 git commit -m "feat(triggers): match predicate with a default cascade guard"
 ```
 
@@ -717,9 +717,9 @@ git commit -m "feat(triggers): match predicate with a default cascade guard"
 
 **Files:**
 
-- Modify: `packages/core/src/triggers.ts`
+- Modify: `packages/graphx/src/core/triggers.ts`
 - Modify: `docs/superpowers/specs/2026-07-27-graph-event-triggers-design.md`
-- Test: `packages/core/test/triggers.test.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -728,7 +728,7 @@ git commit -m "feat(triggers): match predicate with a default cascade guard"
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/triggers.test.ts`. Extend the imports with `TriggerRunner` from `../src/triggers.ts` and `TEST_DRIVER` plus the `DbClient` type as noted.
+Append to `packages/graphx/test/core/triggers.test.ts`. Extend the imports with `TriggerRunner` from `../src/triggers.ts` and `TEST_DRIVER` plus the `DbClient` type as noted.
 
 ```ts
 test('a matching in-proc action fires and receives a source-tagged graph', async () => {
@@ -933,12 +933,12 @@ test.skipIf(TEST_DRIVER === 'postgres')(
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/triggers.test.ts -t runner`
+Run: `bun test packages/graphx/test/core/triggers.test.ts -t runner`
 Expected: FAIL — `TriggerRunner` is not exported by `../src/triggers.ts`.
 
 - [ ] **Step 3: Implement the runner**
 
-Add to `packages/core/src/triggers.ts`. Extend the imports:
+Add to `packages/graphx/src/core/triggers.ts`. Extend the imports:
 
 ```ts
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -1164,10 +1164,10 @@ export class TriggerRunner<S extends GraphSchema> {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (12 tests).
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/triggers.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS, with the mid-batch-kill test skipped.
 
 - [ ] **Step 5: Correct the spec's `runOnce` signature**
@@ -1181,7 +1181,7 @@ The spec wrote `runOnce(): Promise<{ delivered, deadLettered, cursor: number | n
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/triggers.ts packages/core/test/triggers.test.ts \
+git add packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts \
         docs/superpowers/specs/2026-07-27-graph-event-triggers-design.md
 git commit -m "feat(triggers): durable runner with retries, dead letters and cursor resume"
 ```
@@ -1194,8 +1194,8 @@ Trades strict ordering for throughput above `concurrency: 1`, with batch-end che
 
 **Files:**
 
-- Modify: `packages/core/src/triggers.ts`
-- Test: `packages/core/test/triggers.test.ts`
+- Modify: `packages/graphx/src/core/triggers.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -1267,12 +1267,12 @@ test('concurrent batches still checkpoint, so a restart delivers nothing twice',
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/triggers.test.ts -t concurrency`
+Run: `bun test packages/graphx/test/core/triggers.test.ts -t concurrency`
 Expected: FAIL — `peak` is 1, because dispatch is still serial.
 
 - [ ] **Step 3: Implement the bounded pool and the two checkpoint policies**
 
-Add the helper near the bottom of `packages/core/src/triggers.ts`:
+Add the helper near the bottom of `packages/graphx/src/core/triggers.ts`:
 
 ```ts
 /**
@@ -1325,16 +1325,16 @@ if (this.concurrency === 1) {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (14 tests).
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/triggers.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/triggers.ts packages/core/test/triggers.test.ts
+git add packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts
 git commit -m "feat(triggers): bounded-concurrency dispatch with batch-end checkpointing"
 ```
 
@@ -1346,8 +1346,8 @@ git commit -m "feat(triggers): bounded-concurrency dispatch with batch-end check
 
 **Files:**
 
-- Modify: `packages/core/src/triggers.ts`
-- Test: `packages/core/test/triggers.test.ts`
+- Modify: `packages/graphx/src/core/triggers.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -1398,7 +1398,7 @@ test('start polls until stopped, and stop actually stops', async () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/core/test/triggers.test.ts -t 'start polls'`
+Run: `bun test packages/graphx/test/core/triggers.test.ts -t 'start polls'`
 Expected: FAIL — `runner.start is not a function`.
 
 - [ ] **Step 3: Implement the loop**
@@ -1445,13 +1445,13 @@ Add two fields and two methods to `TriggerRunner`:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (15 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/triggers.ts packages/core/test/triggers.test.ts
+git add packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts
 git commit -m "feat(triggers): background poll loop with start/stop"
 ```
 
@@ -1461,8 +1461,8 @@ git commit -m "feat(triggers): background poll loop with start/stop"
 
 **Files:**
 
-- Modify: `packages/core/src/triggers.ts`
-- Test: `packages/core/test/triggers.test.ts`
+- Modify: `packages/graphx/src/core/triggers.ts`
+- Test: `packages/graphx/test/core/triggers.test.ts`
 
 **Interfaces:**
 
@@ -1576,12 +1576,12 @@ test('webhook retries a non-2xx and dead-letters when the attempts run out', asy
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `bun test packages/core/test/triggers.test.ts -t webhook`
+Run: `bun test packages/graphx/test/core/triggers.test.ts -t webhook`
 Expected: FAIL — `webhookAction` is not exported by `../src/triggers.ts`.
 
 - [ ] **Step 3: Implement the action factory**
 
-Add to `packages/core/src/triggers.ts`:
+Add to `packages/graphx/src/core/triggers.ts`:
 
 ```ts
 /** Configuration for {@link webhookAction}. */
@@ -1641,16 +1641,16 @@ export function webhookAction<S extends GraphSchema>(opts: WebhookOptions): Trig
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `bun test packages/core/test/triggers.test.ts`
+Run: `bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS (17 tests).
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/triggers.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/triggers.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/triggers.ts packages/core/test/triggers.test.ts
+git add packages/graphx/src/core/triggers.ts packages/graphx/test/core/triggers.test.ts
 git commit -m "feat(triggers): signed webhook action"
 ```
 
@@ -1660,18 +1660,18 @@ git commit -m "feat(triggers): signed webhook action"
 
 **Files:**
 
-- Modify: `packages/core/src/index.ts`
-- Modify: `packages/cli/src/cli.ts`
-- Test: `packages/cli/test/cli.test.ts`
+- Modify: `packages/graphx/src/core/index.ts`
+- Modify: `packages/graphx/src/cli.ts`
+- Test: `packages/graphx/test/cli/cli.test.ts`
 
 **Interfaces:**
 
 - Consumes: everything from Tasks 2–7.
-- Produces: the `graphx-core` public trigger surface; `parseTriggersArgs(argv): ParsedTriggersArgs`; the `triggers` subcommand.
+- Produces: the `graphx` public trigger surface; `parseTriggersArgs(argv): ParsedTriggersArgs`; the `triggers` subcommand.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/cli/test/cli.test.ts`, matching the file's existing import and test style:
+Append to `packages/graphx/test/cli/cli.test.ts`, matching the file's existing import and test style:
 
 ```ts
 test('parseTriggersArgs defaults the config path and honours -c', () => {
@@ -1683,16 +1683,16 @@ test('parseTriggersArgs defaults the config path and honours -c', () => {
 });
 ```
 
-Add `parseTriggersArgs` to the existing `graphx-cli` / `../src/cli.ts` import in that file.
+Add `parseTriggersArgs` to the existing `graphx/cli` / `../src/cli.ts` import in that file.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `bun test packages/cli/test/cli.test.ts -t parseTriggersArgs`
+Run: `bun test packages/graphx/test/cli/cli.test.ts -t parseTriggersArgs`
 Expected: FAIL — `parseTriggersArgs` is not exported.
 
 - [ ] **Step 3: Export the trigger surface from core**
 
-In `packages/core/src/index.ts`, after the existing eventing export block:
+In `packages/graphx/src/core/index.ts`, after the existing eventing export block:
 
 ```ts
 // Eventing Layer 3 — declarative triggers over the durable outbox (triggers.ts)
@@ -1715,7 +1715,7 @@ export {
 
 - [ ] **Step 4: Add the CLI command**
 
-In `packages/cli/src/cli.ts`, extend the `graphx-core` imports with `TriggerRunner`, `type Trigger`, and `type TriggerRunnerOptions`.
+In `packages/graphx/src/cli.ts`, extend the `graphx` imports with `TriggerRunner`, `type Trigger`, and `type TriggerRunnerOptions`.
 
 Add the arg parser beside `parseServeArgs`:
 
@@ -1803,7 +1803,7 @@ triggers options:
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bun test packages/cli/test/cli.test.ts`
+Run: `bun test packages/graphx/test/cli/cli.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Run the full suite and both type checks**
@@ -1817,7 +1817,7 @@ Expected: PASS (with the documented libSQL-only skips).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/index.ts packages/cli/src/cli.ts packages/cli/test/cli.test.ts
+git add packages/graphx/src/core/index.ts packages/graphx/src/cli.ts packages/graphx/test/cli/cli.test.ts
 git commit -m "feat(cli): graphx triggers command, export the trigger surface"
 ```
 

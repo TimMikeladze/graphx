@@ -1,4 +1,4 @@
-# graphx-auth — P1 (Foundation) Implementation Plan
+# graphx/auth — P1 (Foundation) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -23,7 +23,7 @@
 
 ```
 packages/auth/
-  package.json            — name "auth", mirrors packages/core/package.json
+  package.json            — name "auth", mirrors packages/graphx/package.json
   tsconfig.json           — extends ../../tsconfig.base.json (same as core)
   src/
     index.ts              — public exports
@@ -47,10 +47,10 @@ Each file has one responsibility: `types` = ref parsing, `model` = the authoriza
 
 - Create: `packages/auth/package.json`
 - Create: `packages/auth/tsconfig.json`
-- Create: `packages/auth/src/index.ts`
-- Test: `packages/auth/test/p1-smoke.test.ts`
+- Create: `packages/graphx/src/auth/index.ts`
+- Test: `packages/graphx/test/auth/p1-smoke.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p1-smoke.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p1-smoke.test.ts`
 
 ```typescript
 import { expect, test } from 'bun:test';
@@ -65,7 +65,7 @@ test('P1: package wiring — exports load and core is importable', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-smoke.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-smoke.test.ts`
 Expected: FAIL — cannot resolve `../src/index.ts` (file missing).
 
 - [ ] **Step 3: Create the package files**
@@ -122,7 +122,7 @@ Expected: FAIL — cannot resolve `../src/index.ts` (file missing).
 }
 ```
 
-`packages/auth/src/index.ts`:
+`packages/graphx/src/auth/index.ts`:
 
 ```typescript
 // Public API for `auth` — relationship-based access control (ReBAC) on graphx.
@@ -131,14 +131,14 @@ export const VERSION: string = '0.1.0';
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-smoke.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-smoke.test.ts`
 Expected: PASS (1 test).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/package.json packages/auth/tsconfig.json packages/auth/src/index.ts packages/auth/test/p1-smoke.test.ts
-git commit -m "feat(auth): scaffold graphx-auth package (ReBAC P1)"
+git add packages/auth/package.json packages/auth/tsconfig.json packages/graphx/src/auth/index.ts packages/graphx/test/auth/p1-smoke.test.ts
+git commit -m "feat(auth): scaffold graphx/auth package (ReBAC P1)"
 ```
 
 ---
@@ -149,10 +149,10 @@ A Zanzibar ref is `type:localId` (e.g. `doc:42`, `user:alice`). `parseRef` split
 
 **Files:**
 
-- Create: `packages/auth/src/types.ts`
-- Test: `packages/auth/test/p1-model.test.ts` (shared with Task 3; create here, add to it there)
+- Create: `packages/graphx/src/auth/types.ts`
+- Test: `packages/graphx/test/auth/p1-model.test.ts` (shared with Task 3; create here, add to it there)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p1-model.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p1-model.test.ts`
 
 ```typescript
 import { expect, test } from 'bun:test';
@@ -172,10 +172,10 @@ test('P1: parseRef rejects refs without a type', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-model.test.ts`
 Expected: FAIL — cannot resolve `../src/types.ts`.
 
-- [ ] **Step 3: Create `packages/auth/src/types.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/types.ts`**
 
 ```typescript
 /** A ReBAC relationship tuple `⟨object, relation, subject⟩` (Zanzibar). */
@@ -207,13 +207,13 @@ export function typeOf(ref: string): string {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-model.test.ts`
 Expected: PASS (the 2 ref tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/types.ts packages/auth/test/p1-model.test.ts
+git add packages/graphx/src/auth/types.ts packages/graphx/test/auth/p1-model.test.ts
 git commit -m "feat(auth): ref parsing (type:id) + Tuple type"
 ```
 
@@ -225,10 +225,10 @@ P1 supports only the `self` rewrite (direct tuples). A bare `rel()` means "direc
 
 **Files:**
 
-- Create: `packages/auth/src/model.ts`
-- Test: `packages/auth/test/p1-model.test.ts` (append)
+- Create: `packages/graphx/src/auth/model.ts`
+- Test: `packages/graphx/test/auth/p1-model.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p1-model.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p1-model.test.ts`
 
 ```typescript
 import { defineAuthModel, rel } from '../src/model.ts';
@@ -263,10 +263,10 @@ test('P1: compiled schema has a node kind per type and one edge per relation', (
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-model.test.ts`
 Expected: FAIL — cannot resolve `../src/model.ts`.
 
-- [ ] **Step 3: Create `packages/auth/src/model.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/model.ts`**
 
 ```typescript
 import { z } from 'zod';
@@ -337,13 +337,13 @@ export function defineAuthModel(spec: ModelSpec): AuthModel {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-model.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-model.test.ts`
 Expected: PASS (all model + ref tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/model.ts packages/auth/test/p1-model.test.ts
+git add packages/graphx/src/auth/model.ts packages/graphx/test/auth/p1-model.test.ts
 git commit -m "feat(auth): authorization model DSL + graphx schema compile"
 ```
 
@@ -355,10 +355,10 @@ Objects/subjects are bare existence nodes (`id` = ref, `kind` = type, props `{}`
 
 **Files:**
 
-- Create: `packages/auth/src/store.ts`
-- Test: `packages/auth/test/p1-store.test.ts`
+- Create: `packages/graphx/src/auth/store.ts`
+- Test: `packages/graphx/test/auth/p1-store.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p1-store.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p1-store.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -399,10 +399,10 @@ test('P1: ensureObject is idempotent — second call adds no row', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: FAIL — cannot resolve `../src/store.ts`.
 
-- [ ] **Step 3: Create `packages/auth/src/store.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/store.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -433,13 +433,13 @@ export async function ensureObject(raw: Client, ref: string): Promise<void> {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/store.ts packages/auth/test/p1-store.test.ts
+git add packages/graphx/src/auth/store.ts packages/graphx/test/auth/p1-store.test.ts
 git commit -m "feat(auth): ensureObject — idempotent object existence rows"
 ```
 
@@ -451,10 +451,10 @@ A tuple is an edge `subject --relation--> object`. Both endpoints are ensured fi
 
 **Files:**
 
-- Modify: `packages/auth/src/store.ts`
-- Test: `packages/auth/test/p1-store.test.ts` (append)
+- Modify: `packages/graphx/src/auth/store.ts`
+- Test: `packages/graphx/test/auth/p1-store.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p1-store.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p1-store.test.ts`
 
 ```typescript
 import { Graph } from '../../core/src/index.ts';
@@ -489,10 +489,10 @@ test('P1: writeTuple is idempotent — duplicate writes leave one live edge', as
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: FAIL — `writeTuple`/`liveTupleExists` not exported.
 
-- [ ] **Step 3: Add to `packages/auth/src/store.ts`**
+- [ ] **Step 3: Add to `packages/graphx/src/auth/store.ts`**
 
 Add imports at the top (merge with the existing import block):
 
@@ -538,13 +538,13 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: PASS (4 tests total in file).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/store.ts packages/auth/test/p1-store.test.ts
+git add packages/graphx/src/auth/store.ts packages/graphx/test/auth/p1-store.test.ts
 git commit -m "feat(auth): writeTuple + liveTupleExists (tuples as edges)"
 ```
 
@@ -556,10 +556,10 @@ Revoke closes the live edge version (`valid_to = ts`), preserving history so `as
 
 **Files:**
 
-- Modify: `packages/auth/src/store.ts`
-- Test: `packages/auth/test/p1-store.test.ts` (append)
+- Modify: `packages/graphx/src/auth/store.ts`
+- Test: `packages/graphx/test/auth/p1-store.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p1-store.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p1-store.test.ts`
 
 ```typescript
 import { deleteTuple } from '../src/store.ts';
@@ -590,10 +590,10 @@ test('P1: deleteTuple on a missing tuple is a no-op', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: FAIL — `deleteTuple` not exported.
 
-- [ ] **Step 3: Append to `packages/auth/src/store.ts`**
+- [ ] **Step 3: Append to `packages/graphx/src/auth/store.ts`**
 
 ```typescript
 /**
@@ -627,13 +627,13 @@ export async function deleteTuple(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-store.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-store.test.ts`
 Expected: PASS (6 tests total in file).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/store.ts packages/auth/test/p1-store.test.ts
+git add packages/graphx/src/auth/store.ts packages/graphx/test/auth/p1-store.test.ts
 git commit -m "feat(auth): deleteTuple — temporal revoke (close live edge)"
 ```
 
@@ -645,10 +645,10 @@ The public engine. Wires the model + store. P1 `check` handles only the `self` r
 
 **Files:**
 
-- Create: `packages/auth/src/auth.ts`
-- Test: `packages/auth/test/p1-check.test.ts`
+- Create: `packages/graphx/src/auth/auth.ts`
+- Test: `packages/graphx/test/auth/p1-check.test.ts`
 
-- [ ] **Step 1: Write the failing test** — `packages/auth/test/p1-check.test.ts`
+- [ ] **Step 1: Write the failing test** — `packages/graphx/test/auth/p1-check.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -704,10 +704,10 @@ test('P1: userset subjects are rejected (P2)', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p1-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-check.test.ts`
 Expected: FAIL — cannot resolve `../src/auth.ts`.
 
-- [ ] **Step 3: Create `packages/auth/src/auth.ts`**
+- [ ] **Step 3: Create `packages/graphx/src/auth/auth.ts`**
 
 ```typescript
 import type { Client } from '@libsql/client';
@@ -782,13 +782,13 @@ export class Auth {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p1-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-check.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/auth/src/auth.ts packages/auth/test/p1-check.test.ts
+git add packages/graphx/src/auth/auth.ts packages/graphx/test/auth/p1-check.test.ts
 git commit -m "feat(auth): Auth engine — write/delete/check (direct self, P1)"
 ```
 
@@ -800,9 +800,9 @@ Verify the `asOf` branch end-to-end: a grant written at t1 then revoked at t2 mu
 
 **Files:**
 
-- Test: `packages/auth/test/p1-check.test.ts` (append) — no new source; this exercises the `asOf` branch from Task 7.
+- Test: `packages/graphx/test/auth/p1-check.test.ts` (append) — no new source; this exercises the `asOf` branch from Task 7.
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p1-check.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p1-check.test.ts`
 
 ```typescript
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -823,13 +823,13 @@ test('P1: check asOf sees the grant in the past, not after revoke', async () => 
 
 - [ ] **Step 2: Run test to verify it passes (no new code)**
 
-Run: `bun test packages/auth/test/p1-check.test.ts`
+Run: `bun test packages/graphx/test/auth/p1-check.test.ts`
 Expected: PASS (5 tests). If it fails, the `asOf` SQL bounds in Task 7 are wrong — fix there (interval is `[valid_from, valid_to)`, so `valid_from <= asOf AND valid_to > asOf`).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/auth/test/p1-check.test.ts
+git add packages/graphx/test/auth/p1-check.test.ts
 git commit -m "test(auth): temporal asOf check — grant visible in the past"
 ```
 
@@ -839,10 +839,10 @@ git commit -m "test(auth): temporal asOf check — grant visible in the past"
 
 **Files:**
 
-- Modify: `packages/auth/src/index.ts`
+- Modify: `packages/graphx/src/auth/index.ts`
 - Test: full suite + type-check + lint
 
-- [ ] **Step 1: Replace `packages/auth/src/index.ts`**
+- [ ] **Step 1: Replace `packages/graphx/src/auth/index.ts`**
 
 ```typescript
 // Public API for `auth` — relationship-based access control (ReBAC) on graphx.
@@ -877,13 +877,13 @@ Expected: clean (or auto-fixed). Re-run `bun test packages/auth` if format chang
 
 - [ ] **Step 5: Confirm core is untouched**
 
-Run: `git diff --name-only main -- packages/core`
+Run: `git diff --name-only main -- packages/graphx`
 Expected: empty — P1 added zero core changes (the design's guarantee).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/auth/src/index.ts
+git add packages/graphx/src/auth/index.ts
 git commit -m "feat(auth): public exports — Auth, defineAuthModel, rel, Tuple (P1 complete)"
 ```
 

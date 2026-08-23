@@ -17,7 +17,7 @@
  * Every node also gets a creation time spread over the temporal window, and no edge predates its
  * endpoints — so scrubbing the as-of picker shows the graph growing rather than blinking on.
  */
-import type { BulkEdgeRow, BulkRow } from '../../packages/core/src/index.ts';
+import type { BulkEdgeRow, BulkRow } from '../../packages/graphx/src/core/index.ts';
 import type { DemoSchema } from './schema.ts';
 
 export interface GenConfig {

@@ -1,0 +1,224 @@
+import { rmSync } from 'node:fs';
+import { expect, test } from 'bun:test';
+import { ulid } from 'ulidx';
+import { z } from 'zod';
+import type { Principal } from '../../src/core/authz.ts';
+import type { DbClient } from '../../src/core/dialect.ts';
+import { makeTestDb } from './harness.ts';
+import {
+	addMembership,
+	createProject,
+	createTenant,
+	createUser,
+	initControl,
+} from '../../src/core/control-plane.ts';
+import { evict } from '../../src/core/db.ts';
+import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
+import { createApp } from '../../src/core/serve.ts';
+
+const SCHEMA = defineGraphSchema({
+	nodes: { device: z.object({ type: z.string() }), person: z.object({ name: z.string() }) },
+	edges: { knows: { from: 'person', to: 'person' }, owns: { from: 'person', to: 'device' } },
+});
+
+// authenticate: x-admin-token => operator principal scoped to the route tenant; else x-user/x-tenant.
+function authenticate(c: {
+	req: { header: (n: string) => string | undefined; param: (n: string) => string };
+}): Principal {
+	if (c.req.header('x-admin-token') === 'secret') {
+		return { userId: 'operator', tenantId: c.req.param('tenant'), operator: true };
+	}
+	const userId = c.req.header('x-user');
+	const tenantId = c.req.header('x-tenant');
+	if (!userId || !tenantId) throw new Error('missing auth');
+	return { userId, tenantId };
+}
+
+interface Setup {
+	control: DbClient;
+	app: ReturnType<typeof createApp<typeof SCHEMA>>;
+	tenantA: string;
+	editor: string;
+	pA: string;
+	nsA: string;
+}
+
+async function setup(): Promise<Setup> {
+	const control = makeTestDb().client;
+	await initControl(control);
+	const tenantA = await createTenant(control, { name: 'Acme' });
+	const editor = await createUser(control, { email: `e-${ulid()}@a.test` });
+	await addMembership(control, { userId: editor, tenantId: tenantA, role: 'editor' });
+	const nsA = `ns_${ulid().toLowerCase()}`;
+	const pA = await createProject(control, { tenantId: tenantA, name: 'Alpha', dbNamespace: nsA });
+	const app = createApp({ control, schema: SCHEMA, authenticate });
+	return { control, app, tenantA, editor, pA, nsA };
+}
+
+function cleanup(s: Setup): void {
+	evict(s.nsA);
+	for (const sfx of ['', '-wal', '-shm']) rmSync(`${s.nsA}.db${sfx}`, { force: true });
+	s.control.close();
+}
+
+function hdr(s: Setup): Record<string, string> {
+	return { 'x-user': s.editor, 'x-tenant': s.tenantA, 'content-type': 'application/json' };
+}
+
+async function addNode(s: Setup, body: unknown): Promise<string> {
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
+		method: 'POST',
+		headers: hdr(s),
+		body: JSON.stringify(body),
+	});
+	return (await res.json()).id;
+}
+
+test('GET /nodes lists nodes and filters by type', async () => {
+	const s = await setup();
+	await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const d = await addNode(s, { type: 'device', data: { type: 'router' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?type=device`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.nodes.map((n: { id: string }) => n.id)).toEqual([d]);
+	expect(body.nextCursor).toBeNull();
+	cleanup(s);
+});
+
+test('GET /graph returns a {nodes,links,truncated} slice', async () => {
+	const s = await setup();
+	const p1 = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const p2 = await addNode(s, { type: 'person', data: { name: 'p2' } });
+	await s.app.request(`/t/${s.tenantA}/p/${s.pA}/edges`, {
+		method: 'POST',
+		headers: hdr(s),
+		body: JSON.stringify({ rel: 'knows', src: p1, dst: p2 }),
+	});
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/graph`, { headers: hdr(s) });
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.nodes.length).toBe(2);
+	expect(body.links[0]).toMatchObject({ source: p1, target: p2, rel: 'knows' });
+	expect(body.truncated).toBe(false);
+	cleanup(s);
+});
+
+test('GET /nodes/:id/history returns the version trail', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(200);
+	const body = await res.json();
+	expect(body.versions.length).toBe(1);
+	expect(String(body.versions[0].id)).toBe(id);
+	cleanup(s);
+});
+
+test('GET /nodes/:id/content returns the live body + provenance', async () => {
+	const s = await setup();
+	const id = await addNode(s, {
+		type: 'person',
+		data: { name: 'p1' },
+		body: '# Ada\n\nNotes.',
+		uri: 'vault/ada.md',
+		content_type: 'text/markdown',
+		content_hash: 'abc123',
+	});
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(200);
+	expect(await res.json()).toEqual({
+		body: '# Ada\n\nNotes.',
+		uri: 'vault/ada.md',
+		contentType: 'text/markdown',
+		contentHash: 'abc123',
+	});
+	cleanup(s);
+});
+
+test('GET /nodes/:id/content nulls the content columns when the node has none', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(200);
+	expect(await res.json()).toEqual({ body: null, uri: null, contentType: null, contentHash: null });
+	cleanup(s);
+});
+
+test('GET /nodes/:id/content for an unknown id -> 404', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${ulid()}/content`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(404);
+	cleanup(s);
+});
+
+test('PATCH /nodes/:id {body} appends a version and leaves type/data intact', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' }, body: 'old' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: hdr(s),
+		body: JSON.stringify({ body: '# new' }),
+	});
+	expect(res.status).toBe(200);
+	expect(await res.json()).toMatchObject({ id, type: 'person', data: { name: 'p1' } });
+
+	const content = await (
+		await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/content`, { headers: hdr(s) })
+	).json();
+	expect(content.body).toBe('# new');
+
+	// Bitemporal: the old version is closed, the successor is live — the History tab's trail.
+	const versions = (
+		await (
+			await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) })
+		).json()
+	).versions;
+	expect(versions.length).toBe(2);
+	expect(versions.map((v: { body: string }) => v.body)).toEqual(['old', '# new']);
+	cleanup(s);
+});
+
+test('PATCH /nodes/:id as a viewer -> 403', async () => {
+	const s = await setup();
+	const id = await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const viewer = await createUser(s.control, { email: `v-${ulid()}@a.test` });
+	await addMembership(s.control, { userId: viewer, tenantId: s.tenantA, role: 'viewer' });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}`, {
+		method: 'PATCH',
+		headers: { 'x-user': viewer, 'x-tenant': s.tenantA, 'content-type': 'application/json' },
+		body: JSON.stringify({ body: 'nope' }),
+	});
+	expect(res.status).toBe(403);
+	cleanup(s);
+});
+
+test('GET /nodes with a malformed cursor -> 400', async () => {
+	const s = await setup();
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes?cursor=not-base64-json`, {
+		headers: hdr(s),
+	});
+	expect(res.status).toBe(400);
+	cleanup(s);
+});
+
+test('operator token reads a tenant graph with no membership row -> 200', async () => {
+	const s = await setup();
+	await addNode(s, { type: 'person', data: { name: 'p1' } });
+	const res = await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes`, {
+		headers: { 'x-admin-token': 'secret' },
+	});
+	expect(res.status).toBe(200);
+	expect((await res.json()).nodes.length).toBe(1);
+	cleanup(s);
+});

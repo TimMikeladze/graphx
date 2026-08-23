@@ -20,16 +20,16 @@
  *
  * The consequence is worth stating plainly: at 100k nodes semantic search sees a 5k-node sample.
  * Timings from this harness are meaningful; recall numbers from it are not. Recall is the job of
- * the quality harness in `packages/core/test/eval-*`.
+ * the quality harness in `packages/graphx/test/core/eval-*`.
  */
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
-import type { DbClient, EmbedFn } from '../../packages/core/src/index.ts';
-import { Graph, hashEmbed, init } from '../../packages/core/src/index.ts';
-import { createPgClient } from '../../packages/core/src/pg.ts';
+import type { DbClient, EmbedFn } from '../../packages/graphx/src/core/index.ts';
+import { Graph, hashEmbed, init } from '../../packages/graphx/src/core/index.ts';
+import { createPgClient } from '../../packages/graphx/src/core/pg.ts';
 import { applyPlan } from '../seed/apply.ts';
 import { generate } from '../seed/generate.ts';
 import { DEMO_SCHEMA_VERSION, type DemoSchema, demoSchema } from '../seed/schema.ts';

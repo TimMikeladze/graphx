@@ -10,7 +10,7 @@
  * `maxDepth: 0` keeps the walk out of the measurement. What is left is embed, ANN lookup, and the
  * row assembly for the seeds — the leg, not the expansion.
  */
-import { hybridRetrieve, retrieve } from '../../../packages/core/src/index.ts';
+import { hybridRetrieve, retrieve } from '../../../packages/graphx/src/core/index.ts';
 import { embed } from '../corpus.ts';
 import { defineCase, pick, type Suite } from '../types.ts';
 

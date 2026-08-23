@@ -5,7 +5,7 @@
  * No `single: true` rels — `bulkEdges` refuses them (it cannot close a predecessor edge).
  */
 import { z } from 'zod';
-import { defineGraphSchema } from '../../packages/core/src/index.ts';
+import { defineGraphSchema } from '../../packages/graphx/src/core/index.ts';
 
 export const demoSchema = defineGraphSchema({
 	nodes: {

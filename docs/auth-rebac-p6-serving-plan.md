@@ -1,4 +1,4 @@
-# graphx-auth — P6a (HTTP Serving) Implementation Plan
+# graphx/auth — P6a (HTTP Serving) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -16,7 +16,7 @@
 
 - `bun test`; `{ expect, test } from 'bun:test'`. Import core via `../../core/src/index.ts`; `.ts` extensions.
 - **isolatedDeclarations ON** — exported decls need explicit return types referencing exported/nameable types.
-- **Do NOT run `bun run format`** (dirties `packages/core`). Use `bun run lint`.
+- **Do NOT run `bun run format`** (dirties `packages/graphx`). Use `bun run lint`.
 - HTTP tests use Hono's in-memory `app.request(path, init)` — no network/port.
 - After each task: `bun test packages/auth` green. **Do not commit** unless the human asks. **Zero core changes.**
 
@@ -52,8 +52,8 @@ packages/auth/
 **Files:**
 
 - Modify: `packages/auth/package.json`
-- Create: `packages/auth/src/http.ts`
-- Test: `packages/auth/test/p6-http.test.ts`
+- Create: `packages/graphx/src/auth/http.ts`
+- Test: `packages/graphx/test/auth/p6-http.test.ts`
 
 - [ ] **Step 1: Add deps to `packages/auth/package.json`**
 
@@ -66,7 +66,7 @@ Add to `dependencies` (alphabetical), then run `bun install` from repo root:
 
 (Match the versions core uses. After editing, run: `bun install`.)
 
-- [ ] **Step 2: Write the failing test** — `packages/auth/test/p6-http.test.ts`
+- [ ] **Step 2: Write the failing test** — `packages/graphx/test/auth/p6-http.test.ts`
 
 ```typescript
 import { type Client, createClient } from '@libsql/client';
@@ -172,10 +172,10 @@ test('P6: 400 on an unknown relation (model validation)', async () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p6-http.test.ts`
+Run: `bun test packages/graphx/test/auth/p6-http.test.ts`
 Expected: FAIL — `../src/http.ts` missing.
 
-- [ ] **Step 4: Create `packages/auth/src/http.ts`**
+- [ ] **Step 4: Create `packages/graphx/src/auth/http.ts`**
 
 ```typescript
 import type { Context, MiddlewareHandler } from 'hono';
@@ -309,13 +309,13 @@ export function createAuthApp(cfg: AuthServeConfig): Hono<AuthEnv> {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p6-http.test.ts`
+Run: `bun test packages/graphx/test/auth/p6-http.test.ts`
 Expected: PASS (6 tests). (`/expand`, `/list-objects` not yet routed — Task 2.)
 
 - [ ] **Step 6: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/package.json packages/auth/src/http.ts packages/auth/test/p6-http.test.ts bun.lock
+git add packages/auth/package.json packages/graphx/src/auth/http.ts packages/graphx/test/auth/p6-http.test.ts bun.lock
 git commit -m "feat(auth): HTTP serving — createAuthApp + /check + /tuples (P6a)"
 ```
 
@@ -325,10 +325,10 @@ git commit -m "feat(auth): HTTP serving — createAuthApp + /check + /tuples (P6
 
 **Files:**
 
-- Modify: `packages/auth/src/http.ts`, `packages/auth/src/index.ts`
-- Test: `packages/auth/test/p6-http.test.ts` (append)
+- Modify: `packages/graphx/src/auth/http.ts`, `packages/graphx/src/auth/index.ts`
+- Test: `packages/graphx/test/auth/p6-http.test.ts` (append)
 
-- [ ] **Step 1: Write the failing test** — append to `packages/auth/test/p6-http.test.ts`
+- [ ] **Step 1: Write the failing test** — append to `packages/graphx/test/auth/p6-http.test.ts`
 
 ```typescript
 test('P6: /expand returns the userset tree', async () => {
@@ -403,10 +403,10 @@ test('P6: /list-objects paginates via limit + cursor', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/auth/test/p6-http.test.ts`
+Run: `bun test packages/graphx/test/auth/p6-http.test.ts`
 Expected: FAIL — `/expand` and `/list-objects` return 404 (not routed).
 
-- [ ] **Step 3: Add the two routes in `createAuthApp` (`packages/auth/src/http.ts`)**
+- [ ] **Step 3: Add the two routes in `createAuthApp` (`packages/graphx/src/auth/http.ts`)**
 
 Chain them onto the app (after `/tuples`, before `app.onError`):
 
@@ -427,7 +427,7 @@ Chain them onto the app (after `/tuples`, before `app.onError`):
 		);
 ```
 
-- [ ] **Step 4: Export from `packages/auth/src/index.ts`**
+- [ ] **Step 4: Export from `packages/graphx/src/auth/index.ts`**
 
 Add:
 
@@ -437,7 +437,7 @@ export { type AuthEnv, type AuthOp, type AuthServeConfig, createAuthApp } from '
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `bun test packages/auth/test/p6-http.test.ts`
+Run: `bun test packages/graphx/test/auth/p6-http.test.ts`
 Expected: PASS (9 tests).
 
 - [ ] **Step 6: Full suite + type-check + lint + scope check**
@@ -445,12 +445,12 @@ Expected: PASS (9 tests).
 Run: `bun test packages/auth` → all P1–P6a green.
 Run: `cd packages/auth && tsc --noEmit` → clean.
 Run: `bun run lint` → clean (NOT `bun run format`).
-Run: `git diff --name-only -- packages/core` → empty.
+Run: `git diff --name-only -- packages/graphx` → empty.
 
 - [ ] **Step 7: Commit** (skip if holding commits)
 
 ```bash
-git add packages/auth/src/http.ts packages/auth/src/index.ts packages/auth/test/p6-http.test.ts
+git add packages/graphx/src/auth/http.ts packages/graphx/src/auth/index.ts packages/graphx/test/auth/p6-http.test.ts
 git commit -m "feat(auth): HTTP serving — /expand + /list-objects (P6a complete)"
 ```
 
@@ -472,4 +472,4 @@ git commit -m "feat(auth): HTTP serving — /expand + /list-objects (P6a complet
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P6b  | consistency tokens — opaque snapshot token wrapping `asOf` (read-your-writes / repeatable reads)                                                              |
 | P6c  | perf — shared memo across `listObjects` candidates; materialized reverse index; wire §19.2 governance fan-out caps into `check`/`edgesInto`/`reachableOfType` |
-| P6d  | packaging — publishable `graphx-auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import)              |
+| P6d  | packaging — publishable `graphx/auth` (workspace dep + bunup build; replace the relative `../../core/src` import with the `core` package import)              |

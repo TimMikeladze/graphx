@@ -2,7 +2,7 @@
  * Delete the scratch databases and DuckDB spill that test and dev runs leave behind.
  *
  * Two locations are swept. `.graphx-data/` (or `$GRAPHX_DATA_DIR`) is where everything lands
- * today — see `duckDataDir()` in `packages/core/src/duck-pool.ts`. The repo root is swept too
+ * today — see `duckDataDir()` in `packages/graphx/src/core/duck-pool.ts`. The repo root is swept too
  * because runs from before that change resolved bare paths against the process cwd, so older
  * checkouts and worktrees still carry a strand there. Both are gitignored, which is exactly
  * why they grow to gigabytes unnoticed. `bun run clean:db` from the repo root.
@@ -13,7 +13,7 @@
 import { readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
-import { duckDataDir } from '../packages/core/src/duck-pool.ts';
+import { duckDataDir } from '../packages/graphx/src/core/duck-pool.ts';
 
 /** Prefixes of databases created by tests/dev tooling — always safe to remove. */
 const SCRATCH_PREFIXES = [

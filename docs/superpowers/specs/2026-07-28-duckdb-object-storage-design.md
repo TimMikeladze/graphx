@@ -213,7 +213,7 @@ instead of a silent data-loss mode under contention.
 
 ## 8. Runtime architecture
 
-A new subpath export `graphx-core/duck`, mirroring `./pg`: importing it calls
+A new subpath export `graphx/duck`, mirroring `./pg`: importing it calls
 `registerDuckDriver()` as a side effect, which keeps the 123MB `@duckdb/node-api` an optional
 peer dependency.
 
@@ -450,7 +450,7 @@ A FATAL instance invalidation discards the instance and pool, rebuilds, and retr
 
 ## 14. Testing
 
-`GRAPHX_TEST_DRIVER=duckdb` becomes the third arm of `packages/core/test/harness.ts`, alongside
+`GRAPHX_TEST_DRIVER=duckdb` becomes the third arm of `packages/graphx/test/core/harness.ts`, alongside
 the helper branches for `embSql`, `embReadSql`, `jsonFieldSql`, `tableExistsSql`, and
 `insertOrIgnoreSql`.
 

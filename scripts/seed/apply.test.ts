@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createClient } from '@libsql/client';
-import { Graph, hashEmbed, history, init, retrieve } from '../../packages/core/src/index.ts';
+import { Graph, hashEmbed, history, init, retrieve } from '../../packages/graphx/src/core/index.ts';
 import { applyPlan } from './apply.ts';
 import { generate } from './generate.ts';
 import { demoSchema } from './schema.ts';

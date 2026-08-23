@@ -4,7 +4,7 @@
 
 **Goal:** Make the admin explorer's as-of time travel correct on every read, and replace the sidebar `datetime-local` input with a docked timeline bar that scrubs, snaps to real change points, steps, plays, and locks the UI read-only while viewing the past.
 
-**Architecture:** Four `packages/core` read methods gain an `asOf` parameter and route it through the existing half-open temporal predicate instead of the live `nodes`/`edges` views; a new `timeline.ts` module aggregates change points from both version tables into an extent, a density histogram, and a snap-tick list, served at `GET /timeline`. In `packages/admin`, `asOf` threads into the three inspector reads and their query keys, and a new `components/timeline/` bar drives the existing `filters.asOf` URL state.
+**Architecture:** Four `packages/graphx` read methods gain an `asOf` parameter and route it through the existing half-open temporal predicate instead of the live `nodes`/`edges` views; a new `timeline.ts` module aggregates change points from both version tables into an extent, a density histogram, and a snap-tick list, served at `GET /timeline`. In `packages/admin`, `asOf` threads into the three inspector reads and their query keys, and a new `components/timeline/` bar drives the existing `filters.asOf` URL state.
 
 **Tech Stack:** Bun (runtime + test runner), TypeScript, Hono + `@hono/zod-openapi` (core HTTP), libSQL and Postgres (dual dialect), React 19 + TanStack Query + TanStack Router, Tailwind + shadcn/ui (admin).
 
@@ -13,12 +13,12 @@
 ## Global Constraints
 
 - **No new dependencies.** Every task uses packages already in the workspace.
-- **Dual-driver tests.** Core tests obtain connections only via `makeTestDb()` from `packages/core/test/harness.ts` — never `createClient` directly. The suite must pass under both `bun test` (libSQL, the default) and `GRAPHX_TEST_DRIVER=postgres bun test`.
-- **Indentation:** tabs in `packages/core`, two spaces in `packages/admin`. Match the file you are editing.
-- **Temporal predicate:** always half-open — `valid_from <= t AND t < valid_to`. Use `asOfPredicate(alias)` from `packages/core/src/temporal.ts` rather than retyping it.
-- **Live-read convention:** `asOf === undefined` _or_ `asOf >= FOREVER` means "now" and must take the live `nodes`/`edges` view path. Never bind `FOREVER` into a temporal predicate. `FOREVER` is imported from `packages/core/src/db.ts`.
+- **Dual-driver tests.** Core tests obtain connections only via `makeTestDb()` from `packages/graphx/test/core/harness.ts` — never `createClient` directly. The suite must pass under both `bun test` (libSQL, the default) and `GRAPHX_TEST_DRIVER=postgres bun test`.
+- **Indentation:** tabs in `packages/graphx`, two spaces in `packages/admin`. Match the file you are editing.
+- **Temporal predicate:** always half-open — `valid_from <= t AND t < valid_to`. Use `asOfPredicate(alias)` from `packages/graphx/src/core/temporal.ts` rather than retyping it.
+- **Live-read convention:** `asOf === undefined` _or_ `asOf >= FOREVER` means "now" and must take the live `nodes`/`edges` view path. Never bind `FOREVER` into a temporal predicate. `FOREVER` is imported from `packages/graphx/src/core/db.ts`.
 - **Pre-commit hook** runs `bun run lint && bun run type-check && bun run clean:db`. A commit that fails lint or type-check will not land — fix, do not bypass.
-- **Full test command:** `bun test --timeout 30000` from the repo root (the `test` script). Single file: `bun test packages/core/test/<file>.test.ts`.
+- **Full test command:** `bun test --timeout 30000` from the repo root (the `test` script). Single file: `bun test packages/graphx/test/core/<file>.test.ts`.
 
 ## Spec Deviations
 
@@ -34,8 +34,8 @@ Two corrections found while mapping files. Both are already reflected in the tas
 
 | Path                                                        | Responsibility                                                                         |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `packages/core/src/timeline.ts`                             | Change-point aggregation: extent, density buckets, snap ticks. Pure DB reads, no HTTP. |
-| `packages/core/test/timeline.test.ts`                       | Dual-driver tests for the above.                                                       |
+| `packages/graphx/src/core/timeline.ts`                      | Change-point aggregation: extent, density buckets, snap ticks. Pure DB reads, no HTTP. |
+| `packages/graphx/test/core/timeline.test.ts`                | Dual-driver tests for the above.                                                       |
 | `packages/admin/src/lib/timeline.ts`                        | Pure scrub math — snap, step, presets, time↔pixel. No React.                           |
 | `packages/admin/src/lib/timeline.test.ts`                   | Unit tests for the above.                                                              |
 | `packages/admin/src/components/timeline/timeline-track.tsx` | SVG histogram + drag handle. Reports a time; owns no time state.                       |
@@ -46,10 +46,10 @@ Two corrections found while mapping files. Both are already reflected in the tas
 
 | Path                                                  | Change                                                                                   |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `packages/core/src/graph.ts`                          | `asOf` on `getNode`, `getNodeContent`, `neighborSubquery`, `neighbors`, `neighborsPage`. |
-| `packages/core/src/serve.ts`                          | `asOf` on four route query schemas; new `GET /timeline` route.                           |
-| `packages/core/src/index.ts`                          | Export the timeline module.                                                              |
-| `packages/core/test/openapi.test.ts`                  | Assert the new path is in the document.                                                  |
+| `packages/graphx/src/core/graph.ts`                   | `asOf` on `getNode`, `getNodeContent`, `neighborSubquery`, `neighbors`, `neighborsPage`. |
+| `packages/graphx/src/core/serve.ts`                   | `asOf` on four route query schemas; new `GET /timeline` route.                           |
+| `packages/graphx/src/core/index.ts`                   | Export the timeline module.                                                              |
+| `packages/graphx/test/core/openapi.test.ts`           | Assert the new path is in the document.                                                  |
 | `packages/admin/src/lib/types.ts`                     | `Timeline` DTO.                                                                          |
 | `packages/admin/src/lib/api.ts`                       | `asOf` on three reads; `timeline()`.                                                     |
 | `packages/admin/src/lib/query-keys.ts`                | `asOf` suffix on three keys; `timeline` key.                                             |
@@ -73,8 +73,8 @@ Two corrections found while mapping files. Both are already reflected in the tas
 
 **Files:**
 
-- Modify: `packages/core/src/graph.ts:622-649` (`getNode`, `getNodeContent`)
-- Test: `packages/core/test/p6-temporal.test.ts` (append)
+- Modify: `packages/graphx/src/core/graph.ts:622-649` (`getNode`, `getNodeContent`)
+- Test: `packages/graphx/test/core/p6-temporal.test.ts` (append)
 
 **Interfaces:**
 
@@ -85,7 +85,7 @@ Two corrections found while mapping files. Both are already reflected in the tas
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/p6-temporal.test.ts`:
+Append to `packages/graphx/test/core/p6-temporal.test.ts`:
 
 ```ts
 test('P6: getNode(asOf) reads the version live at that instant', async () => {
@@ -130,12 +130,12 @@ test('P6: getNodeContent(asOf) reads that version body and provenance', async ()
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
-Run: `bun test packages/core/test/p6-temporal.test.ts -t "asOf"`
+Run: `bun test packages/graphx/test/core/p6-temporal.test.ts -t "asOf"`
 Expected: FAIL — `getNode` ignores the second argument, so the as-of assertions return the live value (`'switch'`, not `'router'`).
 
 - [ ] **Step 3: Add the import**
 
-In `packages/core/src/graph.ts`, after the `./events.ts` import block, add:
+In `packages/graphx/src/core/graph.ts`, after the `./events.ts` import block, add:
 
 ```ts
 import { asOfPredicate } from './temporal.ts';
@@ -197,18 +197,18 @@ Replace the body of `getNodeContent` (`graph.ts:637`), keeping its existing doc 
 
 - [ ] **Step 6: Run the tests and verify they pass**
 
-Run: `bun test packages/core/test/p6-temporal.test.ts`
+Run: `bun test packages/graphx/test/core/p6-temporal.test.ts`
 Expected: PASS, including the pre-existing tests in the file.
 
 - [ ] **Step 7: Run the same tests on Postgres**
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/p6-temporal.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/p6-temporal.test.ts`
 Expected: PASS. If the Postgres harness is unavailable in this environment, say so explicitly in the task report rather than silently skipping.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/core/src/graph.ts packages/core/test/p6-temporal.test.ts
+git add packages/graphx/src/core/graph.ts packages/graphx/test/core/p6-temporal.test.ts
 git commit -m "feat(core): read a node and its content as of a past instant"
 ```
 
@@ -218,8 +218,8 @@ git commit -m "feat(core): read a node and its content as of a past instant"
 
 **Files:**
 
-- Modify: `packages/core/src/graph.ts:104-118` (`NeighborOpts`), `:653-706` (`neighborSubquery`, `neighbors`), `:707-742` (`neighborsPage`)
-- Test: `packages/core/test/p6-temporal.test.ts` (append)
+- Modify: `packages/graphx/src/core/graph.ts:104-118` (`NeighborOpts`), `:653-706` (`neighborSubquery`, `neighbors`), `:707-742` (`neighborsPage`)
+- Test: `packages/graphx/test/core/p6-temporal.test.ts` (append)
 
 **Interfaces:**
 
@@ -230,7 +230,7 @@ Both methods share `neighborSubquery`, so the edge half is one edit. The node-jo
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/p6-temporal.test.ts`:
+Append to `packages/graphx/test/core/p6-temporal.test.ts`:
 
 ```ts
 test('P6: neighbors(asOf) sees an edge that has since been deleted', async () => {
@@ -311,12 +311,12 @@ test('P6: neighborsPage(asOf) pages the as-of neighbor set', async () => {
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
-Run: `bun test packages/core/test/p6-temporal.test.ts -t "neighbors"`
+Run: `bun test packages/graphx/test/core/p6-temporal.test.ts -t "neighbors"`
 Expected: FAIL — `asOf` is not on `NeighborOpts`, so this is a type error first (`bun test` reports it at the call site) and a behavioural failure once typed.
 
 - [ ] **Step 3: Add `asOf` to `NeighborOpts`**
 
-In `packages/core/src/graph.ts:105`:
+In `packages/graphx/src/core/graph.ts:105`:
 
 ```ts
 /** Traversal options for {@link Graph.neighbors}. */
@@ -429,23 +429,23 @@ The rest of the method — the `pageArgs.push(pageSize + 1)` over-fetch and the 
 
 - [ ] **Step 7: Run the tests and verify they pass**
 
-Run: `bun test packages/core/test/p6-temporal.test.ts`
+Run: `bun test packages/graphx/test/core/p6-temporal.test.ts`
 Expected: PASS.
 
 - [ ] **Step 8: Run the neighbor and pagination suites for regressions**
 
-Run: `bun test packages/core/test/p14-pagination.test.ts packages/core/test/p3-data.test.ts packages/core/test/p12-serve.test.ts`
+Run: `bun test packages/graphx/test/core/p14-pagination.test.ts packages/graphx/test/core/p3-data.test.ts packages/graphx/test/core/p12-serve.test.ts`
 Expected: PASS. These exercise the live paths through the same shared `neighborSubquery`.
 
 - [ ] **Step 9: Run on Postgres**
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/p6-temporal.test.ts packages/core/test/p14-pagination.test.ts`
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/p6-temporal.test.ts packages/graphx/test/core/p14-pagination.test.ts`
 Expected: PASS.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add packages/core/src/graph.ts packages/core/test/p6-temporal.test.ts
+git add packages/graphx/src/core/graph.ts packages/graphx/test/core/p6-temporal.test.ts
 git commit -m "feat(core): traverse neighbors as of a past instant"
 ```
 
@@ -455,8 +455,8 @@ git commit -m "feat(core): traverse neighbors as of a past instant"
 
 **Files:**
 
-- Modify: `packages/core/src/serve.ts:258-269` (`neighborQuerySchema`), `:866-880` (get node), `:1072-1088` (node content), `:946-968` (neighbors), `:970-992` (neighborsPage)
-- Test: `packages/core/test/p12-serve.test.ts` (append)
+- Modify: `packages/graphx/src/core/serve.ts:258-269` (`neighborQuerySchema`), `:866-880` (get node), `:1072-1088` (node content), `:946-968` (neighbors), `:970-992` (neighborsPage)
+- Test: `packages/graphx/test/core/p12-serve.test.ts` (append)
 
 **Interfaces:**
 
@@ -465,7 +465,7 @@ git commit -m "feat(core): traverse neighbors as of a past instant"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/core/test/p12-serve.test.ts`:
+Append to `packages/graphx/test/core/p12-serve.test.ts`:
 
 ```ts
 test('P12 (serve): asOf reaches getNode, content and neighbors over HTTP', async () => {
@@ -553,12 +553,12 @@ const SCHEMA = defineGraphSchema({
 
 - [ ] **Step 2: Run the test and verify it fails**
 
-Run: `bun test packages/core/test/p12-serve.test.ts -t "asOf reaches"`
+Run: `bun test packages/graphx/test/core/p12-serve.test.ts -t "asOf reaches"`
 Expected: FAIL — the as-of reads return the live values (`'a2'`, `'second'`, `[]`), because the routes drop the query parameter.
 
 - [ ] **Step 3: Add `asOf` to the neighbor query schemas**
 
-In `packages/core/src/serve.ts:258`:
+In `packages/graphx/src/core/serve.ts:258`:
 
 ```ts
 /** GET /nodes/:id/neighbors query. */
@@ -613,18 +613,18 @@ const asOfQuerySchema = z.object({ asOf: numQuery.optional() });
 
 - [ ] **Step 6: Run the test and verify it passes**
 
-Run: `bun test packages/core/test/p12-serve.test.ts`
+Run: `bun test packages/graphx/test/core/p12-serve.test.ts`
 Expected: PASS, including the file's pre-existing upcaster test.
 
 - [ ] **Step 7: Run the HTTP suites for regressions**
 
-Run: `bun test packages/core/test/p11-serving.test.ts packages/core/test/openapi.test.ts packages/core/test/serve-ops.test.ts`
+Run: `bun test packages/graphx/test/core/p11-serving.test.ts packages/graphx/test/core/openapi.test.ts packages/graphx/test/core/serve-ops.test.ts`
 Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/core/src/serve.ts packages/core/test/p12-serve.test.ts
+git add packages/graphx/src/core/serve.ts packages/graphx/test/core/p12-serve.test.ts
 git commit -m "feat(core): accept asOf on the node, content and neighbor routes"
 ```
 
@@ -634,9 +634,9 @@ git commit -m "feat(core): accept asOf on the node, content and neighbor routes"
 
 **Files:**
 
-- Create: `packages/core/src/timeline.ts`
-- Modify: `packages/core/src/index.ts:209-224` (export block)
-- Test: `packages/core/test/timeline.test.ts`
+- Create: `packages/graphx/src/core/timeline.ts`
+- Modify: `packages/graphx/src/core/index.ts:209-224` (export block)
+- Test: `packages/graphx/test/core/timeline.test.ts`
 
 **Interfaces:**
 
@@ -649,7 +649,7 @@ git commit -m "feat(core): accept asOf on the node, content and neighbor routes"
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `packages/core/test/timeline.test.ts`:
+Create `packages/graphx/test/core/timeline.test.ts`:
 
 ```ts
 import { afterAll, expect, test } from 'bun:test';
@@ -793,12 +793,12 @@ test('timeline: buckets is clamped to the supported range', async () => {
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
-Run: `bun test packages/core/test/timeline.test.ts`
+Run: `bun test packages/graphx/test/core/timeline.test.ts`
 Expected: FAIL — `Cannot find module '../src/timeline.ts'`.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `packages/core/src/timeline.ts`:
+Create `packages/graphx/src/core/timeline.ts`:
 
 ```ts
 import { FOREVER } from './db.ts';
@@ -944,7 +944,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 
 - [ ] **Step 4: Export from the package index**
 
-In `packages/core/src/index.ts`, after the `./temporal.ts` export block (ends line 224), add:
+In `packages/graphx/src/core/index.ts`, after the `./temporal.ts` export block (ends line 224), add:
 
 ```ts
 // Change-point timeline — extent + density histogram + snap ticks (admin scrubber)
@@ -959,18 +959,18 @@ export {
 
 - [ ] **Step 5: Run the tests and verify they pass**
 
-Run: `bun test packages/core/test/timeline.test.ts`
+Run: `bun test packages/graphx/test/core/timeline.test.ts`
 Expected: PASS, all eight tests.
 
 - [ ] **Step 6: Run on Postgres**
 
-Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/core/test/timeline.test.ts`
-Expected: PASS. This is the run that proves the `BIGINT` cast and the `GROUP BY` alias work on both dialects — if it fails, fix it in `packages/core/src/dialect-sql.ts` rather than branching inside `timeline.ts`.
+Run: `GRAPHX_TEST_DRIVER=postgres bun test packages/graphx/test/core/timeline.test.ts`
+Expected: PASS. This is the run that proves the `BIGINT` cast and the `GROUP BY` alias work on both dialects — if it fails, fix it in `packages/graphx/src/core/dialect-sql.ts` rather than branching inside `timeline.ts`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/timeline.ts packages/core/src/index.ts packages/core/test/timeline.test.ts
+git add packages/graphx/src/core/timeline.ts packages/graphx/src/core/index.ts packages/graphx/test/core/timeline.test.ts
 git commit -m "feat(core): aggregate graph change points into a scrubber timeline"
 ```
 
@@ -980,8 +980,8 @@ git commit -m "feat(core): aggregate graph change points into a scrubber timelin
 
 **Files:**
 
-- Modify: `packages/core/src/serve.ts` (imports, query + response schemas, one route next to `/diff` at `:1268`)
-- Test: `packages/core/test/openapi.test.ts` (append), `packages/core/test/p12-serve.test.ts` (append)
+- Modify: `packages/graphx/src/core/serve.ts` (imports, query + response schemas, one route next to `/diff` at `:1268`)
+- Test: `packages/graphx/test/core/openapi.test.ts` (append), `packages/graphx/test/core/p12-serve.test.ts` (append)
 
 **Interfaces:**
 
@@ -990,7 +990,7 @@ git commit -m "feat(core): aggregate graph change points into a scrubber timelin
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `packages/core/test/p12-serve.test.ts`:
+Append to `packages/graphx/test/core/p12-serve.test.ts`:
 
 ```ts
 test('P12 (serve): GET /timeline returns the extent, histogram and ticks', async () => {
@@ -1037,7 +1037,7 @@ test('P12 (serve): GET /timeline returns the extent, histogram and ticks', async
 });
 ```
 
-Append to `packages/core/test/openapi.test.ts`:
+Append to `packages/graphx/test/core/openapi.test.ts`:
 
 ```ts
 test('openapi: the timeline route is documented as a read', async () => {
@@ -1050,12 +1050,12 @@ test('openapi: the timeline route is documented as a read', async () => {
 
 - [ ] **Step 2: Run the tests and verify they fail**
 
-Run: `bun test packages/core/test/openapi.test.ts -t "timeline"`
+Run: `bun test packages/graphx/test/core/openapi.test.ts -t "timeline"`
 Expected: FAIL — `TypeError: undefined is not an object` reading `.get` of an undefined path entry.
 
 - [ ] **Step 3: Import the aggregate**
 
-In `packages/core/src/serve.ts`, alongside the existing `./temporal.ts` import, add:
+In `packages/graphx/src/core/serve.ts`, alongside the existing `./temporal.ts` import, add:
 
 ```ts
 import { timeline } from './timeline.ts';
@@ -1115,18 +1115,18 @@ Immediately after the `/diff` route's closing `)` (`serve.ts:1284`), add:
 
 - [ ] **Step 6: Run the tests and verify they pass**
 
-Run: `bun test packages/core/test/openapi.test.ts packages/core/test/p12-serve.test.ts`
+Run: `bun test packages/graphx/test/core/openapi.test.ts packages/graphx/test/core/p12-serve.test.ts`
 Expected: PASS. The OpenAPI document validator test also covers the new schemas.
 
 - [ ] **Step 7: Run the whole core suite**
 
-Run: `bun test packages/core`
+Run: `bun test packages/graphx`
 Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/core/src/serve.ts packages/core/test/openapi.test.ts packages/core/test/p12-serve.test.ts
+git add packages/graphx/src/core/serve.ts packages/graphx/test/core/openapi.test.ts packages/graphx/test/core/p12-serve.test.ts
 git commit -m "feat(core): serve the change-point timeline at GET /timeline"
 ```
 
@@ -2336,8 +2336,8 @@ Added after Task 9's interactive verification measured the tick cap's real behav
 
 **Files:**
 
-- Modify: `packages/core/src/timeline.ts` (tick selection)
-- Modify: `packages/core/test/timeline.test.ts`
+- Modify: `packages/graphx/src/core/timeline.ts` (tick selection)
+- Modify: `packages/graphx/test/core/timeline.test.ts`
 - Create: `packages/admin/src/lib/timeline-window.ts`
 - Create: `packages/admin/src/lib/timeline-window.test.ts`
 - Modify: `packages/admin/src/components/timeline/timeline-bar.tsx`
@@ -2349,7 +2349,7 @@ Added after Task 9's interactive verification measured the tick cap's real behav
 
 - [ ] **Step 1: Write the failing core test**
 
-Append to `packages/core/test/timeline.test.ts`:
+Append to `packages/graphx/test/core/timeline.test.ts`:
 
 ```ts
 test('timeline: a truncated tick list samples across the window rather than slicing one end', async () => {
@@ -2387,7 +2387,7 @@ test('timeline: an untruncated tick list is still every distinct instant', async
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `bun test packages/core/test/timeline.test.ts -t "samples across"`
+Run: `bun test packages/graphx/test/core/timeline.test.ts -t "samples across"`
 Expected: FAIL — the current implementation returns the newest 8 instants, so `ticks[0]` is far from `t.min` and `midPct` is ~100.
 
 - [ ] **Step 3: Sample instead of slicing**
@@ -2407,8 +2407,8 @@ binding `k` and `lastRn` (`count - 1`). Window functions are available on both d
 
 - [ ] **Step 4: Verify on both drivers**
 
-Run: `bun test packages/core/test/timeline.test.ts`
-Then: `GRAPHX_TEST_DRIVER=postgres GRAPHX_TEST_PG_URL='postgresql://postgres:postgres@127.0.0.1:5433/graphx_test' bun test packages/core/test/timeline.test.ts --timeout 30000`
+Run: `bun test packages/graphx/test/core/timeline.test.ts`
+Then: `GRAPHX_TEST_DRIVER=postgres GRAPHX_TEST_PG_URL='postgresql://postgres:postgres@127.0.0.1:5433/graphx_test' bun test packages/graphx/test/core/timeline.test.ts --timeout 30000`
 Expected: PASS on both. The window function is the dialect risk here.
 
 - [ ] **Step 5: Write the zoom maths and its test**
@@ -2449,6 +2449,6 @@ The track needs no change: it already renders `data.from`/`data.to`, which echo 
 `bun test packages/admin`, `bun run --filter 'graphx-admin' type-check`, root `bun run lint`, and `bun test --timeout 30000`.
 
 ```bash
-git add packages/core/src/timeline.ts packages/core/test/timeline.test.ts packages/admin/src/lib/timeline-window.ts packages/admin/src/lib/timeline-window.test.ts packages/admin/src/components/timeline/timeline-bar.tsx
+git add packages/graphx/src/core/timeline.ts packages/graphx/test/core/timeline.test.ts packages/admin/src/lib/timeline-window.ts packages/admin/src/lib/timeline-window.test.ts packages/admin/src/components/timeline/timeline-bar.tsx
 git commit -m "feat: sample change points across the range and let the scrubber zoom"
 ```

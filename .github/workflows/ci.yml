@@ -71,9 +71,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Required, not optional: every `graphx-*` package resolves through `./dist` (see the
-      # `exports` map), so tests importing a workspace package by name — rather than by a
-      # relative `src/` path — fail with "Cannot find module 'graphx-core'" without this.
+      # Required, not optional: the `graphx-mcp` bin test spawns `dist/mcp/bin.js`, and the
+      # examples import `graphx` by name — which resolves through the `exports` map into
+      # `./dist`. Both fail without a build.
       - name: Build
         run: bun run build
 
@@ -112,9 +112,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Required, not optional: every `graphx-*` package resolves through `./dist` (see the
-      # `exports` map), so tests importing a workspace package by name — rather than by a
-      # relative `src/` path — fail with "Cannot find module 'graphx-core'" without this.
+      # Required, not optional: the `graphx-mcp` bin test spawns `dist/mcp/bin.js`, and the
+      # examples import `graphx` by name — which resolves through the `exports` map into
+      # `./dist`. Both fail without a build.
       - name: Build
         run: bun run build
 

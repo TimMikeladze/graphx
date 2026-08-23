@@ -1,7 +1,7 @@
 # IoT fleet example — Vite + Bun + SQLite + React
 
-A tiny IoT fleet graph (sites / gateways / devices / alerts) on `graphx-core` (libSQL/SQLite,
-served by Bun) with a `graphx-react` frontend (Vite). It shows the end-to-end typed surface: typed
+A tiny IoT fleet graph (sites / gateways / devices / alerts) on `graphx` (libSQL/SQLite,
+served by Bun) with a `graphx/react` frontend (Vite). It shows the end-to-end typed surface: typed
 nodes, rel/kind-narrowed neighbors, per-alias `useMatch`, mutations, and CDC live-sync — **no
 codegen**.
 
@@ -48,8 +48,8 @@ alert   --raised------> device
 
 - `schema.ts` defines the graph once. The **server** imports the value (`schema`) to seed + serve;
   the **client** imports only the type (`import type { Schema }`) and calls
-  `createGraphHooks<Schema>()` — so the browser bundle carries **no `graphx-core`/SDK runtime**, just
-  `graphx-react` + your schema's type.
+  `createGraphHooks<Schema>()` — so the browser bundle carries **no `graphx`/SDK runtime**, just
+  `graphx/react` + your schema's type.
 - The hooks are typed from `Schema`:
   - `g.useNode(id, 'gateway')` → `NodeOf<Schema,'gateway'> | null`
   - `g.useNeighbors(id, { rel: 'deployedAt' })` → `site[]` (from `deployedAt.to`);

@@ -3,7 +3,7 @@
 ## Status (as of this branch)
 
 - **Stages 1–3 (object storage, DuckClient, schema, fragments, bulk/journey/pattern, constraint
-  enforcement): DONE.** `packages/core/src/duck.ts` (`DuckClient implements DbClient` over a
+  enforcement): DONE.** `packages/graphx/src/core/duck.ts` (`DuckClient implements DbClient` over a
   pooled `@duckdb/node-api` connection), `duckdbSchema()` in `dialect-sql.ts` (real
   `node_versions`/`edge_versions` tables, `nodes`/`edges` views — no live/history split at the
   local-schema layer; that split is a Parquet-layout concern for stage 4), every dialect fragment
@@ -12,7 +12,7 @@
   use (DuckDB has none). Graph mutations (`addNode`/`updateNode`/`addEdge`/`deleteEdge`/bulk
   load) work end to end.
 - **Stage 4 — third harness arm and the first parity measurement: DONE.**
-  `packages/core/test/harness.ts` gained a `duckdb` branch in `makeTestDb()` (a temp
+  `packages/graphx/test/core/harness.ts` gained a `duckdb` branch in `makeTestDb()` (a temp
   `test_<ulid>.duckdb` file, never `:memory:`) and a `duckdb` arm in `tableExistsSql`
   (`duckdb_tables()`/`duckdb_views()`). The whole suite then ran under
   `GRAPHX_TEST_DRIVER=duckdb` for the first time.
@@ -56,12 +56,12 @@ Two rows above differ from the plan's expected shape and are explained here:
   three tests were already `skipIf(TEST_DRIVER !== 'postgres')` — a genuine allowlist, so they
   correctly skip under duckdb rather than fail. The multi-tenant suites (`p11-serving`,
   `admin-app`, `admin-list`, authz, cdc) all pass: `getDb`'s duckdb factory
-  (`packages/core/src/duck.ts`'s `registerDuckDriver` call) already resolves one local
+  (`packages/graphx/src/core/duck.ts`'s `registerDuckDriver` call) already resolves one local
   `<namespace>.duckdb` file per tenant, which is enough for these tests today. The bucket-per
   namespace requirement is a stage-4/Task-15 concern (object storage), not something these
   suites currently exercise.
 - **auth package is 0/unaffected.** `packages/auth`'s tests obtain a client directly (not via
-  `packages/core/test/harness.ts`) and were not touched by adding the third arm.
+  `packages/graphx/test/core/harness.ts`) and were not touched by adding the third arm.
 
 ## Real bugs fixed (Tasks 1–12), not parity gaps
 
@@ -69,7 +69,7 @@ Investigating every failure surfaced six defects that had nothing to do with ful
 concurrency — each is a genuine bug in earlier stages, fixed as part of closing this task (all
 verified against libSQL and, where applicable, Postgres to confirm no regression):
 
-1. **`duckdbSchema()` was missing every foreign key** (`packages/core/src/dialect-sql.ts`).
+1. **`duckdbSchema()` was missing every foreign key** (`packages/graphx/src/core/dialect-sql.ts`).
    `node_versions.id`, `edge_versions.id`, `edge_versions.src`, and `edge_versions.dst` had no
    `REFERENCES` clause at all, unlike the libSQL and Postgres schemas — so an edge to a
    non-existent node silently inserted instead of failing (`P11: edge to a non-existent endpoint
@@ -78,7 +78,7 @@ verified against libSQL and, where applicable, Postgres to confirm no regression
    9, not a documented/intentional gap — nothing in `duckdbSchema`'s own "differences from
    libSQL" doc comment or in `duck-schema.test.ts` claimed FKs were dropped (contrast with the
    partial-unique-index gap, which is both documented and pinned by a test).
-2. **`updateNode`'s emb carry-forward threw on DuckDB** (`packages/core/src/graph.ts`). A
+2. **`updateNode`'s emb carry-forward threw on DuckDB** (`packages/graphx/src/core/graph.ts`). A
    data-only patch (no new `emb`) rebinds the current row's embedding forward via
    `embRebindExpr(dialect)`, which for duckdb is `from_json(?, '["FLOAT"]')` — it expects a JSON
    _string_. But the value read back from a `FLOAT[]` column comes back as a genuine JS array,
@@ -86,8 +86,8 @@ verified against libSQL and, where applicable, Postgres to confirm no regression
    values of type ANY." Fixed by running the read-back value through `embParam()` (already built
    for exactly this in `duck-value.ts`, previously only used by tests) before binding, mirroring
    the `JSON.stringify` already done for a freshly-supplied `emb`.
-3. **Constraint violations always mapped to 500, never 400** (`packages/core/src/admin.ts`,
-   `packages/core/src/serve.ts`). Both error mappers recognized libSQL's `SQLITE_CONSTRAINT*`
+3. **Constraint violations always mapped to 500, never 400** (`packages/graphx/src/core/admin.ts`,
+   `packages/graphx/src/core/serve.ts`). Both error mappers recognized libSQL's `SQLITE_CONSTRAINT*`
    `.code` and Postgres's SQLSTATE class 23, but DuckDB constraint violations (UNIQUE, FK, CHECK)
    are a plain `Error` with neither a `.code` nor a SQLSTATE — only a message starting
    `"Constraint Error:"`. Added that as a third recognized shape in both mappers.
@@ -101,7 +101,7 @@ stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `
    etc.) still fail, now for the correct reason — `ftsSeedLive` — since they also exercise the
    lexical leg.
 5. **A postgres-only test skip gate silently ran (and broke) under the third driver.**
-   `packages/cli/test/cli.test.ts` had `const PG = ... === 'postgres'; test.skipIf(PG)(...)` on
+   `packages/graphx/test/cli/cli.test.ts` had `const PG = ... === 'postgres'; test.skipIf(PG)(...)` on
    its "(libSQL)" `buildServeApp` test — a denylist, not an allowlist, exactly the shape the
    Task 2 harness fix already corrected once for `libsqlOnly`. Under duckdb this ran and threw
    `getDb: duckdb driver selected but the duck adapter is not registered`. Rewritten to
@@ -112,14 +112,14 @@ stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `
    This reproduces under the live Postgres leg too (confirmed empirically against a running
    `pgvector` container — same root cause, same 13 tests), so it predates this branch and is not
    duckdb-specific, but it was fixed here because it was blocking an honest parity read:
-   - `packages/mcp/src/bin.ts` (production): the local-mode bootstrap now imports
-     `graphx-core/pg` or `graphx-core/duck` based on `GRAPHX_DB_DRIVER`, mirroring the
-     config-driven `await import('graphx-core/pg')` `packages/cli/src/cli.ts`'s `loadConfig`
+   - `packages/graphx/src/mcp/bin.ts` (production): the local-mode bootstrap now imports
+     `graphx/pg` or `graphx/duck` based on `GRAPHX_DB_DRIVER`, mirroring the
+     config-driven `await import('graphx/pg')` `packages/graphx/src/cli.ts`'s `loadConfig`
      already does for postgres configs.
-   - `packages/mcp/test/server.test.ts`: added unconditional side-effect imports of both
+   - `packages/graphx/test/mcp/server.test.ts`: added unconditional side-effect imports of both
      adapter subpaths (test-only; both are already dev dependencies of the workspace), mirroring
      why `core/test/harness.ts` imports `duck.ts`/`pg.ts` unconditionally.
-   - `packages/mcp/test/bin.test.ts`: one assertion hard-coded the libSQL `<namespace>.db`
+   - `packages/graphx/test/mcp/bin.test.ts`: one assertion hard-coded the libSQL `<namespace>.db`
      filename; made it driver-aware (`<namespace>.duckdb`, or no local file at all under
      postgres).
 
@@ -184,33 +184,33 @@ the snapshot chain is designed around.
 
 ## Files changed
 
-- `packages/core/test/harness.ts` — third `makeTestDb()` arm, `tableExistsSql` duckdb case,
+- `packages/graphx/test/core/harness.ts` — third `makeTestDb()` arm, `tableExistsSql` duckdb case,
   `GRAPHX_DB_DRIVER` env wiring.
-- `packages/core/src/dialect-sql.ts` — added the missing `REFERENCES` clauses to `duckdbSchema()`
+- `packages/graphx/src/core/dialect-sql.ts` — added the missing `REFERENCES` clauses to `duckdbSchema()`
   (bug #1 above).
-- `packages/core/src/graph.ts` — fixed the `updateNode` emb carry-forward bind for duckdb (bug
+- `packages/graphx/src/core/graph.ts` — fixed the `updateNode` emb carry-forward bind for duckdb (bug
   #2).
-- `packages/core/src/admin.ts`, `packages/core/src/serve.ts` — recognize DuckDB's `"Constraint
+- `packages/graphx/src/core/admin.ts`, `packages/graphx/src/core/serve.ts` — recognize DuckDB's `"Constraint
 Error:"` message shape (bug #3).
-- `packages/core/test/retrieval-legs.ts` — duckdb branch for `annScored`'s distance expression
+- `packages/graphx/test/core/retrieval-legs.ts` — duckdb branch for `annScored`'s distance expression
   (bug #4).
-- `packages/cli/test/cli.test.ts` — allowlist the libSQL-only `buildServeApp` skip gate (bug #5).
-- `packages/mcp/src/bin.ts`, `packages/mcp/test/server.test.ts`,
-  `packages/mcp/test/bin.test.ts` — register the pg/duck adapters; driver-aware filename
+- `packages/graphx/test/cli/cli.test.ts` — allowlist the libSQL-only `buildServeApp` skip gate (bug #5).
+- `packages/graphx/src/mcp/bin.ts`, `packages/graphx/test/mcp/server.test.ts`,
+  `packages/graphx/test/mcp/bin.test.ts` — register the pg/duck adapters; driver-aware filename
   assertion (bug #6).
-- `packages/core/src/duck-materialize.ts`, `duck-commit.ts` — snapshot load and publish
+- `packages/graphx/src/core/duck-materialize.ts`, `duck-commit.ts` — snapshot load and publish
   (Tasks 14–15).
-- `packages/core/src/duck.ts` — bucket-backed lifecycle: lazy `open()`, `snapshot()`,
+- `packages/graphx/src/core/duck.ts` — bucket-backed lifecycle: lazy `open()`, `snapshot()`,
   `commit()`, `reload()`, the write mutex, and an `S3ObjectStore` built by dynamic import so
   `@aws-sdk/client-s3` stays off the `core/duck` import path.
-- `packages/core/src/db.ts` — the `ManagedWriter` structural seam plus the DuckDB bucket
+- `packages/graphx/src/core/db.ts` — the `ManagedWriter` structural seam plus the DuckDB bucket
   fields on `DbConfig`.
-- `packages/core/src/graph.ts` — `Graph.write(fn)` write sessions, per-mutation `touched()`
+- `packages/graphx/src/core/graph.ts` — `Graph.write(fn)` write sessions, per-mutation `touched()`
   publishing, the serialize wrapper on both write envelopes, and DuckDB's conflict signals in
   `isRetryableContention`.
-- `packages/core/src/bulk.ts` — one publish per bulk load rather than one per row.
-- `packages/core/src/serve.ts` — `…: too much contention` → 409.
-- `packages/core/test/duck-e2e.test.ts`, `duck-commit.test.ts` — the round trip, against
+- `packages/graphx/src/core/bulk.ts` — one publish per bulk load rather than one per row.
+- `packages/graphx/src/core/serve.ts` — `…: too much contention` → 409.
+- `packages/graphx/test/core/duck-e2e.test.ts`, `duck-commit.test.ts` — the round trip, against
   memory or a real bucket via `GRAPHX_TEST_S3_ENDPOINT`.
 - `.gitignore` — `*.duckdb`/`*.duckdb.wal`.
 - `.github/workflows/ci.yml` — new `test-duckdb` job (`continue-on-error: true` until stage 5–7
@@ -242,11 +242,11 @@ Error:"` message shape (bug #3).
 
 ## Why `ranking-golden.json`'s `shared` section was left untouched
 
-`packages/core/test/fixtures/ranking-golden.json` has a `shared` section (dialect-independent
+`packages/graphx/test/core/fixtures/ranking-golden.json` has a `shared` section (dialect-independent
 cosine distances, asserted against every driver with `expect.closeTo`) and a per-driver
 `byDialect` section. Regenerating the file for a new driver is documented in
 `eval-parity.test.ts` as `UPDATE_RANKING_GOLDEN=1 GRAPHX_TEST_DRIVER=<driver> bun test
-packages/core/test/eval-parity.test.ts`, and that path rewrites `shared` unconditionally —
+packages/graphx/test/core/eval-parity.test.ts`, and that path rewrites `shared` unconditionally —
 whichever driver runs last "owns" the committed `shared` values.
 
 Running that regeneration under DuckDB produced the expected `byDialect.duckdb` entry, but it

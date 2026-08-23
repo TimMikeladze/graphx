@@ -7,40 +7,52 @@ mutations, bitemporal history, vector + full-text retrieval, pattern matching, t
 algorithms, an HTTP API with a generated OpenAPI contract, React Query hooks, and an MCP server —
 no codegen anywhere.
 
-## Packages
-
-| Package         | What it is                                                                   |
-| --------------- | ---------------------------------------------------------------------------- |
-| `graphx-core`   | The SDK: schema, data layer, retrieval, temporal reads, algorithms, serving  |
-| `graphx-cli`    | `graphx` binary — `new`, `ingest`, `serve`, `triggers`                       |
-| `graphx-ingest` | Ingest a YAML/markdown vault (or S3 bucket) into a graph                     |
-| `graphx-react`  | Inference-only React Query hooks + CDC live-sync                             |
-| `graphx-mcp`    | `graphx-mcp` — every serving route exposed as an MCP tool                    |
-| `graphx-auth`   | Relationship-based access control (ReBAC) on graphx                          |
-| `graphx-admin`  | Admin SPA (Vite + shadcn; Cosmograph / xyflow canvas, node + edge authoring) |
+## Install
 
 ```sh
-bun add graphx-core          # the SDK
-bun add graphx-react         # + React Query hooks
-bun add -d graphx-cli        # + the `graphx` binary
+bun add graphx
 ```
 
-`graphx-admin` is not published — it is the operator SPA, run from this repo (`bun run dev:admin`).
+One package, one version. Everything below is a subpath of it — there is nothing else to install
+and nothing to keep in lockstep.
+
+| Import          | What it is                                                                  |
+| --------------- | --------------------------------------------------------------------------- |
+| `graphx`        | The SDK: schema, data layer, retrieval, temporal reads, algorithms, serving |
+| `graphx/pg`     | Registers the Postgres driver with `getDb` (side effect)                    |
+| `graphx/duck`   | Registers the DuckDB driver with `getDb` (side effect)                      |
+| `graphx/blob`   | S3-backed blob store for node bodies                                        |
+| `graphx/cli`    | The `graphx` binary — `new`, `ingest`, `serve`, `triggers`                  |
+| `graphx/ingest` | Ingest a YAML/markdown vault into a graph (`graphx/ingest/s3` for a bucket) |
+| `graphx/react`  | Inference-only React Query hooks + CDC live-sync                            |
+| `graphx/mcp`    | The `graphx-mcp` binary — every serving route exposed as an MCP tool        |
+| `graphx/auth`   | Relationship-based access control (ReBAC) on graphx                         |
+
+Two binaries ship with it: `graphx` and `graphx-mcp`.
+
+Each subpath is a **separate entry point**, so an optional peer is only pulled onto your import
+path if you actually reach for it — `pg` by `graphx/pg`, `@duckdb/node-api` (~123MB installed) by
+`graphx/duck`, `@aws-sdk/client-s3` by `graphx/blob` and `graphx/ingest/s3`,
+`@modelcontextprotocol/sdk` by `graphx/mcp`, and React + React Query by `graphx/react`. Importing
+`graphx` alone drags in none of them.
+
+The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo
+(`bun run dev:admin`).
 
 To hack on graphx itself, work inside this repo: `bun install` from the root, and add your app's
-path to the root `package.json` `workspaces` array so the `workspace:` deps resolve.
+path to the root `package.json` `workspaces` array so the `workspace:` dep resolves.
 
 ## Quickstart
 
 ```sh
-bunx graphx-cli new my-app
+bunx graphx new my-app
 ```
 
 That writes a runnable `graphx.config.ts`, `package.json`, and README. The config is the whole
 contract — schema, embedder, dimension, backend:
 
 ```ts
-import { defineGraphSchema, hashEmbed } from 'graphx-core';
+import { defineGraphSchema, hashEmbed } from 'graphx';
 import { z } from 'zod';
 
 export const schema = defineGraphSchema({
@@ -74,7 +86,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 ## Using the SDK
 
 ```ts
-import { getDb, init, Graph, defineGraphSchema, hashEmbed } from 'graphx-core';
+import { getDb, init, Graph, defineGraphSchema, hashEmbed } from 'graphx';
 import { z } from 'zod';
 
 const schema = defineGraphSchema({
@@ -133,7 +145,7 @@ import {
 	diff,
 	shortestPath,
 	pagerank,
-} from 'graphx-core';
+} from 'graphx';
 
 // GraphRAG: ANN seeds, then a time-respecting walk out from them
 await retrieve(db, embed, { query: 'overheating sensor', k: 10, maxDepth: 2, rels: ['raised'] });
@@ -168,7 +180,7 @@ Read paths accept `asOf` (point-in-time), `limits` (row cap, fan-out guard, time
 which mints an in-memory control plane plus one tenant/project/user and seeds the graph:
 
 ```ts
-import { createApp, hashEmbed } from 'graphx-core';
+import { createApp, hashEmbed } from 'graphx';
 import { schema } from './schema.ts';
 
 const { app, tenant, project, user } = await createApp({
@@ -193,7 +205,7 @@ reference at `GET /docs` (set `docs: false` to disable).
 Hooks are typed from the schema _type_ alone, so the browser bundle carries no SDK runtime:
 
 ```tsx
-import { GraphProvider, createGraphHooks } from 'graphx-react';
+import { GraphProvider, createGraphHooks } from 'graphx/react';
 import type { Schema } from './schema.ts';
 
 const g = createGraphHooks<Schema>();
@@ -237,7 +249,7 @@ Connections come from `getDb(namespace, config)`, which caches one client per pr
 ### libSQL (default)
 
 ```ts
-import { getDb } from 'graphx-core';
+import { getDb } from 'graphx';
 
 const db = getDb('acme__alpha'); // file:acme__alpha.db
 ```
@@ -246,11 +258,11 @@ No `driver` is needed. For embedded-replica mode, set `SQLD_URL` / `SQLD_TOKEN` 
 
 ### Postgres
 
-Import the `core/pg` subpath once to register the Postgres adapter with `getDb`. This is a side effect, and it keeps `pg` an optional peer dependency — loaded only by consumers who opt in:
+Import the `graphx/pg` subpath once to register the Postgres adapter with `getDb`. This is a side effect, and it keeps `pg` an optional peer dependency — loaded only by consumers who opt in:
 
 ```ts
-import 'graphx-core/pg'; // registers the Postgres driver (side effect)
-import { getDb } from 'graphx-core';
+import 'graphx/pg'; // registers the Postgres driver (side effect)
+import { getDb } from 'graphx';
 
 const db = getDb('acme__alpha', {
 	driver: 'postgres',
@@ -260,7 +272,7 @@ const db = getDb('acme__alpha', {
 });
 ```
 
-Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import 'graphx-core/pg'` once, or `getDb` throws.
+Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import 'graphx/pg'` once, or `getDb` throws.
 
 **Tenant model.** Each namespace maps to a Postgres **schema** on a shared connection pool, created lazily — one server credential serves every tenant. (libSQL uses one file/replica per namespace instead.)
 
@@ -279,8 +291,8 @@ See [docs/POSTGRES_SUPPORT.md](./docs/POSTGRES_SUPPORT.md) for the full dual-bac
 A third adapter, registered the same way. Its durable state is a chain of immutable snapshots in an object store (S3 or a local directory): each commit writes content-addressed Parquet files and claims the next numbered manifest with a create-if-absent PUT, so the bucket is the database and the local DuckDB file is a materialization of one snapshot.
 
 ```ts
-import 'graphx-core/duck'; // registers the DuckDB driver (side effect)
-import { getDb } from 'graphx-core';
+import 'graphx/duck'; // registers the DuckDB driver (side effect)
+import { getDb } from 'graphx';
 
 const db = getDb('acme__alpha', { driver: 'duckdb' });
 ```
@@ -295,6 +307,17 @@ of filling the disk.
 **One writer process per namespace, readers unbounded.** Writes inside a process serialize on a client-held mutex; across processes the manifest CAS picks a winner and the loser rebases. Two processes rewriting the _same table_ of one namespace cannot merge — that raises `SnapshotConflictError` (HTTP 409) rather than silently dropping the loser's rows. `Graph.write(fn)` groups a body into a single snapshot commit.
 
 See [docs/DUCKDB_SUPPORT.md](./docs/DUCKDB_SUPPORT.md) for the snapshot format, the commit protocol, and the parity record.
+
+## Docs
+
+Per-subpath guides live in [`docs/`](./docs):
+
+- [`docs/cli.md`](./docs/cli.md) — every `graphx` command and flag
+- [`docs/react.md`](./docs/react.md) — the hook set, query keys, and CDC live-sync
+- [`docs/mcp.md`](./docs/mcp.md) — tool manifest, local vs remote mode, environment variables
+- [`docs/ingest.md`](./docs/ingest.md) — vault layout, link resolution, pruning
+- [`docs/auth.md`](./docs/auth.md) — the ReBAC model and its rewrite operators
+- [`docs/POSTGRES_SUPPORT.md`](./docs/POSTGRES_SUPPORT.md) · [`docs/DUCKDB_SUPPORT.md`](./docs/DUCKDB_SUPPORT.md) — per-backend design
 
 ## Contributing
 

@@ -24,8 +24,8 @@ import {
 	hashEmbed,
 	init,
 	retrieve,
-} from '../../packages/core/src/index.ts';
-import { ingestDir } from '../../packages/ingest/src/index.ts';
+} from '../../packages/graphx/src/core/index.ts';
+import { ingestDir } from '../../packages/graphx/src/ingest/index.ts';
 
 // --- Schema ------------------------------------------------------------------
 //

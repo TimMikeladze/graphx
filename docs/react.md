@@ -1,0 +1,174 @@
+# graphx/react
+
+Inference-only [React Query](https://tanstack.com/query) hooks for [graphx](../packages/graphx) — typed query,
+mutation, and infinite-scroll hooks plus **CDC-driven live cache sync**, with **no codegen**. Types
+are inferred from the same `defineGraphSchema(...)` that validates writes server-side.
+
+## Install
+
+```sh
+bun add graphx @tanstack/react-query react
+```
+
+`@tanstack/react-query`, `react`, and `graphx` are peer dependencies.
+
+## Quickstart
+
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createGraphHooks, GraphProvider } from 'graphx/react';
+import { defineGraphSchema } from 'graphx';
+import { z } from 'zod';
+
+const schema = defineGraphSchema({
+	nodes: { person: z.object({ name: z.string() }) },
+	edges: { knows: { from: 'person', to: 'person' } },
+});
+
+// Call once at module scope. `g` carries the per-schema types.
+export const g = createGraphHooks(schema);
+
+const queryClient = new QueryClient();
+
+function Root() {
+	return (
+		<QueryClientProvider client={queryClient}>
+			<GraphProvider
+				baseUrl="https://api.example.com"
+				tenant="acme"
+				project="alpha"
+				headers={() => ({ authorization: `Bearer ${token}` })}
+			>
+				<App />
+			</GraphProvider>
+		</QueryClientProvider>
+	);
+}
+
+function NodeCard({ id }: { id: string }) {
+	const { data, isLoading } = g.useNode(id); // data: AnyNode<typeof schema> | null
+	const update = g.useUpdateNode();
+	if (isLoading) return <Spinner />;
+	return (
+		<button onClick={() => update.mutate({ id, patch: { data: { name: 'Ada' } } })}>
+			{data?.data.name}
+		</button>
+	);
+}
+```
+
+`GraphProvider` config:
+
+| Prop                | Required            | Notes                                                                                                                                         |
+| ------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseUrl`           | no (default `''`)   | Origin the server is mounted at. `''` = same-origin / in-process.                                                                             |
+| `tenant`, `project` | yes\*               | Routes are `/t/:tenant/p/:project/...`. \*Or supply `bootstrap` instead.                                                                      |
+| `bootstrap`         | no                  | URL returning `{ tenant, project, user }` (e.g. `createApp`'s `/demo`) — fetched on mount, wires the transport + `x-user`/`x-tenant` for you. |
+| `fallback`          | no                  | Rendered while a `bootstrap` fetch is in flight.                                                                                              |
+| `headers`           | no                  | `() => Record<string,string> \| Promise<...>` — re-read per request (refreshed tokens).                                                       |
+| `fetch`             | no (default global) | Inject for SSR, or `appFetch(app)` to drive an in-process Hono app with no server/port.                                                       |
+
+**Dev bootstrap** — against a `createApp` dev server, skip the ids entirely:
+
+```tsx
+<GraphProvider bootstrap="/demo" fallback={<Spinner />}>
+	<App />
+</GraphProvider>
+```
+
+## Hooks
+
+**Queries** (`useQuery`): `useNode(id)` → `AnyNode<S> | null` (→ `null` on 404); pass the expected
+type — `useNode(id, 'device')` → `NodeOf<S,'device'> | null` (narrowed, and runtime-checked: a
+mismatched stored type resolves to `null`, so no discriminating). `useHistory`, `useGraphSlice`, `useRetrieve`,
+`useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
+
+`useMatch` is fully typed per alias — pass the spec inline and each selected alias's row is
+type-narrowed from the pattern:
+
+```ts
+const m = g.useMatch({
+	steps: [
+		{ node: { alias: 'p', type: 'person' } },
+		{ edge: { rel: 'owns' } },
+		{ node: { alias: 'd', type: 'device' } },
+	],
+	select: ['p', 'd'],
+});
+m.data?.rows[0]?.d.data.name; // ^? typed NodeOf<S,'device'> — node.type & rel are schema-checked
+```
+
+…or build the same spec fluently (type/rel-checked, same per-alias row types):
+
+```ts
+const m = g.useMatch((q) => q.node('p', 'person').out('owns').node('d', 'device').select('p', 'd'));
+```
+
+**Infinite** (`useInfiniteQuery`, keyset cursor): `useNeighbors(id, { limit })`,
+`useListNodes({ limit })` — page via `fetchNextPage()` / `hasNextPage`. Both narrow when you scope
+them: `useNeighbors(id, { rel: 'owns' })` → rows typed `NodeOf<S,'device'>[]` (the schema's
+`owns.to` pins it; reverse hops use `from`); `useListNodes({ type: 'device' })` → `NodeOf<S,'device'>[]`.
+The server enforces the rel/type filter, so the narrowing is server-backed, not a blind cast.
+
+**Mutations** (`useMutation`, invalidate-on-settle): `useAddNode`, `useAddEdge`, `useUpdateNode`,
+`useDeleteEdge`, `useDeleteNode`, `useBulkLoad`, and the persisted-analytics ops `usePagerank`,
+`useCommunity`, `useCentrality`.
+
+**Live sync:** `useChangeFeedSync({ intervalMs?, fromNow? })` — see below.
+
+**Utilities:** `useKeys()` (the project-scoped query-key factory for manual invalidation/prefetch),
+`graphKeys(project)` (standalone), `appFetch(app)` (adapt an in-process Hono app to a `fetch`),
+`GraphError` — the React Query `error` for any non-2xx: `{ status, message, issues? }` plus a stable
+`code` (`'validation' | 'unauthenticated' | 'forbidden' | 'not_found' | 'conflict' | 'unimplemented'
+| 'server' | 'network' | 'unknown'`) to `switch` on instead of parsing messages (a failed request is
+`status: 0`, `code: 'network'`).
+
+## Response validation (opt-in)
+
+Pass the schema **value** plus `{ validate: true }` and the node reads (`useNode`, `useListNodes`,
+`useNeighbors`, `useMatch`) are checked against their kind's Zod schema at runtime — a server that
+drifts from the contract throws a `GraphError` with `code: 'validation'` instead of silently
+returning a wrong shape:
+
+```ts
+export const g = createGraphHooks(schema, { validate: true }); // needs the value, not just the type
+```
+
+## CDC live sync
+
+`useChangeFeedSync` tails `/changes` and invalidates **exactly** the affected query keys — `node(id)`
+per changed node, `neighbors(src/dst)` per changed edge, plus the list/slice queries — instead of a
+blind interval refetch. The `(valid_from, ver)` keyset advances incrementally so polling never skips
+or double-counts.
+
+```tsx
+function LiveSync() {
+	g.useChangeFeedSync({ intervalMs: 2000 }); // mount once near the root
+	return null;
+}
+```
+
+- `fromNow: true` skips the existing backlog on mount (positions the cursor at the tip) — avoids a
+  mount-time invalidation storm over a large graph.
+- The feed is `valid_from`-only: it carries inserts and update-successors, **not** pure closes
+  (`deleteEdge`, single-valued supersession). Edge/node _removals_ are reconciled by the mutation
+  hooks' `onSettled`, so drive deletes through `useDeleteEdge` / `useDeleteNode`.
+
+## Optimistic updates
+
+The hooks default to **invalidate-on-settle**, not optimistic, for writes that gain server-derived
+fields (the server mints the ULID, applies zod defaults, stamps the P12 `_v` — none of which the
+client can predict). Add your own optimistic `onMutate`/rollback for simple toggles if needed.
+
+## A note on published types
+
+Because the generic `createGraphHooks` return can't be expressed under TypeScript isolated
+declarations, this package is built with bunup `dts.inferTypes` (tsc inference) so the published
+`.d.ts` carries full per-hook types. (`core`'s `AppType` has the inverse limitation — consume its
+source for precise route types.)
+
+## Testing
+
+Hooks are tested with `@testing-library/react` + `happy-dom`, rendering against an **in-process**
+`createApp(...)` via `fetch={appFetch(app)}` — real routes, real zod validation, real CDC keyset, on
+both libSQL and Postgres. See `test/` for the harness.

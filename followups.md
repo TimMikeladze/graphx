@@ -11,7 +11,7 @@ reviews that produced these are summarized in `docs/DUCKDB_SUPPORT.md`.
 
 ### F1 — Give `rebuildIndex` ownership of the freshness markers
 
-`packages/core/src/duck.ts`, `packages/core/src/fts/index-tables.ts`
+`packages/graphx/src/core/duck.ts`, `packages/graphx/src/core/fts/index-tables.ts`
 
 The index's staleness markers (`ftsStale`, `ftsSignature`) must be captured **before**
 `rebuildIndex` reads `node_versions`. Capture them after, and a write landing in that window
@@ -33,7 +33,7 @@ touched anyway.
 
 ### F2 — Tighten the commit failure path
 
-`packages/core/src/duck.ts`, in `commit()`
+`packages/graphx/src/core/duck.ts`, in `commit()`
 
 `this.ftsStale = false` is set before `commitSnapshot` runs; the signature is assigned after.
 If `commitSnapshot` throws — a `SnapshotConflictError` from a lost CAS race is reachable — the
@@ -48,7 +48,7 @@ closed, and unrequested changes at merge time are how regressions land.
 
 ### F3 — Lock the optional-peer import boundary with a test
 
-`packages/core/src/graph.ts`, `hybrid.ts`, `bulk.ts`
+`packages/graphx/src/core/graph.ts`, `hybrid.ts`, `bulk.ts`
 
 None of these may import `duck.ts`, directly or transitively, or the optional
 `@duckdb/node-api` peer (~123MB installed) lands on the import path of every consumer who
@@ -62,17 +62,17 @@ weight for downstream users.
 
 ### F4 — Minor hygiene
 
-- `packages/core/scripts/measure-fts-ground-truth.ts` — the `docs` query is `ORDER BY len`
+- `packages/graphx/scripts/measure-fts-ground-truth.ts` — the `docs` query is `ORDER BY len`
   with no tiebreaker, and several documents share a length, so the array's order is not
   guaranteed stable across regenerations. Values are stable; only ordering is not. Use
   `ORDER BY len, name` if the script is touched.
-- `packages/core/test/fts-args.test.ts` — the libSQL case asserts `ftsArg('libsql', q)` equals
+- `packages/graphx/test/core/fts-args.test.ts` — the libSQL case asserts `ftsArg('libsql', q)` equals
   `sanitizeMatch(q)`, which is how it is implemented, so it cannot fail. Assert the expected
   string instead.
-- `packages/core/src/duck-materialize.ts` — `manifest.indexes` is dereferenced without a
+- `packages/graphx/src/core/duck-materialize.ts` — `manifest.indexes` is dereferenced without a
   `?? {}` fallback. Unreachable for manifests this codebase writes; a hand-written or
   older-format manifest would throw rather than degrade.
-- `packages/core/src/fts/index-tables.ts` — `rebuildIndex` loads the whole corpus into JS to
+- `packages/graphx/src/core/fts/index-tables.ts` — `rebuildIndex` loads the whole corpus into JS to
   build the index. Acknowledged in its own doc comment. The scaling answer is a per-file delta
   in the manifest (`TableRef.files` is already a list), not incremental mutation of the local
   tables.

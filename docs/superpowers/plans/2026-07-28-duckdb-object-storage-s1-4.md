@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **Backend selection is config-only.** Every public type, method signature, route shape, and JSON wire contract stays byte-stable. Same constraint Postgres shipped under (`docs/POSTGRES_SUPPORT.md` §0).
-- **`@duckdb/node-api` is an OPTIONAL peer dependency.** It must only load when a consumer imports the `graphx-core/duck` subpath. Never from `src/index.ts`.
+- **`@duckdb/node-api` is an OPTIONAL peer dependency.** It must only load when a consumer imports the `graphx/duck` subpath. Never from `src/index.ts`.
 - **Pinned versions:** `@duckdb/node-api@1.5.5-r.2` (wraps DuckDB v1.5.5). Do not use the `lts-v1.4` tag — `USING KEY` recursive-CTE syntax differs incompatibly between the 1.4 and 1.5 lines.
 - **FOREVER sentinel is `8640000000000000`.** DuckDB `INTEGER` is 32-bit and overflows it; every temporal column and cast is `BIGINT`.
 - **Never call `listValue()` or `arrayValue()` without an explicit type.** They infer element type from the first element alone and silently truncate floats. Embeddings bind as `JSON.stringify(vec)` with a `::FLOAT[dim]` cast.
@@ -29,38 +29,38 @@
 
 **Stage 1 — seam hardening (no new files):**
 
-- Modify `packages/core/src/dialect.ts` — add `'duckdb'` to `Dialect`, add `assertNever`.
-- Modify `packages/core/src/dialect-sql.ts` — convert every fragment from a two-way ternary to an exhaustive `switch`.
+- Modify `packages/graphx/src/core/dialect.ts` — add `'duckdb'` to `Dialect`, add `assertNever`.
+- Modify `packages/graphx/src/core/dialect-sql.ts` — convert every fragment from a two-way ternary to an exhaustive `switch`.
 - Modify the 12 inline dialect branches: `schema.ts`, `db.ts`, `constraints.ts`, `temporal.ts`, `algorithms.ts`, `bulk.ts`, `journey.ts`, `pattern.ts`.
-- Modify `packages/core/test/harness.ts` — invert the skip gate to an allowlist.
+- Modify `packages/graphx/test/core/harness.ts` — invert the skip gate to an allowlist.
 
 **Stage 2 — storage layer (new, standalone, no DuckDB):**
 
-- Create `packages/core/src/objstore/store.ts` — the `ObjectStore` interface and its errors. One responsibility: the provider-neutral contract.
-- Create `packages/core/src/objstore/memory.ts` — in-memory `ObjectStore` for unit tests.
-- Create `packages/core/src/objstore/file.ts` — filesystem `ObjectStore`, the default test store.
-- Create `packages/core/src/objstore/s3.ts` — S3/R2/GCS/MinIO `ObjectStore` plus the startup CAS probe.
-- Create `packages/core/src/objstore/manifest.ts` — manifest types, parse, serialize, hash.
-- Create `packages/core/src/objstore/snapshot.ts` — `SnapshotStore`: resolve head, read, commit with CAS retry.
-- Create `packages/core/src/objstore/cache.ts` — content-addressed local file cache.
-- Create `packages/core/test/objstore/*.test.ts` — one test file per module above.
+- Create `packages/graphx/src/core/objstore/store.ts` — the `ObjectStore` interface and its errors. One responsibility: the provider-neutral contract.
+- Create `packages/graphx/src/core/objstore/memory.ts` — in-memory `ObjectStore` for unit tests.
+- Create `packages/graphx/src/core/objstore/file.ts` — filesystem `ObjectStore`, the default test store.
+- Create `packages/graphx/src/core/objstore/s3.ts` — S3/R2/GCS/MinIO `ObjectStore` plus the startup CAS probe.
+- Create `packages/graphx/src/core/objstore/manifest.ts` — manifest types, parse, serialize, hash.
+- Create `packages/graphx/src/core/objstore/snapshot.ts` — `SnapshotStore`: resolve head, read, commit with CAS retry.
+- Create `packages/graphx/src/core/objstore/cache.ts` — content-addressed local file cache.
+- Create `packages/graphx/test/core/objstore/*.test.ts` — one test file per module above.
 
 **Stage 3 — DuckDB adapter (new):**
 
-- Create `packages/core/src/duck.ts` — `DuckClient`, `createDuckClient`, `registerDuckDriver` call. Mirrors `pg.ts` exactly in shape and role.
-- Create `packages/core/src/duck-pool.ts` — `DuckDBInstance` lifecycle, connection checkout, FATAL detection and rebuild.
-- Create `packages/core/src/duck-value.ts` — JS↔DuckDB value marshalling (bigint normalization, embedding binding).
-- Modify `packages/core/src/dialect-sql.ts` — fill in the `duckdb` arms.
-- Modify `packages/core/src/schema.ts` — `duckdbSchema(dim)`, plus `init`/`readEmbDim`/`ensureColumn` arms.
-- Modify `packages/core/package.json`, `bunup.config.ts` — `./duck` subpath and build entry.
+- Create `packages/graphx/src/core/duck.ts` — `DuckClient`, `createDuckClient`, `registerDuckDriver` call. Mirrors `pg.ts` exactly in shape and role.
+- Create `packages/graphx/src/core/duck-pool.ts` — `DuckDBInstance` lifecycle, connection checkout, FATAL detection and rebuild.
+- Create `packages/graphx/src/core/duck-value.ts` — JS↔DuckDB value marshalling (bigint normalization, embedding binding).
+- Modify `packages/graphx/src/core/dialect-sql.ts` — fill in the `duckdb` arms.
+- Modify `packages/graphx/src/core/schema.ts` — `duckdbSchema(dim)`, plus `init`/`readEmbDim`/`ensureColumn` arms.
+- Modify `packages/graphx/package.json`, `bunup.config.ts` — `./duck` subpath and build entry.
 
 **Stage 4 — snapshots (new):**
 
-- Create `packages/core/src/duck-materialize.ts` — snapshot → local DuckDB tables/views.
-- Create `packages/core/src/duck-commit.ts` — local tables → Parquet → manifest commit.
-- Modify `packages/core/src/duck.ts` — wire materialize/commit into the client lifecycle.
-- Modify `packages/core/src/graph.ts` — the `write(fn)` session, and the DuckDB entries in `isRetryableContention`.
-- Modify `packages/core/src/serve.ts` — map "too much contention" to 409.
+- Create `packages/graphx/src/core/duck-materialize.ts` — snapshot → local DuckDB tables/views.
+- Create `packages/graphx/src/core/duck-commit.ts` — local tables → Parquet → manifest commit.
+- Modify `packages/graphx/src/core/duck.ts` — wire materialize/commit into the client lifecycle.
+- Modify `packages/graphx/src/core/graph.ts` — the `write(fn)` session, and the DuckDB entries in `isRetryableContention`.
+- Modify `packages/graphx/src/core/serve.ts` — map "too much contention" to 409.
 
 ---
 
@@ -70,9 +70,9 @@ Today `Dialect` is a two-member union and every branch is `dialect === 'postgres
 
 **Files:**
 
-- Modify: `packages/core/src/dialect.ts:16` (the `Dialect` union) and append `assertNever`
-- Modify: `packages/core/src/dialect-sql.ts` (all 22 exported fragments)
-- Test: `packages/core/test/dialect-sql.test.ts` (create)
+- Modify: `packages/graphx/src/core/dialect.ts:16` (the `Dialect` union) and append `assertNever`
+- Modify: `packages/graphx/src/core/dialect-sql.ts` (all 22 exported fragments)
+- Test: `packages/graphx/test/core/dialect-sql.test.ts` (create)
 
 **Interfaces:**
 
@@ -81,7 +81,7 @@ Today `Dialect` is a two-member union and every branch is `dialect === 'postgres
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/dialect-sql.test.ts`:
+Create `packages/graphx/test/core/dialect-sql.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -116,12 +116,12 @@ describe('dialect seam exhaustiveness', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/dialect-sql.test.ts`
+Run: `bun test packages/graphx/test/core/dialect-sql.test.ts`
 Expected: FAIL — `assertNever` is not exported from `dialect.ts`, and `'duckdb'` is not assignable to `Dialect`.
 
 - [ ] **Step 3: Widen the union and add `assertNever`**
 
-In `packages/core/src/dialect.ts`, replace line 16 and append the helper:
+In `packages/graphx/src/core/dialect.ts`, replace line 16 and append the helper:
 
 ```ts
 /** Which SQL backend a client speaks. Absent ⇒ libSQL (the original / default). */
@@ -143,7 +143,7 @@ export function assertNever(x: never, ctx: string): never {
 
 - [ ] **Step 4: Convert every fragment to an exhaustive switch**
 
-In `packages/core/src/dialect-sql.ts`, replace the `notYet` helper so it names the dialect, and convert each fragment. Replace lines 200-204:
+In `packages/graphx/src/core/dialect-sql.ts`, replace the `notYet` helper so it names the dialect, and convert each fragment. Replace lines 200-204:
 
 ```ts
 function notYet(fragment: string, dialect: Dialect): never {
@@ -206,7 +206,7 @@ import { assertNever, type Dialect } from './dialect.ts';
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/dialect-sql.test.ts`
+Run: `bun test packages/graphx/test/core/dialect-sql.test.ts`
 Expected: PASS, 4 tests.
 
 - [ ] **Step 6: Verify nothing regressed**
@@ -220,7 +220,7 @@ Expected: both exit 0.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/dialect.ts packages/core/src/dialect-sql.ts packages/core/test/dialect-sql.test.ts
+git add packages/graphx/src/core/dialect.ts packages/graphx/src/core/dialect-sql.ts packages/graphx/test/core/dialect-sql.test.ts
 git commit -m "refactor(core): make the dialect seam exhaustive
 
 Widens Dialect to include duckdb and converts every fragment in
@@ -237,20 +237,20 @@ Twelve call sites branch on the dialect outside `dialect-sql.ts`. Each is a bare
 
 **Files:**
 
-- Modify: `packages/core/src/db.ts:14-18` (`applyConnPragmas`)
-- Modify: `packages/core/src/schema.ts:166-186` (`readEmbDim`), `:188-218` (`init`), `:227-237` (`ensureColumn`)
-- Modify: `packages/core/src/constraints.ts:62`, `packages/core/src/temporal.ts:294,320`, `packages/core/src/algorithms.ts:341`, `packages/core/src/bulk.ts:200,238,246`, `packages/core/src/journey.ts:104-106`, `packages/core/src/pattern.ts:206-215`
-- Modify: `packages/core/test/harness.ts:40-43`
-- Test: `packages/core/test/duck-guards.test.ts` (create)
+- Modify: `packages/graphx/src/core/db.ts:14-18` (`applyConnPragmas`)
+- Modify: `packages/graphx/src/core/schema.ts:166-186` (`readEmbDim`), `:188-218` (`init`), `:227-237` (`ensureColumn`)
+- Modify: `packages/graphx/src/core/constraints.ts:62`, `packages/graphx/src/core/temporal.ts:294,320`, `packages/graphx/src/core/algorithms.ts:341`, `packages/graphx/src/core/bulk.ts:200,238,246`, `packages/graphx/src/core/journey.ts:104-106`, `packages/graphx/src/core/pattern.ts:206-215`
+- Modify: `packages/graphx/test/core/harness.ts:40-43`
+- Test: `packages/graphx/test/core/duck-guards.test.ts` (create)
 
 **Interfaces:**
 
 - Consumes: `Dialect` and `assertNever` from Task 1.
-- Produces: `TEST_DRIVER: Dialect` (was `string`) and `libsqlOnly` exported from `packages/core/test/harness.ts`. Every inline branch throws `<module>: duckdb not implemented yet` when reached with a duckdb client, so Stage 3 can find them by running the suite.
+- Produces: `TEST_DRIVER: Dialect` (was `string`) and `libsqlOnly` exported from `packages/graphx/test/core/harness.ts`. Every inline branch throws `<module>: duckdb not implemented yet` when reached with a duckdb client, so Stage 3 can find them by running the suite.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-guards.test.ts`:
+Create `packages/graphx/test/core/duck-guards.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -299,12 +299,12 @@ describe('inline dialect guards', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-guards.test.ts`
+Run: `bun test packages/graphx/test/core/duck-guards.test.ts`
 Expected: FAIL on the third test — a duckdb client currently falls through to the libSQL arm and records two PRAGMAs.
 
 - [ ] **Step 3: Convert `applyConnPragmas`**
 
-In `packages/core/src/db.ts`, replace the body of `applyConnPragmas` (lines 14-18):
+In `packages/graphx/src/core/db.ts`, replace the body of `applyConnPragmas` (lines 14-18):
 
 ```ts
 export async function applyConnPragmas(client: DbClient): Promise<void> {
@@ -375,7 +375,7 @@ switch (dialectOf(client)) {
 
 - [ ] **Step 5: Fix the harness skip gate**
 
-In `packages/core/test/harness.ts`, replace lines 40-43:
+In `packages/graphx/test/core/harness.ts`, replace lines 40-43:
 
 ```ts
 /** Selected backend. `libsql` (default) preserves current behavior; others opt in via env. */
@@ -399,14 +399,14 @@ Add the imports `import { test } from 'bun:test';` and `import type { Dialect } 
 Then update every current use. Find them with:
 
 ```bash
-grep -rn "TEST_DRIVER === 'postgres'" packages/core/test packages/auth/test
+grep -rn "TEST_DRIVER === 'postgres'" packages/graphx/test/core packages/graphx/test/auth
 ```
 
 Replace each `const libsqlOnly = TEST_DRIVER === 'postgres' ? test.skip : test;` (or its inline equivalent) with `import { libsqlOnly } from './harness.ts';` and delete the local definition.
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/duck-guards.test.ts`
+Run: `bun test packages/graphx/test/core/duck-guards.test.ts`
 Expected: PASS, 3 tests.
 
 Run: `bun test --timeout 30000`
@@ -421,7 +421,7 @@ Expected: both exit 0.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src packages/core/test packages/auth
+git add packages/graphx/src/core packages/graphx/test/core packages/auth
 git commit -m "refactor(core): give every inline dialect branch a duckdb arm
 
 Converts the twelve bare '=== postgres' tests outside dialect-sql.ts into
@@ -442,10 +442,10 @@ The whole commit protocol rests on one primitive: create a key, fail if it alrea
 
 **Files:**
 
-- Create: `packages/core/src/objstore/store.ts`
-- Create: `packages/core/src/objstore/memory.ts`
-- Create: `packages/core/src/objstore/file.ts`
-- Test: `packages/core/test/objstore/store.test.ts`
+- Create: `packages/graphx/src/core/objstore/store.ts`
+- Create: `packages/graphx/src/core/objstore/memory.ts`
+- Create: `packages/graphx/src/core/objstore/file.ts`
+- Test: `packages/graphx/test/core/objstore/store.test.ts`
 
 **Interfaces:**
 
@@ -457,7 +457,7 @@ The whole commit protocol rests on one primitive: create a key, fail if it alrea
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/objstore/store.test.ts`:
+Create `packages/graphx/test/core/objstore/store.test.ts`:
 
 ```ts
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -547,7 +547,7 @@ for (const [name, make] of stores) {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/objstore/store.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/store.test.ts`
 Expected: FAIL — the modules do not exist.
 
 - [ ] **Step 3: Write `store.ts`**
@@ -778,13 +778,13 @@ test('get surfaces a real I/O error instead of reporting absence', async () => {
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/objstore/store.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/store.test.ts`
 Expected: PASS, 16 tests (8 per store).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/objstore packages/core/test/objstore
+git add packages/graphx/src/core/objstore packages/graphx/test/core/objstore
 git commit -m "feat(core): add the ObjectStore contract with memory and file backends
 
 putIfAbsent is the one primitive the snapshot commit protocol needs: it is
@@ -801,8 +801,8 @@ If-None-Match semantics rather than approximating them."
 
 **Files:**
 
-- Create: `packages/core/src/objstore/s3.ts`
-- Test: `packages/core/test/objstore/s3.test.ts`
+- Create: `packages/graphx/src/core/objstore/s3.ts`
+- Test: `packages/graphx/test/core/objstore/s3.test.ts`
 
 **Interfaces:**
 
@@ -815,7 +815,7 @@ If-None-Match semantics rather than approximating them."
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/objstore/s3.test.ts`:
+Create `packages/graphx/test/core/objstore/s3.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -851,7 +851,7 @@ describe('conditional-write probe', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/objstore/s3.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/s3.test.ts`
 Expected: FAIL — `s3.ts` does not exist.
 
 - [ ] **Step 3: Write `s3.ts`**
@@ -1076,7 +1076,7 @@ The `Math.random()` call is intentional here — the probe key only needs to avo
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/objstore/s3.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/s3.test.ts`
 Expected: PASS, 3 tests.
 
 - [ ] **Step 5: Verify against a real S3 API**
@@ -1092,7 +1092,7 @@ docker run -d --name graphx-minio -p 9100:9000 \
 Write a scratch script and run it with `bun`, then delete it — it is a manual verification, not a committed test (the committed integration test arrives in Task 16 once there is something end-to-end to assert):
 
 ```ts
-import { S3ObjectStore, probeConditionalWrite } from './packages/core/src/objstore/s3.ts';
+import { S3ObjectStore, probeConditionalWrite } from './packages/graphx/src/core/objstore/s3.ts';
 const s = new S3ObjectStore({
 	bucket: 'graphx-test',
 	endpoint: 'http://127.0.0.1:9100',
@@ -1111,7 +1111,7 @@ Then tear down: `docker rm -f graphx-minio`.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/objstore/s3.ts packages/core/test/objstore/s3.test.ts
+git add packages/graphx/src/core/objstore/s3.ts packages/graphx/test/core/objstore/s3.test.ts
 git commit -m "feat(core): add an S3 ObjectStore and a startup conditional-write probe
 
 Create-only writes use If-None-Match: * on S3, R2, MinIO and Tigris, and
@@ -1133,9 +1133,9 @@ This is the heart of the design: a snapshot chain where committing means claimin
 
 **Files:**
 
-- Create: `packages/core/src/objstore/manifest.ts`
-- Create: `packages/core/src/objstore/snapshot.ts`
-- Test: `packages/core/test/objstore/snapshot.test.ts`
+- Create: `packages/graphx/src/core/objstore/manifest.ts`
+- Create: `packages/graphx/src/core/objstore/snapshot.ts`
+- Test: `packages/graphx/test/core/objstore/snapshot.test.ts`
 
 **Interfaces:**
 
@@ -1151,7 +1151,7 @@ This is the heart of the design: a snapshot chain where committing means claimin
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/objstore/snapshot.test.ts`:
+Create `packages/graphx/test/core/objstore/snapshot.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -1246,7 +1246,7 @@ describe('SnapshotStore', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/objstore/snapshot.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/snapshot.test.ts`
 Expected: FAIL — neither module exists.
 
 - [ ] **Step 3: Write `manifest.ts`**
@@ -1487,13 +1487,13 @@ test('a _head pointing past the end falls back to listing', async () => {
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/objstore/snapshot.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/snapshot.test.ts`
 Expected: PASS, 10 tests.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/objstore/manifest.ts packages/core/src/objstore/snapshot.ts packages/core/test/objstore/snapshot.test.ts
+git add packages/graphx/src/core/objstore/manifest.ts packages/graphx/src/core/objstore/snapshot.ts packages/graphx/test/core/objstore/snapshot.test.ts
 git commit -m "feat(core): add the snapshot manifest and its commit protocol
 
 A commit claims snapshots/{n+1}.json with a create-only write. The winner
@@ -1515,8 +1515,8 @@ Every ANN query re-egresses the whole embedding column when served remotely — 
 
 **Files:**
 
-- Create: `packages/core/src/objstore/cache.ts`
-- Test: `packages/core/test/objstore/cache.test.ts`
+- Create: `packages/graphx/src/core/objstore/cache.ts`
+- Test: `packages/graphx/test/core/objstore/cache.test.ts`
 
 **Interfaces:**
 
@@ -1527,7 +1527,7 @@ Every ANN query re-egresses the whole embedding column when served remotely — 
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/objstore/cache.test.ts`:
+Create `packages/graphx/test/core/objstore/cache.test.ts`:
 
 ```ts
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -1622,7 +1622,7 @@ describe('FileCache', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/objstore/cache.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/cache.test.ts`
 Expected: FAIL — `cache.ts` does not exist.
 
 - [ ] **Step 3: Write `cache.ts`**
@@ -1716,7 +1716,7 @@ export class FileCache {
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/objstore/cache.test.ts`
+Run: `bun test packages/graphx/test/core/objstore/cache.test.ts`
 Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Run the whole suite and check types**
@@ -1727,7 +1727,7 @@ Expected: all green. Stage 2 adds only new modules that nothing imports yet, so 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/objstore/cache.ts packages/core/test/objstore/cache.test.ts
+git add packages/graphx/src/core/objstore/cache.ts packages/graphx/test/core/objstore/cache.test.ts
 git commit -m "feat(core): add a content-addressed local file cache
 
 DuckDB's external file cache is in-memory and scoped to the instance, so
@@ -1743,14 +1743,14 @@ reader later."
 
 ## Task 7: Package wiring and the DuckDB connection pool
 
-`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `graphx-core/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but _shared_: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
+`@duckdb/node-api` is 123MB installed, so it must stay an optional peer reachable only through the `graphx/duck` subpath — exactly how `pg` is handled. The pool exists because a DuckDB connection is serialized but _shared_: two async tasks interleaving on one connection silently merge their transactions, which was demonstrated to swallow an autocommit insert into an unrelated rollback with no error raised.
 
 **Files:**
 
-- Modify: `packages/core/package.json` (exports, peerDependencies, peerDependenciesMeta, devDependencies)
+- Modify: `packages/graphx/package.json` (exports, peerDependencies, peerDependenciesMeta, devDependencies)
 - Modify: `bunup.config.ts` (core entry list)
-- Create: `packages/core/src/duck-pool.ts`
-- Test: `packages/core/test/duck-pool.test.ts`
+- Create: `packages/graphx/src/core/duck-pool.ts`
+- Test: `packages/graphx/test/core/duck-pool.test.ts`
 
 **Interfaces:**
 
@@ -1765,7 +1765,7 @@ reader later."
 
 Only the dependency declarations land here. The `./duck` export map and the bunup entry point at `src/duck.ts`, which Task 8 creates — wiring them now would leave `bun run build` pointing at a file that does not exist, so they move to Task 8 with the file they describe.
 
-In `packages/core/package.json`, add to `devDependencies`:
+In `packages/graphx/package.json`, add to `devDependencies`:
 
 ```json
 		"@duckdb/node-api": "1.5.5-r.2",
@@ -1790,7 +1790,7 @@ Expected: `@duckdb/node-api` resolves with a prebuilt binary for this platform. 
 
 - [ ] **Step 2: Write the failing test**
 
-Create `packages/core/test/duck-pool.test.ts`:
+Create `packages/graphx/test/core/duck-pool.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -1952,7 +1952,7 @@ describe('DuckPool', () => {
 
 - [ ] **Step 3: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-pool.test.ts`
+Run: `bun test packages/graphx/test/core/duck-pool.test.ts`
 Expected: FAIL — `duck-pool.ts` does not exist.
 
 - [ ] **Step 4: Write `duck-pool.ts`**
@@ -2181,12 +2181,12 @@ function closeQuietly(raw: RawConnection): void {
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/duck-pool.test.ts`
+Run: `bun test packages/graphx/test/core/duck-pool.test.ts`
 Expected: PASS, 6 tests. The "two concurrent transactions do not merge" test is the important one — if it fails with `[]` instead of `[{v: 99}]`, the pool is handing out one shared connection.
 
 - [ ] **Step 6: Verify the peer stays optional**
 
-Run: `grep -rn "duckdb" packages/core/src/index.ts packages/core/src/db.ts`
+Run: `grep -rn "duckdb" packages/graphx/src/core/index.ts packages/graphx/src/core/db.ts`
 Expected: no matches. Nothing on the default import path may reference the driver. (The `dist/duck.js` build check belongs to Task 8, which creates the file that entry points at.)
 
 Run: `bun run type-check && bun run lint`
@@ -2195,7 +2195,7 @@ Expected: both exit 0.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/package.json packages/core/src/duck-pool.ts packages/core/test/duck-pool.test.ts bunup.config.ts bun.lock
+git add packages/graphx/package.json packages/graphx/src/core/duck-pool.ts packages/graphx/test/core/duck-pool.test.ts bunup.config.ts bun.lock
 git commit -m "feat(core): add the DuckDB connection pool and core/duck subpath
 
 A DuckDB connection is serialized but shared, so two async tasks
@@ -2216,14 +2216,14 @@ behind the core/duck subpath, exactly as pg does."
 
 ## Task 8: `DuckClient` — the `DbClient` implementation
 
-This is `pg.ts`'s counterpart. Read `packages/core/src/pg.ts` first; this file mirrors its structure, and the differences are all defenses against verified DuckDB behaviors.
+This is `pg.ts`'s counterpart. Read `packages/graphx/src/core/pg.ts` first; this file mirrors its structure, and the differences are all defenses against verified DuckDB behaviors.
 
 **Files:**
 
-- Create: `packages/core/src/duck-value.ts`
-- Create: `packages/core/src/duck.ts`
-- Modify: `packages/core/src/db.ts` (register a third driver factory)
-- Test: `packages/core/test/duck-client.test.ts`
+- Create: `packages/graphx/src/core/duck-value.ts`
+- Create: `packages/graphx/src/core/duck.ts`
+- Modify: `packages/graphx/src/core/db.ts` (register a third driver factory)
+- Test: `packages/graphx/test/core/duck-client.test.ts`
 
 **Interfaces:**
 
@@ -2238,7 +2238,7 @@ This is `pg.ts`'s counterpart. Read `packages/core/src/pg.ts` first; this file m
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-client.test.ts`:
+Create `packages/graphx/test/core/duck-client.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -2413,7 +2413,7 @@ describe('DuckClient', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-client.test.ts`
+Run: `bun test packages/graphx/test/core/duck-client.test.ts`
 Expected: FAIL — neither module exists.
 
 - [ ] **Step 3: Write `duck-value.ts`**
@@ -2735,7 +2735,7 @@ registerDuckDriver(
 
 Task 7 declared the dependency but deliberately left the export map alone, because it points at `src/duck.ts` — the file you just created. Wire it now that the target exists.
 
-In `packages/core/package.json`, add to `exports` after the `./pg` entry:
+In `packages/graphx/package.json`, add to `exports` after the `./pg` entry:
 
 ```json
 		"./duck": {
@@ -2751,7 +2751,7 @@ In `bunup.config.ts`, extend the core entry list and its comment:
 ```ts
 	{
 		name: 'core',
-		root: 'packages/core',
+		root: 'packages/graphx',
 		// `pg.ts` and `duck.ts` ship as the `core/pg` and `core/duck` subpaths: importing
 		// one registers that driver with `getDb` (side effect). They stay separate entries
 		// so the optional `pg` / `@duckdb/node-api` peers are only pulled in by consumers
@@ -2762,11 +2762,11 @@ In `bunup.config.ts`, extend the core entry list and its comment:
 	},
 ```
 
-Verify: `bun run build` exits 0 and `packages/core/dist/duck.js` exists.
+Verify: `bun run build` exits 0 and `packages/graphx/dist/duck.js` exists.
 
 - [ ] **Step 5: Register the third driver in `db.ts`**
 
-In `packages/core/src/db.ts`, add `duckPath` to `DbConfig`, add the factory registry beside the Postgres one, and extend `resolveDriver` and `getDb`:
+In `packages/graphx/src/core/db.ts`, add `duckPath` to `DbConfig`, add the factory registry beside the Postgres one, and extend `resolveDriver` and `getDb`:
 
 ```ts
 export interface DbConfig {
@@ -2818,14 +2818,14 @@ let client: DbClient;
 if (driver === 'postgres') {
 	if (!pgFactory) {
 		throw new Error(
-			"getDb: postgres driver selected but the pg adapter is not registered — import 'graphx-core/pg'",
+			"getDb: postgres driver selected but the pg adapter is not registered — import 'graphx/pg'",
 		);
 	}
 	client = pgFactory(namespace, cfg);
 } else if (driver === 'duckdb') {
 	if (!duckFactory) {
 		throw new Error(
-			"getDb: duckdb driver selected but the duck adapter is not registered — import 'graphx-core/duck'",
+			"getDb: duckdb driver selected but the duck adapter is not registered — import 'graphx/duck'",
 		);
 	}
 	client = duckFactory(namespace, cfg);
@@ -2836,7 +2836,7 @@ if (driver === 'postgres') {
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/duck-client.test.ts`
+Run: `bun test packages/graphx/test/core/duck-client.test.ts`
 Expected: PASS, 12 tests. The commit-on-aborted test is the one that matters most — if it passes because `commit()` resolved, the defense is missing.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -2845,7 +2845,7 @@ Expected: all green; the libSQL suite is untouched.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/duck.ts packages/core/src/duck-value.ts packages/core/src/db.ts packages/core/test/duck-client.test.ts
+git add packages/graphx/src/core/duck.ts packages/graphx/src/core/duck-value.ts packages/graphx/src/core/db.ts packages/graphx/test/core/duck-client.test.ts
 git commit -m "feat(core): add the DuckClient DbClient implementation
 
 Mirrors pg.ts. DuckDB accepts ? placeholders natively, so unlike the
@@ -2875,9 +2875,9 @@ This schema is the third sibling of `schema()` (libSQL) and `postgresSchema()`, 
 
 **Files:**
 
-- Modify: `packages/core/src/dialect-sql.ts` (add `duckdbSchema`)
-- Modify: `packages/core/src/schema.ts` (`init`, `readEmbDim` duckdb arms)
-- Test: `packages/core/test/duck-schema.test.ts`
+- Modify: `packages/graphx/src/core/dialect-sql.ts` (add `duckdbSchema`)
+- Modify: `packages/graphx/src/core/schema.ts` (`init`, `readEmbDim` duckdb arms)
+- Test: `packages/graphx/test/core/duck-schema.test.ts`
 
 **Interfaces:**
 
@@ -2886,7 +2886,7 @@ This schema is the third sibling of `schema()` (libSQL) and `postgresSchema()`, 
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-schema.test.ts`:
+Create `packages/graphx/test/core/duck-schema.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -3014,7 +3014,7 @@ describe('duckdbSchema', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-schema.test.ts`
+Run: `bun test packages/graphx/test/core/duck-schema.test.ts`
 Expected: FAIL — `init` throws `schema.init: duckdb not implemented yet` from Task 2.
 
 - [ ] **Step 3: Add `duckdbSchema` to `dialect-sql.ts`**
@@ -3178,7 +3178,7 @@ Import `duckdbSchema` alongside the other fragments, and `SqlRow` from `./dialec
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/duck-schema.test.ts`
+Run: `bun test packages/graphx/test/core/duck-schema.test.ts`
 Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -3187,7 +3187,7 @@ Expected: green.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/dialect-sql.ts packages/core/src/schema.ts packages/core/test/duck-schema.test.ts
+git add packages/graphx/src/core/dialect-sql.ts packages/graphx/src/core/schema.ts packages/graphx/test/core/duck-schema.test.ts
 git commit -m "feat(core): add the DuckDB schema with a live/history split
 
 node_versions and edge_versions become views over a live table and a
@@ -3210,8 +3210,8 @@ Task 1 left every fragment throwing for `duckdb`. This fills in all of them exce
 
 **Files:**
 
-- Modify: `packages/core/src/dialect-sql.ts`
-- Test: `packages/core/test/dialect-sql.test.ts` (extend), `packages/core/test/duck-fragments.test.ts` (create)
+- Modify: `packages/graphx/src/core/dialect-sql.ts`
+- Test: `packages/graphx/test/core/dialect-sql.test.ts` (extend), `packages/graphx/test/core/duck-fragments.test.ts` (create)
 
 **Interfaces:**
 
@@ -3220,7 +3220,7 @@ Task 1 left every fragment throwing for `duckdb`. This fills in all of them exce
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-fragments.test.ts`. These run the emitted SQL rather than string-matching it, because the failure modes being guarded against are silent wrong answers, not syntax errors:
+Create `packages/graphx/test/core/duck-fragments.test.ts`. These run the emitted SQL rather than string-matching it, because the failure modes being guarded against are silent wrong answers, not syntax errors:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -3337,7 +3337,7 @@ describe('duckdb fragments, executed', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-fragments.test.ts`
+Run: `bun test packages/graphx/test/core/duck-fragments.test.ts`
 Expected: FAIL — each fragment throws `dialect-sql: <name>(duckdb) not implemented yet`.
 
 - [ ] **Step 3: Fill in the arms**
@@ -3450,7 +3450,7 @@ Leave `ftsWhere`, `ftsSeedLive`, and `ftsSeedAsOf` throwing `notYet`. They need 
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/duck-fragments.test.ts`
+Run: `bun test packages/graphx/test/core/duck-fragments.test.ts`
 Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -3459,7 +3459,7 @@ Expected: green — the libSQL and Postgres arms are untouched.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/dialect-sql.ts packages/core/test/duck-fragments.test.ts
+git add packages/graphx/src/core/dialect-sql.ts packages/graphx/test/core/duck-fragments.test.ts
 git commit -m "feat(core): fill in the duckdb dialect fragments
 
 JSON access goes through json_extract_string rather than json_extract:
@@ -3485,10 +3485,10 @@ Three call sites Task 2 left throwing. Each has a specific DuckDB hazard behind 
 
 **Files:**
 
-- Modify: `packages/core/src/bulk.ts:200,238,246`
-- Modify: `packages/core/src/journey.ts:104-106`
-- Modify: `packages/core/src/pattern.ts:206-215,403`
-- Test: `packages/core/test/duck-queries.test.ts`
+- Modify: `packages/graphx/src/core/bulk.ts:200,238,246`
+- Modify: `packages/graphx/src/core/journey.ts:104-106`
+- Modify: `packages/graphx/src/core/pattern.ts:206-215,403`
+- Test: `packages/graphx/test/core/duck-queries.test.ts`
 
 **Interfaces:**
 
@@ -3497,7 +3497,7 @@ Three call sites Task 2 left throwing. Each has a specific DuckDB hazard behind 
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-queries.test.ts`:
+Create `packages/graphx/test/core/duck-queries.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -3575,11 +3575,11 @@ describe('duckdb query paths', () => {
 });
 ```
 
-Adjust the `Graph` construction, method names, and option shapes to whatever `packages/core/src/graph.ts` actually exports — read it before writing this file. The assertions above are the contract; the call syntax must match the real API.
+Adjust the `Graph` construction, method names, and option shapes to whatever `packages/graphx/src/core/graph.ts` actually exports — read it before writing this file. The assertions above are the contract; the call syntax must match the real API.
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-queries.test.ts`
+Run: `bun test packages/graphx/test/core/duck-queries.test.ts`
 Expected: FAIL with the `not implemented yet` errors planted in Task 2.
 
 - [ ] **Step 3: `bulk.ts` — drop the index/trigger dance**
@@ -3632,7 +3632,7 @@ The OR-form binds three arguments where the row-value form binds two — thread 
 
 - [ ] **Step 6: Run the tests**
 
-Run: `bun test packages/core/test/duck-queries.test.ts`
+Run: `bun test packages/graphx/test/core/duck-queries.test.ts`
 Expected: PASS, 5 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -3641,7 +3641,7 @@ Expected: green.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/bulk.ts packages/core/src/journey.ts packages/core/src/pattern.ts packages/core/test/duck-queries.test.ts
+git add packages/graphx/src/core/bulk.ts packages/graphx/src/core/journey.ts packages/graphx/src/core/pattern.ts packages/graphx/test/core/duck-queries.test.ts
 git commit -m "feat(core): add the duckdb arms for bulk, journey, and pattern
 
 bulkLoad's index-and-trigger bracket is libSQL-only - DuckDB has no ANN
@@ -3662,10 +3662,10 @@ Neither constraint gets a store-level index on DuckDB, for two different reasons
 
 **Files:**
 
-- Modify: `packages/core/src/constraints.ts:62-91`
-- Create: `packages/core/src/duck-constraints.ts`
-- Modify: `packages/core/src/graph.ts` (call the check on the node write paths)
-- Test: `packages/core/test/duck-constraints.test.ts`
+- Modify: `packages/graphx/src/core/constraints.ts:62-91`
+- Create: `packages/graphx/src/core/duck-constraints.ts`
+- Modify: `packages/graphx/src/core/graph.ts` (call the check on the node write paths)
+- Test: `packages/graphx/test/core/duck-constraints.test.ts`
 
 **Interfaces:**
 
@@ -3676,7 +3676,7 @@ Neither constraint gets a store-level index on DuckDB, for two different reasons
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-constraints.test.ts`:
+Create `packages/graphx/test/core/duck-constraints.test.ts`:
 
 ```ts
 import { describe, expect, test } from 'bun:test';
@@ -3785,7 +3785,7 @@ describe('duckdb constraints', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-constraints.test.ts`
+Run: `bun test packages/graphx/test/core/duck-constraints.test.ts`
 Expected: FAIL — `constraints.ts` throws `not implemented yet` for duckdb.
 
 - [ ] **Step 3: Write `duck-constraints.ts`**
@@ -3947,7 +3947,7 @@ if (dialectOf(this.raw) === 'duckdb') {
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/duck-constraints.test.ts`
+Run: `bun test packages/graphx/test/core/duck-constraints.test.ts`
 Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -3956,7 +3956,7 @@ Expected: green.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/duck-constraints.ts packages/core/src/constraints.ts packages/core/src/graph.ts packages/core/test/duck-constraints.test.ts
+git add packages/graphx/src/core/duck-constraints.ts packages/graphx/src/core/constraints.ts packages/graphx/src/core/graph.ts packages/graphx/test/core/duck-constraints.test.ts
 git commit -m "feat(core): enforce unique node props in code on DuckDB
 
 DuckDB indexes no JSON extraction, directly or through a generated
@@ -3978,7 +3978,7 @@ This is where parity stops being a promise. The whole suite runs under `GRAPHX_T
 
 **Files:**
 
-- Modify: `packages/core/test/harness.ts`
+- Modify: `packages/graphx/test/core/harness.ts`
 - Modify: `.github/workflows/ci.yml`
 - Create: `docs/DUCKDB_SUPPORT.md`
 
@@ -3989,7 +3989,7 @@ This is where parity stops being a promise. The whole suite runs under `GRAPHX_T
 
 - [ ] **Step 1: Add the duckdb arm to `makeTestDb`**
 
-In `packages/core/test/harness.ts`, add the import and the branch. Put it _before_ the postgres branch so the if-chain reads in driver order:
+In `packages/graphx/test/core/harness.ts`, add the import and the branch. Put it _before_ the postgres branch so the if-chain reads in driver order:
 
 ```ts
 import { createDuckClient, type DuckClient } from '../src/duck.ts';
@@ -4096,7 +4096,7 @@ continue-on-error: true
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/test/harness.ts .github/workflows/ci.yml docs/DUCKDB_SUPPORT.md
+git add packages/graphx/test/core/harness.ts .github/workflows/ci.yml docs/DUCKDB_SUPPORT.md
 git commit -m "test(core): run the suite against DuckDB and record the parity gap
 
 Adds the third harness arm and a CI job, then writes down exactly what
@@ -4116,8 +4116,8 @@ Stage 4 begins. The client's durable state moves from a local file to a snapshot
 
 **Files:**
 
-- Create: `packages/core/src/duck-materialize.ts`
-- Test: `packages/core/test/duck-materialize.test.ts`
+- Create: `packages/graphx/src/core/duck-materialize.ts`
+- Test: `packages/graphx/test/core/duck-materialize.test.ts`
 
 **Interfaces:**
 
@@ -4129,7 +4129,7 @@ Stage 4 begins. The client's durable state moves from a local file to a snapshot
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-materialize.test.ts`:
+Create `packages/graphx/test/core/duck-materialize.test.ts`:
 
 ```ts
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -4239,7 +4239,7 @@ describe('materialize', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-materialize.test.ts`
+Run: `bun test packages/graphx/test/core/duck-materialize.test.ts`
 Expected: FAIL — `duck-materialize.ts` does not exist.
 
 - [ ] **Step 3: Write `duck-materialize.ts`**
@@ -4346,13 +4346,13 @@ export async function materialize(
 
 - [ ] **Step 4: Run the tests**
 
-Run: `bun test packages/core/test/duck-materialize.test.ts`
+Run: `bun test packages/graphx/test/core/duck-materialize.test.ts`
 Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/duck-materialize.ts packages/core/test/duck-materialize.test.ts
+git add packages/graphx/src/core/duck-materialize.ts packages/graphx/test/core/duck-materialize.test.ts
 git commit -m "feat(core): materialize a snapshot into a local DuckDB
 
 Parquet loads into real tables rather than views over read_parquet: the
@@ -4372,10 +4372,10 @@ The write direction, and the point at which `DuckClient` stops being a local dat
 
 **Files:**
 
-- Create: `packages/core/src/duck-commit.ts`
-- Modify: `packages/core/src/duck.ts` (bucket-backed lifecycle)
-- Modify: `packages/core/src/db.ts` (`DbConfig` bucket fields)
-- Test: `packages/core/test/duck-commit.test.ts`
+- Create: `packages/graphx/src/core/duck-commit.ts`
+- Modify: `packages/graphx/src/core/duck.ts` (bucket-backed lifecycle)
+- Modify: `packages/graphx/src/core/db.ts` (`DbConfig` bucket fields)
+- Test: `packages/graphx/test/core/duck-commit.test.ts`
 
 **Interfaces:**
 
@@ -4388,7 +4388,7 @@ The write direction, and the point at which `DuckClient` stops being a local dat
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-commit.test.ts`:
+Create `packages/graphx/test/core/duck-commit.test.ts`:
 
 ```ts
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -4502,7 +4502,7 @@ describe('snapshot commit', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-commit.test.ts`
+Run: `bun test packages/graphx/test/core/duck-commit.test.ts`
 Expected: FAIL — `DuckClient` has no `open`, `commit`, or `snapshot`.
 
 - [ ] **Step 3: Write `duck-commit.ts`**
@@ -4754,7 +4754,7 @@ registerDuckDriver((namespace: string, cfg: DbConfig): DbClient => {
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bun test packages/core/test/duck-commit.test.ts`
+Run: `bun test packages/graphx/test/core/duck-commit.test.ts`
 Expected: PASS, 7 tests.
 
 Run: `bun test --timeout 30000 && bun run type-check && bun run lint`
@@ -4763,7 +4763,7 @@ Expected: green.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/core/src/duck-commit.ts packages/core/src/duck.ts packages/core/src/db.ts packages/core/test/duck-commit.test.ts
+git add packages/graphx/src/core/duck-commit.ts packages/graphx/src/core/duck.ts packages/graphx/src/core/db.ts packages/graphx/test/core/duck-commit.test.ts
 git commit -m "feat(core): commit a local DuckDB back to the snapshot chain
 
 Only dirty tables are re-exported; the rest carry their file refs
@@ -4784,10 +4784,10 @@ The last piece. A commit per mutation is untenable, and the conditional-close CA
 
 **Files:**
 
-- Modify: `packages/core/src/graph.ts` (write session, mutex, `isRetryableContention`)
-- Modify: `packages/core/src/serve.ts:687-715` (contention → 409)
-- Create: `packages/core/test/duck-e2e.test.ts`
-- Modify: `packages/core/test/p14-concurrency.test.ts` (duckdb variant)
+- Modify: `packages/graphx/src/core/graph.ts` (write session, mutex, `isRetryableContention`)
+- Modify: `packages/graphx/src/core/serve.ts:687-715` (contention → 409)
+- Create: `packages/graphx/test/core/duck-e2e.test.ts`
+- Modify: `packages/graphx/test/core/p14-concurrency.test.ts` (duckdb variant)
 - Modify: `docs/DUCKDB_SUPPORT.md`
 
 **Interfaces:**
@@ -4797,7 +4797,7 @@ The last piece. A commit per mutation is untenable, and the conditional-close CA
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/duck-e2e.test.ts`:
+Create `packages/graphx/test/core/duck-e2e.test.ts`:
 
 ```ts
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -4925,7 +4925,7 @@ describe('duckdb end to end', () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `bun test packages/core/test/duck-e2e.test.ts`
+Run: `bun test packages/graphx/test/core/duck-e2e.test.ts`
 Expected: FAIL — `Graph.write` does not exist.
 
 - [ ] **Step 3: Add the mutex and the write session to `graph.ts`**
@@ -5034,10 +5034,10 @@ Its 5 tests open 8 connections to one file and rely on write-lock contention, wh
 
 - [ ] **Step 7: Run everything**
 
-Run: `bun test packages/core/test/duck-e2e.test.ts`
+Run: `bun test packages/graphx/test/core/duck-e2e.test.ts`
 Expected: PASS, 5 tests — the last two moved to `p14-concurrency.test.ts` in step 6.
 
-Run: `bun test packages/core/test/p14-concurrency.test.ts`
+Run: `bun test packages/graphx/test/core/p14-concurrency.test.ts`
 Expected: PASS, including the two relocated invariant tests.
 
 Run: `GRAPHX_TEST_DRIVER=duckdb bun test --timeout 30000 2>&1 | tail -40`
@@ -5058,7 +5058,7 @@ docker run -d --name graphx-minio -p 9100:9000 \
   -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
   minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
 GRAPHX_TEST_DRIVER=duckdb GRAPHX_TEST_S3_ENDPOINT=http://127.0.0.1:9100 \
-  bun test packages/core/test/duck-e2e.test.ts
+  bun test packages/graphx/test/core/duck-e2e.test.ts
 docker rm -f graphx-minio
 ```
 
@@ -5067,7 +5067,7 @@ Add that env branch to the e2e test's `client()` helper: when `GRAPHX_TEST_S3_EN
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/core/src/graph.ts packages/core/src/serve.ts packages/core/src/duck.ts packages/core/test docs/DUCKDB_SUPPORT.md
+git add packages/graphx/src/core/graph.ts packages/graphx/src/core/serve.ts packages/graphx/src/core/duck.ts packages/graphx/test/core docs/DUCKDB_SUPPORT.md
 git commit -m "feat(core): add the write session, the writer mutex, and error mapping
 
 A commit is object PUTs plus a manifest CAS, so graph.write(fn) groups a

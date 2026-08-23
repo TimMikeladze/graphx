@@ -9,7 +9,7 @@ search it, walk it, write facts back — has to be handed an HTTP client and a c
 document, and then trusted to compose URLs correctly. Every MCP client on the market speaks a tool
 protocol instead.
 
-The serving layer is already the right shape for this. `packages/core/src/serve.ts` exposes 25
+The serving layer is already the right shape for this. `packages/graphx/src/core/serve.ts` exposes 25
 tenant routes behind one authn injection point and one authz check, with governance caps enforced
 server-side and non-overridable by the client. Since `52bdf5a` each route is declared inline with
 `createRoute()` on an `OpenAPIHono` app, which keeps every declaration in a live registry:
@@ -59,7 +59,7 @@ Six forks, resolved.
 New workspace package `packages/mcp`, published as `graphx-mcp`.
 
 ```
-packages/mcp/src/
+packages/graphx/src/mcp/
   index.ts       createGraphxMcp(), createMcpApp()   — library entry points
   backend.ts     the Backend seam: local | remote
   tools.ts       OpenAPI registry → 25 mirrored tools + describe_schema
@@ -68,7 +68,7 @@ packages/mcp/src/
 ```
 
 Dependencies: `@modelcontextprotocol/sdk@^1.30`, `@hono/mcp@^0.3`, `zod@^4`. Peer dependency on
-`graphx-core`, matching how `graphx-cli` depends on core today.
+`graphx`, matching how `graphx/cli` depends on core today.
 
 The SDK takes `zod@^3.25 || ^4.0`, so the repo's zod 4 works unmodified. `@hono/mcp@0.3.1`
 peer-depends on the SDK rather than vendoring it, so there is one protocol implementation in the

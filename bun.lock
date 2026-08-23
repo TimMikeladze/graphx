@@ -19,8 +19,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@tanstack/react-query": "^5.101.0",
-        "graphx-core": "workspace:*",
-        "graphx-react": "workspace:*",
+        "graphx": "workspace:*",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "zod": "^4.4.3",
@@ -42,7 +41,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@libsql/client": "^0.17.3",
-        "graphx-core": "workspace:*",
+        "graphx": "workspace:*",
         "hono": "^4.12.23",
         "zod": "^4.4.3",
       },
@@ -56,7 +55,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@libsql/client": "^0.17.3",
-        "graphx-core": "workspace:*",
+        "graphx": "workspace:*",
         "hono": "^4.12.23",
         "zod": "^4.4.3",
       },
@@ -116,54 +115,18 @@
         "vite": "^8",
       },
     },
-    "packages/auth": {
-      "name": "graphx-auth",
-      "version": "0.1.0",
-      "dependencies": {
-        "@hono/zod-validator": "^0.9.0",
-        "@libsql/client": "^0.17.3",
-        "graphx-core": "workspace:*",
-        "hono": "^4.12.23",
-        "ulidx": "^2.4.1",
-        "zod": "^4.4.3",
-      },
-      "devDependencies": {
-        "@types/node": "^25.9.1",
-      },
-      "peerDependencies": {
-        "typescript": ">=4.5.0",
-      },
-      "optionalPeers": [
-        "typescript",
-      ],
-    },
-    "packages/cli": {
-      "name": "graphx-cli",
+    "packages/graphx": {
+      "name": "graphx",
       "version": "0.1.0",
       "bin": {
         "graphx": "./dist/cli.js",
+        "graphx-mcp": "./dist/mcp/bin.js",
       },
-      "devDependencies": {
-        "@types/node": "^25.9.1",
-        "graphx-core": "workspace:*",
-        "graphx-ingest": "workspace:*",
-      },
-      "peerDependencies": {
-        "graphx-core": "workspace:*",
-        "graphx-ingest": "workspace:*",
-        "typescript": ">=4.5.0",
-      },
-      "optionalPeers": [
-        "typescript",
-      ],
-    },
-    "packages/core": {
-      "name": "graphx-core",
-      "version": "0.1.0",
       "dependencies": {
         "@hono/zod-openapi": "^1.5.1",
         "@hono/zod-validator": "^0.9.0",
         "@libsql/client": "^0.17.3",
+        "gray-matter": "^4.0.3",
         "hono": "^4.12.23",
         "ulidx": "^2.4.1",
         "zod": "^4.4.3",
@@ -172,97 +135,42 @@
         "@aws-sdk/client-s3": "^3.0.0",
         "@aws-sdk/s3-request-presigner": "^3.0.0",
         "@duckdb/node-api": "1.5.5-r.2",
+        "@happy-dom/global-registrator": "^16.5.3",
+        "@hono/mcp": "^0.3.1",
+        "@modelcontextprotocol/sdk": "^1.29.0",
         "@seriousme/openapi-schema-validator": "^2.9.0",
+        "@tanstack/react-query": "^5.101.0",
+        "@testing-library/react": "^16.1.0",
         "@types/node": "^25.9.1",
         "@types/pg": "^8.11.10",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
         "ajv": "^8.20.0",
+        "happy-dom": "^16.5.3",
         "pg": "^8.13.1",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
       },
       "peerDependencies": {
         "@aws-sdk/client-s3": "^3.0.0",
         "@aws-sdk/s3-request-presigner": "^3.0.0",
         "@duckdb/node-api": "^1.5.5-r.2",
+        "@hono/mcp": "^0.3.1",
+        "@modelcontextprotocol/sdk": "^1.29.0",
+        "@tanstack/react-query": "^5.0.0",
         "pg": "^8.11.0",
+        "react": "^18 || ^19",
         "typescript": ">=4.5.0",
       },
       "optionalPeers": [
         "@aws-sdk/client-s3",
         "@aws-sdk/s3-request-presigner",
         "@duckdb/node-api",
+        "@hono/mcp",
+        "@modelcontextprotocol/sdk",
+        "@tanstack/react-query",
         "pg",
-        "typescript",
-      ],
-    },
-    "packages/ingest": {
-      "name": "graphx-ingest",
-      "version": "0.1.0",
-      "dependencies": {
-        "gray-matter": "^4.0.3",
-      },
-      "devDependencies": {
-        "@aws-sdk/client-s3": "^3.0.0",
-        "@types/node": "^25.9.1",
-        "graphx-core": "workspace:*",
-        "zod": "^4.4.3",
-      },
-      "peerDependencies": {
-        "@aws-sdk/client-s3": "^3.0.0",
-        "graphx-core": "workspace:*",
-        "typescript": ">=4.5.0",
-      },
-      "optionalPeers": [
-        "@aws-sdk/client-s3",
-        "typescript",
-      ],
-    },
-    "packages/mcp": {
-      "name": "graphx-mcp",
-      "version": "0.1.0",
-      "bin": {
-        "graphx-mcp": "./dist/bin.js",
-      },
-      "dependencies": {
-        "@hono/mcp": "^0.3.1",
-        "@modelcontextprotocol/sdk": "^1.29.0",
-        "zod": "^4.4.3",
-      },
-      "devDependencies": {
-        "@hono/zod-openapi": "^1.5.1",
-        "@types/node": "^25.9.1",
-        "graphx-core": "workspace:*",
-        "hono": "^4.12.23",
-      },
-      "peerDependencies": {
-        "graphx-core": "workspace:*",
-        "hono": "^4.12.23",
-        "typescript": ">=4.5.0",
-      },
-      "optionalPeers": [
-        "typescript",
-      ],
-    },
-    "packages/react": {
-      "name": "graphx-react",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@happy-dom/global-registrator": "^16.5.3",
-        "@tanstack/react-query": "^5.101.0",
-        "@testing-library/react": "^16.1.0",
-        "@types/react": "^19",
-        "@types/react-dom": "^19",
-        "graphx-core": "workspace:*",
-        "happy-dom": "^16.5.3",
-        "react": "^19.2.6",
-        "react-dom": "^19.2.6",
-        "zod": "^4.4.3",
-      },
-      "peerDependencies": {
-        "@tanstack/react-query": "^5.0.0",
-        "graphx-core": "workspace:*",
-        "react": "^18 || ^19",
-        "typescript": ">=4.5.0",
-      },
-      "optionalPeers": [
+        "react",
         "typescript",
       ],
     },
@@ -1044,7 +952,7 @@
 
     "@types/ms": ["@types/ms@2.1.0", "", {}, "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA=="],
 
-    "@types/node": ["@types/node@24.13.1", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-RSpUJGmvsJ1ZeBehQZFhIdpsz+bIpES0nIQXko4Ybq+N+kX6XvOq3Jo+iJ82FWLdblFq85AsMikd3m35jgezYg=="],
+    "@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
 
     "@types/offscreencanvas": ["@types/offscreencanvas@2019.7.3", "", {}, "sha512-ieXiYmgSRXUDeOntE1InxjWyvEelZGP63M+cGuquuRLuIKKT1osnkXjxev9B7d1nXSug5vpunx+gNlbVxMlC9A=="],
 
@@ -1234,7 +1142,7 @@
 
     "convert-source-map": ["convert-source-map@2.0.0", "", {}, "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="],
 
-    "cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
+    "cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
 
     "cookie-es": ["cookie-es@3.1.1", "", {}, "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg=="],
 
@@ -1512,25 +1420,15 @@
 
     "graphql": ["graphql@16.14.1", "", {}, "sha512-cQOsSMS/IrDz82PVyRDvf/Q1F/bRbBVjJlh+xYOkI1qw2bWRvWGiWc+m2O0d6l4Bt1fyY+8kzJ8JFWGJqNeDBg=="],
 
+    "graphx": ["graphx@workspace:packages/graphx"],
+
     "graphx-admin": ["graphx-admin@workspace:packages/admin"],
-
-    "graphx-auth": ["graphx-auth@workspace:packages/auth"],
-
-    "graphx-cli": ["graphx-cli@workspace:packages/cli"],
-
-    "graphx-core": ["graphx-core@workspace:packages/core"],
 
     "graphx-example-iot-fleet": ["graphx-example-iot-fleet@workspace:examples/iot-fleet"],
 
     "graphx-example-pantheon-graph": ["graphx-example-pantheon-graph@workspace:examples/pantheon-graph"],
 
     "graphx-example-skills-graph": ["graphx-example-skills-graph@workspace:examples/skills-graph"],
-
-    "graphx-ingest": ["graphx-ingest@workspace:packages/ingest"],
-
-    "graphx-mcp": ["graphx-mcp@workspace:packages/mcp"],
-
-    "graphx-react": ["graphx-react@workspace:packages/react"],
 
     "gray-matter": ["gray-matter@4.0.3", "", { "dependencies": { "js-yaml": "^3.13.1", "kind-of": "^6.0.2", "section-matter": "^1.0.0", "strip-bom-string": "^1.0.0" } }, "sha512-5v6yZd4JK3eMI3FqqCouswVqwugaA9r4dNZB1wwcmrD02QkV5H0y7XBQW8QwQqEaZY1pM9aqORSORhJRdNK44Q=="],
 
@@ -2182,7 +2080,7 @@
 
     "unconfig-core": ["unconfig-core@7.5.0", "", { "dependencies": { "@quansync/fs": "^1.0.0", "quansync": "^1.0.0" } }, "sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w=="],
 
-    "undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+    "undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
 
     "unicorn-magic": ["unicorn-magic@0.3.0", "", {}, "sha512-+QBBXBCvifc56fsbuxZQ6Sic3wqqc3WWaqxs58gvJrcOuN83HGTCwz3oS5phzU9LthRNE9VrJCFCLUgHeeFnfA=="],
 
@@ -2308,19 +2206,11 @@
 
     "@tailwindcss/oxide-wasm32-wasi/tslib": ["tslib@2.8.1", "", { "bundled": true }, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
-    "@types/pg/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "@types/set-cookie-parser/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "@types/ws/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
     "@typescript-eslint/eslint-plugin/ignore": ["ignore@7.0.5", "", {}, "sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg=="],
 
     "@uwdata/mosaic-core/@duckdb/duckdb-wasm": ["@duckdb/duckdb-wasm@1.30.0", "", { "dependencies": { "apache-arrow": "^17.0.0" } }, "sha512-9aWrm+4ayl4sTlvGtl/b+LxrUyXaac3yyVqkoJ3F7Vkd62PoS8PcQIRJ/KjXBW36LP1CnPY5jjvFyIcTFLtcXA=="],
 
     "apache-arrow/@types/node": ["@types/node@20.19.42", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-5L7SUaFC1RyDraj2yRhyBzHTobyXHmohD100CChNtyPyleoq37Mqab5Gn8XEKI04dfN/oqPdpHk38MgcQWHbZg=="],
-
-    "bun-types/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
 
     "chalk-template/chalk": ["chalk@4.1.2", "", { "dependencies": { "ansi-styles": "^4.1.0", "supports-color": "^7.1.0" } }, "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA=="],
 
@@ -2342,19 +2232,9 @@
 
     "eslint/ajv": ["ajv@6.15.0", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "fast-json-stable-stringify": "^2.0.0", "json-schema-traverse": "^0.4.1", "uri-js": "^4.2.2" } }, "sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw=="],
 
-    "express/cookie": ["cookie@0.7.2", "", {}, "sha512-yki5XnKuf750l50uGTllt6kKILY4nQ1eNIQatoXEByZ5dWgnKqbnqmTrBE5B4N7lrMJKQ2ytWMiTO2o0v6Ew/w=="],
-
     "fast-glob/glob-parent": ["glob-parent@5.1.2", "", { "dependencies": { "is-glob": "^4.0.1" } }, "sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow=="],
 
-    "graphx-auth/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "graphx-cli/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "graphx-core/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "graphx-ingest/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
-
-    "graphx-mcp/@types/node": ["@types/node@25.9.3", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg=="],
+    "graphx-admin/@types/node": ["@types/node@24.13.1", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-RSpUJGmvsJ1ZeBehQZFhIdpsz+bIpES0nIQXko4Ybq+N+kX6XvOq3Jo+iJ82FWLdblFq85AsMikd3m35jgezYg=="],
 
     "libsql/detect-libc": ["detect-libc@2.0.2", "", {}, "sha512-UX6sGumvvqSaXgdKGUsgZWqcUyIXZ/vZTrlRT/iobiKhGL0zL4d3osHj3uqllWJK+i+sixDS/3COVEOFbupFyw=="],
 
@@ -2363,6 +2243,8 @@
     "mdast-util-find-and-replace/escape-string-regexp": ["escape-string-regexp@5.0.0", "", {}, "sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw=="],
 
     "micromatch/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
+
+    "msw/cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
 
     "npm-run-path/path-key": ["path-key@4.0.0", "", {}, "sha512-haREypq7xkM7ErfgIyA0z+Bj4AGKlMSdlQE2jvJo6huWD1EdkKYV+G/T4nq0YEF2vgTT8kqMFKo1uHn950r4SQ=="],
 
@@ -2404,15 +2286,7 @@
 
     "@dotenvx/dotenvx/which/isexe": ["isexe@3.1.5", "", {}, "sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w=="],
 
-    "@types/pg/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "@types/set-cookie-parser/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "@types/ws/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
     "apache-arrow/@types/node/undici-types": ["undici-types@6.21.0", "", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
-
-    "bun-types/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
 
     "chalk-template/chalk/ansi-styles": ["ansi-styles@4.3.0", "", { "dependencies": { "color-convert": "^2.0.1" } }, "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg=="],
 
@@ -2422,15 +2296,7 @@
 
     "eslint/ajv/json-schema-traverse": ["json-schema-traverse@0.4.1", "", {}, "sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg=="],
 
-    "graphx-auth/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "graphx-cli/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "graphx-core/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "graphx-ingest/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
-
-    "graphx-mcp/@types/node/undici-types": ["undici-types@7.24.6", "", {}, "sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg=="],
+    "graphx-admin/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "wrap-ansi/string-width/emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 

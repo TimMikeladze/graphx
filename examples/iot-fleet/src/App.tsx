@@ -1,4 +1,4 @@
-import { type GraphError } from 'graphx-react';
+import { type GraphError } from 'graphx/react';
 import { useState } from 'react';
 import { g } from './hooks.ts';
 

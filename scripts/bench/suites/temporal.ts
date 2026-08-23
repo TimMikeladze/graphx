@@ -8,8 +8,8 @@
  * live index cannot see historical rows. The ratio between the two is the price of time travel,
  * and nothing else in the harness reports it.
  */
-import { match, retrieve } from '../../../packages/core/src/index.ts';
-import { changeFeed, diff, history } from '../../../packages/core/src/index.ts';
+import { match, retrieve } from '../../../packages/graphx/src/core/index.ts';
+import { changeFeed, diff, history } from '../../../packages/graphx/src/core/index.ts';
 import { demoSchema } from '../../seed/schema.ts';
 import { BENCH_NOW, DAY_MS, embed, WINDOW_DAYS } from '../corpus.ts';
 import { defineCase, pick, type Suite } from '../types.ts';

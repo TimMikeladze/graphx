@@ -6,7 +6,7 @@ Design for [issue #7](https://github.com/TimMikeladze/graphx/issues/7). Date: 20
 
 The event substrate exists and the consumer does not.
 
-`packages/core/src/events.ts` defines a typed `GraphEvent` covering
+`packages/graphx/src/core/events.ts` defines a typed `GraphEvent` covering
 `node.create`/`node.update`/`node.delete`/`edge.create`/`edge.delete`/`edge.supersede`, with the
 `shape: 'insert' | 'close'` distinction that makes pure closes visible — the case the `valid_from`
 CDC feed is structurally blind to. `Graph` emits post-commit through a pluggable `GraphEventSink`.
@@ -38,7 +38,7 @@ Four forks, resolved:
    throughput. An event that exhausts its retries is dead-lettered and the batch keeps moving, so a
    poison event never wedges a subscription.
 
-4. **The runner ships from core** as `packages/core/src/triggers.ts`, plus a thin `graphx triggers`
+4. **The runner ships from core** as `packages/graphx/src/core/triggers.ts`, plus a thin `graphx triggers`
    CLI command. Core already owns `graph_outbox`, `outboxTail`, and the dialect seam, and the runner
    adds no new dependencies. Apps embed the exported runner in their own worker; the CLI wraps it for
    operators who have not written one. Serverless deployments have nowhere to host a long-lived
@@ -109,7 +109,7 @@ Four small ones:
 
 ## API
 
-All of it in `packages/core/src/triggers.ts`, exported from `graphx-core`.
+All of it in `packages/graphx/src/core/triggers.ts`, exported from `graphx`.
 
 ```ts
 interface TriggerMatch {
@@ -231,7 +231,7 @@ stalled webhook spins its own loop and its own cursor; it cannot stall another's
 
 `graphx triggers -c ./graphx.config.ts`.
 
-No new config format. `GraphxConfig` (`packages/cli/src/cli.ts:117`) gains two optional fields:
+No new config format. `GraphxConfig` (`packages/graphx/src/cli.ts:117`) gains two optional fields:
 
 ```ts
 triggers?: Trigger<S>[];
@@ -246,7 +246,7 @@ matching `parseIngestArgs` and `parseServeArgs`.
 
 ## Tests
 
-`packages/core/test/triggers.test.ts`, obtaining its database from `harness.ts` so both
+`packages/graphx/test/core/triggers.test.ts`, obtaining its database from `harness.ts` so both
 `GRAPHX_TEST_DRIVER` backends run.
 
 - Match filtering across `op`, `entity`, `label`, `shape`, and `source`.
@@ -267,7 +267,7 @@ Stated so they do not leak into the implementation:
 
 - Triggers declared in the database or the graph schema. `match` is serializable so this can be
   added later without reshaping anything.
-- `graphx-auth` gating what a trigger's derived writes may touch. Trigger actions run privileged;
+- `graphx/auth` gating what a trigger's derived writes may touch. Trigger actions run privileged;
   the docs say so.
 - Replaying a dead letter. Inspection is the acceptance criterion; replay is not.
 - `serve()` auto-hosting a runner.

@@ -30,7 +30,7 @@ import {
 	init,
 	initControl,
 	type Principal,
-} from '../packages/core/src/index.ts';
+} from '../packages/graphx/src/core/index.ts';
 import { applyPlan } from './seed/apply.ts';
 import { fingerprint, isCached, wipe, writeCache } from './seed/cache.ts';
 import { generate } from './seed/generate.ts';

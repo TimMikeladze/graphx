@@ -20,7 +20,7 @@ import {
 	pagerank,
 	retrieve,
 	shortestPath,
-} from 'graphx-core';
+} from 'graphx';
 import { z } from 'zod';
 
 // 1 — schema: node types are Zod objects, edges name their endpoints

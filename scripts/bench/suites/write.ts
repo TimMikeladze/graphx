@@ -7,8 +7,8 @@
  * says what an ingest pipeline gives up by writing row-at-a-time, and whether the chunk size is
  * anywhere near the right one.
  */
-import type { BulkEdgeRow, BulkRow } from '../../../packages/core/src/index.ts';
-import { bulkEdges, bulkLoad } from '../../../packages/core/src/index.ts';
+import type { BulkEdgeRow, BulkRow } from '../../../packages/graphx/src/core/index.ts';
+import { bulkEdges, bulkLoad } from '../../../packages/graphx/src/core/index.ts';
 import type { DemoSchema } from '../../seed/schema.ts';
 import { demoSchema } from '../../seed/schema.ts';
 import type { Corpus } from '../corpus.ts';

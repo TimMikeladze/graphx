@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add the HTTP/SDK surface the `graphx-admin` UI needs — operator-scoped control-plane CRUD, governed node list/graph-slice reads, and node history — all on the existing `graphx-core` Hono app.
+**Goal:** Add the HTTP/SDK surface the `graphx-admin` UI needs — operator-scoped control-plane CRUD, governed node list/graph-slice reads, and node history — all on the existing `graphx` Hono app.
 
 **Architecture:** Two auth realms in one process. (1) A new mounted Hono sub-app (`createAdminApp`) gates control-plane registry CRUD behind an operator credential. (2) New tenant-scoped read routes (`/nodes`, `/graph`, `/nodes/:id/history`) reuse the existing `requireGraph('read')` middleware; cross-tenant operator browsing works via a one-field `Principal.operator` bypass in `authorize`. New read primitives are `Graph` methods (`listNodes`, `graphSlice`) reusing the class's private parsing/upcasting — not a separate file (spec §3 said `list.ts`; methods are more consistent with `neighbors`/`neighborsPage` and reach `rowToNode`).
 
@@ -17,17 +17,17 @@
 
 ## File Structure
 
-- **Modify** `packages/core/src/authz.ts` — add `Principal.operator?: boolean` + bypass in `authorize`.
-- **Modify** `packages/core/src/control-plane.ts` — add `listTenants`, `listProjects`, `listUsers`, `hashApiKey`, `createApiKey`.
-- **Modify** `packages/core/src/graph.ts` — add `NodeListOpts`/`NodeListPage`/`GraphSliceOpts`/`GraphSlice`/`GraphSliceNode`/`GraphSliceLink` types, a private `ftsMatch` helper, and `Graph.listNodes` + `Graph.graphSlice` methods.
-- **Create** `packages/core/src/admin.ts` — `AdminConfig` + `createAdminApp(cfg)` (operator-auth sub-app + CRUD routes).
-- **Modify** `packages/core/src/serve.ts` — add `/nodes`, `/graph`, `/nodes/:id/history` routes + `invalid cursor` → 400 in `onError` + import `history`.
-- **Modify** `packages/core/src/index.ts` — export the new symbols/types.
-- **Create** `packages/core/test/admin-authz.test.ts` — operator bypass.
-- **Create** `packages/core/test/admin-controlplane.test.ts` — control-plane list/create helpers.
-- **Create** `packages/core/test/admin-list.test.ts` — `listNodes`/`graphSlice`.
-- **Create** `packages/core/test/admin-routes.test.ts` — the three read routes + operator impersonation over HTTP.
-- **Create** `packages/core/test/admin-app.test.ts` — `createAdminApp` CRUD + auth gate.
+- **Modify** `packages/graphx/src/core/authz.ts` — add `Principal.operator?: boolean` + bypass in `authorize`.
+- **Modify** `packages/graphx/src/core/control-plane.ts` — add `listTenants`, `listProjects`, `listUsers`, `hashApiKey`, `createApiKey`.
+- **Modify** `packages/graphx/src/core/graph.ts` — add `NodeListOpts`/`NodeListPage`/`GraphSliceOpts`/`GraphSlice`/`GraphSliceNode`/`GraphSliceLink` types, a private `ftsMatch` helper, and `Graph.listNodes` + `Graph.graphSlice` methods.
+- **Create** `packages/graphx/src/core/admin.ts` — `AdminConfig` + `createAdminApp(cfg)` (operator-auth sub-app + CRUD routes).
+- **Modify** `packages/graphx/src/core/serve.ts` — add `/nodes`, `/graph`, `/nodes/:id/history` routes + `invalid cursor` → 400 in `onError` + import `history`.
+- **Modify** `packages/graphx/src/core/index.ts` — export the new symbols/types.
+- **Create** `packages/graphx/test/core/admin-authz.test.ts` — operator bypass.
+- **Create** `packages/graphx/test/core/admin-controlplane.test.ts` — control-plane list/create helpers.
+- **Create** `packages/graphx/test/core/admin-list.test.ts` — `listNodes`/`graphSlice`.
+- **Create** `packages/graphx/test/core/admin-routes.test.ts` — the three read routes + operator impersonation over HTTP.
+- **Create** `packages/graphx/test/core/admin-app.test.ts` — `createAdminApp` CRUD + auth gate.
 
 All `bun test` commands run from the repo root `/Users/tim/workspace/graphx`.
 
@@ -37,12 +37,12 @@ All `bun test` commands run from the repo root `/Users/tim/workspace/graphx`.
 
 **Files:**
 
-- Modify: `packages/core/src/authz.ts:8-12` (Principal), `packages/core/src/authz.ts:41-69` (authorize)
-- Test: `packages/core/test/admin-authz.test.ts`
+- Modify: `packages/graphx/src/core/authz.ts:8-12` (Principal), `packages/graphx/src/core/authz.ts:41-69` (authorize)
+- Test: `packages/graphx/test/core/admin-authz.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/admin-authz.test.ts`:
+Create `packages/graphx/test/core/admin-authz.test.ts`:
 
 ```ts
 import { createClient } from '@libsql/client';
@@ -101,12 +101,12 @@ test('non-operator with no membership is still 403', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-authz.test.ts`
+Run: `bun test packages/graphx/test/core/admin-authz.test.ts`
 Expected: FAIL — the first test fails with a 403 `AuthzError` ("no membership in tenant") because `operator` is not yet honored.
 
 - [ ] **Step 3: Add the `operator` field**
 
-In `packages/core/src/authz.ts`, replace the `Principal` interface (lines 8-12):
+In `packages/graphx/src/core/authz.ts`, replace the `Principal` interface (lines 8-12):
 
 ```ts
 /** Authenticated caller: carried on the request context after authn (§3.2 layer 1). */
@@ -125,7 +125,7 @@ export interface Principal {
 
 - [ ] **Step 4: Add the bypass in `authorize`**
 
-In `packages/core/src/authz.ts`, inside `authorize`, immediately AFTER the project-tenant check (right after the `if (!row || String(row.tenant_id) !== principal.tenantId) { throw new AuthzError(404, 'project not found'); }` block, before the `const mem = ...` membership query), insert:
+In `packages/graphx/src/core/authz.ts`, inside `authorize`, immediately AFTER the project-tenant check (right after the `if (!row || String(row.tenant_id) !== principal.tenantId) { throw new AuthzError(404, 'project not found'); }` block, before the `const mem = ...` membership query), insert:
 
 ```ts
 // Operator bypass: the project-tenant guard above already ran (no cross-tenant leak), so an
@@ -138,13 +138,13 @@ if (principal.operator) {
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-authz.test.ts`
+Run: `bun test packages/graphx/test/core/admin-authz.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/authz.ts packages/core/test/admin-authz.test.ts
+git add packages/graphx/src/core/authz.ts packages/graphx/test/core/admin-authz.test.ts
 git commit -m "feat(core): operator principal bypass in authorize (admin cross-tenant reads)"
 ```
 
@@ -154,12 +154,12 @@ git commit -m "feat(core): operator principal bypass in authorize (admin cross-t
 
 **Files:**
 
-- Modify: `packages/core/src/control-plane.ts` (append after `createProject`, end of file ~line 76)
-- Test: `packages/core/test/admin-controlplane.test.ts`
+- Modify: `packages/graphx/src/core/control-plane.ts` (append after `createProject`, end of file ~line 76)
+- Test: `packages/graphx/test/core/admin-controlplane.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/admin-controlplane.test.ts`:
+Create `packages/graphx/test/core/admin-controlplane.test.ts`:
 
 ```ts
 import { createClient } from '@libsql/client';
@@ -238,12 +238,12 @@ test('createApiKey stores only the hash and returns the plaintext once', async (
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-controlplane.test.ts`
+Run: `bun test packages/graphx/test/core/admin-controlplane.test.ts`
 Expected: FAIL — `listTenants`, `listProjects`, `listUsers`, `createApiKey`, `hashApiKey` are not exported.
 
 - [ ] **Step 3: Implement the helpers**
 
-In `packages/core/src/control-plane.ts`, add this import at the top (after the existing imports on lines 1-3):
+In `packages/graphx/src/core/control-plane.ts`, add this import at the top (after the existing imports on lines 1-3):
 
 ```ts
 import { createHash, randomBytes } from 'node:crypto';
@@ -304,13 +304,13 @@ export async function createApiKey(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-controlplane.test.ts`
+Run: `bun test packages/graphx/test/core/admin-controlplane.test.ts`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/control-plane.ts packages/core/test/admin-controlplane.test.ts
+git add packages/graphx/src/core/control-plane.ts packages/graphx/test/core/admin-controlplane.test.ts
 git commit -m "feat(core): control-plane list helpers + api-key minting (admin registry reads)"
 ```
 
@@ -320,12 +320,12 @@ git commit -m "feat(core): control-plane list helpers + api-key minting (admin r
 
 **Files:**
 
-- Modify: `packages/core/src/graph.ts` (add types near line 93; add `ftsMatch` + `listNodes` inside the `Graph` class, e.g. after `neighborsPage` ends at line 399)
-- Test: `packages/core/test/admin-list.test.ts`
+- Modify: `packages/graphx/src/core/graph.ts` (add types near line 93; add `ftsMatch` + `listNodes` inside the `Graph` class, e.g. after `neighborsPage` ends at line 399)
+- Test: `packages/graphx/test/core/admin-list.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/admin-list.test.ts`:
+Create `packages/graphx/test/core/admin-list.test.ts`:
 
 ```ts
 import { createClient } from '@libsql/client';
@@ -407,12 +407,12 @@ test('listNodes maxRows cap bounds the page', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-list.test.ts`
+Run: `bun test packages/graphx/test/core/admin-list.test.ts`
 Expected: FAIL — `g.listNodes is not a function`.
 
 - [ ] **Step 3: Add the option/return types**
 
-In `packages/core/src/graph.ts`, after the `NeighborPage` interface (ends line 93), add:
+In `packages/graphx/src/core/graph.ts`, after the `NeighborPage` interface (ends line 93), add:
 
 ```ts
 /** Filter/pagination options for {@link Graph.listNodes}. */
@@ -472,7 +472,7 @@ export interface GraphSlice {
 
 - [ ] **Step 4: Add the `ftsMatch` helper + `listNodes` method**
 
-In `packages/core/src/graph.ts`, inside the `Graph` class, add a private helper and the method (place after `neighborsPage`, before `runWriteBatch` at line 408):
+In `packages/graphx/src/core/graph.ts`, inside the `Graph` class, add a private helper and the method (place after `neighborsPage`, before `runWriteBatch` at line 408):
 
 ```ts
 	/**
@@ -560,13 +560,13 @@ In `packages/core/src/graph.ts`, inside the `Graph` class, add a private helper 
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-list.test.ts`
+Run: `bun test packages/graphx/test/core/admin-list.test.ts`
 Expected: PASS (5 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/graph.ts packages/core/test/admin-list.test.ts
+git add packages/graphx/src/core/graph.ts packages/graphx/test/core/admin-list.test.ts
 git commit -m "feat(core): Graph.listNodes — governed temporal/kind/FTS node list (admin master)"
 ```
 
@@ -576,12 +576,12 @@ git commit -m "feat(core): Graph.listNodes — governed temporal/kind/FTS node l
 
 **Files:**
 
-- Modify: `packages/core/src/graph.ts` (add `graphSlice` after `listNodes`)
-- Test: `packages/core/test/admin-list.test.ts` (append)
+- Modify: `packages/graphx/src/core/graph.ts` (add `graphSlice` after `listNodes`)
+- Test: `packages/graphx/test/core/admin-list.test.ts` (append)
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `packages/core/test/admin-list.test.ts`:
+Append to `packages/graphx/test/core/admin-list.test.ts`:
 
 ```ts
 test('graphSlice returns the node set and only edges with both endpoints inside it', async () => {
@@ -636,12 +636,12 @@ test('graphSlice with an unmatched full-text query returns empty', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-list.test.ts`
+Run: `bun test packages/graphx/test/core/admin-list.test.ts`
 Expected: FAIL — `g.graphSlice is not a function`.
 
 - [ ] **Step 3: Implement `graphSlice`**
 
-In `packages/core/src/graph.ts`, add inside the `Graph` class right after `listNodes`:
+In `packages/graphx/src/core/graph.ts`, add inside the `Graph` class right after `listNodes`:
 
 ```ts
 	/**
@@ -701,13 +701,13 @@ In `packages/core/src/graph.ts`, add inside the `Graph` class right after `listN
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-list.test.ts`
+Run: `bun test packages/graphx/test/core/admin-list.test.ts`
 Expected: PASS (9 tests total in the file).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/graph.ts packages/core/test/admin-list.test.ts
+git add packages/graphx/src/core/graph.ts packages/graphx/test/core/admin-list.test.ts
 git commit -m "feat(core): Graph.graphSlice — governed {nodes,links} canvas slice (admin viz)"
 ```
 
@@ -717,12 +717,12 @@ git commit -m "feat(core): Graph.graphSlice — governed {nodes,links} canvas sl
 
 **Files:**
 
-- Modify: `packages/core/src/serve.ts` (import `history`; add 3 query schemas; add 3 routes to the chain; add `invalid cursor` branch in `onError`)
-- Test: `packages/core/test/admin-routes.test.ts`
+- Modify: `packages/graphx/src/core/serve.ts` (import `history`; add 3 query schemas; add 3 routes to the chain; add `invalid cursor` branch in `onError`)
+- Test: `packages/graphx/test/core/admin-routes.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/admin-routes.test.ts`:
+Create `packages/graphx/test/core/admin-routes.test.ts`:
 
 ```ts
 import { rmSync } from 'node:fs';
@@ -868,12 +868,12 @@ test('operator token reads a tenant graph with no membership row -> 200', async 
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-routes.test.ts`
+Run: `bun test packages/graphx/test/core/admin-routes.test.ts`
 Expected: FAIL — the `/nodes`, `/graph`, `/nodes/:id/history` routes 404 (not yet defined); the malformed-cursor test gets 500 not 400.
 
 - [ ] **Step 3: Import `history` and add query schemas**
 
-In `packages/core/src/serve.ts`, add to the imports (after line 12, `import { journey } from './journey.ts';`):
+In `packages/graphx/src/core/serve.ts`, add to the imports (after line 12, `import { journey } from './journey.ts';`):
 
 ```ts
 import { history } from './temporal.ts';
@@ -901,7 +901,7 @@ const graphSliceQuerySchema = z.object({
 
 - [ ] **Step 4: Add the routes to the chain**
 
-In `packages/core/src/serve.ts`, in `buildApp`, insert these three routes into the chain immediately AFTER the `/nodes/:id/neighbors` route (which ends at line 276 with `)`), before the `/retrieve` route:
+In `packages/graphx/src/core/serve.ts`, in `buildApp`, insert these three routes into the chain immediately AFTER the `/nodes/:id/neighbors` route (which ends at line 276 with `)`), before the `/retrieve` route:
 
 ```ts
 			.get(
@@ -934,7 +934,7 @@ In `packages/core/src/serve.ts`, in `buildApp`, insert these three routes into t
 
 - [ ] **Step 5: Add the `invalid cursor` branch in `onError`**
 
-In `packages/core/src/serve.ts`, in `onError`, add this branch right before the final `return c.json({ error: 'internal' }, 500);` (line 222):
+In `packages/graphx/src/core/serve.ts`, in `onError`, add this branch right before the final `return c.json({ error: 'internal' }, 500);` (line 222):
 
 ```ts
 // decodeCursor / decodeFeedCursor reject a tampered/stale keyset cursor with this message.
@@ -943,18 +943,18 @@ if (err.message === 'invalid cursor') return c.json({ error: 'invalid cursor' },
 
 - [ ] **Step 6: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-routes.test.ts`
+Run: `bun test packages/graphx/test/core/admin-routes.test.ts`
 Expected: PASS (5 tests).
 
 - [ ] **Step 7: Run the full existing serving suite to confirm no regression**
 
-Run: `bun test packages/core/test/p11-serving.test.ts packages/core/test/p12-serve.test.ts`
+Run: `bun test packages/graphx/test/core/p11-serving.test.ts packages/graphx/test/core/p12-serve.test.ts`
 Expected: PASS (all existing tests still green — the new routes are additive).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/core/src/serve.ts packages/core/test/admin-routes.test.ts
+git add packages/graphx/src/core/serve.ts packages/graphx/test/core/admin-routes.test.ts
 git commit -m "feat(core): /nodes /graph /nodes/:id/history read routes + invalid-cursor 400 (admin explore)"
 ```
 
@@ -964,12 +964,12 @@ git commit -m "feat(core): /nodes /graph /nodes/:id/history read routes + invali
 
 **Files:**
 
-- Create: `packages/core/src/admin.ts`
-- Test: `packages/core/test/admin-app.test.ts`
+- Create: `packages/graphx/src/core/admin.ts`
+- Test: `packages/graphx/test/core/admin-app.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/core/test/admin-app.test.ts`:
+Create `packages/graphx/test/core/admin-app.test.ts`:
 
 ```ts
 import { type Client, createClient } from '@libsql/client';
@@ -1109,12 +1109,12 @@ test('duplicate user email -> 400 (constraint mapped, not 500)', async () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `bun test packages/core/test/admin-app.test.ts`
+Run: `bun test packages/graphx/test/core/admin-app.test.ts`
 Expected: FAIL — `Cannot find module '../src/admin.ts'`.
 
 - [ ] **Step 3: Implement `admin.ts`**
 
-Create `packages/core/src/admin.ts`:
+Create `packages/graphx/src/core/admin.ts`:
 
 ```ts
 import type { Client } from '@libsql/client';
@@ -1218,13 +1218,13 @@ export function createAdminApp(cfg: AdminConfig): Hono {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `bun test packages/core/test/admin-app.test.ts`
+Run: `bun test packages/graphx/test/core/admin-app.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/admin.ts packages/core/test/admin-app.test.ts
+git add packages/graphx/src/core/admin.ts packages/graphx/test/core/admin-app.test.ts
 git commit -m "feat(core): createAdminApp — operator-gated control-plane CRUD sub-app"
 ```
 
@@ -1234,11 +1234,11 @@ git commit -m "feat(core): createAdminApp — operator-gated control-plane CRUD 
 
 **Files:**
 
-- Modify: `packages/core/src/index.ts`
+- Modify: `packages/graphx/src/core/index.ts`
 
 - [ ] **Step 1: Add the control-plane export additions**
 
-In `packages/core/src/index.ts`, replace the existing control-plane export block (the `export { addMembership, CONTROL_SCHEMA, createProject, createTenant, createUser, initControl } from './control-plane.ts';` block) with:
+In `packages/graphx/src/core/index.ts`, replace the existing control-plane export block (the `export { addMembership, CONTROL_SCHEMA, createProject, createTenant, createUser, initControl } from './control-plane.ts';` block) with:
 
 ```ts
 // P0.5 — control plane + authz
@@ -1259,7 +1259,7 @@ export {
 
 - [ ] **Step 2: Add the admin sub-app export**
 
-In `packages/core/src/index.ts`, immediately after the control-plane export block, add:
+In `packages/graphx/src/core/index.ts`, immediately after the control-plane export block, add:
 
 ```ts
 // Admin — operator-gated control-plane CRUD sub-app (mount with app.route('/admin', ...))
@@ -1268,7 +1268,7 @@ export { type AdminConfig, createAdminApp } from './admin.ts';
 
 - [ ] **Step 3: Add the new Graph read types to the existing graph export block**
 
-In `packages/core/src/index.ts`, in the `export { ... } from './graph.ts';` block (the "P3 / P6 — data layer + temporal mutations" block), add these type members (keep alphabetical-ish ordering consistent with the file):
+In `packages/graphx/src/core/index.ts`, in the `export { ... } from './graph.ts';` block (the "P3 / P6 — data layer + temporal mutations" block), add these type members (keep alphabetical-ish ordering consistent with the file):
 
 ```ts
 	type GraphSlice,
@@ -1294,7 +1294,7 @@ Expected: PASS — the prior 244 tests plus the new admin tests (authz 3, contro
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/index.ts
+git add packages/graphx/src/core/index.ts
 git commit -m "feat(core): export admin API — createAdminApp, control-plane helpers, list/slice types"
 ```
 
