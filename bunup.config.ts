@@ -35,8 +35,9 @@ export default defineWorkspace([
 		},
 	},
 	{
-		// The two executables (`graphx`, `graphx-mcp`), built separately ONLY so the shebang
-		// banner lands on them and not on every library entry above.
+		// The `graphx` executable, built separately ONLY so the shebang banner lands on it and
+		// not on every library entry above. `mcp/bin.ts` needs no entry of its own: `graphx mcp`
+		// reaches it by dynamic import, so it is pulled into this graph as a lazy chunk.
 		//
 		// `clean: false` is load-bearing: this group shares `packages/graphx/dist` with the group
 		// above, and bunup cleans the output directory by default — so a cleaning second pass
@@ -45,7 +46,7 @@ export default defineWorkspace([
 		name: 'graphx-bin',
 		root: 'packages/graphx',
 		config: {
-			entry: ['src/cli.ts', 'src/mcp/bin.ts'],
+			entry: ['src/cli.ts'],
 			banner: '#!/usr/bin/env bun',
 			sourceBase: './src',
 			clean: false,

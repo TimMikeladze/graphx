@@ -193,6 +193,7 @@ Usage:
   graphx ingest <dir> [options]   Ingest a vault into the graph
   graphx serve [options]          Serve the graph over HTTP (typed routes + /openapi.json)
   graphx triggers [options]       Run declarative triggers over the event outbox
+  graphx mcp [options]            Serve the graph to an MCP client over stdio
   graphx new <dir>                Scaffold a starter graphx project
 
 ingest options:
@@ -212,6 +213,12 @@ serve options:
 
 triggers options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+
+mcp options (configured by environment, not flags — see docs/mcp.md):
+  --read-only             Expose only the read tools
+  GRAPHX_DB               Namespace to open (local mode)
+  GRAPHX_URL              Deployed server to proxy (remote mode), + GRAPHX_API_KEY
+  GRAPHX_SCHEMA           Path to a JSON schema document; without it writes 400
 
   --help                  Show this help
 `;
@@ -240,6 +247,12 @@ export async function run(argv: string[]): Promise<void> {
 			return runServe(argv);
 		case 'triggers':
 			return runTriggers(argv);
+		case 'mcp':
+			// Dynamic: `@modelcontextprotocol/sdk` is an OPTIONAL peer, so a static import would
+			// put it on the load path of every other subcommand and break installs that never
+			// opted into MCP. Note the stdio transport frames JSON-RPC on stdout — nothing on this
+			// path may write there.
+			return (await import('./mcp/bin.ts')).runMcp(argv);
 		case 'new':
 			return runNew(argv);
 		default:

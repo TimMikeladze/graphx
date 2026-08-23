@@ -9,11 +9,11 @@ import { expect, test } from 'bun:test';
  * source review and only showed up when the process was actually run. Needs `bun run build`
  * first — CI builds before it tests.
  */
-const BIN = join(import.meta.dir, '../../dist/mcp/bin.js');
+const BIN = join(import.meta.dir, '../../dist/cli.js');
 
-/** A live `graphx-mcp` process, already through the MCP handshake. */
+/** A live `graphx mcp` process, already through the MCP handshake. */
 async function spawnBin(env: Record<string, string>, cwd: string) {
-	const child = spawn('bun', [BIN], {
+	const child = spawn('bun', [BIN, 'mcp'], {
 		cwd,
 		env: { ...process.env, ...env },
 		stdio: ['pipe', 'pipe', 'pipe'],

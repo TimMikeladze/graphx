@@ -26,8 +26,7 @@
 		"directory": "packages/graphx"
 	},
 	"bin": {
-		"graphx": "./dist/cli.js",
-		"graphx-mcp": "./dist/mcp/bin.js"
+		"graphx": "./dist/cli.js"
 	},
 	"files": [
 		"dist"

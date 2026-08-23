@@ -8,7 +8,7 @@ import { parseSchemaFile } from './schema-file.ts';
 import { createGraphxMcp } from './server.ts';
 
 /**
- * `graphx-mcp` — the stdio entry point an MCP client spawns.
+ * `graphx mcp` — the stdio entry point an MCP client spawns.
  *
  * Local mode opens the database directly and runs the serving app in-process. Remote mode
  * proxies a deployed server. Either way the tools are identical, because both go through the
@@ -16,6 +16,11 @@ import { createGraphxMcp } from './server.ts';
  *
  * NOTHING may be written to stdout: stdio transport frames JSON-RPC there, and a stray
  * `console.log` corrupts the stream. Diagnostics go to stderr.
+ *
+ * This module is reached ONLY through a dynamic `import()` in `cli.ts`. That is deliberate:
+ * `@modelcontextprotocol/sdk` is an optional peer, so a static import here would drag it onto
+ * the load path of `graphx serve` / `ingest` / `triggers` and break every install that never
+ * asked for MCP.
  */
 
 /**
@@ -60,8 +65,13 @@ function loadSchema(path: string | undefined): GraphSchema | undefined {
 	return parseSchemaFile(JSON.parse(readFileSync(path, 'utf8')), path);
 }
 
-async function main(): Promise<void> {
-	const readOnly = process.argv.includes('--read-only') || process.env.GRAPHX_MCP_READ_ONLY === '1';
+/**
+ * Run the stdio MCP server until the transport closes. `argv` is the CLI's argument list
+ * (`['mcp', ...flags]`), read for `--read-only` rather than `process.argv` so the flag is scoped
+ * to this subcommand.
+ */
+export async function runMcp(argv: string[] = []): Promise<void> {
+	const readOnly = argv.includes('--read-only') || process.env.GRAPHX_MCP_READ_ONLY === '1';
 	const mode = process.env.GRAPHX_MCP_MODE ?? (process.env.GRAPHX_URL ? 'remote' : 'local');
 
 	let app: Parameters<typeof createGraphxMcp>[0]['app'];
@@ -123,7 +133,7 @@ async function main(): Promise<void> {
 		};
 		// hashEmbed is lexical, not semantic. Saying so beats letting `retrieve` look broken.
 		process.stderr.write(
-			'graphx-mcp: no embedder configured; retrieve/hybrid use hashEmbed (lexical, not semantic)\n',
+			'graphx mcp: no embedder configured; retrieve/hybrid use hashEmbed (lexical, not semantic)\n',
 		);
 	}
 
@@ -131,8 +141,3 @@ async function main(): Promise<void> {
 	registerContext(server, context);
 	await server.connect(new StdioServerTransport());
 }
-
-main().catch((err: unknown) => {
-	process.stderr.write(`graphx-mcp: ${(err as Error).message}\n`);
-	process.exit(1);
-});

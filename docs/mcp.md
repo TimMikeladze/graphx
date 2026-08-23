@@ -21,7 +21,7 @@ Code's `.mcp.json`, or equivalent):
 	"mcpServers": {
 		"graphx": {
 			"command": "npx",
-			"args": ["-y", "-p", "graphx", "graphx-mcp"],
+			"args": ["-y", "graphx", "mcp"],
 			"env": {
 				"GRAPHX_MCP_MODE": "local",
 				"GRAPHX_DB": "mygraph",
@@ -49,7 +49,7 @@ with `./schema.json`:
 }
 ```
 
-This spawns `graphx-mcp` over stdio. `GRAPHX_DB` is a **namespace, not a connection string**:
+This spawns `graphx mcp` over stdio. `GRAPHX_DB` is a **namespace, not a connection string**:
 `mygraph` opens (and creates) `./mygraph.db` relative to whatever working directory your client
 launches the process in. `GRAPHX_SCHEMA` is optional but recommended — see
 [Configuration](#configuration) for the file format.
@@ -151,7 +151,7 @@ request → response stream on the bare JSON-RPC id, and that id is a per-client
 
 ## Configuration
 
-Read by `graphx-mcp` (the stdio binary). The library entry points take the same values as fields on
+Read by `graphx mcp` (the stdio subcommand). The library entry points take the same values as fields on
 their options object instead.
 
 | Variable               | Meaning                                                                                                                                                                                                                                                                                                                                                                      |
@@ -267,7 +267,7 @@ for clients that don't implement resources.
   list. `describe_schema` still works in this mode (see below) — only the resource form is
   affected.
 - **The binary runs schemaless unless `GRAPHX_SCHEMA` is set.** A `GraphSchema` is a TypeScript
-  value, so `graphx-mcp` can't import yours directly — but `GRAPHX_SCHEMA` (above) points it at a
+  value, so `graphx mcp` can't import yours directly — but `GRAPHX_SCHEMA` (above) points it at a
   JSON file instead. Without it, `describe_schema` falls back to sampling distinct `type` values off
   `GET /nodes` and returns them tagged `inferred: true`, with no property schemas and no relations.
   A failed sample (401, 403, 404, 500) comes back as an `isError` result carrying the status, so an
@@ -281,7 +281,7 @@ for clients that don't implement resources.
   empty one is used for nothing but the route registry. Point `GRAPHX_SCHEMA` at a schema file
   (above) to write to a local graph without embedding the server as a library.
 - **The binary is libSQL only.** `GRAPHX_DB_DRIVER=postgres` selects the Postgres dialect, but
-  `graphx-mcp` never imports `graphx/pg`, so it exits at startup with `getDb: postgres driver
+  `graphx mcp` never imports `graphx/pg`, so it exits at startup with `getDb: postgres driver
 selected but the pg adapter is not registered`.
 - **The binary defaults to `hashEmbed`.** `retrieve` and `hybrid_search` need an embedder;
   `hashEmbed()` is lexical and deterministic, not semantic, and the binary logs one line to stderr

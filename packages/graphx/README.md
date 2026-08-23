@@ -31,10 +31,10 @@ optional peer only reaches your import path if you actually import the subpath t
 | `graphx/cli`    | The `graphx` binary's internals                   | —                                |
 | `graphx/ingest` | Vault ingestion (`graphx/ingest/s3` for a bucket) | `@aws-sdk/client-s3` for s3      |
 | `graphx/react`  | Inference-only React Query hooks                  | `react`, `@tanstack/react-query` |
-| `graphx/mcp`    | The `graphx-mcp` server                           | `@modelcontextprotocol/sdk`      |
+| `graphx/mcp`    | Backs the `graphx mcp` subcommand                 | `@modelcontextprotocol/sdk`      |
 | `graphx/auth`   | ReBAC over the graph                              | —                                |
 
-Two binaries ship with the package: `graphx` (scaffold, ingest, serve, triggers) and `graphx-mcp`.
+One binary ships with the package: `graphx` — `new`, `ingest`, `serve`, `triggers`, `mcp`.
 
 ## Quickstart
 

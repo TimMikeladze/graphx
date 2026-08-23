@@ -25,10 +25,10 @@ and nothing to keep in lockstep.
 | `graphx/cli`    | The `graphx` binary — `new`, `ingest`, `serve`, `triggers`                  |
 | `graphx/ingest` | Ingest a YAML/markdown vault into a graph (`graphx/ingest/s3` for a bucket) |
 | `graphx/react`  | Inference-only React Query hooks + CDC live-sync                            |
-| `graphx/mcp`    | The `graphx-mcp` binary — every serving route exposed as an MCP tool        |
+| `graphx/mcp`    | Backs `graphx mcp` — every serving route exposed as an MCP tool             |
 | `graphx/auth`   | Relationship-based access control (ReBAC) on graphx                         |
 
-Two binaries ship with it: `graphx` and `graphx-mcp`.
+One binary ships with it: `graphx` — `new`, `ingest`, `serve`, `triggers`, `mcp`.
 
 Each subpath is a **separate entry point**, so an optional peer is only pulled onto your import
 path if you actually reach for it — `pg` by `graphx/pg`, `@duckdb/node-api` (~123MB installed) by
@@ -220,7 +220,7 @@ g.useChangeFeedSync(); // tails /changes, invalidates exact keys
 
 ## MCP
 
-`graphx-mcp` speaks stdio and exposes every serving route as a tool. Configure it with environment
+`graphx mcp` speaks stdio and exposes every serving route as a tool. Configure it with environment
 variables: `GRAPHX_DB` (local mode) or `GRAPHX_URL` + `GRAPHX_API_KEY` (remote mode), plus
 `GRAPHX_SCHEMA` (path to a JSON schema document) and `GRAPHX_MCP_READ_ONLY`. Without `GRAPHX_SCHEMA`,
 local mode runs schemaless and every write tool returns 400. Agents should call `graphx_context`
