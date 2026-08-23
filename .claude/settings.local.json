@@ -1,0 +1,10 @@
+{
+	"permissions": {
+		"allow": [
+			"Bash(lsof -i :5173 -sTCP:LISTEN)",
+			"Bash(git add *)",
+			"Bash(git commit *)",
+			"Bash(echo \"EXIT=$?\")"
+		]
+	}
+}
