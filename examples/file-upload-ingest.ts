@@ -5,7 +5,7 @@
  * store (S3 / Vercel Blob / GCS); libSQL holds the extracted text, embeddings,
  * and a `uri` back-pointer. Core never sees a byte and holds no credentials —
  * the storage backend is injected as a `put` function, exactly the same way
- * `EmbedFn` and `RerankFn` are injected (core bundles no SDKs).
+ * an `Embedder` and a `RerankFn` are injected (core bundles no SDKs).
  *
  * This file is userland, NOT part of graphx. Copy it into your app.
  */

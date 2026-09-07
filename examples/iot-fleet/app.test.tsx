@@ -32,7 +32,7 @@ test('iot-fleet UI renders the seeded fleet through an in-process app (appFetch 
 	const db = `iot_test_${crypto.randomUUID().replace(/-/g, '')}`;
 	const { app, control } = await createApp({
 		schema,
-		embed: hashEmbed(),
+		embedder: hashEmbed(),
 		db,
 		seed: async (graph) => {
 			const site = await graph.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
