@@ -71,7 +71,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Required, not optional: the `graphx-mcp` bin test spawns `dist/mcp/bin.js`, and the
+      # Required, not optional: the `graphx mcp` bin test spawns `dist/cli.js`, and the
       # examples import `graphx` by name — which resolves through the `exports` map into
       # `./dist`. Both fail without a build.
       - name: Build
@@ -112,7 +112,7 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Required, not optional: the `graphx-mcp` bin test spawns `dist/mcp/bin.js`, and the
+      # Required, not optional: the `graphx mcp` bin test spawns `dist/cli.js`, and the
       # examples import `graphx` by name — which resolves through the `exports` map into
       # `./dist`. Both fail without a build.
       - name: Build
