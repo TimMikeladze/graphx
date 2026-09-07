@@ -53,5 +53,3 @@ const result = await ingestDir({
   candidates) in `result.skipped` rather than silently guessed.
 - `result.skipped` entries are structured: `{ key, stage, code, reason, detail? }` — e.g.
   `schema-reject` carries the Zod issues, `ambiguous-link` carries the candidate paths.
-
-See [`docs/superpowers/specs/2026-06-17-file-ingest-static-graph-design.md`](../../docs/superpowers/specs/2026-06-17-file-ingest-static-graph-design.md).

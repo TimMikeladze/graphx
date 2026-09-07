@@ -1,8 +1,8 @@
 /**
  * Wire DTOs for the graphx HTTP API — local mirrors of the shapes returned by
- * `packages/core` (`serve.ts` + `admin.ts`). Defined here rather than imported from `core`
- * because `core` ships no `dist/` build for the Vite app to resolve types against (see Plan 2,
- * deviation D-UI-4). Keep these in sync with the server's response shapes.
+ * `packages/graphx` (`src/core/serve.ts` + `src/core/admin.ts`). Defined here rather than imported
+ * from `graphx` because the Vite app has no `dist/` build to resolve types against. Keep these in
+ * sync with the server's response shapes.
  */
 
 /** A tenant membership role (control plane). */

@@ -55,4 +55,4 @@ bun run lint        # eslint
 
 ## Deferred (not in v1)
 
-Lazy canvas expansion (double-click → merge neighbors), DOM/component tests, match/hybrid/algorithm viz, CDC live-sync. See `docs/superpowers/specs/2026-06-12-graphx-admin-ui-design.md` and `docs/superpowers/plans/2026-06-13-graphx-admin-ui.md`.
+Lazy canvas expansion (double-click → merge neighbors), DOM/component tests, match/hybrid/algorithm viz, CDC live-sync.

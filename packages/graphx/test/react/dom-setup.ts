@@ -8,7 +8,7 @@ import { notifyManager } from '@tanstack/react-query';
 // file — whatever it leaves on `globalThis` is what every later test file sees. Test files are not
 // run in a guaranteed order (Linux and macOS traverse the directory differently), so "the DOM only
 // leaks into files that come after react's" is not something to rely on: on CI the react tests run
-// before packages/core, and its native-HTTP tests failed for weeks because of it.
+// before the core suites, and their native-HTTP tests failed for weeks because of it.
 //
 // The rule this file follows: keep happy-dom's DOM, keep Bun's platform primitives. Registering
 // replaces the twelve globals below with happy-dom's own implementations, and they are NOT

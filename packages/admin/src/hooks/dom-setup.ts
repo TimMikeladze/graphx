@@ -7,10 +7,10 @@
  * `happy-dom` window onto `globalThis`) using only `happy-dom`'s own exports, rather than adding
  * that package as a third dependency: this plan's no-new-dependencies rule was given a scoped
  * exception for exactly two packages, `@testing-library/react` and `happy-dom` (both already
- * present in `node_modules`, hoisted from `packages/react`'s devDependencies) — see the code
+ * present in `node_modules`, hoisted from `packages/graphx`'s devDependencies) — see the code
  * review on this task. `GlobalWindow` and `PropertySymbol` are both public exports of `happy-dom`
  * itself; `@happy-dom/global-registrator`'s own source (also vendored in this monorepo, via
- * `packages/react`) is a thin wrapper around them, reproduced here.
+ * `packages/graphx`) is a thin wrapper around them, reproduced here.
  *
  * Two adjustments to the naive "copy every descriptor" version were needed against Bun 1.3:
  *  - Skip a key when Bun's global already holds the identical value happy-dom would install
@@ -21,7 +21,7 @@
  * This module evaluates ONCE per process, so it cannot scope an `afterAll` unregister to a single
  * file — whatever it leaves on `globalThis` is what every later test file sees. Test files are not
  * run in a guaranteed order, so "the DOM only leaks into files that come after this one" is not
- * something to rely on. `packages/react/test/dom-setup.ts` hit exactly this with its own
+ * something to rely on. `packages/graphx/test/react/dom-setup.ts` hit exactly this with its own
  * `@happy-dom/global-registrator` copy — its core's native-HTTP tests failed for weeks because a
  * leaked happy-dom `Response` fails `Bun.serve`'s "Expected a Response object" check. The fix there
  * (and here) is the same: keep happy-dom's DOM, keep Bun's platform primitives.

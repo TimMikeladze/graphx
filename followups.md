@@ -4,7 +4,7 @@ Known, deliberately-deferred work. Each entry says what it is, why it was not do
 time, and what would make it worth doing. Nothing here is a correctness bug in shipped
 behavior; anything that was is already fixed.
 
-## DuckDB full-text (stage 5, branch `feat/duckdb-fts`)
+## DuckDB full-text (stage 5, merged)
 
 Carried out of the stage 5 execution ledger, which is deleted with its workspace. The
 reviews that produced these are summarized in `docs/DUCKDB_SUPPORT.md`.

@@ -1,6 +1,6 @@
 # `graphx/react` — React Query integration
 
-> Status: **IMPLEMENTED** (`packages/react`, 2026-06-29). Net-new package layered over the existing
+> Status: **IMPLEMENTED** (`graphx/react`, 2026-06-29). Net-new subpath layered over the existing
 > SDK + Hono serving layer. Hooks for the whole HTTP surface (the "Everything" scope), CDC live-sync,
 > infinite scroll, mutation invalidation. Tests run on both backends via the in-process app.
 >

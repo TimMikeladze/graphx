@@ -6,7 +6,7 @@
 > [`embeddings.md`](./embeddings.md) and [`VECTOR_REVIEW.md`](./VECTOR_REVIEW.md).
 
 > What is spec'd or implied but **not built**. Original audit 2026-06-14 (`main` @ d1e459d, plus the unmerged `examples/file-ingest` admin work); **re-verified 2026-06-29** (`fix/ingest-top3-risks`).
-> Scope: `packages/graphx`, `packages/auth`, `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
+> Scope: `packages/graphx` (every `graphx/*` subpath), `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
 >
 > **2026-06-29 corrections:** §1 P9 (blob layer) is now **BUILT** (`packages/graphx/src/core/blob.ts`, commit `bc3b467`) — the original "MISSING" below was stale. §2 (SDK ops with no HTTP route) is **RESOLVED** — every listed op, including `neighborsPage`, is now in `serve.ts`. The full react-query R0 HTTP surface is live.
 
@@ -88,7 +88,7 @@ Also added: `neighborsPage` → `GET /nodes/:id/neighborsPage` (read) — the ke
 
 ## 3. `graphx/react` — ✅ BUILT (2026-06-29)
 
-`packages/react` (`graphx/react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
+`graphx/react` (`packages/graphx/src/react`) ships the full hook set over the §2 HTTP surface. 32 tests, both backends (in-process app). Built/publishable via bunup (`dts.inferTypes`).
 
 - `createGraphHooks<S>(schema)` factory (schema-parameterized, no codegen) — single closure binding `S`.
 - Query hooks: `useNode`, `useNeighbors` (infinite), `useListNodes` (infinite), `useGraphSlice`, `useHistory`, `useRetrieve`, `useHybrid`, `useJourney`, `useMatch`, `useDiff`, `useShortestPath`, `useTopNodes`.
@@ -142,9 +142,9 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 ## 5. Documentation gaps
 
 - ~~**`packages/graphx` — no README.**~~ ✅ written 2026-06-29.
-- ~~**`packages/react` — no README.**~~ ✅ written 2026-06-29 (with the package).
-- ~~**`packages/auth` — no README.**~~ ✅ written 2026-08-19 (release prep).
-- ~~**`packages/cli` — no README.**~~ ✅ written 2026-08-19 (release prep) — this one was never listed here.
+- ~~**`graphx/react` — no docs.**~~ ✅ written 2026-06-29; now `docs/react.md`.
+- ~~**`graphx/auth` — no docs.**~~ ✅ written 2026-08-19 (release prep); now `docs/auth.md`.
+- ~~**`graphx/cli` — no docs.**~~ ✅ written 2026-08-19 (release prep); now `docs/cli.md` — this one was never listed here.
 - ~~**Root `README.md` is a 25-line stub**~~ ✅ full README since; the DuckDB backend and the npm install path were added 2026-08-19.
 - ~~**`docs/react-query-spec.md` §3/§4 tables are stale**~~ ✅ refreshed 2026-06-29 (all live routes listed; R0 marked done).
 
@@ -153,7 +153,7 @@ The admin SPA is **read-only for the graph realm**. Writes exist only for the co
 ## Priority shortlist
 
 1. ~~**`/changes` + PATCH/DELETE + the rest of §2**~~ — ✅ DONE (2026-06-29): changeFeed/diff/hybrid/bulk/match/algorithms **and** neighborsPage. Full react-query R0 HTTP surface is live.
-2. ~~**`packages/graphx` README**~~ — ✅ DONE (2026-06-29). ~~`packages/auth` README + root README~~ ✅ DONE (2026-08-19); every published package now has one.
+2. ~~**`packages/graphx` README**~~ — ✅ DONE (2026-06-29). ~~`graphx/auth` docs + root README~~ ✅ DONE (2026-08-19); the one published package has a README and every subpath has a guide in `docs/`.
 3. ~~**P9 blob layer**~~ — ✅ already built (`blob.ts`, `bc3b467`).
 4. ~~**Expose `hybridRetrieve` + `retrieve` UI in admin**~~ — ✅ DONE; the explorer calls both (`lib/explorer-search.ts`). `journey` / `match` / algorithm visualizations are what is left.
 5. ~~**`graphx/react` package**~~ — ✅ DONE (2026-06-29). Only §13 R3 polish remains (response validation, cursor persistence, close-feed).

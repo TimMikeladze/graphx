@@ -51,7 +51,7 @@
 | constraint enforcement is application code, not a DB index — a raw-SQL insert that bypasses `Graph.addNode`/`addEdge` is not rejected (see the parity note below) | 0     | design, not a gap — gated `indexBackedConstraints` on 2026-08-19 so the arm is green                                                                     |
 | `p14-concurrency` — asserted lock contention that does not exist on this backend                                                                                  | 0     | Task 16: gated `sharedWriterOnly`, and the same invariants re-asserted through the write mutex and the manifest CAS in a `duckdbOnly` block              |
 | outbox ordering and trigger-runner cursors                                                                                                                        | 0     | already gated `postgres`-only; none ran or failed under duckdb                                                                                           |
-| auth package read-modify-write idempotency                                                                                                                        | 0     | `packages/auth` does not import the harness; unaffected by this arm                                                                                      |
+| auth package read-modify-write idempotency                                                                                                                        | 0     | the `graphx/auth` tests do not import the harness; unaffected by this arm                                                                                |
 | multi-tenant `getDb` suites needing a bucket per namespace                                                                                                        | 0     | already pass — `getDb`'s duckdb factory falls back to one local file per namespace, which is sufficient until stage 4/Task 15 moves it to object storage |
 | libSQL-internals probes                                                                                                                                           | 0     | already skipped by `libsqlOnly` (and the 3 `outbox.test.ts`/1 `cli.test.ts` driver-pinned tests)                                                         |
 
@@ -65,7 +65,7 @@ Two rows above differ from the plan's expected shape and are explained here:
   `<namespace>.duckdb` file per tenant, which is enough for these tests today. The bucket-per
   namespace requirement is a stage-4/Task-15 concern (object storage), not something these
   suites currently exercise.
-- **auth package is 0/unaffected.** `packages/auth`'s tests obtain a client directly (not via
+- **auth package is 0/unaffected.** The `graphx/auth` tests (`packages/graphx/test/auth`) obtain a client directly (not via
   `packages/graphx/test/core/harness.ts`) and were not touched by adding the third arm.
 
 ## Real bugs fixed (Tasks 1–12), not parity gaps
@@ -112,7 +112,7 @@ stable, but the tie GROUPS are` outright; the other callers (`ranking parity`, `
    `getDb: duckdb driver selected but the duck adapter is not registered`. Rewritten to
    `NOT_LIBSQL = (GRAPHX_TEST_DRIVER ?? 'libsql') !== 'libsql'` — an allowlist, matching
    `libsqlOnly`'s precedent.
-6. **`packages/mcp` never registered the postgres/duckdb adapters**, in both production code and
+6. **`graphx/mcp` never registered the postgres/duckdb adapters**, in both production code and
    tests, so any non-libSQL `GRAPHX_DB_DRIVER` reaching it threw "adapter is not registered."
    This reproduces under the live Postgres leg too (confirmed empirically against a running
    `pgvector` container — same root cause, same 13 tests), so it predates this branch and is not

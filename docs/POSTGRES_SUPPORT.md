@@ -41,9 +41,9 @@
 ## ✅ COMPLETE — full dual-backend parity
 
 > **Correction, 2026-07-29.** This section overstated its own scope until the DuckDB branch.
-> `packages/mcp` never registered the `pg` (or `duck`) adapter at all, so 13 of its tests
+> `graphx/mcp` never registered the `pg` (or `duck`) adapter at all, so 13 of its tests
 > failed under `GRAPHX_TEST_DRIVER=postgres` — the parity claim below was measured on
-> `packages/graphx` and `packages/auth` only. Fixed on the DuckDB branch; a verified run on a
+> the core and `graphx/auth` suites only. Fixed on the DuckDB branch; a verified run on a
 > dedicated container now reports **1052 pass / 19 skip / 0 fail** across all packages.
 > See `docs/DUCKDB_SUPPORT.md`.
 
