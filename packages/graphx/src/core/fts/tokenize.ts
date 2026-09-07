@@ -10,7 +10,7 @@
  * does not stem either (measured: `"run"` matches no document containing `running runs`),
  * and libSQL is the backend the committed golden rankings were measured against. Matching it
  * keeps ranking parity honest. Postgres does stem, so its lexical recall is genuinely higher
- * on inflected queries; that difference is recorded in docs/DUCKDB_SUPPORT.md rather than
+ * on inflected queries; that difference is accepted rather than
  * papered over. Adding a stemmer later is additive — the index is rebuilt on every commit,
  * so writer and reader change together and there is nothing to migrate.
  */

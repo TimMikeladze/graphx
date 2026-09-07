@@ -17,7 +17,7 @@ import type { ObjectStore } from '../../src/core/objstore/store.ts';
  *
  * Set `GRAPHX_TEST_S3_ENDPOINT` to run every case against a real S3-compatible store
  * (MinIO) instead of the in-memory one. That is the only configuration that exercises the
- * genuine create-if-absent CAS the commit protocol is built on — see docs/DUCKDB_SUPPORT.md.
+ * genuine create-if-absent CAS the commit protocol is built on.
  */
 
 const root = mkdtempSync(join(tmpdir(), 'graphx-e2e-'));

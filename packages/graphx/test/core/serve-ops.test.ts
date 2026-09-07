@@ -15,7 +15,7 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { createApp } from '../../src/core/serve.ts';
 import { makeTestDb, stubEmbedder } from './harness.ts';
 
-// Coverage for the backend-only SDK ops newly exposed over HTTP (GAPS.md §2):
+// Coverage for the backend-only SDK ops newly exposed over HTTP:
 // /changes (changeFeed), /diff, PATCH /nodes/:id (updateNode), DELETE /edges/:id
 // (deleteEdge), POST /hybrid, POST /bulk, POST /match, and the /algorithms/* routes.
 // Self-contained setup mirrors p11-serving (control plane + authz + per-project DB),

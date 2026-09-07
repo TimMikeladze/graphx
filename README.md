@@ -70,7 +70,7 @@ export default defineConfig({
 
 There is no dimension to configure. The embedder's width is probed from the model and recorded in
 the namespace the first time it is initialised, together with the model's id; a different model later
-is refused until `graphx reembed` switches the namespace over. See [`docs/embeddings.md`](./docs/embeddings.md).
+is refused until `graphx reembed` switches the namespace over.
 
 ## CLI
 
@@ -291,8 +291,6 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 This is a one-time, idempotent setup per database and needs a role allowed to create the extension (e.g. a superuser). The `pgvector/pgvector:pg16` Docker image ships pgvector ready to enable.
 
-See [docs/POSTGRES_SUPPORT.md](./docs/POSTGRES_SUPPORT.md) for the full dual-backend design and per-dialect details.
-
 ### DuckDB (object-store backed)
 
 A third adapter, registered the same way. Its durable state is a chain of immutable snapshots in an object store (S3 or a local directory): each commit writes content-addressed Parquet files and claims the next numbered manifest with a create-if-absent PUT, so the bucket is the database and the local DuckDB file is a materialization of one snapshot.
@@ -312,20 +310,6 @@ process working directory — override with `GRAPHX_DATA_DIR`. Spill is capped b
 of filling the disk.
 
 **One writer process per namespace, readers unbounded.** Writes inside a process serialize on a client-held mutex; across processes the manifest CAS picks a winner and the loser rebases. Two processes rewriting the _same table_ of one namespace cannot merge — that raises `SnapshotConflictError` (HTTP 409) rather than silently dropping the loser's rows. `Graph.write(fn)` groups a body into a single snapshot commit.
-
-See [docs/DUCKDB_SUPPORT.md](./docs/DUCKDB_SUPPORT.md) for the snapshot format, the commit protocol, and the parity record.
-
-## Docs
-
-Per-subpath guides live in [`docs/`](./docs):
-
-- [`docs/embeddings.md`](./docs/embeddings.md) — embedders, per-type policies, chunking, lazy mode, `reembed` / `doctor`
-- [`docs/cli.md`](./docs/cli.md) — every `graphx` command and flag
-- [`docs/react.md`](./docs/react.md) — the hook set, query keys, and CDC live-sync
-- [`docs/mcp.md`](./docs/mcp.md) — tool manifest, local vs remote mode, environment variables
-- [`docs/ingest.md`](./docs/ingest.md) — vault layout, link resolution, pruning
-- [`docs/auth.md`](./docs/auth.md) — the ReBAC model and its rewrite operators
-- [`docs/POSTGRES_SUPPORT.md`](./docs/POSTGRES_SUPPORT.md) · [`docs/DUCKDB_SUPPORT.md`](./docs/DUCKDB_SUPPORT.md) — per-backend design
 
 ## Contributing
 

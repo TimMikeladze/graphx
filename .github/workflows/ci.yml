@@ -94,7 +94,7 @@ jobs:
     env:
       GRAPHX_TEST_DRIVER: duckdb
 
-    # Full-text/hybrid retrieval and p14-concurrency are closed (see docs/DUCKDB_SUPPORT.md).
+    # Full-text/hybrid retrieval and p14-concurrency are closed.
     # The two raw-SQL constraint-enforcement probes that DuckDB structurally cannot satisfy —
     # it has no partial UNIQUE index, so `duck-constraints.ts` enforces the same rules in
     # application code instead — are gated by the `indexBackedConstraints` harness helper

@@ -231,7 +231,7 @@ reembed options:
 doctor options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
 
-mcp options (see docs/mcp.md):
+mcp options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts) — local mode
   --read-only             Expose only the read tools
   GRAPHX_URL              Deployed server to proxy instead (remote mode), + GRAPHX_API_KEY

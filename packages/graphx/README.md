@@ -75,7 +75,7 @@ per-type `embedding` policy in the schema declares — hashes that input beside 
 re-embeds only when it changes. A node whose policy yields no text has no vector: FTS and
 `hybridRetrieve` still find it, the vector seeds behind `retrieve` never do. Vectors live in a
 side table keyed by node and model, so a model change is `graph.reembed()` / `graphx reembed`,
-never a rewrite of history. See [`docs/embeddings.md`](../../docs/embeddings.md).
+never a rewrite of history.
 
 ### Retrieval
 
@@ -148,7 +148,7 @@ Routes mount under `/t/:tenant/p/:project/...`: nodes/edges CRUD (`POST`/`GET`/`
 returns the project's declared node types and rels as JSON Schema (derived from your zod schema) —
 what a client needs to render typed editors without hard-coding your shapes. Errors map to `{ error,
 issues? }` JSON (400 validation/constraint, 401 authn, 403 authz, 404 not-found/cross-tenant). Pair
-it with [`graphx/react`](../../docs/react.md) for typed hooks.
+it with `graphx/react` for typed hooks.
 
 > Typed client caveat: under isolated declarations the published `AppType` is env-level only, so
 > `hc<AppType>` is runtime-correct but statically `unknown` — consume the source for precise route
@@ -186,6 +186,5 @@ have no Postgres analog; the user-facing contracts run on both.
 
 ## Design
 
-The authoritative design lives in `initial_spec.md` (§0 "Audit corrections" overrides later sections).
 Key decisions: ULID-text identity end-to-end; current reads via `nodes`/`edges` views (never bind
 `asOf = FOREVER`); analytics in a `node_analytics` side table; partial vector index on live rows.
