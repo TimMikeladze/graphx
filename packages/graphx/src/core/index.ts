@@ -32,13 +32,33 @@ export { insertOrIgnore, jsonField } from './dialect-sql.ts';
 
 // P1 — schema init
 export {
+	dropEmbeddings,
+	type EmbeddingMeta,
 	ensureColumn,
+	ensureEmbeddings,
 	init,
 	NODES_FTS_TRIGGER_DDL,
-	NV_EMB_IDX_DDL,
-	readEmbDim,
+	readEmbeddingMeta,
 	schema,
 } from './schema.ts';
+
+// Embedders — the one object a graph needs to know about a model
+export {
+	assertVector,
+	type ChunkOptions,
+	chunkText,
+	defineEmbedder,
+	type EmbedBatchFn,
+	type Embedder,
+	type EmbedderConfig,
+	embedHash,
+	embedInputFor,
+	EmbeddingError,
+	type EmbeddingErrorCode,
+	type EmbeddingPolicy,
+	hashEmbed,
+	type PreparedEmbedding,
+} from './embedder.ts';
 
 // P14 — constraints (§19.5)
 export {
@@ -95,6 +115,7 @@ export {
 	type AnyNode,
 	defineGraphSchema,
 	type EdgeDef,
+	type EmbeddingPoliciesFor,
 	type NodeType,
 	type NodeOf,
 	type DataOf,
@@ -117,8 +138,12 @@ export {
 	type AddNodeInput,
 	type EdgeDataInput,
 	type EdgeRef,
+	type EmbedItem,
+	type EmbeddingMode,
+	type EmbeddingReport,
 	Graph,
 	graphFor,
+	type GraphOptions,
 	type GraphSchema,
 	type GraphSlice,
 	type GraphSliceLink,
@@ -130,6 +155,8 @@ export {
 	type NodeListOpts,
 	type NodeListPage,
 	type DataInput,
+	type ReembedResult,
+	type UpdateNodePatch,
 } from './graph.ts';
 
 // Eventing — in-proc sink + bus (Layer 1); durable outbox tail lives in temporal.ts (Layer 2)
@@ -150,6 +177,7 @@ export {
 	type DeadLetter,
 	deadLetters,
 	type DeadLetterOpts,
+	embedTrigger,
 	matchesTrigger,
 	pruneDeadLetters,
 	type Trigger,
@@ -164,13 +192,15 @@ export {
 
 // P4 — vectors + GraphRAG retrieve
 export {
-	dimOf,
-	type EmbedFn,
-	hashEmbed,
 	retrieve,
+	type RetrievalVia,
 	type RetrievedNode,
 	type RetrieveOpts,
+	type Seed,
 } from './retrieve.ts';
+
+// `graphx.config.ts` — the contract every CLI command and `graphx mcp` loads
+export { defineConfig, type GraphxConfig } from './config.ts';
 
 // Record/replay embedder — real model vectors, committed once, replayed offline
 export { fixtureEmbed, type FixtureEmbedder, type FixtureEmbedOpts } from './embed-fixture.ts';

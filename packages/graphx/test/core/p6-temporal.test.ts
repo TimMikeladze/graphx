@@ -7,6 +7,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { asOfPredicate, diff, history } from '../../src/core/temporal.ts';
 import { embReadSql, makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P6 — temporal ops (§9, §19.1, B4/B5/D3). updateNode/deleteEdge use the
 // conditional-close + retry pattern; history/diff/asOf surface the temporal
@@ -37,7 +38,7 @@ const teardowns: Array<() => Promise<void>> = [];
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, DIM);
+	await init(client, hashEmbed(DIM));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
@@ -50,7 +51,7 @@ afterAll(async () => {
 // Read a node version row directly (bypassing the live view) by valid_to.
 async function versionRows(client: DbClient, id: string): Promise<Record<string, unknown>[]> {
 	const r = await client.execute({
-		sql: 'SELECT ver, type, body, uri, content_hash, content_type, data, emb, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT ver, type, body, uri, content_hash, content_type, data, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
 		args: [id],
 	});
 	return r.rows as unknown as Record<string, unknown>[];
@@ -98,22 +99,17 @@ test('P6 (B4): data-only patch carries body/uri/content_hash/content_type forwar
 	client.close();
 });
 
-test('P6 (B5): data-only patch carries emb BLOB forward (not null, dim-length, no throw)', async () => {
+test('P6 (B5): data-only patch keeps the stored vector (side table survives a new version)', async () => {
 	const { client, g } = await freshGraph();
 	const emb = [1, 0, 0, 0];
 	const n = await g.addNode({ type: 'device', data: { type: 'sensor' }, emb });
 
-	// must NOT throw (the naive vector('[]') path would throw 0 != dim)
 	await g.updateNode(n.id, { data: { type: 'sensor2' } });
 
-	const rows = await versionRows(client, n.id);
-	const open = rows.find((r) => Number(r.valid_to) === FOREVER)!;
-	expect(open.emb).not.toBeNull();
-
-	// emb is still a real dim-length vector — extract back and check length
+	// The vector is keyed by identity, not version, so the successor still has it.
 	const got = await client.execute({
-		sql: `SELECT ${embReadSql(client)} AS v FROM node_versions WHERE id = ? AND valid_to = ?`,
-		args: [n.id, FOREVER],
+		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
+		args: [n.id],
 	});
 	const arr = JSON.parse(String(got.rows[0]!.v)) as number[];
 	expect(arr.length).toBe(DIM);
@@ -127,21 +123,25 @@ test('P6 (B5): explicit emb patch replaces the embedding', async () => {
 	await g.updateNode(n.id, { emb: [0, 1, 0, 0] });
 
 	const got = await client.execute({
-		sql: `SELECT ${embReadSql(client)} AS v FROM node_versions WHERE id = ? AND valid_to = ?`,
-		args: [n.id, FOREVER],
+		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
+		args: [n.id],
 	});
 	expect(JSON.parse(String(got.rows[0]!.v))).toEqual([0, 1, 0, 0]);
 	client.close();
 });
 
-test('P6: updateNode on a node with NULL emb stays NULL (no throw)', async () => {
+test('P6: updateNode on a node with no vector stays without one (no throw)', async () => {
 	const { client, g } = await freshGraph();
 	const n = await g.addNode({ type: 'person', data: { name: 'noemb' } });
 	await g.updateNode(n.id, { data: { name: 'noemb2' } });
 
 	const rows = await versionRows(client, n.id);
 	const open = rows.find((r) => Number(r.valid_to) === FOREVER)!;
-	expect(open.emb).toBeNull();
+	const vec = await client.execute({
+		sql: 'SELECT count(*) AS n FROM node_embeddings WHERE id = ?',
+		args: [n.id],
+	});
+	expect(Number(vec.rows[0]!.n)).toBe(0);
 	expect(JSON.parse(String(open.data))).toEqual({ name: 'noemb2' });
 	client.close();
 });

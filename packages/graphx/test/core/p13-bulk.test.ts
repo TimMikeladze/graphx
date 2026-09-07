@@ -5,9 +5,9 @@ import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { hybridRetrieve } from '../../src/core/hybrid.ts';
-import { type EmbedFn, retrieve } from '../../src/core/retrieve.ts';
+import { retrieve } from '../../src/core/retrieve.ts';
 import { init } from '../../src/core/schema.ts';
-import { libsqlOnly, makeTestDb } from './harness.ts';
+import { libsqlOnly, makeTestDb, stubEmbedder } from './harness.ts';
 
 // These assert libSQL bulk-load INTERNALS — the deferred-index drop/rebuild via sqlite_master,
 // the FTS5 nodes_fts table, and the libSQL fsync speedup. Postgres bulk loads in one batch with
@@ -21,8 +21,9 @@ const SCHEMA = defineGraphSchema({
 	edges: { links: { from: 'doc', to: 'doc' } },
 });
 
-const stubEmbed: EmbedFn = async (text: string) =>
-	text === 'needle' ? [0, 0, 0, 1] : [1, 0, 0, 0];
+const stubEmbed = stubEmbedder((text) => (text === 'needle' ? [0, 0, 0, 1] : [1, 0, 0, 0]), {
+	dim: 4,
+});
 
 // A dim-4 unit-ish vector that varies per row so the ANN index has spread.
 function vec(i: number): number[] {
@@ -42,7 +43,7 @@ function rows(n: number): BulkRow<typeof SCHEMA>[] {
 
 async function mem(): Promise<DbClient> {
 	const c = makeTestDb().client;
-	await init(c, 4);
+	await init(c, stubEmbed);
 	return c;
 }
 
@@ -66,9 +67,9 @@ test('P13 bulk: loads N nodes, all queryable through the live view', async () =>
 libsqlOnly('P13 bulk: ANN index is rebuilt and queryable after the deferred build', async () => {
 	const client = await mem();
 	await bulkLoad(client, SCHEMA, rows(30));
-	// the partial-live vector index must exist and seed retrieval
+	// the vector index over the side table must exist and seed retrieval
 	const idx = await client.execute(
-		"SELECT name FROM sqlite_master WHERE type='index' AND name='nv_emb_idx'",
+		"SELECT name FROM sqlite_master WHERE type='index' AND name='ne_emb_idx'",
 	);
 	expect(idx.rows.length).toBe(1);
 	const res = await retrieve(client, stubEmbed, { query: 'needle', k: 3 });
@@ -148,7 +149,7 @@ libsqlOnly(
 
 		// the ANN index is still present and queryable
 		const idx = await client.execute(
-			"SELECT name FROM sqlite_master WHERE type='index' AND name='nv_emb_idx'",
+			"SELECT name FROM sqlite_master WHERE type='index' AND name='ne_emb_idx'",
 		);
 		expect(idx.rows.length).toBe(1);
 		const res = await retrieve(client, stubEmbed, { query: 'needle', k: 1 });

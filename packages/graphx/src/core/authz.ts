@@ -1,6 +1,7 @@
 import type { DbClient } from './dialect.ts';
 import { getDb } from './db.ts';
 import { init } from './schema.ts';
+import type { Embedder } from './embedder.ts';
 
 export type Role = 'owner' | 'editor' | 'viewer';
 export type Op = 'read' | 'write';
@@ -91,10 +92,10 @@ export async function authorize(
  */
 const inits = new WeakMap<DbClient, Promise<void>>();
 
-function initOnce(client: DbClient): Promise<void> {
+function initOnce(client: DbClient, embedder: Embedder | undefined): Promise<void> {
 	let p = inits.get(client);
 	if (!p) {
-		p = init(client).catch((e: unknown) => {
+		p = init(client, embedder).catch((e: unknown) => {
 			// allow a later retry if the first init failed
 			inits.delete(client);
 			throw e;
@@ -114,9 +115,12 @@ export async function resolveProjectDb(
 	principal: Principal,
 	projectId: string,
 	op: Op,
+	embedder?: Embedder,
 ): Promise<{ namespace: string; client: DbClient }> {
 	const { dbNamespace } = await authorize(control, principal, projectId, op);
 	const client = getDb(dbNamespace);
-	await initOnce(client);
+	// The embedder sizes the vector table on the namespace's first touch — the production path
+	// used to bake a default width here and break every real model.
+	await initOnce(client, embedder);
 	return { namespace: dbNamespace, client };
 }

@@ -161,7 +161,7 @@ test.skipIf(NOT_LIBSQL)(
 			`import { defineGraphSchema, hashEmbed } from '../../src/core/index.ts';
 import { z } from 'zod';
 const schema = defineGraphSchema({ nodes: { note: z.object({ title: z.string().optional() }) }, edges: {} });
-export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'libsql' }, namespace: '${ns}' };
+export default { schema, embedder: hashEmbed(8), db: { driver: 'libsql' }, namespace: '${ns}' };
 `,
 		);
 		try {
@@ -177,10 +177,10 @@ export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'libsql' }, 
 	},
 );
 
-// buildServeApp bridges a postgres config through GRAPHX_DB_DRIVER/PG_URL env for the dev createApp,
-// then MUST restore them — otherwise a later call / the rest of the process inherits the wrong
-// backend. Uses a refused port so the build fails fast; the `finally` restore must still run.
-test('buildServeApp: restores env after a postgres config even when the build fails (no leak)', async () => {
+// buildServeApp opens the config's backend itself (cached under the namespace) rather than
+// bridging it through process env, so a failing postgres config must leave the env untouched.
+// Uses a refused port so the build fails fast.
+test('buildServeApp: a postgres config that cannot connect fails without touching the env', async () => {
 	const beforeDriver = process.env.GRAPHX_DB_DRIVER;
 	const beforeUrl = process.env.GRAPHX_PG_URL;
 	const ns = `cli-pgleak-${Date.now()}`;
@@ -190,7 +190,7 @@ test('buildServeApp: restores env after a postgres config even when the build fa
 		`import { defineGraphSchema, hashEmbed } from '../../src/core/index.ts';
 import { z } from 'zod';
 const schema = defineGraphSchema({ nodes: { note: z.object({}).passthrough() }, edges: {} });
-export default { schema, embed: hashEmbed(8), dim: 8, db: { driver: 'postgres', connectionString: 'postgresql://postgres:postgres@127.0.0.1:1/nope' }, namespace: '${ns}' };
+export default { schema, embedder: hashEmbed(8), db: { driver: 'postgres', connectionString: 'postgresql://postgres:postgres@127.0.0.1:1/nope' }, namespace: '${ns}' };
 `,
 	);
 	try {
@@ -242,10 +242,11 @@ const schema = defineGraphSchema({
   nodes: { note: z.object({ title: z.string().optional() }).passthrough() },
   edges: { links_to: { from: 'note', to: 'note' } },
 });
-const embed = async () => [1, 0, 0, 0];
+import { defineEmbedder } from '../../src/core/embedder.ts';
+const embedder = defineEmbedder({ id: 'stub', dim: 4, embed: async (texts) => texts.map(() => [1, 0, 0, 0]) });
 // Pin libSQL — the PG test leg sets GRAPHX_DB_DRIVER=postgres globally, which getDb would
 // otherwise inherit (and then need core/pg). This e2e exercises the CLI wiring on libSQL.
-export default { schema, embed, dim: 4, db: { driver: 'libsql' }, namespace: '${ns}' };
+export default { schema, embedder, db: { driver: 'libsql' }, namespace: '${ns}' };
 `,
 	);
 
@@ -259,6 +260,9 @@ export default { schema, embed, dim: 4, db: { driver: 'libsql' }, namespace: '${
 		const client = createClient({ url: `file:${dbFile}` });
 		const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
 		expect(Number(rows.rows[0]!.c)).toBe(1);
+		// The graph embedded the note through the config's embedder.
+		const vectors = await client.execute('SELECT COUNT(*) AS c FROM node_embeddings');
+		expect(Number(vectors.rows[0]!.c)).toBe(1);
 		client.close();
 	} finally {
 		await rm(vaultDir, { recursive: true, force: true });
@@ -267,8 +271,8 @@ export default { schema, embed, dim: 4, db: { driver: 'libsql' }, namespace: '${
 	}
 });
 
-test('run: throws a clear error when the config omits dim', async () => {
-	const ns = `cli-nodim-${Date.now()}`;
+test('run: a config still written for the old `embed` / `dim` keys is refused with the fix', async () => {
+	const ns = `cli-oldcfg-${Date.now()}`;
 	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
 	const configPath = join(import.meta.dir, `${ns}.config.ts`);
 	await writeFile(join(vaultDir, 'note.md'), '---\ntype: note\n---\nhi');
@@ -278,13 +282,13 @@ test('run: throws a clear error when the config omits dim', async () => {
 import { z } from 'zod';
 const schema = defineGraphSchema({ nodes: { note: z.object({}).passthrough() }, edges: {} });
 const embed = async () => [1, 0, 0, 0];
-export default { schema, embed, db: { driver: 'libsql' }, namespace: '${ns}' };
+export default { schema, embed, dim: 4, db: { driver: 'libsql' }, namespace: '${ns}' };
 `,
 	);
 	try {
 		const { run } = await import('../../src/cli.ts');
 		await expect(run(['ingest', vaultDir, '--config', configPath])).rejects.toThrow(
-			/must set .?dim/,
+			/sets `embed`, which no longer exists — rename it to `embedder`/,
 		);
 	} finally {
 		await rm(vaultDir, { recursive: true, force: true });

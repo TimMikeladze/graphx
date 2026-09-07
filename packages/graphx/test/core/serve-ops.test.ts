@@ -13,7 +13,7 @@ import { evict } from '../../src/core/db.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { createApp } from '../../src/core/serve.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, stubEmbedder } from './harness.ts';
 
 // Coverage for the backend-only SDK ops newly exposed over HTTP (GAPS.md §2):
 // /changes (changeFeed), /diff, PATCH /nodes/:id (updateNode), DELETE /edges/:id
@@ -73,7 +73,7 @@ async function setup(): Promise<Setup> {
 		control,
 		schema: SCHEMA,
 		authenticate,
-		embed: async (q) => vec(q.length),
+		embedder: stubEmbedder((q) => vec(q.length), { dim: 768 }),
 	});
 	return { control, app, tenantA, editor, viewer, pA, nsA };
 }

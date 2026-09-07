@@ -5,9 +5,9 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { hybridRetrieve } from '../../src/core/hybrid.ts';
 import { journey } from '../../src/core/journey.ts';
-import { type EmbedFn, retrieve } from '../../src/core/retrieve.ts';
+import { retrieve } from '../../src/core/retrieve.ts';
 import { init } from '../../src/core/schema.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, stubEmbedder } from './harness.ts';
 
 // P14 — §19.2 governance applied to the walk read paths: the maxRows row cap and the
 // fan-out (supernode) guard. The guard is SQL-enforced in the recursive walk — a node
@@ -20,11 +20,11 @@ const SCHEMA = defineGraphSchema({
 	edges: { links: { from: 'doc', to: 'doc' } },
 });
 
-const stubEmbed: EmbedFn = async () => [1, 0, 0, 0];
+const stubEmbed = stubEmbedder(() => [1, 0, 0, 0], { dim: 4 });
 
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	return { client, g: new Graph(client, SCHEMA) };
 }
 

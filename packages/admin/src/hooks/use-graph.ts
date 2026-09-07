@@ -25,10 +25,15 @@ export function useUsers() {
 const PAGE_SIZE = 50;
 
 /** Keyset-paginated node list (master), keyed on the active filters. */
-export function useNodes(tenant?: string, project?: string, filters: ExplorerFilters = {}) {
+export function useNodes(
+	tenant?: string,
+	project?: string,
+	filters: ExplorerFilters = {},
+	opts: { enabled?: boolean } = {},
+) {
 	return useInfiniteQuery({
 		queryKey: qk.nodes(tenant ?? '', project ?? '', filters),
-		enabled: Boolean(tenant && project),
+		enabled: Boolean(tenant && project) && (opts.enabled ?? true),
 		initialPageParam: undefined as string | undefined,
 		queryFn: ({ pageParam }) =>
 			api.listNodes(tenant as string, project as string, {

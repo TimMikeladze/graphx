@@ -53,17 +53,16 @@ const schema = defineGraphSchema({
 	},
 });
 
+const embedder = hashEmbed(); // dev embedder; openai(...) from 'graphx/embedders' for production
 const client = getDb('my-project'); // libSQL: file:my-project.db
-await init(client, 768); // create schema + vector index (dim 768)
+await init(client, embedder); // create schema + the vector table at the embedder's width
 
-const embed = hashEmbed(768);
-const g = new Graph(client, schema);
+const g = new Graph(client, schema, { embedder });
 const ada = await g.addNode({ type: 'person', data: { name: 'Ada' } });
 const paper = await g.addNode({
 	type: 'doc',
 	data: { title: 'Notes' },
-	body: 'analytical engine',
-	emb: await embed('analytical engine'), // `Graph` never calls the embedder itself
+	body: 'analytical engine', // embedded by the graph; re-embedded when it changes
 });
 await g.addEdge({ rel: 'wrote', src: ada.id, dst: paper.id });
 
@@ -71,36 +70,34 @@ const neighbors = await g.neighbors(ada.id, { rels: ['wrote'] }); // omit `rels`
 const page = await g.listNodes({ type: 'doc' }); // { nodes, nextCursor }
 ```
 
-A node written without `emb` has a NULL vector: FTS and `hybridRetrieve` still find it, the ANN
-seeds behind `retrieve` never do. The serving layer and `bulkLoad` embed for you; `Graph` does not.
+The graph embeds every write through its embedder — the type's `body` by default, or the text a
+per-type `embedding` policy in the schema declares — hashes that input beside the vector, and
+re-embeds only when it changes. A node whose policy yields no text has no vector: FTS and
+`hybridRetrieve` still find it, the vector seeds behind `retrieve` never do. Vectors live in a
+side table keyed by node and model, so a model change is `graph.reembed()` / `graphx reembed`,
+never a rewrite of history. See [`docs/embeddings.md`](../../docs/embeddings.md).
 
 ### Retrieval
 
 ```ts
-import { retrieve, hybridRetrieve, hashEmbed } from 'graphx';
+// vector seeds + graph expansion — rows carry type, data, score, via, seed, snippet
+const hits = await g.retrieve({ query: 'computing', k: 10, maxDepth: 2 });
 
-// Your embedding model in production; `hashEmbed()` is a deterministic, model-free stand-in for
-// dev/tests/demos (its default width is 768, matching `init`'s — no dimension bookkeeping).
-const embed = hashEmbed();
-
-// vector ANN + graph expansion
-const hits = await retrieve(client, embed, { query: 'computing', k: 10, maxDepth: 2 });
-
-// hybrid: ANN + FTS5 fused by RRF, optional MMR diversification
-const hybrid = await hybridRetrieve(client, embed, { query: 'computing', k: 10, mmr: { k: 5 } });
+// hybrid: vector + full-text fused by RRF, optional MMR diversification
+const hybrid = await g.hybridRetrieve({ query: 'computing', k: 10, mmr: { k: 5 } });
 ```
 
 ### Time travel
 
 ```ts
-import { history, diff, changeFeed, retrieve } from 'graphx';
+import { history, diff, changeFeed } from 'graphx';
 
 const versions = await history(client, id); // full immutable version trail for an id
 const delta = await diff(client, t1, t2); // what changed in (t1, t2]
 const page = await changeFeed(client); // tailable CDC log (keyset cursor)
 
 // as-of reads run through the retrieval/traversal ops (and match().asOf(t)), not getNode:
-const past = await retrieve(client, embed, { query: 'computing', asOf: 1_700_000_000_000 });
+const past = await g.retrieve({ query: 'computing', asOf: 1_700_000_000_000 });
 ```
 
 Other ops: `match()` / `PatternBuilder` (multi-hop patterns), `journey()` (time-respecting
@@ -118,7 +115,7 @@ import { createApp } from 'graphx';
 
 const { app, tenant, project, user } = await createApp({
 	schema,
-	embed: hashEmbed(), // optional; enables /retrieve + /hybrid. Auto-dim sizes the vector column to it.
+	embedder: hashEmbed(), // optional; enables /retrieve + /hybrid and embeds every write through it
 	cors: true, // optional; browser SPA on another origin, no dev proxy
 	logger: true, // optional; log every request
 	seed: async (g) => {
@@ -140,7 +137,7 @@ const app = createApp({
 	control, // control-plane DB (tenants/projects/memberships)
 	schema,
 	authenticate: (c) => verifyToken(c), // -> { userId, tenantId }; throw to 401
-	embed,
+	embedder, // sizes every project namespace on first touch; every write and /retrieve use it
 });
 export default { fetch: app.fetch }; // Bun.serve / Cloudflare / Node
 ```

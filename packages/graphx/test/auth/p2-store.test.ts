@@ -4,12 +4,13 @@ import { Graph, init } from '../../src/core/index.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { defineAuthModel, rel } from '../../src/auth/model.ts';
 import { deleteTuple, writeTuple } from '../../src/auth/store.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 const MODEL = defineAuthModel({ user: {}, group: { member: rel() }, doc: { viewer: rel() } });
 
 async function fresh(): Promise<{ db: DbClient; g: Graph<typeof MODEL.schema> }> {
 	const db = makeTestDb().client;
-	await init(db, 4);
+	await init(db, hashEmbed(4));
 	return { db, g: new Graph(db, MODEL.schema) };
 }
 

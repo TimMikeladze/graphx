@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { FOREVER } from '../../src/core/db.ts';
-import { hashEmbed, retrieve } from '../../src/core/retrieve.ts';
+import { retrieve } from '../../src/core/retrieve.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 import { CORPUS, seedCorpus } from './fixtures/corpus.ts';
 import { annScored } from './retrieval-legs.ts';
 import { embReadSql, makeTestDb } from './harness.ts';
@@ -61,7 +62,7 @@ test('stored vectors round-trip exactly (what goes in is what the walk scores)',
 	// `hashEmbed` emits small integer token counts, which are exact in the float32 storage
 	// both dialects use — so any difference here is a real encoding bug, not precision loss.
 	const r = await db.client.execute(
-		`SELECT id, ${embReadSql(db.client)} AS e FROM node_versions WHERE valid_to = ${FOREVER}`,
+		`SELECT e.id AS id, ${embReadSql(db.client)} AS e FROM node_embeddings e JOIN node_versions n ON n.id = e.id WHERE n.valid_to = ${FOREVER} AND e.chunk = 0`,
 	);
 	expect(r.rows.length).toBe(CORPUS.length);
 	const stored = new Map(
@@ -69,7 +70,7 @@ test('stored vectors round-trip exactly (what goes in is what the walk scores)',
 	);
 
 	for (const doc of CORPUS) {
-		const expected = await embed(doc.body);
+		const expected = await embed.embedOne(doc.body);
 		expect(stored.get(idOf.get(doc.slug) as string)).toEqual(expected);
 	}
 	await db.teardown();

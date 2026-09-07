@@ -27,6 +27,7 @@ export const SNAPSHOT_TABLES = [
 	'edge_identity',
 	'node_versions',
 	'edge_versions',
+	'node_embeddings',
 	'graph_outbox',
 	'node_analytics',
 	'trigger_cursors',
@@ -73,13 +74,12 @@ export async function materialize(
 	manifest: Manifest | null,
 	cache: FileCache,
 ): Promise<void> {
-	const dim = manifest?.embDim ?? 768;
 	// Drop first: materialize is a load, not a merge. A stale row surviving a snapshot
 	// swap would be invisible corruption.
 	for (const t of [...SNAPSHOT_TABLES, ...FTS_TABLES].reverse()) {
 		await client.execute(`DROP TABLE IF EXISTS ${t}`);
 	}
-	await client.executeMultiple(duckdbSchema(dim));
+	await client.executeMultiple(duckdbSchema());
 	await applyReaderSettings(client);
 	if (manifest === null) return;
 
@@ -88,11 +88,8 @@ export async function materialize(
 		if (!ref || ref.files.length === 0) continue;
 		const paths = await cache.resolve(ref.files);
 		// Column-name matching rather than positional, so a manifest written by an older
-		// build with fewer columns still loads. OR REPLACE, not a bare INSERT:
-		// `duckdbSchema` seeds `graph_meta` with the `emb_dim` row, so a manifest that also
-		// carries `graph_meta` — and every manifest does, since Task 12 keeps the
-		// unique-prop and single-rel declarations there — collides on its primary key. The
-		// snapshot is authoritative, so it wins.
+		// build with fewer columns still loads. OR REPLACE so a row the base schema seeded
+		// never collides with the snapshot's copy — the snapshot is authoritative.
 		await client.execute(
 			`INSERT OR REPLACE INTO ${table} BY NAME SELECT * FROM read_parquet(${pathList(paths)}, union_by_name = true)`,
 		);
@@ -125,10 +122,4 @@ export async function materialize(
 			);
 		}
 	}
-	// graph_meta carries emb_dim; the manifest is authoritative, so restate it after load.
-	await client.execute({
-		sql: `INSERT INTO graph_meta (key, value) VALUES ('emb_dim', ?)
-		      ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-		args: [String(dim)],
-	});
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { DbClient } from '../../../src/core/dialect.ts';
 import { defineGraphSchema } from '../../../src/core/define-graph-schema.ts';
 import { Graph } from '../../../src/core/graph.ts';
-import { dimOf, type EmbedFn } from '../../../src/core/retrieve.ts';
+import type { Embedder } from '../../../src/core/embedder.ts';
 import { init } from '../../../src/core/schema.ts';
 
 /**
@@ -177,11 +177,11 @@ export interface SeededCorpus {
  */
 export async function seedCorpus(
 	client: DbClient,
-	embed: EmbedFn,
+	embedder: Embedder,
 	docs: CorpusDoc[] = CORPUS,
 ): Promise<SeededCorpus> {
-	await init(client, await dimOf(embed));
-	const g = new Graph(client, CORPUS_SCHEMA);
+	await init(client, embedder);
+	const g = new Graph(client, CORPUS_SCHEMA, { embedder });
 
 	const idOf = new Map<string, string>();
 	const slugOf = new Map<string, string>();
@@ -190,7 +190,6 @@ export async function seedCorpus(
 			type: 'doc',
 			data: { slug: doc.slug, title: doc.title },
 			body: doc.body,
-			emb: await embed(doc.body),
 		});
 		idOf.set(doc.slug, node.id);
 		slugOf.set(node.id, doc.slug);

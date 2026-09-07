@@ -3,6 +3,7 @@ import { FOREVER } from '../../src/core/db.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { ensureColumn, init, schema } from '../../src/core/schema.ts';
 import { libsqlOnly, makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // libSQL schema-MECHANICS probes (PRAGMA, sqlite_master, EXPLAIN QUERY PLAN, vector_top_k,
 // table_xinfo). The cross-backend schema contract is exercised by every other suite.
@@ -20,10 +21,11 @@ const ULID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAA';
 const ULID_B = '01ARZ3NDEKTSV4RRFFQ69G5FBB';
 const ULID_E = '01ARZ3NDEKTSV4RRFFQ69G5FEE';
 
-test('P1: schema(dim) substitutes the embedding dimension', () => {
-	expect(schema(4)).toContain('F32_BLOB(4)');
-	expect(schema()).toContain('F32_BLOB(768)'); // default dim
-	// every CREATE is guarded with IF NOT EXISTS
+test('P1: the base schema carries no vector column; every CREATE is guarded', () => {
+	// Vectors live in `node_embeddings`, created by `init(client, embedder)` at the embedder's
+	// width — the base DDL is width-free.
+	expect(schema()).not.toContain('F32_BLOB');
+	expect(schema()).toContain('CREATE TABLE IF NOT EXISTS graph_meta');
 	const creates = schema().match(/CREATE\s+(TABLE|INDEX|VIEW)/gi) ?? [];
 	const guarded = schema().match(/CREATE\s+(TABLE|INDEX|VIEW)\s+IF NOT EXISTS/gi) ?? [];
 	expect(guarded.length).toBe(creates.length);
@@ -113,7 +115,7 @@ test('P1: weight CHECK(weight >= 0) rejects a negative-weight edge_version', asy
 
 test('P1: nodes view returns only live rows (valid_to = FOREVER)', async () => {
 	const c = mem();
-	await init(c, 4);
+	await init(c, hashEmbed(4));
 	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
 	// one closed (historical) version + one live version for the same id
 	await c.execute({
@@ -131,33 +133,35 @@ test('P1: nodes view returns only live rows (valid_to = FOREVER)', async () => {
 	c.close();
 });
 
-libsqlOnly('P1 EMPIRICAL: vector index nv_emb_idx is usable via vector_top_k', async () => {
-	const c = mem();
-	await init(c, 4); // dim 4 for the test
-	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
-	await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_B] });
-	// two LIVE node versions with embeddings
-	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, type, emb, valid_from) VALUES (?,?,?,vector(?),?)',
-		args: [1, ULID_A, 'k', '[1,0,0,0]', 1],
-	});
-	await c.execute({
-		sql: 'INSERT INTO node_versions (ver, id, type, emb, valid_from) VALUES (?,?,?,vector(?),?)',
-		args: [2, ULID_B, 'k', '[0,1,0,0]', 1],
-	});
-	// query nearest to [1,0,0,0] — must come back via the nv_emb_idx index
-	const r = await c.execute({
-		sql: "SELECT n.id FROM vector_top_k('nv_emb_idx', vector(?), 1) v JOIN node_versions n ON n.rowid = v.id",
-		args: ['[1,0,0,0]'],
-	});
-	expect(r.rows.length).toBe(1);
-	expect(String(r.rows[0]!.id)).toBe(ULID_A);
-	c.close();
-});
+libsqlOnly(
+	'P1 EMPIRICAL: the node_embeddings index ne_emb_idx is usable via vector_top_k',
+	async () => {
+		const c = mem();
+		await init(c, hashEmbed(4)); // node_embeddings created at dim 4
+		await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_A] });
+		await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [ULID_B] });
+		await c.execute({
+			sql: "INSERT INTO node_embeddings (id, chunk, emb, embed_hash) VALUES (?,0,vector(?),'h')",
+			args: [ULID_A, '[1,0,0,0]'],
+		});
+		await c.execute({
+			sql: "INSERT INTO node_embeddings (id, chunk, emb, embed_hash) VALUES (?,0,vector(?),'h')",
+			args: [ULID_B, '[0,1,0,0]'],
+		});
+		// query nearest to [1,0,0,0] — must come back via the ne_emb_idx index
+		const r = await c.execute({
+			sql: "SELECT e.id FROM vector_top_k('ne_emb_idx', vector(?), 1) v JOIN node_embeddings e ON e.rowid = v.id",
+			args: ['[1,0,0,0]'],
+		});
+		expect(r.rows.length).toBe(1);
+		expect(String(r.rows[0]!.id)).toBe(ULID_A);
+		c.close();
+	},
+);
 
 libsqlOnly('P1: ensureColumn adds a generated column once, idempotently', async () => {
 	const c = mem();
-	await init(c, 4);
+	await init(c, hashEmbed(4));
 	await ensureColumn(
 		c,
 		'node_versions',

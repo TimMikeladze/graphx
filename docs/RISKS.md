@@ -1,5 +1,9 @@
 # graphx — Risk Blindspots (built code)
 
+> **2026-09-06 update.** §3's `dim` findings and §4's embedding-swap finding are resolved by the
+> embedding rewrite (no `dim`; the namespace records its model and refuses another; `graphx reembed`
+> switches). See [`embeddings.md`](./embeddings.md).
+
 > Latent risks in code that **is built and green-tested**, as of audit on 2026-06-19 (`main` @ `1c38d09`).
 > Scope: `packages/ingest`, `packages/cli`, and the `packages/graphx` read/write/schema paths they drive.
 >

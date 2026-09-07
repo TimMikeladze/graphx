@@ -27,7 +27,7 @@ import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { createClient } from '@libsql/client';
-import type { DbClient, EmbedFn } from '../../packages/graphx/src/core/index.ts';
+import type { DbClient, Embedder } from '../../packages/graphx/src/core/index.ts';
 import { Graph, hashEmbed, init } from '../../packages/graphx/src/core/index.ts';
 import { createPgClient } from '../../packages/graphx/src/core/pg.ts';
 import { applyPlan } from '../seed/apply.ts';
@@ -71,7 +71,7 @@ export const WINDOW_DAYS = 90;
 
 export const DAY_MS = 86_400_000;
 
-export const embed: EmbedFn = hashEmbed(DIM);
+export const embed: Embedder = hashEmbed(DIM);
 
 /** Selected backend, mirroring `GRAPHX_TEST_DRIVER` in the test harness. */
 export const DRIVER = process.env.GRAPHX_BENCH_DRIVER ?? 'libsql';
@@ -191,7 +191,7 @@ async function ensureLibsqlCorpus(key: CorpusKey, scale: Scale, log: Logger): Pr
 		`seeding ${scale} corpus (${SCALES[scale].toLocaleString()} nodes, ${key.embedded.toLocaleString()} vectors) — later runs reuse it`,
 	);
 	const client = createClient({ url: `file:${building}` });
-	await init(client, key.dim);
+	await init(client, hashEmbed(key.dim));
 	await seedInto(client, key);
 	// Fold the WAL back into the main file so the cached corpus is a single copyable artifact.
 	await client.execute('PRAGMA wal_checkpoint(TRUNCATE)');
@@ -245,7 +245,7 @@ async function openPgCorpus(
 		ensureSchema: true,
 		ensureExtension: true,
 	});
-	await init(client, key.dim);
+	await init(client, hashEmbed(key.dim));
 	const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
 	if (Number(rows.rows[0]?.c ?? 0) !== key.nodes) {
 		log(`seeding ${scale} corpus into schema ${schema} — later runs reuse it`);
@@ -356,7 +356,7 @@ export async function freshCorpus(
 			ensureSchema: true,
 			ensureExtension: true,
 		});
-		await init(client, key.dim);
+		await init(client, hashEmbed(key.dim));
 		await seedInto(client, key);
 		const corpus = await buildCorpus(client, scale, key);
 		return {

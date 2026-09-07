@@ -4,10 +4,11 @@ import { FOREVER, Graph, init } from '../../src/core/index.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { defineAuthModel, rel } from '../../src/auth/model.ts';
 import { deleteTuple, ensureObject, liveTupleExists, writeTuple } from '../../src/auth/store.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 async function freshDb(): Promise<DbClient> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return client;
 }
 

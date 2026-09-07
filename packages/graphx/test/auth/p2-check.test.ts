@@ -5,6 +5,7 @@ import { makeTestDb } from '../core/harness.ts';
 import { Graph, init } from '../../src/core/index.ts';
 import { Auth } from '../../src/auth/auth.ts';
 import { defineAuthModel, rel } from '../../src/auth/model.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 const MODEL = defineAuthModel({
 	user: {},
@@ -15,7 +16,7 @@ const MODEL = defineAuthModel({
 
 async function freshAuth(): Promise<{ db: DbClient; auth: Auth }> {
 	const db = makeTestDb().client;
-	await init(db, 4);
+	await init(db, hashEmbed(4));
 	return { db, auth: new Auth(new Graph(db, MODEL.schema), MODEL) };
 }
 

@@ -11,10 +11,7 @@ import './style.css';
  */
 
 /** Every selector below targets prerendered markup — miss loudly. */
-function must<T extends Element>(
-	selector: string,
-	scope: ParentNode = document,
-) {
+function must<T extends Element>(selector: string, scope: ParentNode = document) {
 	const el = scope.querySelector<T>(selector);
 	if (!el) throw new Error(`graphx site: missing element ${selector}`);
 	return el;
@@ -26,8 +23,7 @@ const root = document.documentElement;
 
 must('.theme-toggle').addEventListener('click', () => {
 	const current =
-		root.dataset.theme ??
-		(matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		root.dataset.theme ?? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 	const next = current === 'dark' ? 'light' : 'dark';
 	root.dataset.theme = next;
 	localStorage.setItem('theme', next);
@@ -35,11 +31,7 @@ must('.theme-toggle').addEventListener('click', () => {
 
 /* ---------- copy buttons ---------- */
 
-function wireCopy(
-	button: HTMLElement,
-	getText: () => string,
-	label: HTMLElement,
-) {
+function wireCopy(button: HTMLElement, getText: () => string, label: HTMLElement) {
 	button.addEventListener('click', async () => {
 		await navigator.clipboard.writeText(getText());
 		const previous = label.textContent;
@@ -63,14 +55,11 @@ const installCode = must<HTMLElement>('code', installButton);
 for (const tab of document.querySelectorAll<HTMLButtonElement>('.pm-tab')) {
 	tab.addEventListener('click', () => {
 		const pm = tab.dataset.pm ?? 'bun';
-		const command =
-			installButton.dataset[`install${pm[0]?.toUpperCase()}${pm.slice(1)}`];
+		const command = installButton.dataset[`install${pm[0]?.toUpperCase()}${pm.slice(1)}`];
 		if (!command) return;
 		installButton.dataset.copy = command;
 		installCode.textContent = command;
-		for (const other of document.querySelectorAll<HTMLButtonElement>(
-			'.pm-tab',
-		)) {
+		for (const other of document.querySelectorAll<HTMLButtonElement>('.pm-tab')) {
 			other.classList.toggle('is-active', other === tab);
 			other.setAttribute('aria-selected', String(other === tab));
 		}
@@ -89,9 +78,7 @@ for (const block of document.querySelectorAll<HTMLElement>('.code-block')) {
  * so nothing is fetched or highlighted at click time.
  */
 const panels = [...document.querySelectorAll<HTMLElement>('[data-panel]')];
-const panelTabs = [
-	...document.querySelectorAll<HTMLButtonElement>('[data-panel-tab]'),
-];
+const panelTabs = [...document.querySelectorAll<HTMLButtonElement>('[data-panel-tab]')];
 
 for (const tab of panelTabs) {
 	tab.addEventListener('click', () => {

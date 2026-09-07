@@ -15,7 +15,7 @@ const embed = hashEmbed(DIM);
 
 async function loaded(nodes: number) {
 	const client = createClient({ url: ':memory:' });
-	await init(client, DIM);
+	await init(client, embed);
 	const plan = withHistory(generate({ nodes, seed: 3, now: NOW }), { seed: 4, now: NOW });
 	const result = await applyPlan(client, plan, embed);
 	return { client, plan, result, graph: new Graph(client, demoSchema) };
@@ -90,7 +90,7 @@ test('applyPlan: semantic retrieval is seeded by the ANN index', async () => {
 
 test('applyPlan: an empty plan is a no-op', async () => {
 	const client = createClient({ url: ':memory:' });
-	await init(client, DIM);
+	await init(client, embed);
 	const result = await applyPlan(client, generate({ nodes: 0, seed: 1, now: NOW }), embed);
 	expect(result).toEqual({ nodes: 0, versions: 0, edges: 0, embedded: 0 });
 	client.close();
@@ -99,21 +99,21 @@ test('applyPlan: an empty plan is a no-op', async () => {
 test('applyPlan: embeds every live node when under the cap', async () => {
 	const { client, result } = await loaded(600);
 	expect(result.embedded).toBe(600);
-	const withEmb = await client.execute('SELECT COUNT(*) AS c FROM nodes WHERE emb IS NOT NULL');
+	const withEmb = await client.execute('SELECT COUNT(DISTINCT id) AS c FROM node_embeddings');
 	expect(Number(withEmb.rows[0]?.c)).toBe(600);
 	client.close();
 });
 
 test('applyPlan: caps the embedded sample and still spreads it across types', async () => {
 	const client = createClient({ url: ':memory:' });
-	await init(client, DIM);
+	await init(client, embed);
 	const plan = withHistory(generate({ nodes: 600, seed: 3, now: NOW }), { seed: 4, now: NOW });
 	const result = await applyPlan(client, plan, embed, { maxEmbedded: 100 });
 	expect(result.embedded).toBeLessThanOrEqual(100);
 	expect(result.embedded).toBeGreaterThan(50);
 
 	const sampled = await client.execute(
-		'SELECT COUNT(DISTINCT type) AS c FROM nodes WHERE emb IS NOT NULL',
+		'SELECT COUNT(DISTINCT n.type) AS c FROM nodes n JOIN node_embeddings e ON e.id = n.id',
 	);
 	// The stride runs over a type-interleaved load order, so a sample of ~100 hits most types.
 	expect(Number(sampled.rows[0]?.c)).toBeGreaterThan(5);

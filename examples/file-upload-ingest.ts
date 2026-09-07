@@ -18,7 +18,9 @@ import {
 	bulkLoad,
 	type BulkRow,
 	defineGraphSchema,
+	type Embedder,
 	type GraphSchema,
+	hashEmbed,
 	init,
 } from '../packages/graphx/src/core/index.ts';
 import type { Client } from '@libsql/client';
@@ -32,9 +34,6 @@ type PutBlob = (key: string, bytes: Uint8Array, contentType: string) => Promise<
 type Chunk = { text: string; hash: string };
 type Extract = (bytes: Uint8Array, contentType: string) => Promise<Chunk[]>;
 
-/** Optional: precompute embeddings here, or omit and embed in a downstream pass. */
-type Embed = (text: string) => Promise<number[]>;
-
 // --- The ingest helper -------------------------------------------------------
 
 export async function ingestFile<S extends GraphSchema>(opts: {
@@ -44,9 +43,10 @@ export async function ingestFile<S extends GraphSchema>(opts: {
 	file: { name: string; type: string; bytes: Uint8Array };
 	put: PutBlob;
 	extract: Extract;
-	embed?: Embed;
+	/** The namespace's embedder; `bulkLoad` batch-embeds every chunk through it. */
+	embedder?: Embedder;
 }) {
-	const { client, schema, type, file, put, extract, embed } = opts;
+	const { client, schema, type, file, put, extract, embedder } = opts;
 
 	// 1. bytes → object storage (your backend). Returns the opaque uri.
 	const uri = await put(file.name, file.bytes, file.type);
@@ -55,20 +55,17 @@ export async function ingestFile<S extends GraphSchema>(opts: {
 	const chunks = await extract(file.bytes, file.type);
 
 	// 3. map → BulkRow[]; `uri` back-pointer + `content_hash` for idempotent re-upload.
-	const rows: BulkRow<S>[] = await Promise.all(
-		chunks.map(async (c) => ({
-			type,
-			data: { source: file.name },
-			body: c.text,
-			uri,
-			content_hash: c.hash,
-			content_type: file.type,
-			...(embed ? { emb: await embed(c.text) } : {}),
-		})),
-	);
+	const rows: BulkRow<S>[] = chunks.map((c) => ({
+		type,
+		data: { source: file.name },
+		body: c.text,
+		uri,
+		content_hash: c.hash,
+		content_type: file.type,
+	}));
 
-	// 4. one batched write.
-	return bulkLoad(client, schema, rows, { chunkSize: 500 });
+	// 4. one batched write — embedded in one pass by the loader.
+	return bulkLoad(client, schema, rows, { chunkSize: 500, embedder });
 }
 
 // --- Backend wirings — only `put` changes ------------------------------------
@@ -101,7 +98,8 @@ const SCHEMA = defineGraphSchema({
 
 if (import.meta.main) {
 	const client = createClient({ url: 'file:ingest-demo.db' });
-	await init(client); // pass an embedding dim (e.g. init(client, 1536)) when you store `emb`
+	const embedder = hashEmbed(); // dev embedder; a real model works the same way
+	await init(client, embedder);
 
 	// Stub backend + extractor so the demo runs with no cloud creds.
 	const memStore = new Map<string, Uint8Array>();

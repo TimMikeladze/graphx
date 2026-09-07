@@ -1,40 +1,30 @@
 import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
-import {
-	annSeedsAsOf,
-	embExtract,
-	ftsSeedAsOf,
-	ftsSeedLive,
-	jsonArrayRows,
-	vecSeedLive,
-} from './dialect-sql.ts';
+import { embReadExpr, ftsSeedAsOf, ftsSeedLive } from './dialect-sql.ts';
 import { FOREVER, ftsIndexOwner } from './db.ts';
+import type { Embedder } from './embedder.ts';
 import { tokenize } from './fts/tokenize.ts';
+import type { QueryLimits } from './governance.ts';
+import { resolveLimits } from './governance.ts';
+import type { GraphSchema } from './graph.ts';
 import {
-	applyLimit,
-	FANOUT_DEG_CTE,
-	fanoutJoin,
-	type QueryLimits,
-	resolveLimits,
-	withTimeout,
-} from './governance.ts';
-import type { EmbedFn, RetrievedNode } from './retrieve.ts';
+	idsValidAt,
+	requireEmbeddings,
+	type RetrievedNode,
+	type Seed,
+	vectorSeedRows,
+	walk,
+} from './retrieve.ts';
 
 /**
- * P13 — hybrid retrieval (§19.3–19.4). Fuse an ANN seed list and an FTS5 lexical
- * seed list by Reciprocal Rank Fusion, feed the fused seeds into the SAME cycle-safe,
- * depth-bounded walk P4 uses (§7), then optionally rerank + MMR the expanded
- * candidates before returning top-k.
+ * P13 — hybrid retrieval (§19.3–19.4). Fuse a vector seed list and a full-text seed list by
+ * Reciprocal Rank Fusion, feed the fused seeds into the SAME cycle-safe, depth-bounded walk
+ * `retrieve` uses (§7), then optionally rerank + MMR the expanded candidates before returning.
  *
- * The walk here is a deliberate, self-contained copy of retrieve.ts's §7 walk
- * (seeds injected via `json_each` instead of `vector_top_k`), so P4 stays byte-stable
- * (the task forbids modifying P0–P11 files beyond schema/index). The two temporal
- * paths mirror retrieve.ts exactly:
- *  - **Current-time** (no `asOf`): seeds restricted to LIVE versions
- *    (`valid_to = FOREVER`); walk targets live edges/nodes by the same equality.
- *  - **As-of-past** (`asOf` set, `:t < FOREVER`, D3): vector seeds over-fetch the live
- *    index then keep ids with a version valid at `:t` (mirroring retrieve.ts); lexical
- *    seeds match the version actually valid at `:t`; the walk uses half-open `:t`
- *    predicates throughout.
+ * The two temporal paths mirror `retrieve.ts`:
+ *  - **Current-time** (no `asOf`): both seed lists are live; the walk targets live rows.
+ *  - **As-of-past** (`asOf` set, `:t < FOREVER`, D3): vector seeds over-fetch the live vectors
+ *    and keep ids with a version valid at `:t`; lexical seeds match the version actually valid
+ *    at `:t` (the FTS index covers every version); the walk uses half-open `:t` predicates.
  */
 
 /** RRF constant — the `60` in `score = Σ 1/(60 + rank_i)` (§19.3). */
@@ -49,11 +39,10 @@ export interface RerankScore {
 }
 
 /**
- * Caller-provided reranker (§19.4) — same injection pattern as {@link EmbedFn}. Given
- * the query and the expanded candidate subgraph (in walk order), return a relevance
- * score for each candidate to KEEP. Candidates absent from the returned list are
- * dropped; the survivors are ordered by `score` descending. No local cross-encoder is
- * bundled — bring your own (a cross-encoder call, an LLM judge, etc.).
+ * Caller-provided reranker (§19.4). Given the query and the expanded candidate subgraph (in
+ * walk order), return a relevance score for each candidate to KEEP. Candidates absent from
+ * the returned list are dropped; the survivors are ordered by `score` descending. No local
+ * cross-encoder is bundled — bring your own (a cross-encoder call, an LLM judge, etc.).
  */
 export type RerankFn = (query: string, candidates: RetrievedNode[]) => Promise<RerankScore[]>;
 
@@ -66,7 +55,7 @@ export interface MmrOpts {
 	lambda?: number;
 }
 
-/** Options for {@link hybridRetrieve}. Superset of P4's `RetrieveOpts` plus fusion knobs. */
+/** Options for {@link hybridRetrieve}. Superset of `RetrieveOpts` plus fusion knobs. */
 export interface HybridRetrieveOpts {
 	query: string;
 	/** Number of fused seeds fed into the walk (default 10). */
@@ -83,6 +72,8 @@ export interface HybridRetrieveOpts {
 	mmr?: MmrOpts;
 	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
 	limits?: Partial<QueryLimits>;
+	/** Read-time upcasting for `data` (P12). `Graph.hybridRetrieve` supplies its own registry. */
+	upcast?: (type: string, data: Record<string, unknown>) => Record<string, unknown>;
 }
 
 /**
@@ -109,13 +100,9 @@ export function sanitizeMatch(query: string): string | null {
  *
  * This exists because the three dialects want three different things from the same user text:
  * libSQL an FTS5 expression, Postgres the raw text (its `tsquery` is built in SQL), DuckDB a
- * JSON array of tokens. The call sites used to spell that as `d === 'postgres' ? query :
- * match`, which quietly handed an FTS5 expression to DuckDB the moment a third dialect
- * existed.
- *
- * "Has usable tokens" is judged by the shared {@link tokenize} — the same test every dialect's
- * index is built with — so all three dialects agree on which inputs are empty, even though
- * only DuckDB's argument is literally the token list.
+ * JSON array of tokens. "Has usable tokens" is judged by the shared {@link tokenize} — the
+ * same test every dialect's index is built with — so all three dialects agree on which inputs
+ * are empty, even though only DuckDB's argument is literally the token list.
  */
 export function ftsArg(dialect: Dialect, query: string): string | null {
 	if (tokenize(query).length === 0) return null;
@@ -137,13 +124,11 @@ export function ftsArg(dialect: Dialect, query: string): string | null {
 /**
  * Reciprocal Rank Fusion over ranked id lists (M5). Each list is already in rank
  * order; the FIRST occurrence of an id in a list is its best (lowest) rank. Fused
- * score = Σ 1/(rrfK + rank_i). Returns ids ordered by fused score descending.
+ * score = Σ 1/(rrfK + rank_i). Returns ids ordered by fused score descending, with the score.
  *
- * Exported for retrieval evaluation, which scores the fused seed order directly:
- * {@link hybridRetrieve} feeds this ranking into the walk but returns rows ordered by
- * DEPTH, so the fusion quality is not observable from its output alone.
+ * Exported for retrieval evaluation, which scores the fused seed order directly.
  */
-export function rrf(lists: string[][], rrfK: number): string[] {
+export function rrf(lists: string[][], rrfK: number): Array<{ id: string; score: number }> {
 	const score = new Map<string, number>();
 	for (const list of lists) {
 		const seen = new Set<string>();
@@ -154,164 +139,83 @@ export function rrf(lists: string[][], rrfK: number): string[] {
 			score.set(id, (score.get(id) ?? 0) + 1 / (rrfK + (i + 1)));
 		}
 	}
-	return [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+	return [...score.entries()]
+		.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+		.map(([id, s]) => ({ id, score: s }));
 }
 
-/** `rel IN (?,…)` fragment + the bound rel args (empty when no rels filter). */
-function relFragment(rels: string[] | null): string {
-	return rels ? ` AND rel IN (${rels.map(() => '?').join(',')})` : '';
-}
-
-/** Directional adjacency body (edges stored once; expand fwd/rev/both), per §7. */
-function adjCte(direction: 'forward' | 'reverse' | 'both', edgePred: string): string {
-	const forward = `SELECT src AS a, dst AS b FROM edge_versions WHERE ${edgePred}`;
-	const reverse = `SELECT dst AS a, src AS b FROM edge_versions WHERE ${edgePred}`;
-	if (direction === 'forward') return forward;
-	if (direction === 'reverse') return reverse;
-	return `${forward} UNION ALL ${reverse}`;
-}
-
-/** Fetch the ANN + FTS seed id lists (current-time path), each in rank order. */
-async function seedsCurrent(
+/** Full-text seed ids for `query`, best first (live or as-of). Empty when the query has no tokens. */
+export async function ftsSeedIds(
 	raw: DbClient,
-	qEmbJson: string,
-	arg: string | null,
+	query: string,
 	fetchK: number,
-): Promise<string[][]> {
+	asOf: number | undefined,
+): Promise<string[]> {
 	const d = dialectOf(raw);
-	const vec = await raw.execute({ sql: vecSeedLive(d), args: [qEmbJson, fetchK] });
-	const vecIds = vec.rows.map((r) => String(r.id));
-
-	let ftsIds: string[] = [];
-	if (arg !== null) {
-		const fts = await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
-		ftsIds = fts.rows.map((r) => String(r.id));
-	}
-	return [vecIds, ftsIds];
+	const arg = ftsArg(d, query);
+	if (arg === null) return [];
+	await ftsIndexOwner(raw)?.ensureFtsFresh();
+	const isPast = asOf !== undefined && asOf < FOREVER;
+	const r = isPast
+		? await raw.execute({
+				sql: ftsSeedAsOf(d),
+				args: [arg, asOf as number, asOf as number, fetchK],
+			})
+		: await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
+	return r.rows.map((row) => String(row.id));
 }
 
-/** Fetch the ANN + FTS seed id lists (as-of-past path, `:t < FOREVER`), in rank order. */
-async function seedsAsOf(
+/** Both seed lists in rank order, plus the vector rows' snippets for the fused seeds. */
+export async function hybridSeedLists(
 	raw: DbClient,
-	qEmbJson: string,
-	arg: string | null,
+	embedder: Embedder,
+	query: string,
 	fetchK: number,
-	t: number,
-): Promise<string[][]> {
-	const d = dialectOf(raw);
-	// Vector: over-fetch the live index, keep ids that have a version valid at :t, rank
-	// (libSQL by the index rowid proxy; Postgres by cosine distance).
-	const vec = await raw.execute({
-		sql: annSeedsAsOf(d),
-		args: [qEmbJson, fetchK, t, t, fetchK],
-	});
-	const vecIds = vec.rows.map((r) => String(r.id));
-
-	let ftsIds: string[] = [];
-	if (arg !== null) {
-		// Lexical: match the version actually valid at :t (the FTS index covers every
-		// version, so this is exact — not best-effort like the live-only ANN leg).
-		const fts = await raw.execute({
-			sql: ftsSeedAsOf(d),
-			args: [arg, t, t, fetchK],
-		});
-		ftsIds = fts.rows.map((r) => String(r.id));
+	asOf: number | undefined,
+): Promise<{ vec: string[]; fts: string[]; snippets: Map<string, string | null>; qEmb: number[] }> {
+	const qEmb = await embedder.embedOne(query);
+	const isPast = asOf !== undefined && asOf < FOREVER;
+	let vecRows = await vectorSeedRows(raw, qEmb, isPast ? fetchK * SEED_MULTIPLIER : fetchK);
+	if (isPast) {
+		const keep = new Set(
+			await idsValidAt(
+				raw,
+				vecRows.map((r) => r.id),
+				asOf as number,
+			),
+		);
+		vecRows = vecRows.filter((r) => keep.has(r.id)).slice(0, fetchK);
 	}
-	return [vecIds, ftsIds];
+	const fts = await ftsSeedIds(raw, query, fetchK, asOf);
+	return {
+		vec: vecRows.map((r) => r.id),
+		fts,
+		snippets: new Map(vecRows.map((r) => [r.id, r.snippet])),
+		qEmb,
+	};
 }
 
-/** Run the §7 cycle-safe walk from an explicit fused-seed id list (current-time). */
-async function walkCurrent(
-	raw: DbClient,
-	seedIds: string[],
-	direction: 'forward' | 'reverse' | 'both',
-	rels: string[] | null,
-	maxDepth: number,
-	limits: QueryLimits,
-): Promise<RetrievedNode[]> {
-	const edgePred = `valid_to = ${FOREVER}${relFragment(rels)}`;
-	const sql = `
-WITH RECURSIVE seeds(id) AS (${jsonArrayRows(dialectOf(raw))}),
-adj AS (
-  ${adjCte(direction, edgePred)}
-),
-${FANOUT_DEG_CTE},
-walk AS (
-  SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
-  FROM node_versions n JOIN seeds USING (id)
-  WHERE n.valid_to = ${FOREVER}
-  UNION ALL
-  SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
-  FROM walk
-  JOIN adj ON adj.a = walk.id
-  ${fanoutJoin(limits.maxFanout)}
-  JOIN node_versions n ON n.id = adj.b AND n.valid_to = ${FOREVER}
-  WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
-)
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
-
-	const args: (string | number)[] = [JSON.stringify(seedIds)];
-	const sides = direction === 'both' ? 2 : 1;
-	for (let i = 0; i < sides; i++) args.push(...(rels ?? []));
-	args.push(maxDepth);
-	return rowsToNodes(
-		await withTimeout(
-			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
-			limits.timeoutMs,
-		),
-	);
-}
-
-/** Run the §7 cycle-safe walk from an explicit fused-seed id list (as-of-past). */
-async function walkAsOf(
-	raw: DbClient,
-	seedIds: string[],
-	direction: 'forward' | 'reverse' | 'both',
-	rels: string[] | null,
-	maxDepth: number,
-	t: number,
-	limits: QueryLimits,
-): Promise<RetrievedNode[]> {
-	const edgePred = `valid_from <= ? AND ? < valid_to${relFragment(rels)}`;
-	const sql = `
-WITH RECURSIVE seeds(id) AS (${jsonArrayRows(dialectOf(raw))}),
-adj AS (
-  ${adjCte(direction, edgePred)}
-),
-${FANOUT_DEG_CTE},
-walk AS (
-  SELECT n.id AS id, n.body AS body, n.uri AS uri, 0 AS depth, ',' || n.id || ',' AS path
-  FROM node_versions n JOIN seeds USING (id)
-  WHERE n.valid_from <= ? AND ? < n.valid_to
-  UNION ALL
-  SELECT n.id, n.body, n.uri, walk.depth + 1, walk.path || n.id || ','
-  FROM walk
-  JOIN adj ON adj.a = walk.id
-  ${fanoutJoin(limits.maxFanout)}
-  JOIN node_versions n ON n.id = adj.b AND n.valid_from <= ? AND ? < n.valid_to
-  WHERE walk.depth < ? AND walk.path NOT LIKE '%,' || n.id || ',%'
-)
-SELECT id, body, uri, MIN(depth) AS depth FROM walk GROUP BY id, body, uri ORDER BY depth`;
-
-	const args: (string | number)[] = [JSON.stringify(seedIds)];
-	const sides = direction === 'both' ? 2 : 1;
-	for (let i = 0; i < sides; i++) args.push(t, t, ...(rels ?? []));
-	args.push(t, t, t, t, maxDepth);
-	return rowsToNodes(
-		await withTimeout(
-			raw.execute({ sql: applyLimit(sql, limits.maxRows), args }),
-			limits.timeoutMs,
-		),
-	);
-}
-
-function rowsToNodes(r: { rows: Record<string, unknown>[] }): RetrievedNode[] {
-	return r.rows.map((row) => ({
-		id: String(row.id),
-		body: row.body === null ? null : String(row.body),
-		uri: row.uri === null ? null : String(row.uri),
-		depth: Number(row.depth),
-	}));
+/** Fused seeds: RRF over both lists, truncated to `k`, tagged with the legs that ranked them. */
+export function fuseSeeds(
+	vec: string[],
+	fts: string[],
+	rrfK: number,
+	k: number,
+	snippets: Map<string, string | null>,
+): Seed[] {
+	const inVec = new Set(vec);
+	const inFts = new Set(fts);
+	return rrf([vec, fts], rrfK)
+		.slice(0, k)
+		.map(({ id, score }) => ({
+			id,
+			score,
+			via: [
+				...(inVec.has(id) ? (['vector'] as const) : []),
+				...(inFts.has(id) ? (['fts'] as const) : []),
+			],
+			snippet: snippets.get(id) ?? null,
+		}));
 }
 
 function cosine(a: number[], b: number[]): number {
@@ -332,24 +236,19 @@ function cosine(a: number[], b: number[]): number {
 	return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-/** Load candidate embeddings (the version valid now / at :t) as JS vectors. */
-async function loadEmbeddings(
-	raw: DbClient,
-	ids: string[],
-	isPast: boolean,
-	t: number,
-): Promise<Map<string, number[]>> {
-	const placeholders = ids.map(() => '?').join(',');
-	const pred = isPast ? `valid_from <= ? AND ? < valid_to` : `valid_to = ${FOREVER}`;
-	const args: (string | number)[] = isPast ? [...ids, t, t] : [...ids];
-	const r = await raw.execute({
-		sql: `SELECT id, ${embExtract(dialectOf(raw))} AS e
-FROM node_versions
-WHERE id IN (${placeholders}) AND ${pred} AND emb IS NOT NULL`,
-		args,
-	});
+/** Load candidates' first-chunk vectors as JS arrays (for MMR). */
+async function loadEmbeddings(raw: DbClient, ids: string[]): Promise<Map<string, number[]>> {
 	const out = new Map<string, number[]>();
-	for (const row of r.rows) out.set(String(row.id), JSON.parse(String(row.e)) as number[]);
+	for (let i = 0; i < ids.length; i += 400) {
+		const part = ids.slice(i, i + 400);
+		const r = await raw.execute({
+			sql: `SELECT id, ${embReadExpr(dialectOf(raw))} AS e
+FROM node_embeddings
+WHERE chunk = 0 AND id IN (${part.map(() => '?').join(',')})`,
+			args: part,
+		});
+		for (const row of r.rows) out.set(String(row.id), JSON.parse(String(row.e)) as number[]);
+	}
 	return out;
 }
 
@@ -359,14 +258,14 @@ WHERE id IN (${placeholders}) AND ${pred} AND emb IS NOT NULL`,
  * reranker ran, else cosine similarity to the query embedding. Drops near-duplicate
  * multi-hop results; returns the chosen `k` in selection order.
  */
-function mmrSelect(
-	candidates: RetrievedNode[],
+function mmrSelect<S extends GraphSchema>(
+	candidates: RetrievedNode<S>[],
 	embById: Map<string, number[]>,
 	qEmb: number[],
 	rerankScore: Map<string, number> | null,
 	lambda: number,
 	k: number,
-): RetrievedNode[] {
+): RetrievedNode<S>[] {
 	const relOf = (id: string): number =>
 		rerankScore ? (rerankScore.get(id) ?? 0) : cosine(qEmb, embById.get(id) ?? []);
 	const simOf = (a: string, b: string): number => {
@@ -376,12 +275,12 @@ function mmrSelect(
 	};
 
 	const pool = [...candidates];
-	const chosen: RetrievedNode[] = [];
+	const chosen: RetrievedNode<S>[] = [];
 	while (chosen.length < k && pool.length > 0) {
 		let bestIdx = 0;
 		let bestScore = -Infinity;
 		for (let i = 0; i < pool.length; i++) {
-			const c = pool[i] as RetrievedNode;
+			const c = pool[i] as RetrievedNode<S>;
 			let maxSim = 0;
 			for (const s of chosen) maxSim = Math.max(maxSim, simOf(c.id, s.id));
 			const mmr = lambda * relOf(c.id) - (1 - lambda) * maxSim;
@@ -390,53 +289,49 @@ function mmrSelect(
 				bestIdx = i;
 			}
 		}
-		chosen.push(pool[bestIdx] as RetrievedNode);
+		chosen.push(pool[bestIdx] as RetrievedNode<S>);
 		pool.splice(bestIdx, 1);
 	}
 	return chosen;
 }
 
 /**
- * Hybrid GraphRAG retrieve (§19.3–19.4). Runs the ANN and FTS5 lexical seed lists,
- * fuses them by RRF on the logical ULID `id` (NOT `ver` — M5), expands the fused
- * top-k seeds through the §7 cycle-safe walk, then applies the optional `rerank` and
- * `mmr` post-processors before returning. Drop-in alongside P4's `retrieve`.
+ * Hybrid GraphRAG retrieve (§19.3–19.4). Runs the vector and full-text seed lists, fuses them
+ * by RRF on the logical ULID `id` (NOT `ver` — M5), expands the fused top-k seeds through the
+ * §7 cycle-safe walk, then applies the optional `rerank` and `mmr` post-processors.
  */
-export async function hybridRetrieve(
+export async function hybridRetrieve<S extends GraphSchema = GraphSchema>(
 	raw: DbClient,
-	embed: EmbedFn,
+	embedder: Embedder,
 	opts: HybridRetrieveOpts,
-): Promise<RetrievedNode[]> {
+): Promise<RetrievedNode<S>[]> {
+	await requireEmbeddings(raw, embedder, 'hybridRetrieve');
 	const k = opts.k ?? 10;
-	const maxDepth = opts.maxDepth ?? 2;
-	const direction = opts.direction ?? 'both';
-	const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 	const rrfK = opts.rrfK ?? DEFAULT_RRF_K;
 	const fetchK = k * SEED_MULTIPLIER;
-	const limits = resolveLimits(opts.limits);
 
-	const qEmb = await embed(opts.query);
-	const qEmbJson = JSON.stringify(qEmb);
-	const arg = ftsArg(dialectOf(raw), opts.query);
-	if (arg !== null) await ftsIndexOwner(raw)?.ensureFtsFresh();
+	const { vec, fts, snippets, qEmb } = await hybridSeedLists(
+		raw,
+		embedder,
+		opts.query,
+		fetchK,
+		opts.asOf,
+	);
+	const seeds = fuseSeeds(vec, fts, rrfK, k, snippets);
+	if (seeds.length === 0) return [];
 
-	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
-	const t = isPast ? (opts.asOf as number) : FOREVER;
-
-	const lists = isPast
-		? await seedsAsOf(raw, qEmbJson, arg, fetchK, t)
-		: await seedsCurrent(raw, qEmbJson, arg, fetchK);
-
-	const seedIds = rrf(lists, rrfK).slice(0, k);
-	if (seedIds.length === 0) return [];
-
-	let candidates = isPast
-		? await walkAsOf(raw, seedIds, direction, rels, maxDepth, t, limits)
-		: await walkCurrent(raw, seedIds, direction, rels, maxDepth, limits);
+	let candidates = await walk<S>(raw, seeds, {
+		maxDepth: opts.maxDepth ?? 2,
+		direction: opts.direction ?? 'both',
+		rels: opts.rels && opts.rels.length > 0 ? opts.rels : null,
+		asOf: opts.asOf,
+		limits: resolveLimits(opts.limits),
+		upcast: opts.upcast,
+	});
 
 	let rerankScore: Map<string, number> | null = null;
 	if (opts.rerank) {
-		const scores = await opts.rerank(opts.query, candidates);
+		const scores = await opts.rerank(opts.query, candidates as unknown as RetrievedNode[]);
 		rerankScore = new Map(scores.map((s) => [s.id, s.score]));
 		candidates = candidates
 			.filter((c) => rerankScore?.has(c.id))
@@ -447,8 +342,6 @@ export async function hybridRetrieve(
 		const embById = await loadEmbeddings(
 			raw,
 			candidates.map((c) => c.id),
-			isPast,
-			t,
 		);
 		candidates = mmrSelect(
 			candidates,

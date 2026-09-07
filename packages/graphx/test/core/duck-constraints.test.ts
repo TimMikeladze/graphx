@@ -6,6 +6,7 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { createDuckClient } from '../../src/core/duck.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // T12 — application-level constraint enforcement on DuckDB, exercised through the real
 // Graph write path. Uses the standalone declareUniqueNodeProp/declareSingleValuedRel
@@ -30,7 +31,7 @@ const SCHEMA = defineGraphSchema({
 
 async function graph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = createDuckClient();
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
@@ -101,7 +102,7 @@ describe('duckdb constraints', () => {
 		// connection ends up held by a writer waiting for one more, and the process hangs.
 		// Needs at least poolMax concurrent writers to show up — the default is 4.
 		const client = createDuckClient({ poolMax: 2 });
-		await init(client, 4);
+		await init(client, hashEmbed(4));
 		const g = new Graph(client, SCHEMA);
 		await declareUniqueNodeProp(client, { type: 'Doc', prop: 'slug' });
 		const a = await g.addNode({ type: 'Doc', data: { slug: 'a' } });

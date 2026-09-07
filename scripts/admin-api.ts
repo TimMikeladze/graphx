@@ -24,10 +24,8 @@ import {
 	createProject,
 	createTenant,
 	createUser,
-	getDb,
 	graphForProject,
 	hashEmbed,
-	init,
 	initControl,
 	type Principal,
 } from '../packages/graphx/src/core/index.ts';
@@ -53,7 +51,7 @@ const SEED_EMBED = Number(process.env.SEED_EMBED ?? 5_000);
  * has a vocabulary of a few hundred words, so 128 hash buckets still separate it well.
  */
 const DIM = 128;
-const embed = hashEmbed(DIM);
+const embedder = hashEmbed(DIM);
 
 /** The demo estate. Sizes differ so the explorer sees a truncated slice, small graphs and an empty one. */
 const FIXTURES = [
@@ -88,7 +86,7 @@ const namespaces = FIXTURES.map((f) => f.namespace);
 const fp = fingerprint({
 	schemaVersion: DEMO_SCHEMA_VERSION,
 	seed: SEED_SEED,
-	dim: DIM,
+	embedder: embedder.id,
 	embedded: SEED_EMBED,
 	fixtures: FIXTURES.map((f) => ({ namespace: f.namespace, nodes: f.nodes })),
 });
@@ -122,9 +120,6 @@ for (const [i, fixture] of FIXTURES.entries()) {
 		name: fixture.project,
 		dbNamespace: fixture.namespace,
 	});
-	// Create the vector column at the embedder's width BEFORE the lazy init inside
-	// graphForProject bakes the 768 default. `init` is idempotent, so the later re-init is a no-op.
-	await init(getDb(fixture.namespace), DIM);
 
 	if (!rebuild) {
 		summary.push(`${fixture.tenant}/${fixture.project}: cached`);
@@ -132,7 +127,9 @@ for (const [i, fixture] of FIXTURES.entries()) {
 	}
 
 	const seedPrincipal: Principal = { userId: 'seed', tenantId, operator: true };
-	const g = await graphForProject(control, seedPrincipal, projectId, 'write', demoSchema);
+	const g = await graphForProject(control, seedPrincipal, projectId, 'write', demoSchema, {
+		embedder,
+	});
 	// Each project gets its own PRNG stream, so they are different graphs rather than prefixes
 	// of one graph.
 	const plan = withHistory(generate({ nodes: fixture.nodes, seed: SEED_SEED + i, now }), {
@@ -143,7 +140,7 @@ for (const [i, fixture] of FIXTURES.entries()) {
 	console.log(
 		`[admin-api] building ${fixture.tenant}/${fixture.project} — ${plan.nodes.length} node rows, ${plan.edges.length} edges`,
 	);
-	const loaded = await applyPlan(g.raw, plan, embed, { maxEmbedded: SEED_EMBED });
+	const loaded = await applyPlan(g.raw, plan, embedder, { maxEmbedded: SEED_EMBED });
 	summary.push(
 		`${fixture.tenant}/${fixture.project}: ${loaded.nodes} nodes (${loaded.versions} versions), ${loaded.edges} edges, ${loaded.embedded} embedded`,
 	);
@@ -151,7 +148,7 @@ for (const [i, fixture] of FIXTURES.entries()) {
 
 if (rebuild) writeCache(fp, namespaces);
 
-const app = createApp({ control, schema: demoSchema, authenticate, embed });
+const app = createApp({ control, schema: demoSchema, authenticate, embedder });
 app.route('/admin', createAdminApp({ control, authenticate: adminAuthenticate }));
 
 Bun.serve({ port: PORT, fetch: app.fetch });

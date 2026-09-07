@@ -5,6 +5,7 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { journey } from '../../src/core/journey.ts';
 import { init } from '../../src/core/schema.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P7 — journey() (§10, B2). Earliest-arrival time-respecting cascade. Fixtures are
 // built with RAW SQL inserts so each test controls edge valid_from/valid_to (and
@@ -51,7 +52,7 @@ async function edge(
 
 async function fresh(): Promise<DbClient> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return client;
 }
 

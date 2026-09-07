@@ -13,7 +13,7 @@ import {
 	evict,
 	initControl,
 } from '../../src/core/index.ts';
-import { makeTestDb } from '../core/harness.ts';
+import { makeTestDb, stubEmbedder } from '../core/harness.ts';
 import { createGraphHooks } from '../../src/react/create-hooks.ts';
 import { GraphProvider } from '../../src/react/provider.tsx';
 
@@ -77,7 +77,7 @@ export async function setup(): Promise<Harness> {
 		control,
 		schema: SCHEMA,
 		authenticate,
-		embed: async (q) => vec(q.length),
+		embedder: stubEmbedder((q) => vec(q.length), { dim: 768 }),
 	});
 	return {
 		app,

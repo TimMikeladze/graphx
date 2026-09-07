@@ -23,7 +23,6 @@ import {
 	Graph,
 	hashEmbed,
 	init,
-	retrieve,
 } from '../../packages/graphx/src/core/index.ts';
 import { ingestDir } from '../../packages/graphx/src/ingest/index.ts';
 
@@ -50,21 +49,16 @@ const SCHEMA = defineGraphSchema({
 	},
 });
 
-const DIM = 768;
-const embed = hashEmbed(DIM);
+const embedder = hashEmbed();
 
 /** Options shared by every run below — identical opts are what make re-runs reconcile. */
 function opts(dir: string, graph: Graph<typeof SCHEMA>) {
 	return {
 		dir,
 		graph,
-		embed,
 		// Namespaces node uris as `ingest:notes-vault:<identity>`. Reconcile and prune only
 		// ever touch this source, so a second vault can share the graph safely.
 		source: 'notes-vault',
-		// Changing this forces a re-embed of every node even when bodies are byte-identical —
-		// set it to your real model id so a model swap can't leave stale vectors behind.
-		embedId: `hash:${DIM}`,
 		// Frontmatter `author: "[[ada]]"` becomes a typed edge instead of node data.
 		edgeFields: { author: 'authored_by' },
 		// `![[diagram.png]]` has no ingested file behind it, so it becomes a metadata-only
@@ -79,8 +73,10 @@ if (import.meta.main) {
 	await cp(new URL('./vault', import.meta.url).pathname, dir, { recursive: true });
 
 	const db = getDb(join(work, 'graph'));
-	await init(db, DIM);
-	const graph = new Graph(db, SCHEMA);
+	// The graph owns embedding: ingest batches every body through this embedder, and a model
+	// swap is `graph.reembed()` / `graphx reembed` rather than a per-run option.
+	await init(db, embedder);
+	const graph = new Graph(db, SCHEMA, { embedder });
 
 	// --- Run 1: cold ingest ----------------------------------------------------
 	const first = await ingestDir(opts(dir, graph));
@@ -121,15 +117,15 @@ if (import.meta.main) {
 	console.log('run 4 (1 delete):', fourth);
 
 	// --- GraphRAG retrieve -----------------------------------------------------
-	// ANN seeds from the vector index, then expands `maxDepth` hops over the live edges.
-	const hits = await retrieve(db, embed, {
+	// Vector seeds, then expands `maxDepth` hops over the live edges.
+	const hits = await graph.retrieve({
 		query: 'how does bitemporal storage work?',
 		k: 2,
 		maxDepth: 1,
 	});
 	console.log(
 		'\nretrieve (depth-ordered):',
-		hits.map((h) => ({ uri: h.uri, depth: h.depth })),
+		hits.map((h) => ({ uri: h.uri, depth: h.depth, score: h.score })),
 	);
 
 	db.close();

@@ -1,5 +1,10 @@
 # DuckDB Support — Parity Record
 
+> **2026-09-06 update.** Vectors now live in `node_embeddings` (`FLOAT[]`, width enforced by graphx
+> against `graph_meta`), a snapshot table like the rest; `node_versions` has no `emb` column and the
+> manifest carries `embModel`/`embDim` as informational copies of `graph_meta`. The notes below that
+> mention `emb` carry-forward on `node_versions` predate that. See [`embeddings.md`](./embeddings.md).
+
 ## Status (as of this branch)
 
 - **Stages 1–3 (object storage, DuckClient, schema, fragments, bulk/journey/pattern, constraint

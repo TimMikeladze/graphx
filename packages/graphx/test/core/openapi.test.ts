@@ -118,9 +118,15 @@ test('openapi: success responses carry real schemas (not an empty object)', asyn
 	]);
 	expect(Object.keys(body(`${TENANT}/retrieve`, 'get').items.properties).sort()).toEqual([
 		'body',
+		'data',
 		'depth',
 		'id',
+		'score',
+		'seed',
+		'snippet',
+		'type',
 		'uri',
+		'via',
 	]);
 	expect(Object.keys(body(`${TENANT}/changes`, 'get').properties).sort()).toEqual([
 		'edges',

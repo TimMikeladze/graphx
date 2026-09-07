@@ -165,13 +165,21 @@ export async function buildManifest(
 		   coalesce((SELECT max(seq) FROM graph_outbox), 0) AS sq`,
 	);
 	const row = high.rows[0] ?? {};
-	const dim = await client.execute(`SELECT value FROM graph_meta WHERE key = 'emb_dim'`);
+	const meta = await client.execute(
+		`SELECT key, value FROM graph_meta WHERE key IN ('emb_model', 'emb_dim')`,
+	);
+	const metaOf = (key: string): string | undefined => {
+		const m = meta.rows.find((r) => r.key === key);
+		return m ? String(m.value) : undefined;
+	};
+	const dimValue = metaOf('emb_dim');
 	return {
 		v: 1,
 		snapshot: base === null ? 0 : base.snapshot + 1,
 		parent: base === null ? null : base.snapshot,
 		committedAt: Date.now(),
-		embDim: Number(dim.rows[0]?.value ?? 768),
+		embModel: metaOf('emb_model') ?? null,
+		embDim: dimValue === undefined ? null : Number(dimValue),
 		schemaHash: base?.schemaHash ?? '',
 		verHigh: Math.max(Number(row.nv ?? 0), Number(row.ev ?? 0)),
 		seqHigh: Number(row.sq ?? 0),

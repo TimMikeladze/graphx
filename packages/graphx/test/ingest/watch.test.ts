@@ -5,9 +5,8 @@ import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import { Graph } from '../../src/core/graph.ts';
-import type { EmbedFn } from '../../src/core/retrieve.ts';
 import { init } from '../../src/core/schema.ts';
-import { makeTestDb } from '../core/harness.ts';
+import { makeTestDb, stubEmbedder } from '../core/harness.ts';
 import { ingestDir, watchDir } from '../../src/ingest/index.ts';
 
 const SCHEMA = defineGraphSchema({
@@ -19,25 +18,24 @@ const SCHEMA = defineGraphSchema({
 	},
 });
 
-const embed: EmbedFn = async () => [1, 0, 0, 0];
+const embed = stubEmbedder(() => [1, 0, 0, 0], { dim: 4 });
 
 test('watchDir: detects a new file and triggers ingest', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA);
+	await init(client, embed);
+	const g = new Graph(client, SCHEMA, { embedder: embed });
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-'));
 
 	// Seed one file and run the initial ingest (caller's responsibility)
 	await writeFile(join(dir, 'a.md'), '---\ntype: note\ntitle: A\n---\nalpha');
-	await ingestDir({ dir, graph: g, embed });
+	await ingestDir({ dir, graph: g });
 
 	let runCount = 0;
 
 	const watcher = watchDir({
 		dir,
 		graph: g,
-		embed,
 		debounceMs: 30,
 		onRun: (_result) => {
 			runCount++;
@@ -71,20 +69,19 @@ test('watchDir: detects a new file and triggers ingest', async () => {
 
 test('watchDir: close() stops further runs', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA);
+	await init(client, embed);
+	const g = new Graph(client, SCHEMA, { embedder: embed });
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-close-'));
 
 	await writeFile(join(dir, 'a.md'), '---\ntype: note\ntitle: A\n---\nalpha');
-	await ingestDir({ dir, graph: g, embed });
+	await ingestDir({ dir, graph: g });
 
 	let runCount = 0;
 
 	const watcher = watchDir({
 		dir,
 		graph: g,
-		embed,
 		debounceMs: 30,
 		onRun: () => {
 			runCount++;
@@ -108,20 +105,19 @@ test('watchDir: close() stops further runs', async () => {
 
 test('watchDir: single-flight — rapid writes produce at most two runs (in-flight + trailing)', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA);
+	await init(client, embed);
+	const g = new Graph(client, SCHEMA, { embedder: embed });
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-sf-'));
 
 	await writeFile(join(dir, 'seed.md'), '---\ntype: note\ntitle: Seed\n---\nbody');
-	await ingestDir({ dir, graph: g, embed });
+	await ingestDir({ dir, graph: g });
 
 	const runTimes: number[] = [];
 
 	const watcher = watchDir({
 		dir,
 		graph: g,
-		embed,
 		debounceMs: 30,
 		onRun: () => {
 			runTimes.push(Date.now());
@@ -167,22 +163,24 @@ test('watchDir: single-flight — rapid writes produce at most two runs (in-flig
 
 test('watchDir: an ingest error is routed to onError; the watcher keeps running', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA);
+	await init(client, embed);
 
 	const dir = await mkdtemp(join(tmpdir(), 'gx-watch-err-'));
 
 	let calls = 0;
-	const flakyEmbed: EmbedFn = async () => {
-		calls++;
-		throw new Error('embed boom');
-	};
+	const flakyEmbed = stubEmbedder(
+		() => {
+			calls++;
+			throw new Error('embed boom');
+		},
+		{ dim: 4 },
+	);
+	const flaky = new Graph(client, SCHEMA, { embedder: flakyEmbed });
 
 	const errors: unknown[] = [];
 	const watcher = watchDir({
 		dir,
-		graph: g,
-		embed: flakyEmbed,
+		graph: flaky,
 		debounceMs: 30,
 		onError: (e) => errors.push(e),
 	});

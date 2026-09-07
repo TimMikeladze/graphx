@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { expect, test } from 'bun:test';
-import { hashEmbed } from '../../src/core/retrieve.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 import { type EvalScore, round3, scoreRuns } from './eval-metrics.ts';
 import { GOLDEN, seedCorpus } from './fixtures/corpus.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
@@ -124,20 +124,16 @@ test('ablation: every stage of the pipeline earns its place', async () => {
 	expect(a.hybridWalk.recall).toBeGreaterThan(0.7);
 });
 
-test('the walk trades ranking quality for recall — output is depth-ordered, not relevance-ordered', async () => {
+test('the walk lifts recall and keeps the seed ranking at the head of the output', async () => {
 	const a = await ablate();
 
-	// Measured on this corpus: expanding the seeds lifts recall to 1.0, but MRR falls from 1.0 to
-	// ~0.44 and nDCG from ~0.86 to ~0.58. That is not a scoring bug — `retrieve` and
-	// `hybridRetrieve` both `ORDER BY depth`, so a depth-1 neighbor is emitted ahead of nothing
-	// and the fused relevance ranking is discarded on the way out (see `rrf`'s note in hybrid.ts).
-	//
-	// The consequence is API-shaped: these functions return a SUBGRAPH for an LLM to read, not a
-	// ranked result list. Anything user-facing — a search box, a "top results" pane — has to
-	// re-rank the output itself, or it will show the least relevant neighbors first.
+	// Expanding the seeds reaches documents no seed list ranked, so recall rises. The output is
+	// depth-ordered — every seed before every neighbor — and WITHIN depth 0 the rows follow the
+	// fused seed rank (each carries `score`/`via`/`seed`), so the head of the list is exactly the
+	// fused ranking: MRR cannot fall. Walked rows trail with `score: null`; a user-facing "top
+	// results" pane should show depth-0 rows or re-rank the rest.
 	expect(a.hybridWalk.recall).toBeGreaterThan(a.fusedSeeds.recall * 0.99);
-	expect(a.hybridWalk.mrr).toBeLessThan(a.fusedSeeds.mrr);
-	expect(a.hybridWalk.ndcg).toBeLessThan(a.fusedSeeds.ndcg);
+	expect(a.hybridWalk.mrr).toBeGreaterThanOrEqual(a.fusedSeeds.mrr * 0.99);
 });
 
 test('the lexical leg carries comparable weight on both dialects', async () => {

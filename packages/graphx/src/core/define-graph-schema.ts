@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { EmbeddingPolicy } from './embedder.ts';
 
 /**
  * P2 — the one Zod schema (§5, §2.7). It is the single source of validation,
@@ -42,9 +43,19 @@ export interface EdgeDef<K extends string> {
 export function defineGraphSchema<
 	N extends Record<string, ZObj>,
 	E extends Record<string, EdgeDef<Extract<keyof N, string>>>,
->(s: { nodes: N; edges: E }): { nodes: N; edges: E } {
-	return s;
+	P extends EmbeddingPoliciesFor<N> = Record<never, never>,
+>(s: { nodes: N; edges: E; embedding?: P }): { nodes: N; edges: E; embedding: P | undefined } {
+	return { nodes: s.nodes, edges: s.edges, embedding: s.embedding };
 }
+
+/**
+ * Per-type embedding policy, keyed on the node types of `N` and typed against each type's parsed
+ * data. Omit a type to embed its `body` as one vector; declare `text` to embed something else
+ * (a data-only type has no body), and `chunk` to split long inputs into several vectors.
+ */
+export type EmbeddingPoliciesFor<N extends Record<string, ZObj>> = {
+	[K in keyof N]?: EmbeddingPolicy<N[K] extends z.ZodType ? z.infer<N[K]> : never>;
+};
 
 type Nodes<S> = S extends { nodes: infer N } ? N : never;
 type Edges<S> = S extends { edges: infer E } ? E : never;

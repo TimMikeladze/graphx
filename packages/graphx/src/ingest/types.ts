@@ -1,4 +1,4 @@
-import type { EmbedFn, Graph, GraphSchema } from '../core/index.ts';
+import type { Graph, GraphSchema } from '../core/index.ts';
 import type { Source } from './source.ts';
 
 /** A parsed source file. `key` is the relative POSIX path from the vault root. */
@@ -21,10 +21,12 @@ export interface IngestOptions<S extends GraphSchema> {
 	dir?: string;
 	/** Pluggable file source. Provide `fileSource` OR `dir`. */
 	fileSource?: Source;
-	/** Target graph, already bound to its DbClient + schema. */
+	/**
+	 * Target graph, already bound to its DbClient + schema. Its embedder (if any) embeds the
+	 * ingested bodies — batched here, one embedder call per run rather than one per file — and
+	 * its per-type policies decide what text is embedded.
+	 */
 	graph: Graph<S>;
-	/** Embedding function — required (embeddings-on scope). */
-	embed: EmbedFn;
 	/** File extensions to include (lowercase, with dot). Default: .md/.markdown/.yml/.yaml */
 	include?: string[];
 	/** Override type resolution. Default: frontmatter.type ?? top-level folder name. */
@@ -69,18 +71,6 @@ export interface IngestOptions<S extends GraphSchema> {
 	 * a bare basename `"t"`, an object `{ target, weight?, data? }`, or an array mixing these.
 	 */
 	edgeFields?: Record<string, string>;
-	/**
-	 * Maximum number of parallel embed calls during the batch-embed step. Default: 8.
-	 */
-	embedConcurrency?: number;
-	/**
-	 * Opaque embedder identity (e.g. a model id + dimension, `'openai:text-embedding-3-small:1536'`).
-	 * Mixed into the stored `embed_hash` so that CHANGING it forces a re-embed of every node on the
-	 * next run — even when file bodies are byte-identical. Without it, a model swap silently keeps
-	 * stale vectors and query/document vectors end up in incompatible spaces. Unset = legacy
-	 * behavior (`embed_hash = sha256(body)`), so existing graphs are unaffected until an id is set.
-	 */
-	embedId?: string;
 	/**
 	 * Turn `![[asset]]` / `![alt](asset)` embeds into nodes. Off by default (embeds ignored).
 	 * An embed that resolves to a known ingested file becomes an edge to that node; otherwise a

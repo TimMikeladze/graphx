@@ -4,9 +4,9 @@ import { FOREVER } from '../../src/core/db.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import { Graph } from '../../src/core/graph.ts';
-import { type EmbedFn, retrieve } from '../../src/core/retrieve.ts';
+import { retrieve } from '../../src/core/retrieve.ts';
 import { init } from '../../src/core/schema.ts';
-import { embSql, makeTestDb } from './harness.ts';
+import { embSql, makeTestDb, stubEmbedder } from './harness.ts';
 
 // P4 — vectors + GraphRAG retrieve (§7, D3/D5). ANN-seeded, cycle-safe temporal
 // walk. dim 4 so embeddings are cheap and the partial vector index is small.
@@ -27,11 +27,11 @@ const VECTORS: Record<string, number[]> = {
 	blue: [0, 0, 1, 0],
 	yellow: [0, 0, 0, 1],
 };
-const stubEmbed: EmbedFn = async (text: string) => VECTORS[text] ?? [0, 0, 0, 0];
+const stubEmbed = stubEmbedder((text) => VECTORS[text] ?? [0, 0, 0, 0], { dim: 4 });
 
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
@@ -172,7 +172,7 @@ test('P4: rels filter restricts walk to matching relations', async () => {
 		},
 	});
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	const g = new Graph(client, SCHEMA2);
 	const a = await g.addNode({
 		type: 'doc',
@@ -231,7 +231,7 @@ test('P4: ordered by depth ascending', async () => {
 
 test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal fixture)', async () => {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	const id = '01ARZ3NDEKTSV4RRFFQ69G5FZ1';
 	const T1 = 1000; // v1 valid_from
 	const T2 = 2000; // v1 closed / v2 opened
@@ -242,13 +242,18 @@ test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal f
 	// v1: body 'red-old', live emb so the partial live index seeds it... but we close
 	// it below. The seed for past asOf must come from the live index over-fetch+filter.
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
-		args: [1, id, 'doc', 'red-old', '[1,0,0,0]', T1, T2],
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		args: [1, id, 'doc', 'red-old', T1, T2],
 	});
-	// v2: body 'red-new', live (valid_to = FOREVER), same emb so it's in the live index.
+	// v2: body 'red-new', live (valid_to = FOREVER). Vectors live beside the identity, so one
+	// row seeds both the current and the past query.
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
-		args: [2, id, 'doc', 'red-new', '[1,0,0,0]', T2, FOREVER],
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		args: [2, id, 'doc', 'red-new', T2, FOREVER],
+	});
+	await client.execute({
+		sql: `INSERT INTO node_embeddings (id, chunk, text, emb, embed_hash) VALUES (?,0,NULL,${embSql(client)},'h')`,
+		args: [id, '[1,0,0,0]'],
 	});
 
 	// current (no asOf): live v2 shape
@@ -268,7 +273,7 @@ test('P4: asOf — past returns v1 era shape, current returns v2 (raw temporal f
 
 test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skipped', async () => {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	const a = '01ARZ3NDEKTSV4RRFFQ69G5FA1';
 	const b = '01ARZ3NDEKTSV4RRFFQ69G5FB1';
 	const eid = '01ARZ3NDEKTSV4RRFFQ69G5FE1';
@@ -277,8 +282,12 @@ test('P4: asOf walk — neighbor valid at :t appears; edge not yet valid is skip
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [b] });
 	// a is live with emb (seed), b is live (no emb needed)
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
-		args: [1, a, 'doc', 'red', '[1,0,0,0]', 100, FOREVER],
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		args: [1, a, 'doc', 'red', 100, FOREVER],
+	});
+	await client.execute({
+		sql: `INSERT INTO node_embeddings (id, chunk, text, emb, embed_hash) VALUES (?,0,NULL,${embSql(client)},'h')`,
+		args: [a, '[1,0,0,0]'],
 	});
 	await client.execute({
 		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',

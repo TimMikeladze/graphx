@@ -11,6 +11,7 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { indexBackedConstraints, jsonFieldSql, makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P14 — constraints (§19.5). Uniqueness is a partial UNIQUE index over LIVE rows only
 // (historical versions never collide); edge cardinality marks a rel single-valued so a
@@ -33,7 +34,7 @@ const teardowns: Array<() => Promise<void>> = [];
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 afterAll(async () => {

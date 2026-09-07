@@ -34,6 +34,12 @@ export interface DbConfig {
 	connectionString?: string;
 	ssl?: boolean | import('node:tls').ConnectionOptions;
 	poolMax?: number;
+	/**
+	 * `'auto'` (default) detects a transaction pooler (PgBouncer and friends) in front of Postgres
+	 * and applies the tenant `search_path` per transaction instead of at connect time;
+	 * `'transaction'` assumes one; `'none'` never switches. See `PgPoolerMode` in `graphx/pg`.
+	 */
+	pooler?: 'auto' | 'transaction' | 'none';
 	// libSQL
 	authToken?: string;
 	syncUrl?: string;

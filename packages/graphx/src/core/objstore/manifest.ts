@@ -21,8 +21,11 @@ export interface Manifest {
 	snapshot: number;
 	parent: number | null;
 	committedAt: number;
-	/** Embedding width baked into `emb`. Read by `readEmbDim` instead of probing the catalog. */
-	embDim: number;
+	/** The embedding model recorded in `graph_meta` at commit time, or `null` when none. Informational —
+	 *  `graph_meta` itself is a snapshot table and is the value `readEmbeddingMeta` reads. */
+	embModel: string | null;
+	/** The embedding width recorded alongside it, or `null`. */
+	embDim: number | null;
 	/**
 	 * Covers the embedding dimension and every declared constraint. A writer whose in-memory
 	 * schema hashes differently refuses to commit, which catches two application versions with
@@ -58,13 +61,14 @@ export function parseManifest(bytes: Uint8Array): Manifest {
 }
 
 /** The starting point for a brand-new namespace: no tables, no indexes, nothing allocated. */
-export function emptyManifest(embDim: number, schemaHash: string): Manifest {
+export function emptyManifest(schemaHash: string): Manifest {
 	return {
 		v: 1,
 		snapshot: 0,
 		parent: null,
 		committedAt: 0,
-		embDim,
+		embModel: null,
+		embDim: null,
 		schemaHash,
 		verHigh: 0,
 		seqHigh: 0,

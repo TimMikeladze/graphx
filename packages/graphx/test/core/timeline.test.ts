@@ -7,6 +7,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { timeline } from '../../src/core/timeline.ts';
 import { insertOrIgnoreSql, makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // The timeline aggregate backs the admin explorer's scrubber: the extent of the graph's change
 // points, a density histogram over a window, and the distinct instants to snap to. Change points
@@ -24,7 +25,7 @@ const teardowns: Array<() => Promise<void>> = [];
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, DIM);
+	await init(client, hashEmbed(DIM));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 

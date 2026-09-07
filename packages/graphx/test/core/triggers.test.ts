@@ -15,6 +15,7 @@ import {
 	webhookAction,
 } from '../../src/core/triggers.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // Eventing Layer 3 — declarative triggers over the durable graph_outbox. Every test drives the
 // runner through `runOnce()` rather than `start()`, so nothing here depends on wall-clock timing.
@@ -29,8 +30,8 @@ const teardowns: Array<() => Promise<void>> = [];
 async function makeGraph(): Promise<Graph<typeof SCHEMA>> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
-	return new Graph(client, SCHEMA, undefined, { outbox: true });
+	await init(client, hashEmbed(4));
+	return new Graph(client, SCHEMA, { events: { outbox: true } });
 }
 
 /**
@@ -357,8 +358,8 @@ test('a second runner resumes at exactly the undelivered remainder', async () =>
 test('a process killed mid-batch redelivers only what it had not checkpointed', async () => {
 	const { client, sibling, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA, undefined, { outbox: true });
+	await init(client, hashEmbed(4));
+	const g = new Graph(client, SCHEMA, { events: { outbox: true } });
 
 	const ids: string[] = [];
 	for (let i = 0; i < 4; i++) {

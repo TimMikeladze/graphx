@@ -1,5 +1,10 @@
 # graphx — Gaps & Missing Work
 
+> **2026-09-06 update.** The vector layer was rebuilt: vectors moved to a model-keyed side table,
+> `Graph` owns embedding (auto-embed, staleness hash, re-embed), `dim` is gone, spec §19.9 (model
+> identity + re-embed) is built, and `graphx mcp` loads `graphx.config.ts`. See
+> [`embeddings.md`](./embeddings.md) and [`VECTOR_REVIEW.md`](./VECTOR_REVIEW.md).
+
 > What is spec'd or implied but **not built**. Original audit 2026-06-14 (`main` @ d1e459d, plus the unmerged `examples/file-ingest` admin work); **re-verified 2026-06-29** (`fix/ingest-top3-risks`).
 > Scope: `packages/graphx`, `packages/auth`, `packages/admin`, the specs in `docs/`, and `initial_spec.md`.
 >

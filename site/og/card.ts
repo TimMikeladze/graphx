@@ -58,8 +58,8 @@ await g.addNode({ type: 'site', data: { name: 'us-east-1' } });
 await history(db, id);
 await diff(db, t1, t2);
 
-// GraphRAG: ANN seeds, then a time-respecting walk
-await retrieve(db, embed, { query: 'overheating sensor', k: 10 });`;
+// GraphRAG: vector seeds, then a time-respecting walk
+await g.retrieve({ query: 'overheating sensor', k: 10 });`;
 
 const CODE_SIZE = 21;
 const CODE_LINE = 34;
@@ -81,27 +81,19 @@ type Node = {
 	props: Record<string, unknown> & { children?: unknown };
 };
 
-function el(
-	type: string,
-	props: Record<string, unknown>,
-	...children: unknown[]
-): Node {
+function el(type: string, props: Record<string, unknown>, ...children: unknown[]): Node {
 	return {
 		type,
 		props: {
 			...props,
-			...(children.length
-				? { children: children.length === 1 ? children[0] : children }
-				: {}),
+			...(children.length ? { children: children.length === 1 ? children[0] : children } : {}),
 		},
 	};
 }
 
 /** Satori needs woff/ttf/otf — the woff2 files @fontsource ships are not read. */
 async function loadFont(siteDir: string, pkg: string, file: string) {
-	return readFile(
-		path.join(siteDir, 'node_modules/@fontsource', pkg, 'files', file),
-	);
+	return readFile(path.join(siteDir, 'node_modules/@fontsource', pkg, 'files', file));
 }
 
 /**
@@ -445,9 +437,7 @@ export async function renderCard(siteDir: string): Promise<Buffer> {
 
 	if (!wasmReady) {
 		wasmReady = initWasm(
-			readFile(
-				path.join(siteDir, 'node_modules/@resvg/resvg-wasm/index_bg.wasm'),
-			),
+			readFile(path.join(siteDir, 'node_modules/@resvg/resvg-wasm/index_bg.wasm')),
 		);
 	}
 	await wasmReady;

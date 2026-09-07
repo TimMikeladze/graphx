@@ -26,10 +26,8 @@ import {
 	createProject,
 	createTenant,
 	createUser,
-	getDb,
 	graphForProject,
 	hashEmbed,
-	init,
 	initControl,
 	type Principal,
 } from 'graphx';
@@ -51,7 +49,7 @@ const CACHE_FILE = '.seed-cache.json';
  * cost scales with width.
  */
 const DIM = 128;
-const embed = hashEmbed(DIM);
+const embedder = hashEmbed(DIM);
 
 if (!existsSync(COLLECTOR_DB)) {
 	console.error(
@@ -73,9 +71,8 @@ interface Cache {
 const source = statSync(COLLECTOR_DB);
 const fingerprint = JSON.stringify({
 	schemaVersion: PANTHEON_SCHEMA_VERSION,
-	// The embedding width is baked into the vector column at first init and is immutable, so a
-	// database built at another width must not be reused — it would fail on start, not degrade.
-	dim: DIM,
+	// A database built with another embedder must not be reused — init refuses a model mismatch.
+	embedder: embedder.id,
 	embedCap: EMBED_CAP,
 	collector: { size: source.size, mtime: source.mtimeMs },
 });
@@ -108,10 +105,6 @@ const projectId = await createProject(control, {
 	dbNamespace: NAMESPACE,
 });
 
-// Create the vector column at the embedder's width BEFORE the lazy init inside graphForProject
-// bakes the 768 default. `init` is idempotent, so the later re-init is a no-op.
-await init(getDb(NAMESPACE), DIM);
-
 // --- build -----------------------------------------------------------------------------------
 
 const started = Date.now();
@@ -126,14 +119,14 @@ if (rebuild) {
 	// Embedding is the dominant cost: the vector index grows superlinearly in row count, so above
 	// the cap semantic search sees a representative sample rather than every node. The sample is
 	// an even stride over the load order, which interleaves sources, pantheons, deities, domains.
+	// `bulkLoad` embeds every live row it is not told to skip, so the cap is expressed as
+	// `embedding: false` on the rows outside the sample.
 	const stride =
 		EMBED_CAP > 0 && plan.nodes.length > EMBED_CAP ? Math.ceil(plan.nodes.length / EMBED_CAP) : 1;
-	const rows = await Promise.all(
-		plan.nodes.map(async (node, i) =>
-			i % stride === 0 && node.body ? { ...node, emb: await embed(node.body) } : node,
-		),
+	const rows = plan.nodes.map((node, i) =>
+		i % stride === 0 && node.body ? node : { ...node, embedding: false as const },
 	);
-	const embedded = rows.filter((r) => r.emb !== undefined).length;
+	const embedded = rows.filter((r) => !('embedding' in r)).length;
 
 	const graph = await graphForProject(
 		control,
@@ -141,8 +134,9 @@ if (rebuild) {
 		projectId,
 		'write',
 		pantheonSchema,
+		{ embedder },
 	);
-	await bulkLoad(graph.raw, pantheonSchema, rows, { chunkSize: 200 });
+	await bulkLoad(graph.raw, pantheonSchema, rows, { chunkSize: 200, embedder });
 	// One `bulkEdges` call is one batch, so slice to bound peak statement size.
 	const SLICE = 10_000;
 	for (let i = 0; i < plan.edges.length; i += SLICE) {
@@ -181,7 +175,7 @@ function adminAuthenticate(c: Context): void {
 	if (bearer(c) !== ADMIN_TOKEN) throw new Error('unauthorized');
 }
 
-const app = createApp({ control, schema: pantheonSchema, authenticate, embed, cors: true });
+const app = createApp({ control, schema: pantheonSchema, authenticate, embedder, cors: true });
 app.route('/admin', createAdminApp({ control, authenticate: adminAuthenticate }));
 
 Bun.serve({ port: PORT, fetch: app.fetch });

@@ -1,18 +1,13 @@
 import { parseArgs } from 'node:util';
-import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
-import type {
-	CreateAppResult,
-	GraphSchema,
-	EmbedFn,
-	DbConfig,
-	Trigger,
-	TriggerRunnerOptions,
-} from './core/index.ts';
-import { getDb, init, Graph, createApp, TriggerRunner } from './core/index.ts';
+import type { CreateAppResult, GraphSchema } from './core/index.ts';
+import { createApp, Graph, init, TriggerRunner } from './core/index.ts';
+import { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 import { ingestDir, watchDir } from './ingest/index.ts';
 import type { IngestResult } from './ingest/index.ts';
+
+export { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Arg parsing (exported for unit tests)
@@ -121,6 +116,46 @@ export function parseTriggersArgs(argv: string[]): ParsedTriggersArgs {
 	return { config: (values.config as string | undefined) ?? './graphx.config.ts' };
 }
 
+export interface ParsedReembedArgs {
+	config: string;
+	dryRun: boolean;
+}
+
+export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
+	const { values } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			'dry-run': { type: 'boolean', default: false },
+		},
+	});
+	return {
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		dryRun: (values['dry-run'] as boolean | undefined) ?? false,
+	};
+}
+
+export interface ParsedMcpArgs {
+	config: string;
+	readOnly: boolean;
+}
+
+export function parseMcpArgs(argv: string[]): ParsedMcpArgs {
+	const { values } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			'read-only': { type: 'boolean', default: false },
+		},
+	});
+	return {
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		readOnly: (values['read-only'] as boolean | undefined) ?? false,
+	};
+}
+
 export interface ParsedNewArgs {
 	dir: string;
 }
@@ -130,33 +165,6 @@ export function parseNewArgs(argv: string[]): ParsedNewArgs {
 	const dir = positionals[1]; // positionals[0] = 'new'
 	if (!dir) throw new Error('new: missing <dir> argument');
 	return { dir };
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Config types
-// ──────────────────────────────────────────────────────────────────────────────
-
-interface GraphxConfig {
-	schema: GraphSchema;
-	embed: EmbedFn;
-	db?: DbConfig;
-	dim?: number;
-	namespace?: string;
-	/**
-	 * Rules run by `graphx triggers`. Actions are functions, so they live in this config module
-	 * rather than the database — which is also why the runner is a process you host, not a row.
-	 */
-	triggers?: Trigger<GraphSchema>[];
-	/** Runner tuning. `name` keys the `trigger_cursors` row and defaults to 'graphx'. */
-	triggerRunner?: Partial<Omit<TriggerRunnerOptions<GraphSchema>, 'triggers'>>;
-}
-
-/** Import + return a user's `graphx.config.ts` default export (registers the pg driver if selected). */
-async function loadConfig(configPath: string): Promise<GraphxConfig> {
-	const configUrl = pathToFileURL(resolve(configPath)).href;
-	const cfg: GraphxConfig = (await import(configUrl)).default;
-	if (cfg.db?.driver === 'postgres') await import('./core/pg.ts');
-	return cfg;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -194,6 +202,8 @@ Usage:
   graphx serve [options]          Serve the graph over HTTP (typed routes + /openapi.json)
   graphx triggers [options]       Run declarative triggers over the event outbox
   graphx mcp [options]            Serve the graph to an MCP client over stdio
+  graphx reembed [options]        Re-embed every live node with the configured embedder
+  graphx doctor [options]         Report the namespace's embedding model, width, and health
   graphx new <dir>                Scaffold a starter graphx project
 
 ingest options:
@@ -214,11 +224,17 @@ serve options:
 triggers options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
 
-mcp options (configured by environment, not flags — see docs/mcp.md):
+reembed options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --dry-run               Report what would change without writing
+
+doctor options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+
+mcp options (see docs/mcp.md):
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts) — local mode
   --read-only             Expose only the read tools
-  GRAPHX_DB               Namespace to open (local mode)
-  GRAPHX_URL              Deployed server to proxy (remote mode), + GRAPHX_API_KEY
-  GRAPHX_SCHEMA           Path to a JSON schema document; without it writes 400
+  GRAPHX_URL              Deployed server to proxy instead (remote mode), + GRAPHX_API_KEY
 
   --help                  Show this help
 `;
@@ -247,12 +263,16 @@ export async function run(argv: string[]): Promise<void> {
 			return runServe(argv);
 		case 'triggers':
 			return runTriggers(argv);
+		case 'reembed':
+			return runReembed(argv);
+		case 'doctor':
+			return runDoctor(argv);
 		case 'mcp':
 			// Dynamic: `@modelcontextprotocol/sdk` is an OPTIONAL peer, so a static import would
 			// put it on the load path of every other subcommand and break installs that never
 			// opted into MCP. Note the stdio transport frames JSON-RPC on stdout — nothing on this
 			// path may write there.
-			return (await import('./mcp/bin.ts')).runMcp(argv);
+			return (await import('./mcp/bin.ts')).runMcp(parseMcpArgs(argv));
 		case 'new':
 			return runNew(argv);
 		default:
@@ -264,23 +284,11 @@ export async function run(argv: string[]): Promise<void> {
 async function runIngest(argv: string[]): Promise<void> {
 	const args = parseIngestArgs(argv);
 	const cfg = await loadConfig(args.config);
-
-	// `dim` MUST be set explicitly: it is baked into the vector column at first init and cannot be
-	// changed later (CREATE TABLE IF NOT EXISTS). A wrong/default value silently rejects every node
-	// at insert time (dimension mismatch), so refuse to guess.
-	if (cfg.dim == null) {
-		throw new Error(
-			"graphx: config must set `dim` (the embedding dimension, e.g. 768) — it must match your embedder's output and cannot be changed after the first run",
-		);
-	}
-	const client = getDb(cfg.namespace ?? 'graphx', cfg.db ?? {});
-	await init(client, cfg.dim);
-	const graph = new Graph(client, cfg.schema);
+	const graph = await openGraph(cfg);
 
 	const ingestOpts = {
 		dir: args.dir,
 		graph,
-		embed: cfg.embed,
 		source: args.source,
 		idField: args.idField,
 		prune: args.prune,
@@ -318,7 +326,6 @@ async function runIngest(argv: string[]): Promise<void> {
  * `graphx serve` — load the config and expose the graph over HTTP via the batteries-included
  * `createApp` (typed routes + CDC + `GET /openapi.json`, `GET /demo` for the session ids). Opens the
  * SAME DB namespace `graphx ingest` writes to, so `ingest` then `serve` surfaces the ingested graph.
- * Dimension is derived from the embedder — no `dim` bookkeeping needed here.
  */
 /**
  * Load a config and build the serving app (no listener) — the testable core of `graphx serve`.
@@ -326,35 +333,16 @@ async function runIngest(argv: string[]): Promise<void> {
  */
 export async function buildServeApp(configPath: string): Promise<CreateAppResult<GraphSchema>> {
 	const cfg = await loadConfig(configPath);
-	// The dev `createApp` opens project DBs via `getDb(namespace)` WITHOUT a DbConfig, so a Postgres
-	// config's driver/connectionString must be surfaced through the env that `getDb` also reads —
-	// otherwise a `driver: 'postgres'` config would silently fall back to a libSQL file. `getDb` reads
-	// the env synchronously DURING createApp (bootstrap opens the DB), so scope the mutation to that
-	// call and restore it after — leaving it set would make a later buildServeApp with a different
-	// driver inherit the wrong backend, and would leak into the rest of the process.
-	const prevDriver = process.env.GRAPHX_DB_DRIVER;
-	const prevUrl = process.env.GRAPHX_PG_URL;
-	if (cfg.db?.driver === 'postgres') {
-		process.env.GRAPHX_DB_DRIVER = 'postgres';
-		if (cfg.db.connectionString) process.env.GRAPHX_PG_URL = cfg.db.connectionString;
-	}
-	try {
-		return await createApp({
-			schema: cfg.schema,
-			embed: cfg.embed,
-			db: cfg.namespace ?? 'graphx',
-			dim: cfg.dim,
-		});
-	} finally {
-		restoreEnv('GRAPHX_DB_DRIVER', prevDriver);
-		restoreEnv('GRAPHX_PG_URL', prevUrl);
-	}
-}
-
-/** Restore an env var to a captured prior value (deleting it if it was previously unset). */
-function restoreEnv(key: string, prev: string | undefined): void {
-	if (prev === undefined) delete process.env[key];
-	else process.env[key] = prev;
+	// The dev `createApp` opens project DBs via a bare `getDb(namespace)`. Opening the client HERE,
+	// with the config's backend settings, caches it under that namespace first — so the bootstrap
+	// finds this client instead of falling back to a libSQL file.
+	openDb(cfg);
+	return createApp({
+		schema: cfg.schema,
+		embedder: cfg.embedder,
+		embedding: cfg.embedding,
+		db: namespaceOf(cfg),
+	});
 }
 
 async function runServe(argv: string[]): Promise<void> {
@@ -387,10 +375,8 @@ async function runTriggers(argv: string[]): Promise<void> {
 	if (!cfg.triggers || cfg.triggers.length === 0) {
 		throw new Error(`triggers: ${args.config} exports no \`triggers\` — nothing to run`);
 	}
-	const client = getDb(cfg.namespace ?? 'graphx', cfg.db ?? {});
-	await init(client, cfg.dim);
 	// The outbox is the substrate triggers read; without it there is nothing to tail.
-	const graph = new Graph(client, cfg.schema, undefined, { outbox: true });
+	const graph = await openGraph(cfg, { outbox: true });
 	const name = cfg.triggerRunner?.name ?? 'graphx';
 	const runner = new TriggerRunner(graph, { ...cfg.triggerRunner, name, triggers: cfg.triggers });
 
@@ -402,6 +388,65 @@ async function runTriggers(argv: string[]): Promise<void> {
 	// Keep the process alive until interrupted, then drain the in-flight cycle.
 	await new Promise<void>((resolve) => process.once('SIGINT', resolve));
 	await runner.stop();
+}
+
+/**
+ * `graphx reembed` — re-embed every live node under the configured embedder. This is also how a
+ * namespace switches models: the stored vectors are dropped and the table is recreated for the
+ * new model before the pass.
+ */
+async function runReembed(argv: string[]): Promise<void> {
+	const args = parseReembedArgs(argv);
+	const cfg = await loadConfig(args.config);
+	if (!cfg.embedder) throw new Error('reembed: the config has no `embedder`');
+	const client = openDb(cfg);
+	// Do NOT `init(client, embedder)` here: on a model change it would refuse. Open the graph
+	// without initialising the embeddings and let `reembed` replace them.
+	await init(client);
+	const graph = new Graph(client, cfg.schema, { embedder: cfg.embedder, embedding: 'off' });
+	const before = await graph.embeddingReport();
+	console.log(
+		`namespace=${namespaceOf(cfg)} stored=${before.stored ? `${before.stored.model} (${before.stored.dim})` : 'none'} ` +
+			`configured=${cfg.embedder.id} liveNodes=${before.liveNodes} embedded=${before.embedded} stale=${before.stale}`,
+	);
+	if (args.dryRun) {
+		console.log(`dry run: would re-embed ${before.liveNodes} live node(s)`);
+		return;
+	}
+	const result = await graph.reembed({
+		onProgress: (done) => process.stderr.write(`  ${done}/${before.liveNodes}\r`),
+	});
+	process.stderr.write('\n');
+	console.log(
+		`reembedded nodes=${result.nodes} embedded=${result.embedded} skipped=${result.skipped}`,
+	);
+}
+
+/** `graphx doctor` — the namespace's embedding model, width, counts, and staleness. */
+async function runDoctor(argv: string[]): Promise<void> {
+	const args = parseTriggersArgs(argv);
+	const cfg = await loadConfig(args.config);
+	const client = openDb(cfg);
+	await init(client);
+	const graph = new Graph(client, cfg.schema, { embedder: cfg.embedder, embedding: 'off' });
+	const r = await graph.embeddingReport();
+	const lines = [
+		`namespace      ${namespaceOf(cfg)} (${cfg.db?.driver ?? 'libsql'})`,
+		`stored model   ${r.stored ? `${r.stored.model}  dim=${r.stored.dim}` : 'none (init with an embedder)'}`,
+		`configured     ${r.configured ? `${r.configured.model}${r.configured.dim ? `  dim=${r.configured.dim}` : ''}` : 'none'}`,
+		`live nodes     ${r.liveNodes}`,
+		`embedded       ${r.embedded}  (${r.vectors} vector rows)`,
+		`unembedded     ${r.unembedded}`,
+		`stale          ${r.stale}`,
+	];
+	if (r.stored && r.configured && r.stored.model !== r.configured.model) {
+		lines.push(
+			`\n! model mismatch — run \`graphx reembed\` to switch this namespace to ${r.configured.model}`,
+		);
+	} else if (r.stale > 0 || r.unembedded > 0) {
+		lines.push(`\n! ${r.stale + r.unembedded} node(s) need embedding — run \`graphx reembed\``);
+	}
+	console.log(lines.join('\n'));
 }
 
 /** True if `path` exists (file or dir). */
@@ -472,7 +517,7 @@ function scaffoldPkg(range: string): string {
 	)}\n`;
 }
 
-const SCAFFOLD_CONFIG = `import { defineGraphSchema, hashEmbed } from 'graphx';
+const SCAFFOLD_CONFIG = `import { defineConfig, defineGraphSchema, hashEmbed } from 'graphx';
 import { z } from 'zod';
 
 // Your graph's shape — types (node types) and rels (edge types).
@@ -485,13 +530,14 @@ export const schema = defineGraphSchema({
 	},
 });
 
-// hashEmbed is a deterministic, model-free embedder for dev — swap in a real model for production.
-export default {
+// hashEmbed is a deterministic, model-free embedder for dev. For production, swap in a real
+// model — e.g. \`openai('text-embedding-3-small')\` from 'graphx/embedders'. The width is
+// probed from the model and recorded in the namespace; there is nothing to keep in sync.
+export default defineConfig({
 	schema,
-	embed: hashEmbed(768),
-	dim: 768,
+	embedder: hashEmbed(),
 	namespace: 'graphx',
-};
+});
 `;
 
 const SCAFFOLD_README = `# graphx app

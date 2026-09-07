@@ -5,7 +5,13 @@ import { createClient } from '@libsql/client';
 import { test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { type DbClient, type Dialect, dialectOf } from '../../src/core/dialect.ts';
-import { embExtract, embFreshExpr, insertOrIgnore, jsonField } from '../../src/core/dialect-sql.ts';
+import {
+	embReadExpr,
+	embValueExpr,
+	insertOrIgnore,
+	jsonField,
+} from '../../src/core/dialect-sql.ts';
+import { defineEmbedder, type Embedder } from '../../src/core/embedder.ts';
 import { createDuckClient, type DuckClient } from '../../src/core/duck.ts';
 import { duckDataDir } from '../../src/core/duck-pool.ts';
 import { createPgClient, type PgClient } from '../../src/core/pg.ts';
@@ -177,12 +183,28 @@ export const duckdbOnly = DRIVER === 'duckdb' ? test : test.skip;
  * Postgres → `?::vector`.
  */
 export function embSql(client: DbClient): string {
-	return embFreshExpr(dialectOf(client));
+	return embValueExpr(dialectOf(client));
 }
 
 /** Dialect-correct expression for READING an embedding back as a JSON-array string in raw fixtures. */
 export function embReadSql(client: DbClient): string {
-	return embExtract(dialectOf(client));
+	return embReadExpr(dialectOf(client));
+}
+
+/**
+ * A deterministic test embedder from a per-text function. `dim` is inferred from the first
+ * vector when omitted. The id defaults to `'stub'`, so every stub in one test agrees with the
+ * namespace it initialised.
+ */
+export function stubEmbedder(
+	fn: (text: string) => number[] | Promise<number[]>,
+	opts: { id?: string; dim?: number } = {},
+): Embedder {
+	return defineEmbedder({
+		id: opts.id ?? 'stub',
+		dim: opts.dim,
+		embed: (texts) => Promise.all(texts.map((t) => fn(t))),
+	});
 }
 
 /** Dialect-correct `col ->> 'key'` JSON text extraction for raw-SQL test assertions. */

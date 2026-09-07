@@ -12,6 +12,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { MemoryObjectStore } from '../../src/core/objstore/memory.ts';
 import { init } from '../../src/core/schema.ts';
 import { duckdbOnly, makeTestDb, sharedWriterOnly } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P14 — the §19.1 write-correctness proof. The conditional-close + retry is ALREADY
 // implemented (P6); this proves the invariant under genuine contention: N racing
@@ -70,7 +71,7 @@ sharedWriterOnly(
 	async () => {
 		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 		teardowns.push(teardown);
-		await init(setup, 4);
+		await init(setup, hashEmbed(4));
 		const seed = await new Graph(setup, SCHEMA).addNode({ type: 'person', data: { name: 'race' } });
 
 		// N writers, each on its OWN connection → genuine write-lock contention.
@@ -93,7 +94,7 @@ sharedWriterOnly(
 test('P14 race (F2): updateNode never creates an inverted/zero-width interval when the live valid_from leads the clock', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	const g = new Graph(client, SCHEMA);
 	const n = await g.addNode({ type: 'person', data: { name: 'x' } });
 	// Force the live version's valid_from far into the future — simulates a cross-instance
@@ -118,7 +119,7 @@ sharedWriterOnly(
 	async () => {
 		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 		teardowns.push(teardown);
-		await init(setup, 4);
+		await init(setup, hashEmbed(4));
 
 		const clientA = (sibling as () => DbClient)();
 		const gA = new Graph(clientA, SCHEMA);
@@ -149,7 +150,7 @@ sharedWriterOnly(
 	async () => {
 		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 		teardowns.push(teardown);
-		await init(setup, 4);
+		await init(setup, hashEmbed(4));
 		await materializeConstraints(setup, SCHEMA);
 		const g0 = new Graph(setup, SCHEMA);
 		const src = await g0.addNode({ type: 'person', data: { name: 'src' } });
@@ -184,7 +185,7 @@ sharedWriterOnly(
 	async () => {
 		const { client: setup, sibling, teardown } = makeTestDb({ file: true });
 		teardowns.push(teardown);
-		await init(setup, 4);
+		await init(setup, hashEmbed(4));
 		await materializeConstraints(setup, SCHEMA); // partial unique index on (src) for best_friend
 		const g0 = new Graph(setup, SCHEMA);
 		const src = await g0.addNode({ type: 'person', data: { name: 'src' } });

@@ -6,6 +6,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { outboxHead, outboxTail, pruneOutbox } from '../../src/core/temporal.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // Eventing Layer 2 — the durable graph_outbox. Every mutation co-writes an event row in its OWN
 // transaction (atomic with the version rows), tailed by outboxTail over one monotonic `seq`. The
@@ -24,8 +25,8 @@ const teardowns: Array<() => Promise<void>> = [];
 async function makeGraph(events?: GraphEventOptions): Promise<Graph<typeof SCHEMA>> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
-	return new Graph(client, SCHEMA, undefined, events);
+	await init(client, hashEmbed(4));
+	return new Graph(client, SCHEMA, { events });
 }
 
 /** Run the canonical mutation sequence (10 events, incl. 3 feed-blind closes) on an outbox graph. */
@@ -188,7 +189,7 @@ test.skipIf(TEST_DRIVER !== 'postgres')(
 	async () => {
 		const td = makeTestDb();
 		teardowns.push(td.teardown);
-		await init(td.client, 4);
+		await init(td.client, hashEmbed(4));
 		const reader = (td.sibling as () => typeof td.client)();
 		const writerB = (td.sibling as () => typeof td.client)();
 
@@ -226,7 +227,7 @@ test.skipIf(TEST_DRIVER !== 'postgres')(
 	async () => {
 		const td = makeTestDb();
 		teardowns.push(td.teardown);
-		await init(td.client, 4);
+		await init(td.client, hashEmbed(4));
 		const reader = (td.sibling as () => typeof td.client)();
 		const writerB = (td.sibling as () => typeof td.client)();
 

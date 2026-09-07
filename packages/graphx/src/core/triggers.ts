@@ -522,3 +522,19 @@ export function webhookAction<S extends GraphSchema>(opts: WebhookOptions): Trig
 		}
 	};
 }
+
+/**
+ * The trigger behind `embedding: 'lazy'`: after a node insert commits (create or update), embed
+ * it from its current input through the graph's embedder. Matches only untagged (user) writes,
+ * and `Graph.embedNode` writes no version row, so it never re-fires on its own output. Attach it
+ * to `graphx triggers` (config `triggers: [embedTrigger()]`) or any `TriggerRunner`.
+ */
+export function embedTrigger<S extends GraphSchema>(name = 'embed'): Trigger<S> {
+	return {
+		name,
+		match: { entity: 'node', shape: 'insert' },
+		action: async (event, graph) => {
+			await graph.embedNode(event.id);
+		},
+	};
+}

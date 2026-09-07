@@ -145,9 +145,19 @@ export type SearchMode = 'text' | 'semantic' | 'hybrid';
 /** One row of `GET /retrieve` / `POST /hybrid`. `depth` 0 = seed, ≥1 = reached by the walk. */
 export interface RetrievedNode {
 	id: string;
+	type: string;
+	data: Record<string, unknown>;
 	body: string | null;
 	uri: string | null;
+	/** 0 = seed, ≥1 = reached by the walk. */
 	depth: number;
+	/** Cosine similarity (vector seed) or RRF score (hybrid seed); `null` for walked rows. */
+	score: number | null;
+	via: Array<'vector' | 'fts' | 'walk'>;
+	/** The seed whose walk reached this row. */
+	seed: string;
+	/** The best-matching chunk when the type is chunked. */
+	snippet: string | null;
 }
 
 /**

@@ -24,15 +24,15 @@ const schema = defineGraphSchema({
 
 type S = typeof schema;
 
-test('P2: defineGraphSchema is identity at runtime (carries the same object)', () => {
+test('P2: defineGraphSchema carries the same node/edge objects (no copying, no wrapping)', () => {
 	const input = {
 		nodes: { device: z.object({ type: z.string() }) },
 		edges: {},
 	};
 	const out = defineGraphSchema(input);
-	expect(out).toBe(input);
 	expect(out.nodes).toBe(input.nodes);
 	expect(out.edges).toBe(input.edges);
+	expect(out.embedding).toBeUndefined();
 });
 
 test('P2: node parse returns parsed output for valid data', () => {

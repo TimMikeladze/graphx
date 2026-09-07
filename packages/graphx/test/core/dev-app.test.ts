@@ -4,7 +4,7 @@ import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { evict, getDb } from '../../src/core/db.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
-import { hashEmbed } from '../../src/core/retrieve.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 import { init } from '../../src/core/schema.ts';
 import { createApp } from '../../src/core/serve.ts';
 
@@ -53,23 +53,17 @@ test('createApp dev: reads default to the seeded principal when no auth headers 
 	cleanup(control, db);
 });
 
-test('createApp dev: auto-dim sizes the vector column from the embedder (non-768 works end-to-end)', async () => {
+test('createApp dev: the vector table is sized from the embedder and writes embed through it', async () => {
 	const db = `dev_${ulid().toLowerCase()}`;
-	const embed = hashEmbed(64); // deliberately NOT the 768 default
+	const embedder = hashEmbed(64); // deliberately NOT the 768 default
 	const { app, control, tenant, project, graph } = await createApp({
 		schema: SCHEMA,
-		embed,
+		embedder,
 		db,
-		// seed a node whose stored embedding is 64-dim — a 768 column would reject the ANN
-		// (vector_distance dimension mismatch), so a hit proves the column was sized at the
-		// embedder's width, not the default.
+		// The seed passes no vector: the graph embeds `body` itself at the embedder's width, so
+		// a retrieve hit proves both the table sizing and the automatic embedding.
 		seed: async (g) => {
-			await g.addNode({
-				type: 'person',
-				data: { name: 'ada' },
-				body: 'analytical engine',
-				emb: await embed('analytical engine'),
-			});
+			await g.addNode({ type: 'person', data: { name: 'ada' }, body: 'analytical engine' });
 		},
 	});
 	expect(graph).toBeDefined();
@@ -83,12 +77,12 @@ test('createApp dev: auto-dim sizes the vector column from the embedder (non-768
 	cleanup(control, db);
 });
 
-test('createApp dev: fails fast when auto-dim disagrees with an existing namespace', async () => {
+test('createApp dev: fails fast when the embedder disagrees with an existing namespace', async () => {
 	const db = `dev_${ulid().toLowerCase()}`;
-	await init(getDb(db), 64); // namespace already materialized at dim 64
-	// An embedder implying dim 128 must throw (immutable), not silently keep 64 and reject inserts.
-	await expect(createApp({ schema: SCHEMA, embed: hashEmbed(128), db })).rejects.toThrow(
-		/immutable|dim 64/,
+	await init(getDb(db), hashEmbed(64)); // namespace already embedded with hash:64
+	// A different model must throw (model mismatch), not silently keep the old vectors.
+	await expect(createApp({ schema: SCHEMA, embedder: hashEmbed(128), db })).rejects.toThrow(
+		/embedded with 'hash:64'/,
 	);
 	evict(db);
 	for (const sfx of ['', '-wal', '-shm']) rmSync(`${db}.db${sfx}`, { force: true });

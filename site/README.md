@@ -28,12 +28,12 @@ so neither can drift out of step with the page:
 Four things are written here rather than derived, and every one of them restates something the
 README already says — check them when it changes:
 
-| Where | What |
-| --- | --- |
-| `prerender.ts` → `PILLARS` | The three claims in the band under the hero |
-| `prerender.ts` → `PANELS` | The three code samples in the hero card |
-| `og/card.ts` → `SNIPPET` | The code crop on the social card |
-| `og/card.ts` → `CLAIMS` | The two lines of card copy under the headline |
+| Where                      | What                                          |
+| -------------------------- | --------------------------------------------- |
+| `prerender.ts` → `PILLARS` | The three claims in the band under the hero   |
+| `prerender.ts` → `PANELS`  | The three code samples in the hero card       |
+| `og/card.ts` → `SNIPPET`   | The code crop on the social card              |
+| `og/card.ts` → `CLAIMS`    | The two lines of card copy under the headline |
 
 ## Not done yet
 

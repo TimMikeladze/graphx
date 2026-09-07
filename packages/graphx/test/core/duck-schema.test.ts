@@ -1,14 +1,15 @@
 import { createClient } from '@libsql/client';
 import { describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../../src/core/duck.ts';
-import { init, readEmbDim } from '../../src/core/schema.ts';
+import { init, readEmbeddingMeta } from '../../src/core/schema.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 const FOREVER = 8640000000000000;
 
 describe('duckdbSchema', () => {
 	test('init creates the version tables and their views', async () => {
 		const c = createDuckClient();
-		await init(c, 4);
+		await init(c, hashEmbed(4));
 		const r = await c.execute('SELECT table_name FROM duckdb_tables()');
 		const names = r.rows.map((x) => String(x.table_name));
 		for (const t of ['node_versions', 'edge_versions', 'node_identity', 'graph_outbox']) {
@@ -19,14 +20,14 @@ describe('duckdbSchema', () => {
 
 	test('init is idempotent', async () => {
 		const c = createDuckClient();
-		await init(c, 4);
-		await init(c, 4);
+		await init(c, hashEmbed(4));
+		await init(c, hashEmbed(4));
 		await c.end();
 	});
 
 	test('nodes shows only the live version, node_versions shows every one', async () => {
 		const c = createDuckClient();
-		await init(c, 4);
+		await init(c, hashEmbed(4));
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
 			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,
@@ -47,7 +48,7 @@ describe('duckdbSchema', () => {
 		// and application-level checks (Task 12) instead. This test pins that the store
 		// gives no backstop, so nobody later mistakes silence for enforcement.
 		const c = createDuckClient();
-		await init(c, 4);
+		await init(c, hashEmbed(4));
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		for (const ver of [1, 2]) {
 			await c.execute({
@@ -66,9 +67,9 @@ describe('duckdbSchema', () => {
 		// than comparing it against the reference. Comparing the two live backends keeps
 		// this self-maintaining: it fails if EITHER schema drifts.
 		const duck = createDuckClient();
-		await init(duck, 4);
+		await init(duck, hashEmbed(4));
 		const lib = createClient({ url: ':memory:' });
-		await init(lib, 4);
+		await init(lib, hashEmbed(4));
 		for (const view of ['nodes', 'edges', 'node_versions', 'edge_versions']) {
 			const d = await duck.execute(`SELECT * FROM ${view} LIMIT 0`);
 			const l = await lib.execute(`SELECT * FROM ${view} LIMIT 0`);
@@ -80,7 +81,7 @@ describe('duckdbSchema', () => {
 
 	test('ver auto-populates from the sequence when a caller omits it', async () => {
 		const c = createDuckClient();
-		await init(c, 4);
+		await init(c, hashEmbed(4));
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
 			sql: `INSERT INTO node_versions (id, type, valid_from) VALUES (?, ?, ?)`,
@@ -91,23 +92,23 @@ describe('duckdbSchema', () => {
 		await c.end();
 	});
 
-	test('readEmbDim reads the declared width back', async () => {
+	test('readEmbeddingMeta reads the recorded model and width back', async () => {
 		const c = createDuckClient();
-		await init(c, 384);
-		expect(await readEmbDim(c)).toBe(384);
+		await init(c, hashEmbed(384));
+		expect(await readEmbeddingMeta(c)).toEqual({ model: 'hash:384', dim: 384 });
 		await c.end();
 	});
 
-	test('init rejects a conflicting dimension', async () => {
+	test('init rejects a different embedder', async () => {
 		const c = createDuckClient();
-		await init(c, 384);
-		await expect(init(c, 768)).rejects.toThrow(/immutable/);
+		await init(c, hashEmbed(384));
+		await expect(init(c, hashEmbed(768))).rejects.toThrow(/embedded with 'hash:384'/);
 		await c.end();
 	});
 
 	test('temporal columns hold the FOREVER sentinel without overflow', async () => {
 		const c = createDuckClient();
-		await init(c, 4);
+		await init(c, hashEmbed(4));
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['n1'] });
 		await c.execute({
 			sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to) VALUES (?,?,?,?,?)`,

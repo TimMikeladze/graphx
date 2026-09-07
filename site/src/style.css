@@ -10,9 +10,9 @@
 :root {
 	color-scheme: light dark;
 
-	--display: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--display: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--sans: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
 	--bg: light-dark(#ffffff, #0a0a0a);
 	--bg-raised: light-dark(#ffffff, #0f0f0f);
@@ -49,17 +49,17 @@
 }
 
 @media (prefers-color-scheme: light) {
-	:root:not([data-theme="dark"]) {
+	:root:not([data-theme='dark']) {
 		--rules-opacity: 1;
 	}
 }
 
-:root[data-theme="light"] {
+:root[data-theme='light'] {
 	color-scheme: light;
 	--rules-opacity: 1;
 }
 
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
 	color-scheme: dark;
 	--rules-opacity: 0.6;
 }
@@ -215,12 +215,12 @@ a:hover {
 }
 
 @media (prefers-color-scheme: light) {
-	:root:not([data-theme="dark"]) .theme-icon {
+	:root:not([data-theme='dark']) .theme-icon {
 		box-shadow: inset 0 0 0 0 var(--bg-raised);
 	}
 }
 
-:root[data-theme="light"] .theme-icon {
+:root[data-theme='light'] .theme-icon {
 	box-shadow: inset 0 0 0 0 var(--bg-raised);
 }
 
@@ -240,11 +240,7 @@ a:hover {
 		linear-gradient(to right, var(--border) 1px, transparent 1px),
 		linear-gradient(to bottom, var(--border) 1px, transparent 1px);
 	background-size: 32px 32px;
-	mask-image: radial-gradient(
-		ellipse 70% 60% at 50% 40%,
-		#000 0%,
-		transparent 78%
-	);
+	mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 0%, transparent 78%);
 	opacity: var(--rules-opacity);
 }
 
@@ -252,11 +248,7 @@ a:hover {
 	position: absolute;
 	inset: -30% 0 auto 0;
 	height: 70%;
-	background: radial-gradient(
-		ellipse 55% 100% at 50% 50%,
-		var(--accent-wash),
-		transparent 70%
-	);
+	background: radial-gradient(ellipse 55% 100% at 50% 50%, var(--accent-wash), transparent 70%);
 	pointer-events: none;
 }
 
@@ -1102,9 +1094,9 @@ a:hover {
 
 	/* The bar cannot hold five links beside the wordmark; these three are the
 	 * least-used, and all are reachable from the docs and the footer. */
-	.nav-links a[href="/llms.txt"],
-	.nav-links a[href="#mcp"],
-	.nav-links a[href$="/package/graphx"] {
+	.nav-links a[href='/llms.txt'],
+	.nav-links a[href='#mcp'],
+	.nav-links a[href$='/package/graphx'] {
 		display: none;
 	}
 

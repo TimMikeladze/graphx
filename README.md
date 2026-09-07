@@ -16,19 +16,20 @@ bun add graphx
 One package, one version. Everything below is a subpath of it — there is nothing else to install
 and nothing to keep in lockstep.
 
-| Import          | What it is                                                                  |
-| --------------- | --------------------------------------------------------------------------- |
-| `graphx`        | The SDK: schema, data layer, retrieval, temporal reads, algorithms, serving |
-| `graphx/pg`     | Registers the Postgres driver with `getDb` (side effect)                    |
-| `graphx/duck`   | Registers the DuckDB driver with `getDb` (side effect)                      |
-| `graphx/blob`   | S3-backed blob store for node bodies                                        |
-| `graphx/cli`    | The `graphx` binary — `new`, `ingest`, `serve`, `triggers`                  |
-| `graphx/ingest` | Ingest a YAML/markdown vault into a graph (`graphx/ingest/s3` for a bucket) |
-| `graphx/react`  | Inference-only React Query hooks + CDC live-sync                            |
-| `graphx/mcp`    | Backs `graphx mcp` — every serving route exposed as an MCP tool             |
-| `graphx/auth`   | Relationship-based access control (ReBAC) on graphx                         |
+| Import             | What it is                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `graphx`           | The SDK: schema, embedders, data layer, retrieval, temporal reads, algorithms, serving |
+| `graphx/embedders` | `fetch`-based embedders for OpenAI, Voyage, and Ollama (no SDKs)                       |
+| `graphx/pg`        | Registers the Postgres driver with `getDb` (side effect)                               |
+| `graphx/duck`      | Registers the DuckDB driver with `getDb` (side effect)                                 |
+| `graphx/blob`      | S3-backed blob store for node bodies                                                   |
+| `graphx/cli`       | The `graphx` binary                                                                    |
+| `graphx/ingest`    | Ingest a YAML/markdown vault into a graph (`graphx/ingest/s3` for a bucket)            |
+| `graphx/react`     | Inference-only React Query hooks + CDC live-sync                                       |
+| `graphx/mcp`       | Backs `graphx mcp` — every serving route exposed as an MCP tool                        |
+| `graphx/auth`      | Relationship-based access control (ReBAC) on graphx                                    |
 
-One binary ships with it: `graphx` — `new`, `ingest`, `serve`, `triggers`, `mcp`.
+One binary ships with it: `graphx` — `new`, `ingest`, `serve`, `triggers`, `mcp`, `reembed`, `doctor`.
 
 Each subpath is a **separate entry point**, so an optional peer is only pulled onto your import
 path if you actually reach for it — `pg` by `graphx/pg`, `@duckdb/node-api` (~123MB installed) by
@@ -49,10 +50,10 @@ bunx graphx new my-app
 ```
 
 That writes a runnable `graphx.config.ts`, `package.json`, and README. The config is the whole
-contract — schema, embedder, dimension, backend:
+contract — schema, embedder, backend:
 
 ```ts
-import { defineGraphSchema, hashEmbed } from 'graphx';
+import { defineConfig, defineGraphSchema, hashEmbed } from 'graphx';
 import { z } from 'zod';
 
 export const schema = defineGraphSchema({
@@ -60,16 +61,16 @@ export const schema = defineGraphSchema({
 	edges: { links_to: { from: 'note', to: 'note' } },
 });
 
-export default {
+export default defineConfig({
 	schema,
-	embed: hashEmbed(768), // deterministic, model-free — swap in a real model for production
-	dim: 768,
+	embedder: hashEmbed(), // deterministic, model-free — swap in openai('text-embedding-3-small') from 'graphx/embedders'
 	namespace: 'graphx',
-};
+});
 ```
 
-`dim` is baked into the vector column at first init and cannot be changed later. It must match your
-embedder's output width, or every insert fails on a dimension mismatch.
+There is no dimension to configure. The embedder's width is probed from the model and recorded in
+the namespace the first time it is initialised, together with the model's id; a different model later
+is refused until `graphx reembed` switches the namespace over. See [`docs/embeddings.md`](./docs/embeddings.md).
 
 ## CLI
 
@@ -78,6 +79,9 @@ graphx new      <dir>                     Scaffold a starter project
 graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs
 graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
+graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
+graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
+graphx doctor   [-c config]               Embedding model, width, and health of the namespace
 ```
 
 `ingest` options: `--source <id>`, `--id-field <name>`, `--prune`, `--watch`, `--assets-type <type>`,
@@ -97,30 +101,35 @@ const schema = defineGraphSchema({
 	edges: {
 		deployedAt: { from: 'gateway', to: 'site', single: true },
 	},
+	// Optional per-type policy: what text a node is embedded from (default: its `body`), and
+	// whether long inputs are split into chunks. A data-only type stays searchable this way.
+	embedding: {
+		site: { text: (d) => `${d.name} (${d.region})` },
+	},
 });
 
-const embed = hashEmbed(768);
+const embedder = hashEmbed();
 const db = getDb('acme__alpha'); // one cached client per namespace (tenant)
-await init(db, 768); // tables, indexes, vector column
-const g = new Graph(db, schema);
+await init(db, embedder); // tables, indexes, and the vector table at the embedder's width
+const g = new Graph(db, schema, { embedder });
 
 const site = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
-const body = 'free text — indexed for FTS, and embedded for vector search when `emb` is supplied';
 const gw = await g.addNode({
 	type: 'gateway',
 	data: { name: 'gw-1', firmware: '2.1.0' },
-	body,
-	emb: await embed(body), // `Graph` never calls the embedder for you — see below
+	body: 'free text — indexed for FTS and embedded for vector search by the graph itself',
 });
 await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 
-await g.updateNode(gw.id, { data: { firmware: '2.2.0' } }); // shallow merge, opens a new version
-await g.deleteNode(gw.id); // closes the version; nothing is erased
+await g.updateNode(gw.id, { data: { firmware: '2.2.0' } }); // shallow merge, opens a new version; body unchanged ⇒ no re-embed
+await g.updateNode(gw.id, { body: 'edited' }); // the embedding input changed ⇒ re-embedded
+await g.deleteNode(gw.id); // closes the version and drops its vectors; the history is kept
 ```
 
-`Graph` is embedder-free by design: `emb` is a plain `number[]` you pass in (the serving layer and
-`bulkLoad` embed on your behalf). Omit it and the node's vector column stays NULL — it is still
-found by FTS and by `hybridRetrieve`, but never by the ANN seeds `retrieve` runs on.
+The graph owns embedding: every write embeds its type's input through the graph's embedder, hashes
+that input beside the vector, and re-embeds only when the hash changes. `emb: number[]` binds a
+precomputed vector instead (validated against the namespace width); `embedding: false` skips a
+write; `embedding: 'lazy'` on the graph defers the work to `embedTrigger` over the outbox.
 
 Reads on `Graph`: `getNode`, `getNodeContent`, `neighbors`, `neighborsPage`, `listNodes`,
 `graphSlice`.
@@ -136,22 +145,14 @@ append-only and `asOf` reads reconstruct the graph as it stood at any timestamp.
 ### Retrieval and queries
 
 ```ts
-import {
-	retrieve,
-	hybridRetrieve,
-	match,
-	journey,
-	history,
-	diff,
-	shortestPath,
-	pagerank,
-} from 'graphx';
+import { match, journey, history, diff, shortestPath, pagerank } from 'graphx';
 
-// GraphRAG: ANN seeds, then a time-respecting walk out from them
-await retrieve(db, embed, { query: 'overheating sensor', k: 10, maxDepth: 2, rels: ['raised'] });
+// GraphRAG: vector seeds, then a time-respecting walk out from them. Every row carries the
+// node's type + data, a score, which leg matched it (vector / fts / walk), and its seed.
+await g.retrieve({ query: 'overheating sensor', k: 10, maxDepth: 2, rels: ['raised'] });
 
-// Vector + FTS5 fused with RRF, optional rerank / MMR
-await hybridRetrieve(db, embed, { query: 'overheating sensor', k: 10 });
+// Vector + full-text fused with RRF, optional rerank / MMR
+await g.hybridRetrieve({ query: 'overheating sensor', k: 10 });
 
 // Pattern match — rows typed per alias. `select()` is async: it compiles the SQL and
 // hands back the runnable query, so await it before `.run()` / `.page()`.
@@ -185,7 +186,7 @@ import { schema } from './schema.ts';
 
 const { app, tenant, project, user } = await createApp({
 	schema,
-	embed: hashEmbed(), // dim is derived from the embedder when omitted
+	embedder: hashEmbed(), // every project namespace is sized to it on first touch; every write embeds through it
 	db: 'iot_demo',
 	cors: true,
 	openapi: { title: 'iot-fleet', servers: [{ url: 'http://localhost:8899' }] },
@@ -220,11 +221,11 @@ g.useChangeFeedSync(); // tails /changes, invalidates exact keys
 
 ## MCP
 
-`graphx mcp` speaks stdio and exposes every serving route as a tool. Configure it with environment
-variables: `GRAPHX_DB` (local mode) or `GRAPHX_URL` + `GRAPHX_API_KEY` (remote mode), plus
-`GRAPHX_SCHEMA` (path to a JSON schema document) and `GRAPHX_MCP_READ_ONLY`. Without `GRAPHX_SCHEMA`,
-local mode runs schemaless and every write tool returns 400. Agents should call `graphx_context`
-first — it returns the tenant and project ids the other tools require.
+`graphx mcp` speaks stdio and exposes every serving route as a tool. Local mode loads the same
+`graphx.config.ts` every other command does (`-c`, default `./graphx.config.ts`) — schema, embedder,
+namespace, backend — so writes validate against your schema and `retrieve` uses your model. Set
+`GRAPHX_URL` (+ `GRAPHX_API_KEY`) to proxy a deployed server instead. Agents should call
+`graphx_context` first — it returns the tenant and project ids the other tools require.
 
 ## Examples
 
@@ -274,6 +275,12 @@ const db = getDb('acme__alpha', {
 
 Alternatively, select Postgres globally with `GRAPHX_DB_DRIVER=postgres` (and `GRAPHX_PG_URL` for the connection string). You must still `import 'graphx/pg'` once, or `getDb` throws.
 
+**Behind a transaction pooler** (PgBouncer, pgcat, Supavisor): nothing to configure. The adapter
+normally sets the tenant `search_path` as a connect-time option; a transaction pooler rejects that,
+so on the first query it switches to applying `search_path` with `SET LOCAL` inside every
+statement's transaction and retries. Set `pooler: 'transaction'` to skip the probe, or
+`pooler: 'none'` to forbid the switch.
+
 **Tenant model.** Each namespace maps to a Postgres **schema** on a shared connection pool, created lazily — one server credential serves every tenant. (libSQL uses one file/replica per namespace instead.)
 
 **Prerequisite.** The `vector` extension (pgvector) must exist in the target database:
@@ -312,6 +319,7 @@ See [docs/DUCKDB_SUPPORT.md](./docs/DUCKDB_SUPPORT.md) for the snapshot format, 
 
 Per-subpath guides live in [`docs/`](./docs):
 
+- [`docs/embeddings.md`](./docs/embeddings.md) — embedders, per-type policies, chunking, lazy mode, `reembed` / `doctor`
 - [`docs/cli.md`](./docs/cli.md) — every `graphx` command and flag
 - [`docs/react.md`](./docs/react.md) — the hook set, query keys, and CDC live-sync
 - [`docs/mcp.md`](./docs/mcp.md) — tool manifest, local vs remote mode, environment variables

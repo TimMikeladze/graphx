@@ -9,6 +9,7 @@ import { encodeCursor } from '../../src/core/governance.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { insertOrIgnoreSql, makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P15 — change feed / CDC (§19.10). "The temporal log IS the changelog." changeFeed
 // is the tailable sibling of diff(): new versions WHERE valid_from > cursor, ordered
@@ -31,7 +32,7 @@ const teardowns: Array<() => Promise<void>> = [];
 /** A pure :memory: client (read-only CDC + raw inserts; no transactions). */
 async function memClient(): Promise<DbClient> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return client;
 }
 
@@ -39,7 +40,7 @@ async function memClient(): Promise<DbClient> {
 async function fileGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 

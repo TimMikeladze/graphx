@@ -7,8 +7,26 @@ import {
 	type SqlStatement,
 	type SqlValue,
 } from './dialect.ts';
-import { distinctSelect, embFreshExpr, embRebindExpr, ftsWhere } from './dialect-sql.ts';
-import { ftsArg } from './hybrid.ts';
+import { distinctSelect, embValueExpr, ftsWhere } from './dialect-sql.ts';
+import { ftsArg, hybridRetrieve, type HybridRetrieveOpts } from './hybrid.ts';
+import {
+	assertVector,
+	chunkPolicyFor,
+	chunksFor,
+	embedHash,
+	embedInputFor,
+	type Embedder,
+	EmbeddingError,
+	type EmbeddingPolicy,
+	type PreparedEmbedding,
+} from './embedder.ts';
+import { retrieve, type RetrievedNode, type RetrieveOpts } from './retrieve.ts';
+import {
+	type EmbeddingMeta,
+	embeddingsIndexFor,
+	ensureEmbeddings,
+	readEmbeddingMeta,
+} from './schema.ts';
 import { ulid } from 'ulidx';
 import type { z } from 'zod';
 import {
@@ -19,7 +37,6 @@ import {
 	managedWriter,
 } from './db.ts';
 import { assertUniqueProps } from './duck-constraints.ts';
-import { embParam } from './duck-value.ts';
 import {
 	type GraphEvent,
 	type GraphEventOptions,
@@ -46,7 +63,12 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  */
 
 /** Loosened schema shape; the `defineGraphSchema` types ride on `S` at call sites. */
-export type GraphSchema = { nodes: Record<string, unknown>; edges: Record<string, unknown> };
+export type GraphSchema = {
+	nodes: Record<string, unknown>;
+	edges: Record<string, unknown>;
+	/** Per-type embedding policies (`defineGraphSchema({ embedding })`). Absent ⇒ embed `body`. */
+	embedding?: Record<string, EmbeddingPolicy<never> | undefined>;
+};
 
 /**
  * Zod INPUT prop type for node type `K` — the shape a caller passes to `addNode`
@@ -66,16 +88,105 @@ export type EdgeDataInput<S extends GraphSchema, R extends Rel<S>> = S['edges'][
 		: Record<string, unknown>
 	: Record<string, unknown> | undefined;
 
-/** Input to {@link Graph.addNode}. `data` is the unparsed prop object for the type. */
+/**
+ * Input to {@link Graph.addNode}. `data` is the unparsed prop object for the type.
+ *
+ * Embedding is automatic when the graph has an embedder: the type's embedding input (its `body`
+ * by default) is embedded and stored. Two escape hatches: `emb` binds a precomputed vector
+ * (validated against the namespace width), and `embedding` binds rows prepared by
+ * {@link Graph.prepareEmbeddings} — or `false` to skip embedding this node.
+ */
 export interface AddNodeInput<S extends GraphSchema, K extends NodeType<S>> {
 	type: K;
 	data: DataInput<S, K>;
 	emb?: number[];
+	embedding?: PreparedEmbedding | false;
 	body?: string;
 	uri?: string;
 	content_hash?: string;
-	embed_hash?: string;
 	content_type?: string;
+}
+
+/** Patch for {@link Graph.updateNode}. Every field optional; omitted ones carry forward. */
+export interface UpdateNodePatch {
+	type?: string;
+	data?: Record<string, unknown>;
+	/** Bind a precomputed vector for the successor (validated). */
+	emb?: number[];
+	/** Prepared rows for the successor, or `false` to leave the stored vectors untouched. */
+	embedding?: PreparedEmbedding | false;
+	body?: string;
+	uri?: string;
+	content_hash?: string;
+	content_type?: string;
+}
+
+/** How a {@link Graph} embeds on write. */
+export type EmbeddingMode = 'sync' | 'lazy' | 'off';
+
+/** Construction options for {@link Graph}. */
+export interface GraphOptions {
+	/** P12 read-time upcasters (§15). */
+	upcasters?: UpcasterRegistry;
+	/** Typed mutation events (+ optional durable outbox). */
+	events?: GraphEventOptions;
+	/** The namespace's embedder. Without it, writes store no vectors and `retrieve` throws. */
+	embedder?: Embedder;
+	/**
+	 * `'sync'` (default) embeds inside the write. `'lazy'` writes no vector and leaves it to an
+	 * {@link import('./triggers.ts').embedTrigger} over the outbox. `'off'` never embeds
+	 * automatically (explicit `emb` / `embedding` still work).
+	 */
+	embedding?: EmbeddingMode;
+}
+
+/** One live node's embedding input, for {@link Graph.prepareEmbeddings}. */
+export interface EmbedItem {
+	type: string;
+	data: Record<string, unknown>;
+	body?: string | null;
+}
+
+/** What {@link Graph.reembed} did. */
+export interface ReembedResult {
+	/** Live nodes visited. */
+	nodes: number;
+	/** Nodes that received vectors. */
+	embedded: number;
+	/** Nodes whose policy yields no text (left without vectors). */
+	skipped: number;
+}
+
+/** Namespace embedding health, from {@link Graph.embeddingReport}. */
+export interface EmbeddingReport {
+	/** The model + width recorded in the namespace, or `null` when never initialised with one. */
+	stored: EmbeddingMeta | null;
+	/** The graph's configured embedder, or `null`. */
+	configured: { model: string; dim: number | undefined } | null;
+	liveNodes: number;
+	/** Live nodes that have at least one vector. */
+	embedded: number;
+	/** Live nodes whose policy yields text but that have no vector. */
+	unembedded: number;
+	/** Live nodes whose stored vector was computed from different text or a different model. */
+	stale: number;
+	/** Vector rows (chunks) in the table. */
+	vectors: number;
+}
+
+/**
+ * Thrown from inside the conditional-close body when the successor needs a vector the caller
+ * has not computed yet. The transaction rolls back, {@link Graph.updateNode} embeds OUTSIDE the
+ * write lock, then retries with the vector in hand.
+ */
+class NeedEmbed extends Error {
+	constructor(
+		readonly type: string,
+		readonly text: string,
+		readonly hash: string,
+	) {
+		super('need embed');
+	}
 }
 
 /** Input to {@link Graph.addEdge}. `src`/`dst` are ULID node ids. */
@@ -358,21 +469,31 @@ export class Graph<S extends GraphSchema> {
 	private readonly fts: FtsIndexOwner | null;
 	/** Tables the open {@link write} session has touched, or undefined when none is open. */
 	private session?: Set<string>;
+	/** The namespace's embedder, when the graph was built with one. */
+	readonly embedder: Embedder | undefined;
+	/** How writes embed. See {@link GraphOptions.embedding}. */
+	readonly embeddingMode: EmbeddingMode;
+	/** Cached `graph_meta` model/width; `undefined` until first read. */
+	private embMeta?: EmbeddingMeta | null;
+	/** Retained so {@link withEventSource} can build a sibling with the same options. */
+	private readonly options: GraphOptions;
 
 	constructor(
 		public raw: DbClient,
 		public schema: S,
-		upcasters?: UpcasterRegistry,
-		events?: GraphEventOptions,
+		opts: GraphOptions = {},
 	) {
-		this.upcasters = upcasters ?? {};
+		this.options = opts;
+		this.upcasters = opts.upcasters ?? {};
 		this.upcaster = new Upcaster(schema, this.upcasters);
-		this.events = events?.sink ?? NOOP_EVENTS;
-		this.outbox = events?.outbox ?? false;
-		this.eventSource = events?.source;
-		this.eventOpts = events;
+		this.events = opts.events?.sink ?? NOOP_EVENTS;
+		this.outbox = opts.events?.outbox ?? false;
+		this.eventSource = opts.events?.source;
+		this.eventOpts = opts.events;
 		this.writer = managedWriter(raw);
 		this.fts = ftsIndexOwner(raw);
+		this.embedder = opts.embedder;
+		this.embeddingMode = opts.embedding ?? 'sync';
 	}
 
 	/**
@@ -434,7 +555,330 @@ export class Graph<S extends GraphSchema> {
 	 * attributable and the matcher's default predicate can exclude them.
 	 */
 	withEventSource(source: string): Graph<S> {
-		return new Graph(this.raw, this.schema, this.upcasters, { ...this.eventOpts, source });
+		return new Graph(this.raw, this.schema, {
+			...this.options,
+			events: { ...this.eventOpts, source },
+		});
+	}
+
+	// ------------------------------------------------------------------------------------------
+	// Embeddings
+	// ------------------------------------------------------------------------------------------
+
+	/** The model + width this namespace is embedded at (cached), or `null`. */
+	private async embeddingMeta(): Promise<EmbeddingMeta | null> {
+		if (this.embMeta === undefined) this.embMeta = await readEmbeddingMeta(this.raw);
+		return this.embMeta;
+	}
+
+	/** The width every stored vector must have. Throws `missing` when the namespace has none. */
+	private async requireDim(context: string): Promise<number> {
+		const meta = await this.embeddingMeta();
+		if (!meta) {
+			throw new EmbeddingError(
+				'missing',
+				`${context}: this namespace has no embedding table — call init(db, embedder) first`,
+			);
+		}
+		if (this.embedder && this.embedder.id !== meta.model) {
+			throw new EmbeddingError(
+				'model',
+				`${context}: this namespace is embedded with '${meta.model}' but the graph's embedder is '${this.embedder.id}' — run reembed to switch models`,
+			);
+		}
+		return meta.dim;
+	}
+
+	/** The embedder, or a `missing` error naming what needed it. */
+	private requireEmbedder(context: string): Embedder {
+		if (!this.embedder) {
+			throw new EmbeddingError(
+				'missing',
+				`${context}: no embedder configured — construct the Graph with { embedder }`,
+			);
+		}
+		return this.embedder;
+	}
+
+	/** The text a node of `type` is embedded from, per the schema's policy. */
+	embedInput(
+		type: string,
+		data: Record<string, unknown>,
+		body: string | null | undefined,
+	): string | null {
+		return embedInputFor(this.schema, type, data, body);
+	}
+
+	/** The staleness hash a node's vectors would carry under the configured embedder. */
+	embedHashFor(
+		type: string,
+		data: Record<string, unknown>,
+		body: string | null | undefined,
+	): string | null {
+		const text = this.embedInput(type, data, body);
+		return text === null ? null : embedHash(this.requireEmbedder('embedHashFor').id, text);
+	}
+
+	/**
+	 * Batch-embed several nodes' inputs in one pass through the embedder — the path for ingest
+	 * and other bulk writers. Returns one {@link PreparedEmbedding} per item (`null` when the
+	 * item's policy yields no text), to be passed as `embedding` to `addNode` / `updateNode`.
+	 */
+	async prepareEmbeddings(items: EmbedItem[]): Promise<(PreparedEmbedding | null)[]> {
+		const embedder = this.requireEmbedder('prepareEmbeddings');
+		const dim = await this.requireDim('prepareEmbeddings');
+		// Every chunk of every item, flattened, with a back-pointer so the vectors re-assemble.
+		const inputs: string[] = [];
+		const plan: Array<{ item: number; chunk: number; text: string | null; hash: string } | null> =
+			[];
+		const perItem: Array<{ hash: string; texts: string[] } | null> = items.map((it, i) => {
+			const text = this.embedInput(it.type, it.data, it.body);
+			if (text === null) return null;
+			const texts = chunksFor(text, chunkPolicyFor(this.schema, it.type));
+			const hash = embedHash(embedder.id, text);
+			texts.forEach((t, c) => {
+				inputs.push(t);
+				plan.push({ item: i, chunk: c, text: texts.length === 1 ? null : t, hash });
+			});
+			return { hash, texts };
+		});
+		const vectors = await embedder.embed(inputs);
+		const out: (PreparedEmbedding | null)[] = perItem.map((p) =>
+			p ? { hash: p.hash, chunks: [] } : null,
+		);
+		plan.forEach((entry, i) => {
+			if (!entry) return;
+			const vec = vectors[i] as number[];
+			assertVector(vec, dim, 'prepareEmbeddings');
+			(out[entry.item] as PreparedEmbedding).chunks.push({
+				chunk: entry.chunk,
+				text: entry.text,
+				emb: vec,
+			});
+		});
+		return out;
+	}
+
+	/** Embed one node's input text under the configured embedder (used by the update retry). */
+	private async prepareFromText(type: string, text: string): Promise<PreparedEmbedding> {
+		const embedder = this.requireEmbedder('embed');
+		const dim = await this.requireDim('embed');
+		const texts = chunksFor(text, chunkPolicyFor(this.schema, type));
+		const vectors = await embedder.embed(texts);
+		return {
+			hash: embedHash(embedder.id, text),
+			chunks: texts.map((t, c) => {
+				const emb = vectors[c] as number[];
+				assertVector(emb, dim, 'embed');
+				return { chunk: c, text: texts.length === 1 ? null : t, emb };
+			}),
+		};
+	}
+
+	/** Wrap a caller-supplied raw vector as one prepared row, validated against the namespace. */
+	private async fromRawVector(
+		type: string,
+		data: Record<string, unknown>,
+		body: string | null | undefined,
+		emb: number[],
+	): Promise<PreparedEmbedding> {
+		const dim = await this.requireDim('emb');
+		assertVector(emb, dim, 'emb');
+		const text = this.embedInput(type, data, body) ?? '';
+		const model = this.embedder?.id ?? (await this.embeddingMeta())?.model ?? 'unknown';
+		return { hash: embedHash(model, text), chunks: [{ chunk: 0, text: null, emb }] };
+	}
+
+	/**
+	 * Decide a NEW node's vectors from its input: an explicit `embedding` / `emb` wins; otherwise
+	 * embed synchronously when the graph has an embedder in `'sync'` mode; otherwise nothing.
+	 */
+	private async resolveNewEmbedding(
+		type: string,
+		data: Record<string, unknown>,
+		body: string | null | undefined,
+		input: { emb?: number[]; embedding?: PreparedEmbedding | false },
+	): Promise<PreparedEmbedding | null> {
+		if (input.embedding === false) return null;
+		if (input.embedding) {
+			const dim = await this.requireDim('embedding');
+			for (const c of input.embedding.chunks) assertVector(c.emb, dim, 'embedding');
+			return input.embedding;
+		}
+		if (input.emb) return this.fromRawVector(type, data, body, input.emb);
+		if (!this.embedder || this.embeddingMode !== 'sync') return null;
+		const text = this.embedInput(type, data, body);
+		return text === null ? null : this.prepareFromText(type, text);
+	}
+
+	/** The statements that replace a node's vector rows with `prepared` (or remove them). */
+	private embeddingStmts(id: string, prepared: PreparedEmbedding | null): SqlStatement[] {
+		const stmts: SqlStatement[] = [{ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] }];
+		if (!prepared) return stmts;
+		const expr = embValueExpr(dialectOf(this.raw));
+		for (const c of prepared.chunks) {
+			stmts.push({
+				sql: `INSERT INTO node_embeddings (id, chunk, text, emb, embed_hash) VALUES (?,?,?,${expr},?)`,
+				args: [id, c.chunk, c.text, JSON.stringify(c.emb), prepared.hash],
+			});
+		}
+		return stmts;
+	}
+
+	/** The staleness hashes stored for `ids` (chunk 0), keyed by id. Ids without vectors are absent. */
+	async embeddingHashes(ids: string[]): Promise<Map<string, string>> {
+		const out = new Map<string, string>();
+		if ((await this.embeddingMeta()) === null) return out;
+		for (let i = 0; i < ids.length; i += 400) {
+			const part = ids.slice(i, i + 400);
+			const r = await this.raw.execute({
+				sql: `SELECT id, embed_hash FROM node_embeddings WHERE chunk = 0 AND id IN (${part.map(() => '?').join(',')})`,
+				args: part,
+			});
+			for (const row of r.rows) out.set(String(row.id), String(row.embed_hash));
+		}
+		return out;
+	}
+
+	/**
+	 * (Re)embed one live node from its current input. The path a lazy-mode trigger and
+	 * {@link reembed} take. Returns `false` when the node is not live or its policy yields no
+	 * text (any stored vectors are removed in that case).
+	 */
+	async embedNode(id: string): Promise<boolean> {
+		const cur = (
+			await this.raw.execute({ sql: 'SELECT type, data, body FROM nodes WHERE id = ?', args: [id] })
+		).rows[0];
+		if (!cur) return false;
+		const type = String(cur.type);
+		const data = this.upcaster.apply(type, JSON.parse(String(cur.data)) as Record<string, unknown>);
+		const text = this.embedInput(type, data, cur.body as string | null);
+		const prepared = text === null ? null : await this.prepareFromText(type, text);
+		await this.runWriteBatch('embedNode', () =>
+			this.raw.batch(this.embeddingStmts(id, prepared), 'write'),
+		);
+		await this.touched('node_embeddings');
+		return prepared !== null;
+	}
+
+	/**
+	 * Re-embed every live node under the configured embedder. When the namespace was embedded
+	 * with a different model (or width), the stored vectors are dropped and the table is
+	 * recreated for the new one first — this is how a model switch happens. Runs in pages so a
+	 * large graph never loads into memory at once; `onProgress` fires after each page.
+	 */
+	async reembed(
+		opts: { pageSize?: number; onProgress?: (done: number) => void } = {},
+	): Promise<ReembedResult> {
+		const embedder = this.requireEmbedder('reembed');
+		const pageSize = Math.max(1, opts.pageSize ?? 200);
+		this.embMeta = await ensureEmbeddings(this.raw, embedder, { replace: true });
+		const d = dialectOf(this.raw);
+		const result: ReembedResult = { nodes: 0, embedded: 0, skipped: 0 };
+		// libSQL: defer the DiskANN index across the whole pass — its build is superlinear and
+		// per-row inserts would pay it repeatedly.
+		if (d === 'libsql') await this.raw.execute('DROP INDEX IF EXISTS ne_emb_idx');
+		try {
+			let after = '';
+			for (;;) {
+				const page = await this.raw.execute({
+					sql: 'SELECT id, type, data, body FROM nodes WHERE id > ? ORDER BY id LIMIT ?',
+					args: [after, pageSize],
+				});
+				if (page.rows.length === 0) break;
+				const items: EmbedItem[] = page.rows.map((r) => ({
+					type: String(r.type),
+					data: this.upcaster.apply(
+						String(r.type),
+						JSON.parse(String(r.data)) as Record<string, unknown>,
+					),
+					body: (r.body as string | null) ?? null,
+				}));
+				const prepared = await this.prepareEmbeddings(items);
+				const stmts: SqlStatement[] = [];
+				page.rows.forEach((r, i) => {
+					const p = prepared[i] ?? null;
+					stmts.push(...this.embeddingStmts(String(r.id), p));
+					result.nodes++;
+					if (p) result.embedded++;
+					else result.skipped++;
+				});
+				await this.runWriteBatch('reembed', () => this.raw.batch(stmts, 'write'));
+				after = String(page.rows[page.rows.length - 1]?.id);
+				opts.onProgress?.(result.nodes);
+				if (page.rows.length < pageSize) break;
+			}
+		} finally {
+			if (d === 'libsql') await this.raw.execute(embeddingsIndexFor(this.raw));
+		}
+		await this.touched('node_embeddings', 'graph_meta');
+		return result;
+	}
+
+	/** Namespace embedding health: model, counts, and how many live nodes are stale. */
+	async embeddingReport(): Promise<EmbeddingReport> {
+		const stored = await readEmbeddingMeta(this.raw);
+		this.embMeta = stored;
+		const one = async (sql: string): Promise<number> =>
+			Number((await this.raw.execute(sql)).rows[0]?.n ?? 0);
+		const liveNodes = await one('SELECT count(*) AS n FROM nodes');
+		const report: EmbeddingReport = {
+			stored,
+			configured: this.embedder ? { model: this.embedder.id, dim: this.embedder.dim } : null,
+			liveNodes,
+			embedded: 0,
+			unembedded: 0,
+			stale: 0,
+			vectors: 0,
+		};
+		if (!stored) {
+			report.unembedded = liveNodes;
+			return report;
+		}
+		report.vectors = await one('SELECT count(*) AS n FROM node_embeddings');
+		report.embedded = await one('SELECT count(DISTINCT id) AS n FROM node_embeddings');
+		// Staleness needs the policy text per node, so page through the live set once.
+		const model = this.embedder?.id ?? stored.model;
+		let after = '';
+		for (;;) {
+			const page = await this.raw.execute({
+				sql: 'SELECT id, type, data, body FROM nodes WHERE id > ? ORDER BY id LIMIT 500',
+				args: [after],
+			});
+			if (page.rows.length === 0) break;
+			const hashes = await this.embeddingHashes(page.rows.map((r) => String(r.id)));
+			for (const r of page.rows) {
+				const type = String(r.type);
+				const text = this.embedInput(
+					type,
+					this.upcaster.apply(type, JSON.parse(String(r.data)) as Record<string, unknown>),
+					(r.body as string | null) ?? null,
+				);
+				const stored = hashes.get(String(r.id));
+				if (text === null) continue;
+				if (stored === undefined) report.unembedded++;
+				else if (stored !== embedHash(model, text)) report.stale++;
+			}
+			after = String(page.rows[page.rows.length - 1]?.id);
+			if (page.rows.length < 500) break;
+		}
+		return report;
+	}
+
+	/** GraphRAG retrieve through this graph's embedder and upcasters. See {@link retrieve}. */
+	retrieve(opts: RetrieveOpts): Promise<RetrievedNode<S>[]> {
+		return retrieve(this.raw, this.requireEmbedder('retrieve'), {
+			...opts,
+			upcast: (type, data) => this.upcaster.apply(type, data),
+		});
+	}
+
+	/** Hybrid retrieve (ANN + FTS → RRF → walk → MMR) through this graph. See {@link hybridRetrieve}. */
+	hybridRetrieve(opts: HybridRetrieveOpts): Promise<RetrievedNode<S>[]> {
+		return hybridRetrieve(this.raw, this.requireEmbedder('hybridRetrieve'), {
+			...opts,
+			upcast: (type, data) => this.upcaster.apply(type, data),
+		});
 	}
 
 	/**
@@ -487,15 +931,21 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Insert a node: validate data (parsed output stored), mint a ULID, write the
-	 * identity row + the first open version atomically. B5: omit-emb inserts SQL
-	 * NULL (never `vector('[]')`, which throws on dim 0); a supplied embedding binds
-	 * `vector(?)` with its JSON form.
+	 * Insert a node: validate data (parsed output stored), mint a ULID, embed its input (see
+	 * {@link AddNodeInput}), and write the identity row + the first open version + the vector
+	 * rows atomically.
 	 */
 	async addNode<K extends NodeType<S>>(n: AddNodeInput<S, K>): Promise<NodeOf<S, K>> {
 		const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[n.type];
 		if (!def) throw new Error(`addNode: unknown type '${n.type}'`);
 		const parsed = def.parse(n.data) as NodeOf<S, K>['data'];
+		// Embed BEFORE the write so the network call never sits inside the batch/lock.
+		const prepared = await this.resolveNewEmbedding(
+			n.type,
+			parsed as Record<string, unknown>,
+			n.body,
+			n,
+		);
 		const id = ulid();
 		const ts = this.now();
 
@@ -505,28 +955,20 @@ export class Graph<S extends GraphSchema> {
 		// a type that itself declares the reserved `_v` throws (no silent clobber).
 		const storedData = this.upcaster.stamp(n.type, parsed as Record<string, unknown>);
 
-		const common = [
-			id,
-			n.type,
-			n.body ?? null,
-			n.uri ?? null,
-			n.content_hash ?? null,
-			n.embed_hash ?? null,
-			n.content_type ?? null,
-			JSON.stringify(storedData),
-		];
-		// B5: emb present -> vector(?) with the JSON array; absent -> literal NULL.
-		const versionStmt: SqlStatement = n.emb
-			? {
-					sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
-						VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
-					args: [...common, JSON.stringify(n.emb), ts],
-				}
-			: {
-					sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
-						VALUES (?,?,?,?,?,?,?,?, NULL, ?)`,
-					args: [...common, ts],
-				};
+		const versionStmt: SqlStatement = {
+			sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from)
+				VALUES (?,?,?,?,?,?,?,?)`,
+			args: [
+				id,
+				n.type,
+				n.body ?? null,
+				n.uri ?? null,
+				n.content_hash ?? null,
+				n.content_type ?? null,
+				JSON.stringify(storedData),
+				ts,
+			],
+		};
 
 		// foreign_keys is ON, so the identity row must land before the version row. The
 		// batch is wrapped in the same contention-retry envelope as the close paths: an
@@ -545,6 +987,8 @@ export class Graph<S extends GraphSchema> {
 			{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] },
 			versionStmt,
 		];
+		// A fresh id has no vector rows to replace, so only the inserts are needed.
+		if (prepared) stmts.push(...this.embeddingStmts(id, prepared).slice(1));
 		const ob = this.outboxStmt(event);
 		if (ob) stmts.push(ob); // co-write the event row in the same atomic batch (Layer 2)
 		// DuckDB has no store-level backing for declared-unique props (see
@@ -553,7 +997,12 @@ export class Graph<S extends GraphSchema> {
 			await assertUniqueProps(this.raw, n.type, parsed as Record<string, unknown>);
 		}
 		await this.runWriteBatch('addNode', () => this.raw.batch(stmts, 'write'));
-		await this.touched('node_identity', 'node_versions', 'graph_outbox');
+		await this.touched(
+			'node_identity',
+			'node_versions',
+			'graph_outbox',
+			...(prepared ? ['node_embeddings'] : []),
+		);
 
 		this.typeCache.set(id, n.type);
 		this.emit(event); // post-commit
@@ -1054,30 +1503,49 @@ export class Graph<S extends GraphSchema> {
 	 * concurrent writer that already superseded this row leaves `rowsAffected = 0` and we
 	 * retry instead of creating overlapping intervals.
 	 *
-	 * Carry-forward (B4/B5): every column the patch omits is copied from the
-	 * current live version — `body/uri/content_hash/content_type/type` via
-	 * `patch.X ?? cur.X`, data by shallow-merge, and the `emb` BLOB by rebinding
-	 * the raw `cur.emb` bytes (NEVER `vector('[]')`, which throws on a dim
-	 * mismatch). A supplied `emb` binds `vector(?)`; a NULL stays NULL.
+	 * Carry-forward (B4): every column the patch omits is copied from the current live
+	 * version — `body/uri/content_hash/content_type/type` via `patch.X ?? cur.X`, data by
+	 * shallow-merge.
+	 *
+	 * Vectors: the successor's embedding input is hashed and compared with the stored
+	 * `embed_hash`. Unchanged ⇒ the stored vectors stand. Changed ⇒ the node is re-embedded —
+	 * OUTSIDE the transaction (the body throws {@link NeedEmbed}, the tx rolls back, the
+	 * embedder runs, and the write retries with the vector in hand), so a network call never
+	 * holds the write lock. `emb` / `embedding` on the patch override this; `embedding: false`
+	 * leaves the stored vectors untouched.
 	 */
-	async updateNode(
+	async updateNode(id: string, patch: UpdateNodePatch): Promise<void> {
+		let pre: PreparedEmbedding | undefined;
+		for (;;) {
+			try {
+				await this.updateNodeOnce(id, patch, pre);
+				return;
+			} catch (e) {
+				if (!(e instanceof NeedEmbed)) throw e;
+				pre = await this.prepareFromText(e.type, e.text);
+			}
+		}
+	}
+
+	private async updateNodeOnce(
 		id: string,
-		patch: {
-			type?: string;
-			data?: Record<string, unknown>;
-			emb?: number[];
-			body?: string;
-			uri?: string;
-			content_hash?: string;
-			embed_hash?: string;
-			content_type?: string;
-		},
+		patch: UpdateNodePatch,
+		pre: PreparedEmbedding | undefined,
 	): Promise<void> {
 		let event: GraphEvent | undefined;
+		let embeddingTouched = false;
+		// Warm the meta cache and validate any caller-supplied vector BEFORE the lock is taken, so
+		// nothing inside the transaction reaches for a second connection or fails on bad input.
+		const meta = await this.embeddingMeta();
+		if (patch.embedding) {
+			const dim = await this.requireDim('embedding');
+			for (const c of patch.embedding.chunks) assertVector(c.emb, dim, 'embedding');
+		}
+		if (patch.emb) assertVector(patch.emb, await this.requireDim('emb'), 'emb');
 		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
 			const cur = (
 				await tx.execute({
-					sql: `SELECT type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from
+					sql: `SELECT type, body, uri, content_hash, content_type, data, valid_from
 						FROM node_versions WHERE id = ? AND valid_to = ?`,
 					args: [id, FOREVER],
 				})
@@ -1102,7 +1570,7 @@ export class Graph<S extends GraphSchema> {
 			// `apply` and `stamp` are identity → exactly the pre-P12 behavior.
 			const successorType = patch.type ?? String(cur.type);
 			const curRaw = JSON.parse(String(cur.data)) as Record<string, unknown>;
-			let data: Record<string, unknown>;
+			let plain: Record<string, unknown>;
 			if (
 				successorType !== String(cur.type) &&
 				this.upcaster.stampVersion(successorType) !== undefined
@@ -1112,16 +1580,15 @@ export class Graph<S extends GraphSchema> {
 				// SUCCESSOR's Zod schema (drops foreign fields, applies its defaults, throws if a
 				// required successor field is missing) before stamping, so the stamp matches the shape.
 				const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[successorType];
-				const reshaped = (
+				plain = (
 					def ? def.parse({ ...curRaw, ...patch.data }) : { ...curRaw, ...patch.data }
 				) as Record<string, unknown>;
-				data = this.upcaster.stamp(successorType, reshaped);
 			} else {
 				// Same-type (or unregistered successor): migrate the live data to the latest shape,
-				// merge the patch, stamp.
-				const merged = { ...this.upcaster.apply(String(cur.type), curRaw), ...patch.data };
-				data = this.upcaster.stamp(successorType, merged);
+				// merge the patch.
+				plain = { ...this.upcaster.apply(String(cur.type), curRaw), ...patch.data };
 			}
+			const data = this.upcaster.stamp(successorType, plain);
 			// DuckDB has no store-level backing for declared-unique props (see
 			// duck-constraints.ts); libSQL/Postgres enforce it via their partial index instead.
 			// `id` is excluded so a node updated to its own current value is never rejected.
@@ -1131,43 +1598,56 @@ export class Graph<S extends GraphSchema> {
 			if (dialectOf(this.raw) === 'duckdb') {
 				await assertUniqueProps(tx, successorType, data, id);
 			}
+			const body = patch.body ?? (cur.body as string | null) ?? null;
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
-			// Carried forward: type, body, uri, content_hash, embed_hash, content_type, data, emb.
-			const common: SqlValue[] = [
-				id,
-				patch.type ?? (cur.type as SqlValue),
-				patch.body ?? (cur.body as SqlValue) ?? null,
-				patch.uri ?? (cur.uri as SqlValue) ?? null,
-				patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
-				patch.embed_hash ?? (cur.embed_hash as SqlValue) ?? null,
-				patch.content_type ?? (cur.content_type as SqlValue) ?? null,
-				JSON.stringify(data),
-			];
-			// B5: patch.emb -> vector(?); else rebind the raw cur.emb blob forward
-			// (carries a real F32 vector, or NULL when there was none). DuckDB reads its
-			// FLOAT[] column back as a genuine JS array, not the JSON-array STRING
-			// embRebindExpr's from_json(?, …) expects (libSQL/Postgres rebind the driver's
-			// own raw/text form directly) — embParam() re-encodes it, mirroring the
-			// JSON.stringify a fresh patch.emb gets below.
-			const rebindEmb: SqlValue =
-				cur.emb == null
-					? null
-					: dialectOf(this.raw) === 'duckdb'
-						? embParam(cur.emb as number[])
-						: (cur.emb as SqlValue);
-			const successor: SqlStatement = patch.emb
-				? {
-						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?,?, ${embFreshExpr(dialectOf(this.raw))}, ?)`,
-						args: [...common, JSON.stringify(patch.emb), now],
-					}
-				: {
-						sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, embed_hash, content_type, data, emb, valid_from)
-							VALUES (?,?,?,?,?,?,?,?, ${embRebindExpr(dialectOf(this.raw))}, ?)`,
-						args: [...common, rebindEmb, now],
-					};
+			const successor: SqlStatement = {
+				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from)
+					VALUES (?,?,?,?,?,?,?,?)`,
+				args: [
+					id,
+					successorType,
+					body,
+					patch.uri ?? (cur.uri as SqlValue) ?? null,
+					patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
+					patch.content_type ?? (cur.content_type as SqlValue) ?? null,
+					JSON.stringify(data),
+					now,
+				],
+			};
 			await tx.execute(successor);
+
+			// Vectors for the successor. `undefined` = leave the stored rows as they are.
+			let rows: PreparedEmbedding | null | undefined;
+			if (patch.embedding === false) rows = undefined;
+			else if (patch.embedding) rows = patch.embedding;
+			else if (patch.emb) {
+				const model = this.embedder?.id ?? meta?.model ?? 'unknown';
+				rows = {
+					hash: embedHash(model, this.embedInput(successorType, plain, body) ?? ''),
+					chunks: [{ chunk: 0, text: null, emb: patch.emb }],
+				};
+			} else if (this.embedder) {
+				const text = this.embedInput(successorType, plain, body);
+				if (text === null) {
+					rows = null; // the policy yields nothing now: drop any stored vectors
+				} else if (this.embeddingMode === 'sync') {
+					const hash = embedHash(this.embedder.id, text);
+					const stored = (
+						await tx.execute({
+							sql: 'SELECT embed_hash FROM node_embeddings WHERE id = ? AND chunk = 0',
+							args: [id],
+						})
+					).rows[0]?.embed_hash;
+					if (stored === hash) rows = undefined;
+					else if (pre?.hash === hash) rows = pre;
+					else throw new NeedEmbed(successorType, text, hash);
+				}
+			}
+			if (rows !== undefined) {
+				for (const stmt of this.embeddingStmts(id, rows)) await tx.execute(stmt);
+				embeddingTouched = true;
+			}
 			const ev: GraphEvent = {
 				op: 'node.update',
 				entity: 'node',
@@ -1182,7 +1662,11 @@ export class Graph<S extends GraphSchema> {
 			event = ev;
 			return 'committed';
 		});
-		await this.touched('node_versions', 'graph_outbox');
+		await this.touched(
+			'node_versions',
+			'graph_outbox',
+			...(embeddingTouched ? ['node_embeddings'] : []),
+		);
 		if (event) this.emit(event); // post-commit
 	}
 
@@ -1202,6 +1686,7 @@ export class Graph<S extends GraphSchema> {
 	 */
 	async deleteNode(id: string): Promise<void> {
 		let event: GraphEvent | undefined;
+		const hasVectors = (await this.embeddingMeta()) !== null;
 		await this.runConditionalClose('deleteNode', async (tx, rawNow) => {
 			// Widened to also read `type` so the delete event carries the node's label.
 			const cur = (
@@ -1219,6 +1704,11 @@ export class Graph<S extends GraphSchema> {
 				args: [now, id, FOREVER],
 			});
 			if (closed.rowsAffected !== 1) return 'superseded';
+			// Vectors are derived from the live version; there is none now. History keeps the
+			// version rows, so nothing about the node's past is lost.
+			if (hasVectors) {
+				await tx.execute({ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] });
+			}
 			// Pure close (no successor) — the delete the valid_from CDC feed can't see.
 			const ev: GraphEvent = {
 				op: 'node.delete',
@@ -1234,7 +1724,7 @@ export class Graph<S extends GraphSchema> {
 			event = ev;
 			return 'committed';
 		});
-		await this.touched('node_versions', 'graph_outbox');
+		await this.touched('node_versions', 'graph_outbox', 'node_embeddings');
 		// A retracted id no longer resolves to a live type; drop any cached entry so a later
 		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
 		this.typeCache.delete(id);
@@ -1320,10 +1810,9 @@ export class Graph<S extends GraphSchema> {
 export function graphFor<S extends GraphSchema>(
 	raw: DbClient,
 	schema: S,
-	upcasters?: UpcasterRegistry,
-	events?: GraphEventOptions,
+	opts?: GraphOptions,
 ): Graph<S> {
-	return new Graph(raw, schema, upcasters, events);
+	return new Graph(raw, schema, opts);
 }
 
 export { FOREVER };

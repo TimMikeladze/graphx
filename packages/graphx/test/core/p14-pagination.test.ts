@@ -7,6 +7,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { match } from '../../src/core/pattern.ts';
 import { init } from '../../src/core/schema.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P14 — keyset pagination (§19.7). neighbors (single stable key = neighbor id) and
 // match (composite row-value key over the selected alias ids). Pages must neither
@@ -19,7 +20,7 @@ const SCHEMA = defineGraphSchema({
 
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 

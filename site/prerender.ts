@@ -70,8 +70,8 @@ export const schema = defineGraphSchema({
 	{
 		label: 'Query',
 		lang: 'typescript',
-		code: `// GraphRAG: ANN seeds, then a time-respecting walk out from them
-await retrieve(db, embed, { query: 'overheating sensor', k: 10, maxDepth: 2 });
+		code: `// GraphRAG: vector seeds, then a time-respecting walk out from them
+await g.retrieve({ query: 'overheating sensor', k: 10, maxDepth: 2 });
 
 // Pattern match — rows typed per alias, no codegen
 const q = await match(schema, db)
@@ -91,7 +91,7 @@ import { schema } from './schema.ts';
 
 const { app } = await createApp({
   schema,
-  embed: hashEmbed(), // dim is derived from the embedder when omitted
+  embedder: hashEmbed(), // every write embeds through it; no dimension to configure
   db: 'iot_demo',
   openapi: { title: 'iot-fleet' },
 });
@@ -340,8 +340,7 @@ export async function renderPage(siteDir: string): Promise<RenderedPage> {
 
 	const rail = sections(readme)
 		.map(
-			({ text, slug }) =>
-				`<li><a href="#${slug}" data-spy="${slug}">${escapeHtml(text)}</a></li>`,
+			({ text, slug }) => `<li><a href="#${slug}" data-spy="${slug}">${escapeHtml(text)}</a></li>`,
 		)
 		.join('');
 

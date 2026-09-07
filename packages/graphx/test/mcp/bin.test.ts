@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from 'bun:test';
 
 /**
@@ -10,10 +11,34 @@ import { expect, test } from 'bun:test';
  * first — CI builds before it tests.
  */
 const BIN = join(import.meta.dir, '../../dist/cli.js');
+/** Absolute paths to the in-repo SDK and to zod, so a config written into a temp cwd can import them. */
+const SDK = join(import.meta.dir, '../../src/core/index.ts');
+const ZOD = fileURLToPath(import.meta.resolve('zod'));
+
+/**
+ * Write a `graphx.config.ts` into `cwd` for local mode. It imports the repo's own source rather
+ * than `graphx`, because a temp directory has no node_modules to resolve the package from. The
+ * embedder is `hashEmbed(8)` — small, deterministic, and enough for `retrieve` to answer.
+ */
+async function writeConfig(cwd: string, namespace: string): Promise<string> {
+	const path = join(cwd, 'graphx.config.ts');
+	await writeFile(
+		path,
+		`import { defineGraphSchema, hashEmbed } from ${JSON.stringify(SDK)};
+import { z } from ${JSON.stringify(ZOD)};
+export const schema = defineGraphSchema({
+	nodes: { person: z.object({ name: z.string(), age: z.number().optional() }) },
+	edges: { knows: { from: 'person', to: 'person' } },
+});
+export default { schema, embedder: hashEmbed(8), namespace: ${JSON.stringify(namespace)}, db: { driver: 'libsql' } };
+`,
+	);
+	return path;
+}
 
 /** A live `graphx mcp` process, already through the MCP handshake. */
-async function spawnBin(env: Record<string, string>, cwd: string) {
-	const child = spawn('bun', [BIN, 'mcp'], {
+async function spawnBin(env: Record<string, string>, cwd: string, args: string[] = []) {
+	const child = spawn('bun', [BIN, 'mcp', ...args], {
 		cwd,
 		env: { ...process.env, ...env },
 		stdio: ['pipe', 'pipe', 'pipe'],
@@ -71,33 +96,28 @@ async function spawnBin(env: Record<string, string>, cwd: string) {
 test('bin: graphx_context hands an agent the ids every other tool needs', async () => {
 	const cwd = await mkdtemp(join(tmpdir(), 'gx-mcp-local-'));
 	try {
-		const bin = await spawnBin({ GRAPHX_MCP_MODE: 'local', GRAPHX_DB: 'mygraph' }, cwd);
+		const configPath = await writeConfig(cwd, 'mygraph');
+		const bin = await spawnBin({ GRAPHX_MCP_MODE: 'local' }, cwd, ['-c', configPath]);
 
 		// The ids are minted fresh on every start and appear in no config, so this tool is the
 		// only way an agent can learn them — there is no list_tenants to fall back to.
 		const ctx = await bin.call('graphx_context', {});
 		expect(ctx.isError).toBeFalsy();
-		const { mode, tenant, project } = ctx.structuredContent;
+		const { mode, tenant, project, embedder, namespace } = ctx.structuredContent;
 		expect(mode).toBe('local');
 		expect(tenant).toBeString();
 		expect(project).toBeString();
+		expect(embedder).toBe('hash:8');
+		expect(namespace).toBe('mygraph');
 
 		// The proof they are usable: a tool that would 404 on a guessed tenant.
 		const projects = await bin.call('list_projects', { tenant });
 		expect(projects.isError).toBeFalsy();
 		expect(projects.structuredContent.projects.map((p: any) => p.id)).toContain(project);
 
-		// GRAPHX_DB is a NAMESPACE, not a URL: libSQL writes `./mygraph.db`, DuckDB
-		// `./.graphx-data/mygraph.duckdb` (this process inherits whatever GRAPHX_DB_DRIVER the
-		// test runner set); Postgres writes no local file at all. DuckDB nests its file under a
-		// data directory rather than dropping it in the cwd because it also spills temp storage
-		// beside the database — see `duckDataDir()`.
-		const driver = process.env.GRAPHX_DB_DRIVER ?? 'libsql';
-		if (driver === 'duckdb') {
-			expect(await readdir(join(cwd, '.graphx-data'))).toContain('mygraph.duckdb');
-		} else if (driver !== 'postgres') {
-			expect(await readdir(cwd)).toContain('mygraph.db');
-		}
+		// `namespace` is a NAMESPACE, not a URL: the config pins libSQL, which writes
+		// `./mygraph.db` relative to the process cwd.
+		expect(await readdir(cwd)).toContain('mygraph.db');
 
 		bin.stop();
 	} finally {
@@ -132,32 +152,15 @@ test('bin: remote mode touches no database, even from a read-only cwd', async ()
 	}
 }, 30000);
 
-test('bin: GRAPHX_SCHEMA lets local mode actually write — create_node succeeds and reads back', async () => {
+test('bin: the config schema validates writes — create_node succeeds, reads back, and retrieve embeds', async () => {
 	const cwd = await mkdtemp(join(tmpdir(), 'gx-mcp-schema-'));
 	try {
-		const schemaPath = join(cwd, 'schema.json');
-		await writeFile(
-			schemaPath,
-			JSON.stringify({
-				nodes: {
-					person: {
-						type: 'object',
-						properties: { name: { type: 'string' }, age: { type: 'number' } },
-						required: ['name'],
-					},
-				},
-				edges: { knows: { from: 'person', to: 'person' } },
-			}),
-		);
+		const configPath = await writeConfig(cwd, 'mygraph');
+		const bin = await spawnBin({ GRAPHX_MCP_MODE: 'local' }, cwd, ['-c', configPath]);
 
-		const bin = await spawnBin(
-			{ GRAPHX_MCP_MODE: 'local', GRAPHX_DB: 'mygraph', GRAPHX_SCHEMA: schemaPath },
-			cwd,
-		);
-
-		// graphx_context reports which schema file (if any) is validating this run.
+		// graphx_context reports which config is driving this run.
 		const ctx = await bin.call('graphx_context', {});
-		expect(ctx.structuredContent.schema).toBe(schemaPath);
+		expect(ctx.structuredContent.config).toBe(configPath);
 		const { tenant, project } = ctx.structuredContent;
 
 		// graphx://schema is now a real resource, not the schemaless no-op.
@@ -167,12 +170,12 @@ test('bin: GRAPHX_SCHEMA lets local mode actually write — create_node succeeds
 		expect(doc.nodes.person.properties.name.type).toBe('string');
 		expect(doc.edges).toEqual([{ rel: 'knows', from: 'person', to: 'person' }]);
 
-		// N1: without GRAPHX_SCHEMA this always fails with "HTTP 400: addNode: unknown type 'person'".
 		const created = await bin.call('create_node', {
 			tenant,
 			project,
 			type: 'person',
 			data: { name: 'Ada' },
+			body: 'Ada Lovelace wrote the first published algorithm',
 		});
 		expect(created.isError).toBeFalsy();
 		const node = created.structuredContent;
@@ -182,6 +185,19 @@ test('bin: GRAPHX_SCHEMA lets local mode actually write — create_node succeeds
 		const fetched = await bin.call('get_node', { tenant, project, id: node.id });
 		expect(fetched.isError).toBeFalsy();
 		expect(fetched.structuredContent.data).toEqual({ name: 'Ada' });
+
+		// The write was embedded through the config's embedder, so vector retrieval finds it —
+		// local mode is no longer lexical-by-accident.
+		const hits = await bin.call('retrieve', {
+			tenant,
+			project,
+			query: 'published algorithm',
+			k: 3,
+		});
+		expect(hits.isError).toBeFalsy();
+		const rows = JSON.parse(hits.content[0].text) as Array<{ id: string; via: string[] }>;
+		expect(rows.map((r) => r.id)).toContain(node.id);
+		expect(rows[0]?.via).toEqual(['vector']);
 
 		// A schema that rejects the type still fails clearly — validation is real, not bypassed.
 		const rejected = await bin.call('create_node', {

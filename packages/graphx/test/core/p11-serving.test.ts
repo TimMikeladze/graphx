@@ -14,7 +14,7 @@ import { evict } from '../../src/core/db.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { type AppType, createApp } from '../../src/core/serve.ts';
-import { makeTestDb } from './harness.ts';
+import { makeTestDb, stubEmbedder } from './harness.ts';
 
 // P11 — serving (§14, D2). The Hono app reuses the P0.5 control plane + authz to
 // route every request to ONE project DB, exposes the SDK over typed routes, and is
@@ -77,7 +77,12 @@ async function setup(): Promise<Setup> {
 	const nsB = `ns_${ulid().toLowerCase()}`;
 	const pA = await createProject(control, { tenantId: tenantA, name: 'Alpha', dbNamespace: nsA });
 	const pB = await createProject(control, { tenantId: tenantB, name: 'Beta', dbNamespace: nsB });
-	const app = createApp({ control, schema: SCHEMA, authenticate, embed: async () => vec(3) });
+	const app = createApp({
+		control,
+		schema: SCHEMA,
+		authenticate,
+		embedder: stubEmbedder(() => vec(3), { dim: 768 }),
+	});
 	return { control, app, tenantA, tenantB, editor, viewer, editorB, pA, pB, nsA, nsB };
 }
 

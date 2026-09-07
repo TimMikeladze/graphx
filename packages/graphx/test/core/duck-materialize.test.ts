@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../../src/core/duck.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
+import { init, readEmbeddingMeta } from '../../src/core/schema.ts';
 import { materialize, SNAPSHOT_TABLES } from '../../src/core/duck-materialize.ts';
 import { FileCache } from '../../src/core/objstore/cache.ts';
 import { emptyManifest, type Manifest } from '../../src/core/objstore/manifest.ts';
@@ -23,9 +25,9 @@ describe('materialize', () => {
 		await materialize(c, null, cache);
 		for (const t of SNAPSHOT_TABLES) {
 			const r = await c.execute(`SELECT count(*) AS n FROM ${t}`);
-			// "Complete" means graph_meta already carries its seeded emb_dim row
-			// (duckdbSchema inserts it unconditionally) — every other table starts empty.
-			expect(r.rows[0]?.n).toBe(t === 'graph_meta' ? 1 : 0);
+			// "Complete" means every table exists; a fresh namespace has nothing in any of them —
+			// the embedding model is recorded by `init(client, embedder)`, not by the DDL.
+			expect(r.rows[0]?.n).toBe(0);
 		}
 		await c.end();
 	});
@@ -43,8 +45,7 @@ describe('materialize', () => {
 			`CREATE TABLE t AS SELECT 'n1' AS id, 'Doc' AS type, 1::BIGINT AS ver,
 			 1::BIGINT AS valid_from, 8640000000000000::BIGINT AS valid_to,
 			 NULL::TEXT AS body, NULL::TEXT AS uri, NULL::TEXT AS content_hash,
-			 NULL::TEXT AS embed_hash, NULL::TEXT AS content_type, '{}' AS data,
-			 NULL::FLOAT[] AS emb`,
+			 NULL::TEXT AS content_type, '{}' AS data`,
 		);
 		const path = join(root, 'nv.parquet');
 		await producer.execute(`COPY t TO '${path}' (FORMAT parquet)`);
@@ -53,7 +54,7 @@ describe('materialize', () => {
 		const idKey = await cache.putContent(new Uint8Array(await Bun.file(idPath).arrayBuffer()));
 		const key = await cache.putContent(new Uint8Array(await Bun.file(path).arrayBuffer()));
 		const manifest: Manifest = {
-			...emptyManifest(4, 'h'),
+			...emptyManifest('h'),
 			tables: { node_identity: { files: [idKey] }, node_versions: { files: [key] } },
 		};
 
@@ -67,7 +68,7 @@ describe('materialize', () => {
 	test('materialize is a fresh load, not an append', async () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
-		const manifest = { ...emptyManifest(4, 'h'), tables: {} };
+		const manifest = { ...emptyManifest('h'), tables: {} };
 		await materialize(c, manifest, cache);
 		await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: ['stale'] });
 		await materialize(c, manifest, cache);
@@ -90,7 +91,7 @@ describe('materialize', () => {
 		const c = createDuckClient();
 		await materialize(
 			c,
-			{ ...emptyManifest(4, 'h'), tables: { graph_meta: { files: [key] } } },
+			{ ...emptyManifest('h'), tables: { graph_meta: { files: [key] } } },
 			cache,
 		);
 		expect(
@@ -99,13 +100,13 @@ describe('materialize', () => {
 		await c.end();
 	});
 
-	test('the embedding dimension comes from the manifest', async () => {
+	test('an empty manifest records no embedding model — init with an embedder does', async () => {
 		const { cache } = ctx();
 		const c = createDuckClient();
-		await materialize(c, { ...emptyManifest(384, 'h'), tables: {} }, cache);
-		expect(
-			(await c.execute(`SELECT value FROM graph_meta WHERE key='emb_dim'`)).rows[0]?.value,
-		).toBe('384');
+		await materialize(c, { ...emptyManifest('h'), tables: {} }, cache);
+		expect(await readEmbeddingMeta(c)).toBeNull();
+		await init(c, hashEmbed(384));
+		expect(await readEmbeddingMeta(c)).toEqual({ model: 'hash:384', dim: 384 });
 		await c.end();
 	});
 });

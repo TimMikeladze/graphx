@@ -3,7 +3,7 @@
  * graph's shape happened in `generate.ts` / `temporal.ts`, and this just embeds the bodies and
  * hands the rows to the bulk loaders.
  */
-import type { DbClient, EmbedFn } from '../../packages/graphx/src/core/index.ts';
+import type { DbClient, Embedder } from '../../packages/graphx/src/core/index.ts';
 import { bulkEdges, bulkLoad } from '../../packages/graphx/src/core/index.ts';
 import type { Plan } from './generate.ts';
 import { demoSchema } from './schema.ts';
@@ -43,26 +43,25 @@ const DEFAULT_MAX_EMBEDDED = 5_000;
 export async function applyPlan(
 	raw: DbClient,
 	plan: Plan,
-	embed: EmbedFn,
+	embedder: Embedder,
 	opts: ApplyOpts = {},
 ): Promise<ApplyResult> {
 	if (plan.nodes.length === 0) return { nodes: 0, versions: 0, edges: 0, embedded: 0 };
 
-	// Only open versions are candidates: the ANN index is partial over live rows, so a vector on a
-	// superseded version is storage nobody queries.
+	// Only open versions are candidates: `bulkLoad` embeds live rows only, and a vector on a
+	// superseded version is storage nobody queries. The cap is expressed as `embedding: false` on
+	// the rows outside the sample; the loader batch-embeds the rest.
 	const live = plan.nodes.filter((node) => node.validTo === undefined);
 	const cap = opts.maxEmbedded ?? DEFAULT_MAX_EMBEDDED;
 	const stride = cap > 0 && live.length > cap ? Math.ceil(live.length / cap) : 1;
 	const chosen = new Set(live.filter((_, i) => i % stride === 0).map((node) => node.id));
 
-	const rows = await Promise.all(
-		plan.nodes.map(async (node) =>
-			node.validTo === undefined && chosen.has(node.id)
-				? { ...node, emb: await embed(node.body as string) }
-				: node,
-		),
+	const rows = plan.nodes.map((node) =>
+		node.validTo === undefined && chosen.has(node.id)
+			? node
+			: { ...node, embedding: false as const },
 	);
-	await bulkLoad(raw, demoSchema, rows, { chunkSize: 200 });
+	await bulkLoad(raw, demoSchema, rows, { chunkSize: 200, embedder });
 
 	for (let i = 0; i < plan.edges.length; i += EDGE_SLICE) {
 		await bulkEdges(raw, demoSchema, plan.edges.slice(i, i + EDGE_SLICE), {

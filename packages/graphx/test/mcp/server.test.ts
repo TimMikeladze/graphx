@@ -27,7 +27,7 @@ async function harness(opts: { readOnly?: boolean } = {}) {
 	const dev = await createApp({
 		schema: SCHEMA,
 		db,
-		embed: hashEmbed(),
+		embedder: hashEmbed(),
 		seed: async (g) => {
 			await g.addNode({ type: 'person', data: { name: 'ada' } });
 		},
@@ -201,7 +201,7 @@ async function mounted(backend?: (dev: any) => any) {
 	const { createMcpApp } = await import('../../src/mcp/index.ts');
 
 	const db = `mcp_mount_${crypto.randomUUID().replaceAll('-', '')}`;
-	const dev = await createApp({ schema: SCHEMA, db, embed: hashEmbed() });
+	const dev = await createApp({ schema: SCHEMA, db, embedder: hashEmbed() });
 	const host = new Hono();
 	host.route(
 		'/mcp',

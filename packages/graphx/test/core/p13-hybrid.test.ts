@@ -5,9 +5,9 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { hybridRetrieve, sanitizeMatch } from '../../src/core/hybrid.ts';
-import { type EmbedFn, retrieve } from '../../src/core/retrieve.ts';
+import { retrieve } from '../../src/core/retrieve.ts';
 import { init } from '../../src/core/schema.ts';
-import { embSql, libsqlOnly, makeTestDb } from './harness.ts';
+import { embSql, libsqlOnly, makeTestDb, stubEmbedder } from './harness.ts';
 
 /** These probe libSQL's FTS5 internals (the `nodes_fts` table + sync trigger), which have no
  *  Postgres analog (FTS is a generated `body_tsv` column there). The user-facing hybrid-search
@@ -30,11 +30,11 @@ const VECTORS: Record<string, number[]> = {
 	a: [1, 0, 0, 0],
 };
 // Unknown query → a nonzero default so vector_top_k never sees a degenerate 0-vector.
-const stubEmbed: EmbedFn = async (text: string) => VECTORS[text] ?? [1, 0, 0, 0];
+const stubEmbed = stubEmbedder((text) => VECTORS[text] ?? [1, 0, 0, 0], { dim: 4 });
 
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
@@ -52,8 +52,8 @@ libsqlOnly('P13 schema: addNode populates nodes_fts via the AFTER INSERT trigger
 
 libsqlOnly('P13 schema: init() is idempotent with the FTS table + trigger present', async () => {
 	const client = makeTestDb().client;
-	await init(client, 4);
-	await init(client, 4); // must not throw (IF NOT EXISTS on vtable + trigger)
+	await init(client, stubEmbed);
+	await init(client, stubEmbed); // must not throw (IF NOT EXISTS on vtable + trigger)
 	const g = new Graph(client, SCHEMA);
 	await g.addNode({ type: 'doc', data: { title: 'x' }, body: 'hello world' });
 	const r = await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'hello'");
@@ -143,7 +143,7 @@ test('P13 hybrid: recall beats vector-only (lexical finds an ANN-missed doc)', a
 
 test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/temporal filters', async () => {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, stubEmbed);
 	const x = '01ARZ3NDEKTSV4RRFFQ69G5FX1';
 	const z = '01ARZ3NDEKTSV4RRFFQ69G5FZ1';
 	const T1 = 100;
@@ -163,8 +163,12 @@ test('P13 hybrid: lexical seeds resolve ver→logical id and respect live/tempor
 	// Z: a decoy with a live embedding so the ANN index is non-empty.
 	await client.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [z] });
 	await client.execute({
-		sql: `INSERT INTO node_versions (ver, id, type, body, emb, valid_from, valid_to) VALUES (?,?,?,?,${embSql(client)},?,?)`,
-		args: [3, z, 'doc', 'zzz', '[0,0,0,1]', T1, FOREVER],
+		sql: 'INSERT INTO node_versions (ver, id, type, body, valid_from, valid_to) VALUES (?,?,?,?,?,?)',
+		args: [3, z, 'doc', 'zzz', T1, FOREVER],
+	});
+	await client.execute({
+		sql: `INSERT INTO node_embeddings (id, chunk, text, emb, embed_hash) VALUES (?,0,NULL,${embSql(client)},'h')`,
+		args: [z, '[0,0,0,1]'],
 	});
 
 	// current 'dragon' → matches X's LIVE ver (v2) → X seeded exactly once.

@@ -18,8 +18,9 @@ for (const sfx of ['', '-wal', '-shm']) rmSync(`${db}.db${sfx}`, { force: true }
 
 const { app } = await createApp({
 	schema,
-	// Model-free dev embedder; auto-dim sizes the vector column to match it (no `dim` bookkeeping).
-	embed: hashEmbed(),
+	// Model-free dev embedder; its width is recorded in the namespace on first init — nothing to
+	// keep in sync. Every seeded node with a `body` is embedded through it.
+	embedder: hashEmbed(),
 	db: db,
 	// CORS lets a browser SPA on another origin call this directly (the Vite proxy also covers dev).
 	cors: true,

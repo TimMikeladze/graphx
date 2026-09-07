@@ -31,7 +31,7 @@ routes, real Zod validation, real CDC keyset, no listener. It also turns on `{ v
 ## DX helpers shown here
 
 - **`bootstrap="/demo"`** — `src/main.tsx`: id-less provider setup.
-- **`hashEmbed()` + `cors: true`** — `server.ts`: model-free embedder (auto-dim) + no dev proxy needed.
+- **`hashEmbed()` + `cors: true`** — `server.ts`: model-free embedder (the graph embeds every seeded `body` through it) + no dev proxy needed.
 - **Fluent `useMatch`** — `src/App.tsx`: `q => q.node('d','device').in('raised').node('a','alert').select('d','a')`.
 - **`GraphError.code`** — `src/App.tsx`: the ack button surfaces a typed error `code` (e.g. `forbidden`).
 - **`appFetch` + `validate`** — `app.test.tsx`: in-process testing + runtime validation.

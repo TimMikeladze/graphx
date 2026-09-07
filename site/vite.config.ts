@@ -25,10 +25,7 @@ function prerenderReadme(): Plugin {
 				.replace(/<title>.*?<\/title>/, `<title>${page.title}</title>`)
 				.replace(/(name="description" content=")[^"]*/, `$1${page.description}`)
 				.replace(/(property="og:title" content=")[^"]*/, `$1${page.title}`)
-				.replace(
-					/(property="og:description" content=")[^"]*/,
-					`$1${page.description}`,
-				);
+				.replace(/(property="og:description" content=")[^"]*/, `$1${page.description}`);
 		},
 		configureServer(server) {
 			// Editing the README reloads the dev page.

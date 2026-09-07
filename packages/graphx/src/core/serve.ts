@@ -28,16 +28,19 @@ import {
 	initControl,
 	listProjects,
 } from './control-plane.ts';
-import { getDb } from './db.ts';
 import type { NodeType, Rel } from './define-graph-schema.ts';
+import { type Embedder, EmbeddingError } from './embedder.ts';
 import type { MetricsSink, QueryLimits } from './governance.ts';
-import { init } from './schema.ts';
-import { type AddEdgeInput, type AddNodeInput, Graph, type GraphSchema } from './graph.ts';
+import {
+	type AddEdgeInput,
+	type AddNodeInput,
+	Graph,
+	type GraphOptions,
+	type GraphSchema,
+} from './graph.ts';
 import { type GraphEventOptions, scopeEvents } from './events.ts';
-import { hybridRetrieve } from './hybrid.ts';
 import { journey } from './journey.ts';
 import { match, type PatternBuilder } from './pattern.ts';
-import { dimOf, type EmbedFn, retrieve } from './retrieve.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
 import { timeline } from './timeline.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
@@ -74,7 +77,7 @@ export interface OpenApiOptions {
 	servers?: Array<{ url: string; description?: string }>;
 }
 
-/** Per-request server config. `authenticate` is authn layer 1; `embed` powers `retrieve`. */
+/** Per-request server config. `authenticate` is authn layer 1; `embedder` powers vectors. */
 export interface ServeConfig<S extends GraphSchema> {
 	/** The shared control-plane client (registry of tenants/projects/memberships). */
 	control: DbClient;
@@ -82,8 +85,14 @@ export interface ServeConfig<S extends GraphSchema> {
 	schema: S;
 	/** Authn: verify the request → principal. Throw to reject (mapped to 401). */
 	authenticate: (c: Context) => Principal | Promise<Principal>;
-	/** Embedder for the `retrieve` route; omit to leave `retrieve` unconfigured (501). */
-	embed?: EmbedFn;
+	/**
+	 * The deployment's embedder. Every project namespace is initialised at its width on first
+	 * touch, every write embeds through it, and `/retrieve` + `/hybrid` query with it. Omit to
+	 * store no vectors (those two routes answer 501).
+	 */
+	embedder?: Embedder;
+	/** How project graphs embed on write — see {@link GraphOptions.embedding}. Default `'sync'`. */
+	embedding?: GraphOptions['embedding'];
 	/**
 	 * §19.2 governance caps enforced server-side on every read route (row cap, fan-out
 	 * guard, fail-safe timeout). Set by the operator — NOT client-overridable, so a
@@ -195,11 +204,10 @@ export async function graphForProject<S extends GraphSchema>(
 	projectId: string,
 	op: Op,
 	schema: S,
-	upcasters?: UpcasterRegistry,
-	events?: GraphEventOptions,
+	opts: GraphOptions = {},
 ): Promise<Graph<S>> {
-	const { client } = await resolveProjectDb(control, principal, projectId, op);
-	return new Graph(client, schema, upcasters, events);
+	const { client } = await resolveProjectDb(control, principal, projectId, op, opts.embedder);
+	return new Graph(client, schema, opts);
 }
 
 // --- wire contracts (the Zod schema is the single source feeding every surface) ---
@@ -243,7 +251,6 @@ const patchNodeSchema = z.object({
 	body: z.string().optional(),
 	uri: z.string().optional(),
 	content_hash: z.string().optional(),
-	embed_hash: z.string().optional(),
 	content_type: z.string().optional(),
 });
 
@@ -544,11 +551,20 @@ const graphSliceSchema = z.object({
 	truncated: z.boolean(),
 });
 
+/** The wire shape of a retrieved row — `data` is opaque JSON on the wire, typed on the client. */
+type WireRetrieved = z.infer<typeof retrievedNodeSchema>;
+
 const retrievedNodeSchema = z.object({
 	id: z.string(),
+	type: z.string(),
+	data: z.record(z.string(), z.unknown()),
 	body: z.string().nullable(),
 	uri: z.string().nullable(),
 	depth: z.number(),
+	score: z.number().nullable(),
+	via: z.array(z.enum(['vector', 'fts', 'walk'])),
+	seed: z.string(),
+	snippet: z.string().nullable(),
 });
 
 const journeyRowSchema = z.object({
@@ -688,15 +704,12 @@ function requireGraph<S extends GraphSchema>(
 					outbox: cfg.events.outbox,
 				}
 			: undefined;
-		const graph = await graphForProject(
-			cfg.control,
-			principal,
-			project,
-			op,
-			cfg.schema,
-			cfg.upcasters,
+		const graph = await graphForProject(cfg.control, principal, project, op, cfg.schema, {
+			upcasters: cfg.upcasters,
 			events,
-		);
+			embedder: cfg.embedder,
+			embedding: cfg.embedding,
+		});
 		// §19.6 per-tenant query counts: only authorized requests are counted (this runs
 		// after the confused-deputy guard + authz resolve), labelled by tenant and op.
 		cfg.metrics?.inc('graphx_queries_total', { tenant: principal.tenantId, op });
@@ -713,6 +726,13 @@ function onError(err: Error, c: Context) {
 	if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
 	if (err instanceof AuthzError) return c.json({ error: err.message }, err.status);
 	if (err instanceof ZodError) return c.json({ error: 'validation', issues: err.issues }, 400);
+	// Embedding failures are graphx's own, raised before any SQL: a wrong-width or non-finite
+	// vector is the caller's (400); a model that disagrees with the namespace is a conflict the
+	// operator resolves with `reembed` (409); no embedder at all is the deployment's (501).
+	if (err instanceof EmbeddingError) {
+		const status = err.code === 'model' ? 409 : err.code === 'missing' ? 501 : 400;
+		return c.json({ error: err.message, code: err.code }, status);
+	}
 	// Graph.updateNode/deleteEdge/deleteNode on a missing id -> the target doesn't exist (404, not 400).
 	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
@@ -1162,15 +1182,15 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				},
 			}),
 			async (c) => {
-				if (!cfg.embed) throw new HTTPException(501, { message: 'retrieve not configured' });
-				const rows = await retrieve(c.get('graph').raw, cfg.embed, {
+				if (!cfg.embedder) throw new HTTPException(501, { message: 'retrieve not configured' });
+				const rows = await c.get('graph').retrieve({
 					...c.req.valid('query'),
 					limits: cfg.limits,
 					metrics: cfg.metrics
 						? { sink: cfg.metrics, op: 'retrieve', tenant: c.get('principal').tenantId }
 						: undefined,
 				});
-				return c.json(rows, 200);
+				return c.json(rows as unknown as WireRetrieved[], 200);
 			},
 		)
 		.openapi(
@@ -1362,12 +1382,14 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				},
 			}),
 			async (c) => {
-				if (!cfg.embed) throw new HTTPException(501, { message: 'hybrid retrieve not configured' });
-				const rows = await hybridRetrieve(c.get('graph').raw, cfg.embed, {
+				if (!cfg.embedder) {
+					throw new HTTPException(501, { message: 'hybrid retrieve not configured' });
+				}
+				const rows = await c.get('graph').hybridRetrieve({
 					...c.req.valid('json'),
 					limits: cfg.limits,
 				});
-				return c.json(rows, 200);
+				return c.json(rows as unknown as WireRetrieved[], 200);
 			},
 		)
 		// Batch node ingestion (§19.8). Validates every row up front (unknown type / bad data →
@@ -1393,6 +1415,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					chunkSize,
 					loadTs,
 					upcasters: cfg.upcasters,
+					embedder: cfg.embedding === 'off' ? undefined : cfg.embedder,
 				});
 				return c.json(result, 201);
 			},
@@ -1593,7 +1616,10 @@ export type AppType = OpenAPIHono<ServeEnv<GraphSchema>>;
  */
 export interface DevServeConfig<S extends GraphSchema> {
 	schema: S;
-	embed?: EmbedFn;
+	/** See {@link ServeConfig.embedder}. */
+	embedder?: Embedder;
+	/** See {@link ServeConfig.embedding}. */
+	embedding?: GraphOptions['embedding'];
 	limits?: Partial<QueryLimits>;
 	upcasters?: UpcasterRegistry;
 	metrics?: MetricsSink;
@@ -1609,13 +1635,6 @@ export interface DevServeConfig<S extends GraphSchema> {
 	docs?: boolean;
 	/** Project DB namespace (libSQL file / PG schema). Default `'graphx_dev'`. */
 	db?: string;
-	/**
-	 * Embedding dimension for the vector column. Omit and it's derived from `embed` ({@link dimOf}) so
-	 * `/retrieve` + `/hybrid` line up with the model automatically; falls back to 768 when there's no
-	 * embedder. Baked at first init and immutable — if it disagrees with an already-materialized
-	 * namespace, `createApp` throws (fail-fast) instead of silently keeping the old width.
-	 */
-	dim?: number;
 	/** Seed the graph before serving; runs with an operator principal. */
 	seed?: (g: Graph<S>) => void | Promise<void>;
 }
@@ -1643,21 +1662,17 @@ async function bootstrapDevApp<S extends GraphSchema>(
 		name: 'dev',
 		dbNamespace: namespace,
 	});
-	// Auto-dim: create the project DB's vector column at the embedder's width (or an explicit `dim`)
-	// BEFORE the lazy `initOnce` in graphForProject bakes the 768 default. `init` is idempotent
-	// (CREATE ... IF NOT EXISTS), so the later re-init is a no-op and the column keeps this width —
-	// no manual dim/embedder sync, and `/retrieve` + `/hybrid` just work.
-	const dim = cfg.dim ?? (cfg.embed ? await dimOf(cfg.embed) : undefined);
-	if (dim !== undefined) await init(getDb(namespace), dim);
 	const user = await createUser(control, { email: 'dev@local' });
 	await addMembership(control, { userId: user, tenantId: tenant, role: 'editor' });
+	// The embedder rides into `graphForProject`, whose first-touch init sizes the vector table
+	// at its width — the same path every request takes, so dev and production agree.
 	const graph = await graphForProject(
 		control,
 		{ userId: 'seed', tenantId: tenant, operator: true },
 		project,
 		'write',
 		cfg.schema,
-		cfg.upcasters,
+		{ upcasters: cfg.upcasters, embedder: cfg.embedder, embedding: cfg.embedding },
 	);
 	if (cfg.seed) await cfg.seed(graph);
 	const app = buildApp<S>({

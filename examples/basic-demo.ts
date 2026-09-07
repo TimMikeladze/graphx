@@ -13,12 +13,10 @@ import {
 	Graph,
 	hashEmbed,
 	history,
-	hybridRetrieve,
 	init,
 	journey,
 	match,
 	pagerank,
-	retrieve,
 	shortestPath,
 } from 'graphx';
 import { z } from 'zod';
@@ -36,27 +34,25 @@ const schema = defineGraphSchema({
 	},
 });
 
-// 2 — connection + init. dim is baked into the vector column on first init.
-const embed = hashEmbed(768);
+// 2 — connection + init. The embedder's width is recorded in the namespace on first init;
+// hashEmbed is lexical and model-free — swap in a real model (graphx/embedders) for production.
+const embedder = hashEmbed();
 const db = getDb('basic_demo');
-await init(db, 768);
-const g = new Graph(db, schema);
+await init(db, embedder);
+const g = new Graph(db, schema, { embedder });
 
-// 3 — writes. `data` is the typed payload; `body` is FTS-indexed text; `emb` is the ANN vector.
+// 3 — writes. `data` is the typed payload; `body` is FTS-indexed text AND the embedding input —
+// the graph embeds it for you, and re-embeds when it changes.
 const site = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
-const gwBody = 'edge gateway in us-east-1, sensor reported overheating last night';
 const gw = await g.addNode({
 	type: 'gateway',
 	data: { name: 'gw-1', firmware: '2.1.0' },
-	body: gwBody,
-	emb: await embed(gwBody), // Graph does NOT embed for you — pass the vector or ANN sees NULL
+	body: 'edge gateway in us-east-1, sensor reported overheating last night',
 });
-const alertBody = 'temperature threshold exceeded on gw-1';
 const alert = await g.addNode({
 	type: 'alert',
 	data: { severity: 'high' },
-	body: alertBody,
-	emb: await embed(alertBody),
+	body: 'temperature threshold exceeded on gw-1',
 });
 await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 await g.addEdge({ rel: 'raised', src: gw.id, dst: alert.id });
@@ -87,9 +83,10 @@ console.log(
 	rows.map((r) => [r.gw.data.name, r.a.data.severity]),
 );
 
-// 7 — retrieval: ANN seeds + time-respecting walk / hybrid vector+FTS with RRF
-console.log('retrieve  ', await retrieve(db, embed, { query: 'overheating', k: 5, maxDepth: 2 }));
-console.log('hybrid    ', await hybridRetrieve(db, embed, { query: 'overheating gw-1', k: 5 }));
+// 7 — retrieval: vector seeds + time-respecting walk / hybrid vector+FTS with RRF. Rows carry
+// the node's type + data, a score, which leg matched, and the seed that reached it.
+console.log('retrieve  ', await g.retrieve({ query: 'overheating', k: 5, maxDepth: 2 }));
+console.log('hybrid    ', await g.hybridRetrieve({ query: 'overheating gw-1', k: 5 }));
 
 // 8 — traversal + algorithms
 console.log(

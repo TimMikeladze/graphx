@@ -4,7 +4,7 @@ Ingest a local YAML/markdown vault into a [graphx](../packages/graphx) graph: **
 links become edges, re-runs reconcile incrementally using graphx's bitemporal model.
 
 ```ts
-import { defineGraphSchema, Graph, getDb, init } from 'graphx';
+import { defineGraphSchema, Graph, getDb, hashEmbed, init } from 'graphx';
 import { ingestDir } from 'graphx/ingest';
 import { z } from 'zod';
 
@@ -13,14 +13,14 @@ const schema = defineGraphSchema({
 	edges: { links_to: { from: 'note', to: 'note' } },
 });
 
+const embedder = hashEmbed(); // or openai(...) from 'graphx/embedders'
 const db = getDb('my-vault');
-await init(db, 768);
-const graph = new Graph(db, schema);
+await init(db, embedder);
+const graph = new Graph(db, schema, { embedder });
 
 const result = await ingestDir({
 	dir: './vault',
-	graph,
-	embed: async (text) => myEmbedder(text), // (text: string) => Promise<number[]>
+	graph, // its embedder embeds every body — batched, one embedder call per run
 });
 // { added, updated, unchanged, edgesAdded, edgesClosed, skipped }
 ```
@@ -34,7 +34,9 @@ const result = await ingestDir({
 - **edges** = `[[wikilink]]` (by basename) and `[text](./rel.md)` (by path) → `links_to`.
 - **assets** (opt-in `assets: { kind, rel? }`) = `![[x]]` / `![alt](x)` embeds → an edge to the
   embedded note if it's ingested, else a metadata-only asset node (path + MIME, no bytes).
-- **change detection** = sha256 of the file in `content_hash`; unchanged files are skipped (no re-embed).
+- **change detection** = sha256 of the file in `content_hash`; unchanged files are skipped. A changed
+  file is re-embedded only if its embedding input (per the type's policy) changed — a frontmatter-only
+  edit costs no embedder call. A model change is `graphx reembed`, not an ingest option.
 
 ## v1 limitations
 

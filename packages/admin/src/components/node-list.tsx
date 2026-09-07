@@ -13,15 +13,16 @@ import type { ExplorerFilters } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 /**
- * One list row, from either source. `type`/`data` are absent for a retrieved node that is not on
- * the loaded page of `GET /nodes`; `body` and `depth` are present only for retrieved rows.
+ * One list row, from either source. `body`, `depth` and `score` are present only for retrieved
+ * rows — retrieval returns each node's `type`/`data` itself, so no second lookup is needed.
  */
 interface Row {
 	id: string;
-	type?: string;
-	data?: Record<string, unknown>;
+	type: string;
+	data: Record<string, unknown>;
 	body?: string | null;
 	depth?: number;
+	score?: number | null;
 }
 
 /** Master node list: keyset-paginated, arrow-key navigable, selection drives canvas + detail. */
@@ -43,28 +44,24 @@ export function NodeList({
 	// Two sources, one list. `text` mode paginates `GET /nodes`; the retrieval modes hit
 	// /retrieve or /hybrid, which return a bounded subgraph — no paging, and a hop `depth` per row.
 	const retrieving = (filters.mode ?? 'text') !== 'text' && Boolean(filters.q?.trim());
-	// While retrieving, the node list is still fetched UNFILTERED: retrieval returns ids and body
-	// only, so type and parsed data have to come from here. A retrieved node beyond the first page
-	// simply renders without them rather than being dropped.
-	const listQuery = useNodes(tenant, project, retrieving ? {} : filters);
+	// The list query is idle while retrieving: retrieved rows carry their own type and data.
+	const listQuery = useNodes(tenant, project, filters, { enabled: !retrieving });
 	const retrievalQuery = useRetrieval(tenant, project, filters);
 
 	const listed = listQuery.data?.pages.flatMap((p) => p.nodes) ?? [];
-	const byId = new Map(listed.map((n) => [n.id, n]));
 	const rows: Row[] = retrieving
 		? (retrievalQuery.data ?? []).map((r) => ({
 				id: r.id,
-				type: byId.get(r.id)?.type,
-				data: byId.get(r.id)?.data,
+				type: r.type,
+				data: r.data,
 				body: r.body,
 				depth: r.depth,
+				score: r.score,
 			}))
 		: listed.map((n) => ({ id: n.id, type: n.type, data: n.data }));
 
-	const isLoading = retrieving
-		? retrievalQuery.isLoading || listQuery.isLoading
-		: listQuery.isLoading;
-	const isError = retrieving ? retrievalQuery.isError || listQuery.isError : listQuery.isError;
+	const isLoading = retrieving ? retrievalQuery.isLoading : listQuery.isLoading;
+	const isError = retrieving ? retrievalQuery.isError : listQuery.isError;
 
 	// Roving keyboard focus within the listbox (independent of URL selection).
 	const [focus, setFocus] = useState(0);

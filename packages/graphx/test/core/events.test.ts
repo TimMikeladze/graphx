@@ -11,6 +11,7 @@ import {
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // Eventing Layer 1 — the in-proc emitter. Every public mutation emits a typed event AFTER the
 // write commits (post-commit, phantom-free), INCLUDING the pure closes (delete/supersede) the
@@ -30,8 +31,8 @@ const teardowns: Array<() => Promise<void>> = [];
 async function makeGraph(events?: GraphEventOptions): Promise<Graph<typeof SCHEMA>> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, 4);
-	return new Graph(client, SCHEMA, undefined, events);
+	await init(client, hashEmbed(4));
+	return new Graph(client, SCHEMA, { events });
 }
 
 afterAll(async () => {

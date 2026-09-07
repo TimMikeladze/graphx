@@ -9,6 +9,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { match } from '../../src/core/pattern.ts';
 import { init } from '../../src/core/schema.ts';
 import { defineUpcasters, Upcaster } from '../../src/core/upcast.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P12 — schema evolution / read-time upcasting (§15). JSON data make add/remove
 // free; history is immutable. Writes stamp the type's current `_v`; OLD-version
@@ -194,7 +195,7 @@ const teardowns: Array<() => Promise<void>> = [];
 async function freshClient(): Promise<DbClient> {
 	const { client, teardown } = makeTestDb({ file: true });
 	teardowns.push(teardown);
-	await init(client, DIM);
+	await init(client, hashEmbed(DIM));
 	return client;
 }
 
@@ -238,7 +239,7 @@ async function rawProps(client: DbClient, id: string): Promise<string> {
 
 test('P12: a v1 raw row reads back as the v2 shape via getNode (upcaster ran)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const id = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
 
 	const node = await g.getNode(id);
@@ -248,7 +249,7 @@ test('P12: a v1 raw row reads back as the v2 shape via getNode (upcaster ran)', 
 
 test('P12: the stored v1 bytes are UNCHANGED after a read (history immutable)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const id = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
 	const before = await rawProps(client, id);
 
@@ -262,7 +263,7 @@ test('P12: the stored v1 bytes are UNCHANGED after a read (history immutable)', 
 
 test('P12: a no-`_v` raw row reads back upcast (pre-P12 row back-compat)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const id = await rawNode(client, { name: 'old', crit: 3 }); // NO _v
 	const node = await g.getNode(id);
 	expect(node!.data).toEqual({ name: 'old', criticality: 3, status: 'online' });
@@ -271,7 +272,7 @@ test('P12: a no-`_v` raw row reads back upcast (pre-P12 row back-compat)', async
 
 test('P12: a v1 raw row upcasts through neighbors() too', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const person = await rawNode(client, { name: 'owner' }, { type: 'person' });
 	const dev = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
 	await g.addEdge({ rel: 'owns', src: person, dst: dev });
@@ -286,7 +287,7 @@ test('P12: a v1 raw row upcasts through neighbors() too', async () => {
 
 test('P12: addNode stamps the type current `_v` into stored bytes; getNode returns clean shape', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const node = await g.addNode({ type: 'device', data: { name: 'fresh', criticality: 2 } });
 
 	// in-memory: clean v2 shape, no `_v`
@@ -306,7 +307,7 @@ test('P12: addNode stamps the type current `_v` into stored bytes; getNode retur
 
 test('P12: addNode on an UNREGISTERED type stamps no `_v` (byte-identical to pre-P12)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const node = await g.addNode({ type: 'person', data: { name: 'ada' } });
 	const stored = JSON.parse(await rawProps(client, node.id));
 	expect(stored).toEqual({ name: 'ada' }); // no `_v`
@@ -315,7 +316,7 @@ test('P12: addNode on an UNREGISTERED type stamps no `_v` (byte-identical to pre
 
 test('P12: updateNode upcasts a v1 row forward — successor is current-shaped and `_v`-stamped', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const id = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
 
 	// patch only status; the v1 row must first migrate to v2 (crit -> criticality) then merge.
@@ -334,7 +335,7 @@ test('P12: updateNode upcasts a v1 row forward — successor is current-shaped a
 
 test('P12: updateNode leaves the OLD (closed) v1 version bytes immutable', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const id = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
 
 	await g.updateNode(id, { data: { status: 'offline' } });
@@ -425,7 +426,7 @@ const UPCAST_DG = defineUpcasters({
 
 test('P12: updateNode type-change into a registered type reshapes under the SUCCESSOR schema (no foreign fields, honest `_v`)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_DG, UPCAST_DG);
+	const g = new Graph(client, SCHEMA_DG, { upcasters: UPCAST_DG });
 	const id = await rawNode(client, { name: 'r1', crit: 5, _v: 1 }); // a v1 device
 
 	// retarget to gadget, supplying the gadget field
@@ -453,7 +454,7 @@ const UPCAST_REC = defineUpcasters({ rec: { current: 2, steps: [(p) => ({ ...p }
 
 test('P12: addNode on a registered type that declares the reserved `_v` throws (no silent clobber)', async () => {
 	const client = await freshClient();
-	const g = new Graph(client, SCHEMA_REC, UPCAST_REC);
+	const g = new Graph(client, SCHEMA_REC, { upcasters: UPCAST_REC });
 	await expect(g.addNode({ type: 'rec', data: { name: 'x' } })).rejects.toThrow(/reserved|_v/);
 	client.close();
 });
@@ -477,7 +478,7 @@ test('P12: bulkLoad stamps the type `_v`; the row reads back clean under a regis
 	expect(stored._v).toBe(2);
 
 	// reading under the registry does NOT re-run the v1->v2 chain over already-v2 data
-	const g = new Graph(client, SCHEMA_V2, UPCAST_V2);
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
 	const read = await g.getNode(id);
 	expect(read!.data).toEqual({ name: 'b1', criticality: 5, status: 'online' });
 	client.close();

@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import process from 'node:process';
-import type { EmbedFn } from './retrieve.ts';
+import { defineEmbedder, type Embedder } from './embedder.ts';
 
 /**
- * Record/replay {@link EmbedFn} — real model vectors, committed to disk, replayed offline.
+ * Record/replay {@link Embedder} — real model vectors, committed to disk, replayed offline.
  *
  * {@link hashEmbed} is a hashed bag-of-tokens: it exercises the vector plumbing (dimension,
  * storage, ANN SQL, RRF fusion, temporal filtering) but is LEXICAL, so it can never test
@@ -15,9 +15,9 @@ import type { EmbedFn } from './retrieve.ts';
  * from that file — real semantics, zero network, byte-identical results.
  *
  * ```ts
- * const embed = fixtureEmbed({ path: 'test/fixtures/emb.json', embed: openaiEmbed });
- * await retrieve(client, embed, { query: 'who broke Enigma?' });
- * embed.save(); // no-op unless something new was recorded
+ * const embedder = fixtureEmbed({ path: 'test/fixtures/emb.json', embedder: openai });
+ * await retrieve(client, embedder, { query: 'who broke Enigma?' });
+ * embedder.save(); // no-op unless something new was recorded
  * ```
  *
  * A miss in replay mode THROWS rather than silently falling back to a live call, so a test
@@ -32,6 +32,8 @@ interface FixtureEntry {
 
 /** On-disk shape. Keys are `sha256(text)` hex; `dim` is the (single) vector width. */
 interface FixtureFile {
+	/** The model the vectors came from. The fixture embedder reports this as its own `id`. */
+	model: string;
 	dim: number;
 	entries: Record<string, FixtureEntry>;
 }
@@ -49,7 +51,7 @@ export interface FixtureEmbedOpts {
 	 * The real embedder. Called ONLY on a cache miss while recording — never in replay mode.
 	 * Omit it to build a strict replay-only embedder.
 	 */
-	embed?: EmbedFn;
+	embedder?: Embedder;
 	/**
 	 * Record misses instead of throwing. Defaults to whether `UPDATE_EMBED_FIXTURES` is set,
 	 * so the same test file records with the env var and replays without it.
@@ -57,14 +59,11 @@ export interface FixtureEmbedOpts {
 	refresh?: boolean;
 }
 
-export interface FixtureEmbedder {
-	(text: string): Promise<number[]>;
+export interface FixtureEmbedder extends Embedder {
 	/** Write newly recorded vectors to `path`. No-op (returns `false`) when nothing was recorded. */
 	save: () => boolean;
 	/** Cache hits and freshly recorded vectors since construction. */
 	readonly stats: { hits: number; recorded: number };
-	/** Vector width of the loaded fixture, or `null` when it is empty and nothing is recorded yet. */
-	readonly dim: number | null;
 }
 
 /** Stable cache key. Same text ⇒ same key across machines and runs. */
@@ -77,81 +76,116 @@ function round(v: number[]): number[] {
 	return v.map((x) => Math.round(x * f) / f);
 }
 
-function load(path: string): FixtureFile {
-	if (!existsSync(path)) return { dim: 0, entries: {} };
-	const parsed = JSON.parse(readFileSync(path, 'utf8')) as FixtureFile;
+function load(path: string, fallbackModel: string): FixtureFile {
+	if (!existsSync(path)) return { model: fallbackModel, dim: 0, entries: {} };
+	const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<FixtureFile>;
 	if (
 		typeof parsed.dim !== 'number' ||
 		typeof parsed.entries !== 'object' ||
 		parsed.entries === null
 	) {
-		throw new Error(`fixtureEmbed: ${path} is not a fixture file (expected { dim, entries })`);
+		throw new Error(
+			`fixtureEmbed: ${path} is not a fixture file (expected { model, dim, entries })`,
+		);
 	}
-	return parsed;
+	return {
+		model: typeof parsed.model === 'string' ? parsed.model : fallbackModel,
+		dim: parsed.dim,
+		entries: parsed.entries,
+	};
 }
 
 /**
  * Build a record/replay embedder over a JSON fixture file. See the module docstring for the
- * recording workflow.
+ * recording workflow. Its `id` is the recorded model's id, so a namespace embedded through the
+ * fixture and one embedded through the live model agree.
  */
 export function fixtureEmbed(opts: FixtureEmbedOpts): FixtureEmbedder {
 	const refresh = opts.refresh ?? process.env.UPDATE_EMBED_FIXTURES !== undefined;
-	const file = load(opts.path);
+	const file = load(opts.path, opts.embedder?.id ?? `fixture:${opts.path}`);
+	if (opts.embedder && file.dim !== 0 && file.model !== opts.embedder.id) {
+		throw new Error(
+			`fixtureEmbed: ${opts.path} was recorded with '${file.model}' but the embedder is '${opts.embedder.id}' — delete the fixture to re-record it.`,
+		);
+	}
 	const stats = { hits: 0, recorded: 0 };
 	let dirty = false;
 
-	const embedder = async (text: string): Promise<number[]> => {
-		const key = keyOf(text);
-		const hit = file.entries[key];
-		if (hit) {
-			stats.hits++;
-			return hit.vector;
-		}
-		const preview = text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : text;
-		if (!refresh) {
-			throw new Error(
-				`fixtureEmbed: no cached vector for "${preview}" (sha256 ${key.slice(0, 12)}) in ${opts.path}. ` +
-					`Re-run with UPDATE_EMBED_FIXTURES=1 to record it.`,
-			);
-		}
-		if (!opts.embed) {
-			throw new Error(
-				`fixtureEmbed: recording "${preview}" needs a real embedder, but no \`embed\` was provided.`,
-			);
-		}
-		const vector = round(await opts.embed(text));
-		// One width per fixture — a mid-recording model swap would otherwise produce a file
-		// that only fails much later, as an opaque dimension error from the database.
-		if (file.dim === 0) file.dim = vector.length;
-		else if (vector.length !== file.dim) {
-			throw new Error(
-				`fixtureEmbed: embedder returned dim ${vector.length} but ${opts.path} is dim ${file.dim} — ` +
-					`delete the fixture to re-record it with the new model.`,
-			);
-		}
-		file.entries[key] = { preview, vector };
-		stats.recorded++;
-		dirty = true;
-		return vector;
-	};
-
-	return Object.defineProperties(embedder, {
-		save: {
-			value: (): boolean => {
-				if (!dirty) return false;
-				mkdirSync(dirname(opts.path), { recursive: true });
-				// Sort by key so the committed file is insertion-order independent — two runs that
-				// embed the same texts in a different order produce identical bytes.
-				const entries: Record<string, FixtureEntry> = {};
-				for (const k of Object.keys(file.entries).sort()) {
-					entries[k] = file.entries[k] as FixtureEntry;
+	const inner = defineEmbedder({
+		id: file.model,
+		dim: file.dim === 0 ? undefined : file.dim,
+		batchSize: opts.embedder ? 64 : 1024,
+		embed: async (texts) => {
+			const out: number[][] = [];
+			const missing: Array<{ i: number; text: string; key: string }> = [];
+			for (let i = 0; i < texts.length; i++) {
+				const text = texts[i] as string;
+				const hit = file.entries[keyOf(text)];
+				if (hit) {
+					stats.hits++;
+					out[i] = hit.vector;
+				} else {
+					missing.push({ i, text, key: keyOf(text) });
 				}
-				writeFileSync(opts.path, `${JSON.stringify({ dim: file.dim, entries }, null, '\t')}\n`);
-				dirty = false;
-				return true;
-			},
+			}
+			if (missing.length > 0) {
+				const first = missing[0] as { text: string; key: string };
+				const preview =
+					first.text.length > PREVIEW_CHARS ? `${first.text.slice(0, PREVIEW_CHARS)}…` : first.text;
+				if (!refresh) {
+					throw new Error(
+						`fixtureEmbed: no cached vector for "${preview}" (sha256 ${first.key.slice(0, 12)}) in ${opts.path}. ` +
+							`Re-run with UPDATE_EMBED_FIXTURES=1 to record it.`,
+					);
+				}
+				if (!opts.embedder) {
+					throw new Error(
+						`fixtureEmbed: recording "${preview}" needs a real embedder, but no \`embedder\` was provided.`,
+					);
+				}
+				const vectors = await opts.embedder.embed(missing.map((m) => m.text));
+				for (let j = 0; j < missing.length; j++) {
+					const m = missing[j] as { i: number; text: string; key: string };
+					const vector = round(vectors[j] as number[]);
+					// One width per fixture — a mid-recording model swap would otherwise produce a
+					// file that only fails much later, as an opaque dimension error.
+					if (file.dim === 0) file.dim = vector.length;
+					else if (vector.length !== file.dim) {
+						throw new Error(
+							`fixtureEmbed: embedder returned dim ${vector.length} but ${opts.path} is dim ${file.dim} — ` +
+								`delete the fixture to re-record it with the new model.`,
+						);
+					}
+					const p = m.text.length > PREVIEW_CHARS ? `${m.text.slice(0, PREVIEW_CHARS)}…` : m.text;
+					file.entries[m.key] = { preview: p, vector };
+					stats.recorded++;
+					dirty = true;
+					out[m.i] = vector;
+				}
+			}
+			return out;
 		},
-		stats: { get: () => stats },
-		dim: { get: () => (file.dim === 0 ? null : file.dim) },
+	});
+
+	return Object.assign(inner, {
+		save: (): boolean => {
+			if (!dirty) return false;
+			mkdirSync(dirname(opts.path), { recursive: true });
+			// Sort by key so the committed file is insertion-order independent — two runs that
+			// embed the same texts in a different order produce identical bytes.
+			const entries: Record<string, FixtureEntry> = {};
+			for (const k of Object.keys(file.entries).sort()) {
+				entries[k] = file.entries[k] as FixtureEntry;
+			}
+			writeFileSync(
+				opts.path,
+				`${JSON.stringify({ model: file.model, dim: file.dim, entries }, null, '\t')}\n`,
+			);
+			dirty = false;
+			return true;
+		},
+		get stats() {
+			return stats;
+		},
 	}) as FixtureEmbedder;
 }

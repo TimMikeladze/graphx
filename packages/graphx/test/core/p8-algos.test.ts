@@ -14,6 +14,7 @@ import {
 import { FOREVER } from '../../src/core/db.ts';
 import { init } from '../../src/core/schema.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P8 — graph algorithms (§11). Fixtures built with RAW SQL so each test controls
 // weight / rel / valid_from / valid_to directly (independent of P3). dim 4 keeps
@@ -22,7 +23,7 @@ import { makeTestDb } from './harness.ts';
 
 async function fresh(): Promise<DbClient> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return client;
 }
 

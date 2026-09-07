@@ -1,5 +1,17 @@
 # Seamless Postgres Support for graphx — Design Doc
 
+> **2026-09-06, pooler support.** `PgClient` is transaction-pooler aware: `'auto'` (default) starts
+> with the connect-time `-c search_path` option and, when a pooler rejects it (PgBouncer's
+> `unsupported startup parameter in options`), rebuilds the pool without it and applies
+> `SET LOCAL search_path` inside every statement's transaction. `DbConfig.pooler` /
+> `PgClientOptions.pooler` force `'transaction'` or `'none'`. Verified against the fly sandbox
+> (PgBouncer, transaction mode) and direct Postgres.
+>
+> **2026-09-06 update.** Vectors now live in `node_embeddings` (`vector(dim)` + an HNSW index over
+> the whole table), created by `init(client, embedder)`; `node_versions` has no `emb` column and the
+> width is recorded in `graph_meta`. The phase log below predates that and mentions the old column
+> and fragments (`nv_emb_idx`, `annSeedsLive`, `embFreshExpr`). See [`embeddings.md`](./embeddings.md).
+
 ## Status (as of this branch)
 
 - **Phase 0 — Dialect type seam: DONE.** New `packages/graphx/src/core/dialect.ts` (neutral `DbClient`/`SqlStatement`/`SqlValue`/`SqlRow`/`DbTransaction` + `Dialect`/`dialectOf`, aliasing libSQL types 1:1 so a real `Client` stays assignable). All 12 dialect-touching core modules now type against `DbClient` instead of `@libsql/client`. Divergent DDL extracted to `packages/graphx/src/core/dialect-sql.ts` (libSQL impl; Postgres branches `throw` "later phase"). `init()`/`declareUniqueNodeProp()` guard the Postgres path. Neutral types exported from the public API (additive). **Scope note:** the heavy _query_ SQL (vector_top_k, json_each, FTS5 MATCH, recursive-CTE walks) was left in place and routed through the seam — its Postgres form is a structural rewrite written whole in Phases 3–4, not a Phase-0 fragment swap. The `auth` package still imports `@libsql/client` (DbClient is assignable to Client); it neutralizes alongside its own SQL rewrites (Phase 2/5).

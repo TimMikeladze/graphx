@@ -59,6 +59,12 @@
 				"default": "./dist/core/blob.js"
 			}
 		},
+		"./embedders": {
+			"import": {
+				"types": "./dist/embedders/index.d.ts",
+				"default": "./dist/embedders/index.js"
+			}
+		},
 		"./cli": {
 			"import": {
 				"types": "./dist/cli.d.ts",

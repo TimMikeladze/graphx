@@ -1,10 +1,20 @@
 import { FOREVER, ftsIndexOwner, managedWriter } from './db.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
-import { embFreshExpr, insertOrIgnore } from './dialect-sql.ts';
+import { embValueExpr, insertOrIgnore } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
 import type { NodeType, Rel } from './define-graph-schema.ts';
+import {
+	assertVector,
+	chunkPolicyFor,
+	chunksFor,
+	embedHash,
+	embedInputFor,
+	type Embedder,
+	EmbeddingError,
+	type PreparedEmbedding,
+} from './embedder.ts';
 import type { GraphSchema } from './graph.ts';
-import { NODES_FTS_TRIGGER_DDL, NV_EMB_IDX_DDL } from './schema.ts';
+import { embeddingsIndexFor, NODES_FTS_TRIGGER_DDL, readEmbeddingMeta } from './schema.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 
 /**
@@ -37,7 +47,10 @@ export interface BulkRow<S extends GraphSchema> {
 	id?: string;
 	type: NodeType<S>;
 	data: Record<string, unknown>;
+	/** A precomputed vector (validated against the namespace width). */
 	emb?: number[];
+	/** Rows prepared by `Graph.prepareEmbeddings`, or `false` to skip embedding this row. */
+	embedding?: PreparedEmbedding | false;
 	body?: string;
 	uri?: string;
 	content_hash?: string;
@@ -64,6 +77,12 @@ export interface BulkOpts {
 	/** Shared `valid_from` for every row (epoch ms; default `Date.now()`). */
 	loadTs?: number;
 	/**
+	 * Embed every LIVE row (open interval) that carries no `emb` / `embedding`, in batches,
+	 * before the insert. Rows with a closed interval are history and get no vector. Omit to
+	 * store only the vectors rows bring with them.
+	 */
+	embedder?: Embedder;
+	/**
 	 * P12 (§15) upcaster registry. When set, each bulk row's data are `_v`-stamped exactly
 	 * like {@link Graph.addNode}, so a registered type's bulk-loaded rows read back correctly
 	 * (without it they would lack `_v`, be misread as v1, and the read-time chain would run
@@ -84,7 +103,10 @@ interface PreparedRow {
 	content_hash: SqlValue;
 	content_type: SqlValue;
 	data: string;
+	/** Parsed data, for the embedding policy. */
+	plain: Record<string, unknown>;
 	emb: number[] | null;
+	embedding: PreparedEmbedding | false | undefined;
 	validFrom: number;
 	validTo: number;
 }
@@ -148,6 +170,78 @@ function distinctIds(rows: { id: string }[]): string[] {
 }
 
 /**
+ * The vectors a bulk load writes, keyed by id: explicit `embedding` rows, raw `emb` vectors,
+ * and — with an embedder — every remaining LIVE row's policy input, embedded in one batched
+ * pass. Only the open version of an id gets vectors (a closed one is history). Every vector
+ * is validated against the namespace width here, before any index is touched.
+ */
+async function prepareBulkEmbeddings(
+	raw: DbClient,
+	schema: GraphSchema,
+	rows: PreparedRow[],
+	embedder: Embedder | undefined,
+): Promise<Map<string, PreparedEmbedding>> {
+	const out = new Map<string, PreparedEmbedding>();
+	const live = rows.filter((r) => r.validTo === FOREVER && r.embedding !== false);
+	const wantsVectors =
+		live.some((r) => r.emb || r.embedding) || (embedder !== undefined && live.length > 0);
+	if (!wantsVectors) return out;
+	const meta = await readEmbeddingMeta(raw);
+	if (!meta) {
+		throw new EmbeddingError(
+			'missing',
+			'bulkLoad: this namespace has no embedding table — call init(db, embedder) first',
+		);
+	}
+	if (embedder && embedder.id !== meta.model) {
+		throw new EmbeddingError(
+			'model',
+			`bulkLoad: this namespace is embedded with '${meta.model}' but the embedder is '${embedder.id}' — run reembed to switch models`,
+		);
+	}
+	const model = embedder?.id ?? meta.model;
+	const toEmbed: Array<{ id: string; type: string; text: string }> = [];
+	for (const r of live) {
+		const text = embedInputFor(schema, r.type, r.plain, r.body as string | null);
+		if (r.embedding) {
+			for (const c of r.embedding.chunks) assertVector(c.emb, meta.dim, 'bulkLoad');
+			out.set(r.id, r.embedding);
+		} else if (r.emb) {
+			assertVector(r.emb, meta.dim, 'bulkLoad');
+			out.set(r.id, {
+				hash: embedHash(model, text ?? ''),
+				chunks: [{ chunk: 0, text: null, emb: r.emb }],
+			});
+		} else if (embedder && text !== null) {
+			toEmbed.push({ id: r.id, type: r.type, text });
+		}
+	}
+	if (embedder && toEmbed.length > 0) {
+		const inputs: string[] = [];
+		const plan: Array<{ id: string; chunk: number; text: string | null }> = [];
+		for (const item of toEmbed) {
+			const texts = chunksFor(item.text, chunkPolicyFor(schema, item.type));
+			out.set(item.id, { hash: embedHash(model, item.text), chunks: [] });
+			texts.forEach((t, c) => {
+				inputs.push(t);
+				plan.push({ id: item.id, chunk: c, text: texts.length === 1 ? null : t });
+			});
+		}
+		const vectors = await embedder.embed(inputs);
+		plan.forEach((entry, i) => {
+			const emb = vectors[i] as number[];
+			assertVector(emb, meta.dim, 'bulkLoad');
+			(out.get(entry.id) as PreparedEmbedding).chunks.push({
+				chunk: entry.chunk,
+				text: entry.text,
+				emb,
+			});
+		});
+	}
+	return out;
+}
+
+/**
  * Bulk-load nodes (§19.8). Validates every row's data against the schema FIRST (so a
  * bad row fails before any index is dropped), then: drops `nv_emb_idx` + the FTS
  * trigger, inserts identity + version rows chunked in one transaction, recreates the
@@ -166,7 +260,6 @@ export async function bulkLoad<S extends GraphSchema>(
 	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
 	// index-free and its FTS index is built at commit time — so the whole bracket is skipped.
 	const deferIndexes = d === 'libsql';
-	const embExpr = embFreshExpr(d);
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
 	// 1. Validate + prepare everything up front — fail fast, BEFORE touching indexes.
@@ -183,7 +276,9 @@ export async function bulkLoad<S extends GraphSchema>(
 			content_type: row.content_type ?? null,
 			// P12: stamp `_v` for registered types (no-op for unregistered ⇒ pre-P12 bytes).
 			data: JSON.stringify(upcaster.stamp(String(row.type), parsed)),
+			plain: parsed,
 			emb: row.emb ?? null,
+			embedding: row.embedding,
 			validFrom: row.validFrom ?? loadTs,
 			validTo: row.validTo ?? FOREVER,
 		};
@@ -198,10 +293,15 @@ export async function bulkLoad<S extends GraphSchema>(
 		})),
 	);
 
+	// 1b. Vectors: one PreparedEmbedding per LIVE row that ends up with one — explicit rows,
+	// raw `emb`, or (with an embedder) the type's embedding input, batch-embedded. Validated
+	// against the namespace width BEFORE any index is dropped.
+	const vectors = await prepareBulkEmbeddings(raw, schema, prepared, opts.embedder);
+
 	// 2. Defer the indexes: drop the ANN index and the per-row FTS sync trigger. libSQL only —
 	// see deferIndexes above for why Postgres and DuckDB both skip this.
 	if (deferIndexes) {
-		await raw.execute('DROP INDEX IF EXISTS nv_emb_idx');
+		if (vectors.size > 0) await raw.execute('DROP INDEX IF EXISTS ne_emb_idx');
 		await raw.execute('DROP TRIGGER IF EXISTS nodes_fts_ai');
 	}
 
@@ -219,27 +319,55 @@ export async function bulkLoad<S extends GraphSchema>(
 			});
 		}
 		for (const part of chunk(prepared, chunkSize)) {
-			// Version rows: per-row emb placeholder (vector(?) when present, else NULL).
-			const valuesSql = part
-				.map((p) => (p.emb ? `(?,?,?,?,?,?,?,${embExpr},?,?)` : '(?,?,?,?,?,?,?,NULL,?,?)'))
-				.join(',');
+			const valuesSql = part.map(() => '(?,?,?,?,?,?,?,?,?)').join(',');
 			const args: SqlValue[] = [];
 			for (const p of part) {
 				args.push(p.id, p.type, p.body, p.uri, p.content_hash, p.content_type, p.data);
-				if (p.emb) args.push(JSON.stringify(p.emb));
 				args.push(p.validFrom, p.validTo);
 			}
 			stmts.push({
-				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, emb, valid_from, valid_to) VALUES ${valuesSql}`,
+				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from, valid_to) VALUES ${valuesSql}`,
 				args,
 			});
+		}
+		// Vector rows: replace whatever the (possibly pre-existing) identity had, then insert
+		// one row per chunk. Batched by chunkSize like the version rows.
+		if (vectors.size > 0) {
+			const expr = embValueExpr(d);
+			const ids = [...vectors.keys()];
+			for (const part of chunk(ids, chunkSize)) {
+				stmts.push({
+					sql: `DELETE FROM node_embeddings WHERE id IN (${part.map(() => '?').join(',')})`,
+					args: part,
+				});
+			}
+			const flat: Array<{
+				id: string;
+				chunk: number;
+				text: string | null;
+				emb: number[];
+				hash: string;
+			}> = [];
+			for (const [id, p] of vectors) {
+				for (const c of p.chunks)
+					flat.push({ id, chunk: c.chunk, text: c.text, emb: c.emb, hash: p.hash });
+			}
+			for (const part of chunk(flat, chunkSize)) {
+				const valuesSql = part.map(() => `(?,?,?,${expr},?)`).join(',');
+				const args: SqlValue[] = [];
+				for (const c of part) args.push(c.id, c.chunk, c.text, JSON.stringify(c.emb), c.hash);
+				stmts.push({
+					sql: `INSERT INTO node_embeddings (id, chunk, text, emb, embed_hash) VALUES ${valuesSql}`,
+					args,
+				});
+			}
 		}
 		if (stmts.length > 0) await raw.batch(stmts, 'write');
 	} finally {
 		// 3. Always restore queryability — recreate the ANN index and the FTS trigger,
 		// even if the load threw (a failed batch is atomic, so no rows leak). libSQL only.
 		if (deferIndexes) {
-			await raw.execute(NV_EMB_IDX_DDL);
+			if (vectors.size > 0) await raw.execute(embeddingsIndexFor(raw));
 			await raw.execute(NODES_FTS_TRIGGER_DDL);
 		}
 	}
@@ -256,7 +384,12 @@ export async function bulkLoad<S extends GraphSchema>(
 	await raw.execute('ANALYZE');
 	// A bulk load is one logical write, so it publishes once — the whole point of routing
 	// an import through here rather than N addNode calls.
-	await publish(raw, 'node_identity', 'node_versions');
+	await publish(
+		raw,
+		'node_identity',
+		'node_versions',
+		...(vectors.size > 0 ? ['node_embeddings'] : []),
+	);
 
 	return { ids: prepared.map((p) => p.id), count: prepared.length };
 }

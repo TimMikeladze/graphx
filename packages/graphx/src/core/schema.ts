@@ -1,21 +1,15 @@
 import { applyConnPragmas } from './db.ts';
-import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
+import { type DbClient, dialectOf } from './dialect.ts';
 import {
 	duckdbSchema,
-	embColumnType,
+	embeddingsIndexDDL,
+	embeddingsTableDDL,
 	ftsTableDDL,
 	ftsTriggerDDL,
+	META_UPSERT_SQL,
 	postgresSchema,
-	vectorIndexDDL,
 } from './dialect-sql.ts';
-
-/**
- * The partial live ANN index DDL (D5). Exported so the P13 bulk loader can DROP it
- * before a large import and recreate it afterward (deferred index build, §19.8).
- * The predicate `valid_to = 8640000000000000` (FOREVER) makes it partial over live
- * rows only; it is dim-independent (the `F32_BLOB(dim)` lives on the column).
- */
-export const NV_EMB_IDX_DDL: string = vectorIndexDDL('libsql');
+import { type Embedder, EmbeddingError } from './embedder.ts';
 
 /**
  * The FTS5 external-content sync trigger DDL (M2, §19.3). External-content FTS5 does
@@ -28,20 +22,17 @@ export const NV_EMB_IDX_DDL: string = vectorIndexDDL('libsql');
 export const NODES_FTS_TRIGGER_DDL: string = ftsTriggerDDL('libsql');
 
 /**
- * Full P1 DDL (§4 corrected + D1/D5/B9) with the embedding dimension substituted
- * into `F32_BLOB(<dim>)`. Every `CREATE` is `IF NOT EXISTS` so `init()` re-runs as
+ * Full P1 DDL (§4 corrected + D1/B9). Every `CREATE` is `IF NOT EXISTS` so `init()` re-runs as
  * a no-op. `executeMultiple` runs the whole script (no `;`-splitting).
  *
- * D5: `nv_emb_idx` is a **partial** vector index over LIVE rows only
- * (`WHERE valid_to = FOREVER`). This is verified to execute on @libsql/client at
- * init time (see test/p1-schema.test.ts). P4's as-of-past path must over-fetch and
- * temporal-filter because the index covers live rows only.
+ * Vectors are NOT here: `node_embeddings` is created by {@link init} once an embedder is known,
+ * because its column width is the embedder's (see `dialect-sql.ts`'s `embeddingsTableDDL`).
  *
  * P13 (M2, §19.3): `nodes_fts` is an external-content FTS5 index over `node_versions`
  * (`content_rowid='ver'`) kept in sync by `nodes_fts_ai`; both are additive and join
  * the lexical seed list into hybrid retrieval.
  */
-export function schema(dim: number = 768): string {
+export function schema(): string {
 	return `
 CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);   -- ULID
 CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
@@ -53,16 +44,16 @@ CREATE TABLE IF NOT EXISTS node_versions (
   body         TEXT,
   uri          TEXT,
   content_hash TEXT,
-  embed_hash   TEXT,
   content_type TEXT,
   data        TEXT NOT NULL DEFAULT '{}',
-  emb          ${embColumnType('libsql', dim)},
   valid_from   INTEGER NOT NULL,
   valid_to     INTEGER NOT NULL DEFAULT 8640000000000000
 );
 CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
 CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
-${NV_EMB_IDX_DDL}
+
+-- Namespace-level facts: the embedding model + width, and the declared constraints.
+CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 -- P13 (M2/§19.3): external-content FTS5 over node_versions, synced by the trigger below.
 ${ftsTableDDL('libsql')}
@@ -84,7 +75,7 @@ CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_t
 CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
 
 CREATE VIEW IF NOT EXISTS nodes AS
-  SELECT id, type, body, uri, content_hash, embed_hash, content_type, data, emb
+  SELECT id, type, body, uri, content_hash, content_type, data
   FROM node_versions WHERE valid_to = 8640000000000000;
 CREATE VIEW IF NOT EXISTS edges AS
   SELECT id, src, dst, rel, weight, data, source
@@ -154,87 +145,109 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
 
-/**
- * Create the schema on `client`, idempotent. Sets `journal_mode = WAL` (persists in
- * the file; harmless on `:memory:`), applies the per-connection pragmas
- * (`foreign_keys`, `busy_timeout`), then runs the multi-statement DDL.
- */
-/**
- * The embedding dimension baked into the live `node_versions.emb` column, or `null` when the table
- * doesn't exist yet (a fresh namespace). Parsed from the stored column type (`F32_BLOB(<dim>)` on
- * libSQL, `vector(<dim>)` on Postgres) — used by {@link init} to reject a conflicting dim.
- */
-export async function readEmbDim(client: DbClient): Promise<number | null> {
-	switch (dialectOf(client)) {
-		case 'postgres': {
-			const r = await client.execute(
-				`SELECT format_type(a.atttypid, a.atttypmod) AS t
-				 FROM pg_attribute a
-				 JOIN pg_class c ON a.attrelid = c.oid
-				 JOIN pg_namespace n ON c.relnamespace = n.oid
-				 WHERE c.relname = 'node_versions' AND a.attname = 'emb'
-				   AND n.nspname = current_schema() AND a.attnum > 0 AND NOT a.attisdropped`,
-			);
-			const t = r.rows[0]?.t;
-			const m = typeof t === 'string' ? /vector\((\d+)\)/.exec(t) : null;
-			return m ? Number(m[1]) : null;
-		}
-		case 'duckdb': {
-			const r = await client
-				.execute(`SELECT value FROM graph_meta WHERE key = 'emb_dim'`)
-				.catch(() => ({ rows: [] as SqlRow[] }));
-			const v = r.rows[0]?.value;
-			return typeof v === 'string' ? Number(v) : null;
-		}
-		default: {
-			const r = await client.execute(
-				`SELECT sql FROM sqlite_master WHERE type='table' AND name='node_versions'`,
-			);
-			const sql = r.rows[0]?.sql;
-			const m = typeof sql === 'string' ? /emb\s+F32_BLOB\((\d+)\)/i.exec(sql) : null;
-			return m ? Number(m[1]) : null;
-		}
-	}
+/** The embedding model and width a namespace was initialised with. */
+export interface EmbeddingMeta {
+	model: string;
+	dim: number;
 }
 
-export async function init(client: DbClient, dim?: number): Promise<void> {
-	// Fail fast on a dimension mismatch: the emb column's width is baked at first CREATE and the DDL
-	// is `IF NOT EXISTS`, so re-`init`ing an existing namespace at a DIFFERENT explicit dim would
-	// silently keep the old width — then every embed insert / ANN query fails as an opaque dimension
-	// mismatch. Only checked when `dim` is given (the defaulted path stays a no-op).
-	if (dim !== undefined) {
-		const existing = await readEmbDim(client);
-		if (existing !== null && existing !== dim) {
-			throw new Error(
-				`init: node_versions.emb already exists at dim ${existing}, but dim ${dim} was requested — the embedding dimension is immutable. Delete the namespace or use dim ${existing}.`,
-			);
-		}
+const META_MODEL = 'emb_model';
+const META_DIM = 'emb_dim';
+
+/**
+ * The embedding model + width recorded in `graph_meta`, or `null` when the namespace has never
+ * been initialised with an embedder (or does not exist yet).
+ */
+export async function readEmbeddingMeta(client: DbClient): Promise<EmbeddingMeta | null> {
+	const r = await client
+		.execute({
+			sql: 'SELECT key, value FROM graph_meta WHERE key IN (?, ?)',
+			args: [META_MODEL, META_DIM],
+		})
+		.catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
+	let model: string | undefined;
+	let dim: number | undefined;
+	for (const row of r.rows) {
+		if (row.key === META_MODEL) model = String(row.value);
+		if (row.key === META_DIM) dim = Number(row.value);
 	}
+	return model !== undefined && dim !== undefined && Number.isFinite(dim) ? { model, dim } : null;
+}
+
+/**
+ * Create the base schema on `client`, idempotent, and — when `embedder` is given — the vector
+ * side table at its width, recording the model in `graph_meta`.
+ *
+ * A namespace that was initialised with a DIFFERENT embedder is refused ({@link EmbeddingError}
+ * `code: 'model'`) rather than silently kept at the old width: `Graph.reembed` /
+ * `graphx reembed` is the sanctioned way to switch models.
+ */
+export async function init(client: DbClient, embedder?: Embedder): Promise<void> {
 	switch (dialectOf(client)) {
 		case 'postgres':
 			// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
 			// `vector` extension is expected to exist in `public` (on the search_path).
-			await client.executeMultiple(postgresSchema(dim));
-			return;
+			await client.executeMultiple(postgresSchema());
+			break;
 		case 'duckdb':
 			// No pragmas: FKs are not declared, there is no WAL to set, and there is no
 			// lock-based contention to time out — the writer is serialized in-process.
-			await client.executeMultiple(duckdbSchema(dim));
-			return;
+			await client.executeMultiple(duckdbSchema());
+			break;
 		default:
 			await client.execute('PRAGMA journal_mode = WAL');
 			await applyConnPragmas(client);
-			await client.executeMultiple(schema(dim));
-			// Pre-existing namespaces predate `graph_outbox.source`; `CREATE TABLE IF NOT EXISTS` will not
-			// add it, and without it every outbox INSERT fails on the unknown column.
-			await ensureColumn(
-				client,
-				'graph_outbox',
-				'source',
-				'ALTER TABLE graph_outbox ADD COLUMN source TEXT',
-			);
-			return;
+			await client.executeMultiple(schema());
+			break;
 	}
+	if (embedder) await ensureEmbeddings(client, embedder);
+}
+
+/**
+ * Make `client`'s namespace ready for `embedder`: create `node_embeddings` at its width and
+ * record the model, or verify that the recorded model matches. With `replace: true` a
+ * mismatch is resolved by DROPPING every stored vector and recreating the table for the new
+ * model — the first step of a re-embed.
+ */
+export async function ensureEmbeddings(
+	client: DbClient,
+	embedder: Embedder,
+	opts: { replace?: boolean } = {},
+): Promise<EmbeddingMeta> {
+	const dim = await embedder.resolveDim();
+	const existing = await readEmbeddingMeta(client);
+	if (existing && existing.model === embedder.id && existing.dim === dim) return existing;
+	if (existing && !opts.replace) {
+		throw new EmbeddingError(
+			'model',
+			`this namespace is embedded with '${existing.model}' (${existing.dim} dims) but the configured embedder is '${embedder.id}' (${dim} dims). ` +
+				`Run \`graphx reembed\` (or Graph.reembed) to switch models, or point at a different namespace.`,
+		);
+	}
+	if (existing) await dropEmbeddings(client);
+	const d = dialectOf(client);
+	if (d !== 'duckdb') await client.executeMultiple(embeddingsTableDDL(d, dim));
+	await client.execute({ sql: META_UPSERT_SQL, args: [META_MODEL, embedder.id] });
+	await client.execute({ sql: META_UPSERT_SQL, args: [META_DIM, String(dim)] });
+	return { model: embedder.id, dim };
+}
+
+/** Remove every stored vector and the model record. DuckDB keeps its width-free table. */
+export async function dropEmbeddings(client: DbClient): Promise<void> {
+	if (dialectOf(client) === 'duckdb') {
+		await client.execute('DELETE FROM node_embeddings');
+	} else {
+		await client.execute('DROP TABLE IF EXISTS node_embeddings');
+	}
+	await client.execute({
+		sql: 'DELETE FROM graph_meta WHERE key IN (?, ?)',
+		args: [META_MODEL, META_DIM],
+	});
+}
+
+/** The ANN index DDL for `client`'s dialect (empty on DuckDB). For bulk-load bracketing. */
+export function embeddingsIndexFor(client: DbClient): string {
+	return embeddingsIndexDDL(dialectOf(client));
 }
 
 /**

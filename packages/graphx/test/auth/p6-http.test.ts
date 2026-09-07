@@ -6,12 +6,13 @@ import { Graph, init } from '../../src/core/index.ts';
 import { Auth } from '../../src/auth/auth.ts';
 import { createAuthApp } from '../../src/auth/http.ts';
 import { defineAuthModel, rel } from '../../src/auth/model.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 const MODEL = defineAuthModel({ user: {}, doc: { editor: rel(), viewer: rel().or('editor') } });
 
 async function freshApp(): Promise<{ db: DbClient; app: ReturnType<typeof createAuthApp> }> {
 	const db = makeTestDb().client;
-	await init(db, 4);
+	await init(db, hashEmbed(4));
 	const auth = new Auth(new Graph(db, MODEL.schema), MODEL);
 	const app = createAuthApp({
 		// L1 authn: require a bearer token, else throw → 401
@@ -168,7 +169,7 @@ test('P6: /list-objects paginates via limit + cursor', async () => {
 
 test('P6: 403 when resolveAuth throws a plain (non-HTTPException) error', async () => {
 	const db = makeTestDb().client;
-	await init(db, 4);
+	await init(db, hashEmbed(4));
 	const _auth = new Auth(new Graph(db, MODEL.schema), MODEL);
 	const app = createAuthApp({
 		authenticate: () => ({ svc: 'app' }),

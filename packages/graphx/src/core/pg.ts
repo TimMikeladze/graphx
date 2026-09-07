@@ -36,6 +36,33 @@ export interface PgClientOptions {
 	 * disables verification.
 	 */
 	ssl?: boolean | import('node:tls').ConnectionOptions;
+	/**
+	 * How the tenant `search_path` is applied — see {@link PgPoolerMode}. Default `'auto'`.
+	 */
+	pooler?: PgPoolerMode;
+}
+
+/**
+ * Whether the connection string points at a transaction-pooling proxy (PgBouncer, pgcat, Supavisor)
+ * rather than Postgres itself.
+ *
+ * Direct connections get the tenant schema as a libpq startup option
+ * (`-c search_path=…`), which every pooled connection then carries for its whole life — zero
+ * per-query cost. A transaction pooler hands each transaction to whichever server connection is
+ * free, so session state cannot be trusted and PgBouncer rejects the startup option outright
+ * (`unsupported startup parameter in options`). In pooled mode the adapter drops the startup
+ * option and instead runs every statement inside a transaction that begins with
+ * `SET LOCAL search_path` — one extra round trip per statement, correct under any pooler.
+ *
+ * - `'auto'` (default): start direct; on PgBouncer's startup rejection, switch to pooled and retry.
+ * - `'transaction'`: pooled from the first query (skips the failed handshake).
+ * - `'none'`: direct only; a pooler's rejection propagates as an error.
+ */
+export type PgPoolerMode = 'auto' | 'transaction' | 'none';
+
+/** PgBouncer's answer to a libpq `options` startup parameter it does not pass through. */
+function isStartupOptionsRejection(e: unknown): boolean {
+	return e instanceof Error && /unsupported startup parameter in options/i.test(e.message);
 }
 
 /**
@@ -124,83 +151,163 @@ class PgTransaction implements DbTransaction {
 
 export class PgClient implements DbClient {
 	readonly dialect = 'postgres' as const;
-	private readonly pool: Pool;
+	private pool: Pool;
 	private ended = false;
+	/** True once the adapter applies `search_path` per transaction instead of at connect time. */
+	private pooled: boolean;
+	/** In-flight switch to pooled mode, so concurrent first queries share one pool rebuild. */
+	private switching: Promise<void> | undefined;
+	private readonly opts: PgClientOptions;
 	/** One-shot extension/schema bootstrap; every method awaits it before its first query. */
 	private readonly ready: Promise<void>;
 
 	constructor(opts: PgClientOptions) {
-		const pool = new Pool({
+		this.opts = opts;
+		this.pooled = opts.pooler === 'transaction';
+		this.pool = this.makePool();
+		this.ready = this.run(async () => {
+			if (opts.ensureExtension) await this.pool.query('CREATE EXTENSION IF NOT EXISTS vector');
+			if (opts.ensureSchema && opts.schema) {
+				await this.pool.query(`CREATE SCHEMA IF NOT EXISTS "${opts.schema}"`);
+			}
+		});
+	}
+
+	private makePool(): Pool {
+		const { opts } = this;
+		return new Pool({
 			connectionString: opts.connectionString,
 			max: opts.max ?? 10,
 			...(opts.ssl !== undefined ? { ssl: opts.ssl } : {}),
-			// search_path applies to every pooled connection, isolating the tenant schema
-			// while leaving the SQL itself unqualified (schema-per-tenant, §2.9 analog).
-			// `public` stays on the path so the shared `vector` type/extension resolves.
-			...(opts.schema ? { options: `-c search_path="${opts.schema}",public` } : {}),
+			// Direct mode: search_path applies to every pooled connection, isolating the tenant
+			// schema while leaving the SQL itself unqualified (schema-per-tenant, §2.9 analog).
+			// `public` stays on the path so the shared `vector` type/extension resolves. Pooled
+			// mode sets it per transaction instead (see PgPoolerMode).
+			...(opts.schema && !this.pooled ? { options: `-c search_path="${opts.schema}",public` } : {}),
 		});
-		this.pool = pool;
-		this.ready = (async () => {
-			if (opts.ensureExtension) await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
-			if (opts.ensureSchema && opts.schema) {
-				await pool.query(`CREATE SCHEMA IF NOT EXISTS "${opts.schema}"`);
-			}
-		})();
+	}
+
+	/** The per-transaction `search_path`, or `null` when direct mode already carries it. */
+	private pathStmt(): string | null {
+		return this.pooled && this.opts.schema
+			? `SET LOCAL search_path TO "${this.opts.schema}", public`
+			: null;
+	}
+
+	/**
+	 * Run `fn`; if a transaction pooler rejects the startup option, flip to pooled mode (a fresh
+	 * pool without the option) and run `fn` once more. Only `'auto'` switches.
+	 */
+	private async run<T>(fn: () => Promise<T>): Promise<T> {
+		try {
+			return await fn();
+		} catch (e) {
+			if (this.pooled || this.opts.pooler === 'none' || !isStartupOptionsRejection(e)) throw e;
+			this.switching ??= (async () => {
+				const old = this.pool;
+				this.pooled = true;
+				this.pool = this.makePool();
+				await old.end().catch(() => {});
+			})();
+			await this.switching;
+			return fn();
+		}
 	}
 
 	async execute(stmt: SqlStatement): Promise<SqlResult> {
 		await this.ready;
 		const { sql, args } = normalize(stmt);
-		return toResult(await this.pool.query(toPgPlaceholders(sql), args));
+		return this.run(async () => {
+			const path = this.pathStmt();
+			if (!path) return toResult(await this.pool.query(toPgPlaceholders(sql), args));
+			// Pooled: the SET LOCAL and the statement must reach the same server connection,
+			// which only a transaction guarantees under a transaction pooler. Round trips are
+			// what pooled mode costs, so they are minimised: a parameterless statement rides in
+			// ONE simple query with its BEGIN/SET/COMMIT; a parameterised one (extended protocol,
+			// which cannot carry several statements) takes three.
+			const client = await this.pool.connect();
+			try {
+				if (args.length === 0) {
+					const results = await client.query(`BEGIN; ${path}; ${sql}; COMMIT`);
+					// pg returns one result per statement for a multi-statement simple query.
+					const all = Array.isArray(results) ? results : [results];
+					return toResult(all[all.length - 2] as QueryResult);
+				}
+				await client.query(`BEGIN; ${path}`);
+				const r = toResult(await client.query(toPgPlaceholders(sql), args));
+				await client.query('COMMIT');
+				return r;
+			} catch (e) {
+				await client.query('ROLLBACK').catch(() => {});
+				throw e;
+			} finally {
+				client.release();
+			}
+		});
 	}
 
 	/** Atomic batch — all statements in one transaction (mirrors libSQL `batch(_, 'write')`). */
 	async batch(stmts: SqlStatement[], _mode?: TransactionMode): Promise<SqlResult[]> {
 		await this.ready;
-		const client = await this.pool.connect();
-		try {
-			await client.query('BEGIN');
-			const out: SqlResult[] = [];
-			for (const stmt of stmts) {
-				const { sql, args } = normalize(stmt);
-				out.push(toResult(await client.query(toPgPlaceholders(sql), args)));
+		return this.run(async () => {
+			const client = await this.pool.connect();
+			try {
+				const path = this.pathStmt();
+				await client.query(path ? `BEGIN; ${path}` : 'BEGIN');
+				const out: SqlResult[] = [];
+				for (const stmt of stmts) {
+					const { sql, args } = normalize(stmt);
+					out.push(toResult(await client.query(toPgPlaceholders(sql), args)));
+				}
+				await client.query('COMMIT');
+				return out;
+			} catch (e) {
+				await client.query('ROLLBACK').catch(() => {});
+				throw e;
+			} finally {
+				client.release();
 			}
-			await client.query('COMMIT');
-			return out;
-		} catch (e) {
-			await client.query('ROLLBACK').catch(() => {});
-			throw e;
-		} finally {
-			client.release();
-		}
+		});
 	}
 
 	async transaction(mode?: TransactionMode): Promise<DbTransaction> {
 		await this.ready;
-		const client = await this.pool.connect();
-		try {
-			// SERIALIZABLE for write transactions: graphx's conditional-close reads
-			// (SELECT MAX(valid_from)) then writes, and relies on full writer serialization
-			// (libSQL's BEGIN IMMEDIATE). Under READ COMMITTED a racing writer would read a
-			// stale snapshot and close a successor at an inverted timestamp; SERIALIZABLE
-			// raises 40001 on the conflict instead, which the caller's retry envelope handles.
-			await client.query(mode === 'read' ? 'BEGIN' : 'BEGIN ISOLATION LEVEL SERIALIZABLE');
-		} catch (e) {
-			client.release();
-			throw e;
-		}
-		return new PgTransaction(client, () => client.release());
+		return this.run(async () => {
+			const client = await this.pool.connect();
+			try {
+				// SERIALIZABLE for write transactions: graphx's conditional-close reads
+				// (SELECT MAX(valid_from)) then writes, and relies on full writer serialization
+				// (libSQL's BEGIN IMMEDIATE). Under READ COMMITTED a racing writer would read a
+				// stale snapshot and close a successor at an inverted timestamp; SERIALIZABLE
+				// raises 40001 on the conflict instead, which the caller's retry envelope handles.
+				const begin = mode === 'read' ? 'BEGIN' : 'BEGIN ISOLATION LEVEL SERIALIZABLE';
+				const path = this.pathStmt();
+				await client.query(path ? `${begin}; ${path}` : begin);
+			} catch (e) {
+				client.release();
+				throw e;
+			}
+			return new PgTransaction(client, () => client.release());
+		});
 	}
 
 	/** Run a multi-statement script (DDL) on one connection via the simple-query protocol. */
 	async executeMultiple(sql: string): Promise<void> {
 		await this.ready;
-		const client = await this.pool.connect();
-		try {
-			await client.query(sql);
-		} finally {
-			client.release();
-		}
+		await this.run(async () => {
+			const client = await this.pool.connect();
+			try {
+				const path = this.pathStmt();
+				// A multi-statement simple query is already one implicit transaction; the explicit
+				// BEGIN only exists to give SET LOCAL something to be local to.
+				await client.query(path ? `BEGIN; ${path}; ${sql}; COMMIT` : sql);
+			} catch (e) {
+				if (this.pathStmt()) await client.query('ROLLBACK').catch(() => {});
+				throw e;
+			} finally {
+				client.release();
+			}
+		});
 	}
 
 	/** Drain the pool. Fire-and-forget to satisfy the synchronous `DbClient.close()`. */
@@ -235,5 +342,6 @@ registerPgDriver(
 			ensureSchema: true,
 			...(cfg.ssl !== undefined ? { ssl: cfg.ssl } : {}),
 			...(cfg.poolMax !== undefined ? { max: cfg.poolMax } : {}),
+			...(cfg.pooler !== undefined ? { pooler: cfg.pooler } : {}),
 		}),
 );

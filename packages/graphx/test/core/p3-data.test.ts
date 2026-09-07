@@ -5,7 +5,8 @@ import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
-import { libsqlOnly, makeTestDb } from './harness.ts';
+import { embReadSql, libsqlOnly, makeTestDb, stubEmbedder } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // The nv_emb_idx retrieval probe uses libSQL's vector_top_k; PG vector retrieval is covered by P4.
 
@@ -29,7 +30,7 @@ const SCHEMA = defineGraphSchema({
 // dim 4 so embeddings are cheap and the vector index is small.
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<typeof SCHEMA> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 
@@ -55,34 +56,45 @@ test('P3: ULID id is a 26-char string', async () => {
 	client.close();
 });
 
-test('P3: addNode without emb inserts SQL NULL (no throw); node retrievable', async () => {
+test('P3: addNode without a vector stores no embedding row (no throw); node retrievable', async () => {
 	const { client, g } = await freshGraph();
 	const created = await g.addNode({ type: 'person', data: { name: 'noemb' } });
 	const r = await client.execute({
-		sql: 'SELECT emb FROM node_versions WHERE id = ?',
+		sql: 'SELECT count(*) AS n FROM node_embeddings WHERE id = ?',
 		args: [created.id],
 	});
-	expect(r.rows[0]!.emb).toBeNull();
+	expect(Number(r.rows[0]!.n)).toBe(0);
 	const read = await g.getNode(created.id);
 	expect(read!.data).toEqual({ name: 'noemb' });
 	client.close();
 });
 
-libsqlOnly('P3: addNode WITH emb stores a vector and is retrievable via nv_emb_idx', async () => {
+libsqlOnly('P3: addNode WITH emb stores a vector row and is reachable via ne_emb_idx', async () => {
 	const { client, g } = await freshGraph();
 	const created = await g.addNode({ type: 'device', data: { type: 'sensor' }, emb: [1, 0, 0, 0] });
 	const r = await client.execute({
-		sql: 'SELECT emb FROM node_versions WHERE id = ?',
+		sql: 'SELECT count(*) AS n FROM node_embeddings WHERE id = ?',
 		args: [created.id],
 	});
-	expect(r.rows[0]!.emb).not.toBeNull(); // a real F32 blob, not NULL
+	expect(Number(r.rows[0]!.n)).toBe(1);
 
-	// reachable through the partial vector index (live rows)
+	// reachable through the vector index over the side table
 	const seed = await client.execute({
-		sql: "SELECT n.id FROM vector_top_k('nv_emb_idx', vector(?), 1) v JOIN node_versions n ON n.rowid = v.id",
+		sql: "SELECT e.id FROM vector_top_k('ne_emb_idx', vector(?), 1) v JOIN node_embeddings e ON e.rowid = v.id",
 		args: ['[1,0,0,0]'],
 	});
 	expect(String(seed.rows[0]!.id)).toBe(created.id);
+	client.close();
+});
+
+test('P3: a wrong-width vector is refused before any SQL, with both widths named', async () => {
+	const { client, g } = await freshGraph();
+	await expect(
+		g.addNode({ type: 'device', data: { type: 'sensor' }, emb: [1, 0] }),
+	).rejects.toThrow(/2 dimensions but this namespace is embedded at 4/);
+	// Nothing leaked: no identity, no version, no vector.
+	const n = await client.execute('SELECT count(*) AS n FROM node_identity');
+	expect(Number(n.rows[0]!.n)).toBe(0);
 	client.close();
 });
 
@@ -285,36 +297,57 @@ test('P3: getNode returns null for an unknown id', async () => {
 	client.close();
 });
 
-test('P3: embed_hash — addNode stores it; updateNode without embed_hash carries it forward; explicit patch replaces it', async () => {
+test('P3: the graph embeds on write and re-embeds only when the embedding input changes', async () => {
 	const { client, teardown } = makeTestDb({ file: true });
-	await init(client, 4);
-	const g = new Graph(client, SCHEMA);
+	let calls = 0;
+	const embedder = stubEmbedder(
+		(text) => {
+			calls++;
+			return [text.length, 1, 0, 0];
+		},
+		{ dim: 4 },
+	);
+	await init(client, embedder);
+	const g = new Graph(client, SCHEMA, { embedder });
 
-	// addNode with embed_hash: 'h1'
-	const node = await g.addNode({ type: 'person', data: { name: 'alice' }, embed_hash: 'h1' });
+	// addNode with a body: embedded once, hash stored beside the vector.
+	const node = await g.addNode({ type: 'person', data: { name: 'alice' }, body: 'hello' });
+	expect(calls).toBe(1);
+	const hashOf = async (): Promise<string> =>
+		String(
+			(
+				await client.execute({
+					sql: 'SELECT embed_hash FROM node_embeddings WHERE id = ? AND chunk = 0',
+					args: [node.id],
+				})
+			).rows[0]!.embed_hash,
+		);
+	const h1 = await hashOf();
 
-	// Read back via nodes view — embed_hash must be present and equal 'h1'
-	const r1 = await client.execute({
-		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
+	// A data-only patch leaves the input unchanged — no embed call, same hash.
+	await g.updateNode(node.id, { data: { name: 'alice b' } });
+	expect(calls).toBe(1);
+	expect(await hashOf()).toBe(h1);
+
+	// A body change is a new input — re-embedded, new hash, new vector.
+	await g.updateNode(node.id, { body: 'hello there' });
+	expect(calls).toBe(2);
+	expect(await hashOf()).not.toBe(h1);
+	const vec = await client.execute({
+		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
 		args: [node.id],
 	});
-	expect(String(r1.rows[0]!.embed_hash)).toBe('h1');
+	expect((JSON.parse(String(vec.rows[0]!.v)) as number[])[0]).toBe('hello there'.length);
 
-	// updateNode with only body change (no embed_hash patch) — carry forward
-	await g.updateNode(node.id, { body: 'x2' });
-	const r2 = await client.execute({
-		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
-		args: [node.id],
+	// A node without a body has no vector; a delete removes the vector rows.
+	const bare = await g.addNode({ type: 'person', data: { name: 'bare' } });
+	expect(calls).toBe(2);
+	await g.deleteNode(node.id);
+	const left = await client.execute({
+		sql: 'SELECT count(*) AS n FROM node_embeddings WHERE id IN (?, ?)',
+		args: [node.id, bare.id],
 	});
-	expect(String(r2.rows[0]!.embed_hash)).toBe('h1');
-
-	// updateNode with explicit embed_hash — replaces stored value
-	await g.updateNode(node.id, { embed_hash: 'h2' });
-	const r3 = await client.execute({
-		sql: 'SELECT embed_hash FROM nodes WHERE id = ?',
-		args: [node.id],
-	});
-	expect(String(r3.rows[0]!.embed_hash)).toBe('h2');
+	expect(Number(left.rows[0]!.n)).toBe(0);
 
 	await teardown();
 });

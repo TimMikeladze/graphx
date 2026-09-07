@@ -1,6 +1,5 @@
-import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path/posix';
-import type { GraphSchema } from '../core/index.ts';
+import type { Embedder, GraphSchema, PreparedEmbedding } from '../core/index.ts';
 import { extractEmbeds, extractLinks, extractTags } from './links.ts';
 import { parseFile } from './parse.ts';
 import { buildPathIndex, type Resolution, resolveLink } from './resolve.ts';
@@ -27,15 +26,17 @@ function mimeOf(path: string): string {
 
 /** The structural, non-generic slice of `Graph` that ingest drives. */
 interface LooseGraph {
+	readonly embedder: Embedder | undefined;
+	readonly embeddingMode: 'sync' | 'lazy' | 'off';
+	schema: { nodes: Record<string, unknown> };
 	addNode(n: {
 		type: string;
 		body?: string;
 		uri?: string;
 		data: Record<string, unknown>;
 		content_hash?: string;
-		embed_hash?: string;
 		content_type?: string;
-		emb?: number[];
+		embedding?: PreparedEmbedding | false;
 	}): Promise<{ id: string }>;
 	updateNode(
 		id: string,
@@ -44,10 +45,14 @@ interface LooseGraph {
 			body?: string;
 			data?: Record<string, unknown>;
 			content_hash?: string;
-			embed_hash?: string;
-			emb?: number[];
+			embedding?: PreparedEmbedding | false;
 		},
 	): Promise<void>;
+	prepareEmbeddings(
+		items: Array<{ type: string; data: Record<string, unknown>; body?: string | null }>,
+	): Promise<(PreparedEmbedding | null)[]>;
+	embeddingHashes(ids: string[]): Promise<Map<string, string>>;
+	embedHashFor(type: string, data: Record<string, unknown>, body: string | null): string | null;
 	addEdge(e: {
 		rel: string;
 		src: string;
@@ -84,7 +89,6 @@ function identityKeyOf(file: ParsedFile, idField: string): string {
 interface LiveEntry {
 	id: string;
 	hash: string;
-	embedHash: string;
 }
 
 /** One live out-edge this source authored, as read back for reconciliation. */
@@ -172,7 +176,7 @@ async function liveIncidentEdges(g: LooseGraph, nodeIds: string[]): Promise<stri
 	return [...ids];
 }
 
-/** Read the live identity map (key → node id + hash + embedHash) from the `nodes` view via raw SQL. */
+/** Read the live identity map (key → node id + content hash) from the `nodes` view via raw SQL. */
 async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string, LiveEntry>> {
 	const map = new Map<string, LiveEntry>();
 	// Bind the pattern (never interpolate a caller-derived prefix) and escape LIKE
@@ -180,7 +184,7 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 	// is honored identically by SQLite (libSQL) and Postgres.
 	const pattern = `${keyPrefix.replace(/[\\%_]/g, '\\$&')}%`;
 	const r = await g.raw.execute({
-		sql: `SELECT id, uri, content_hash, embed_hash FROM nodes WHERE uri LIKE ? ESCAPE '\\'`,
+		sql: `SELECT id, uri, content_hash FROM nodes WHERE uri LIKE ? ESCAPE '\\'`,
 		args: [pattern],
 	});
 	for (const row of r.rows) {
@@ -188,7 +192,6 @@ async function loadLiveMap(g: LooseGraph, keyPrefix: string): Promise<Map<string
 		map.set(uri.slice(keyPrefix.length), {
 			id: String(row.id),
 			hash: row.content_hash == null ? '' : String(row.content_hash),
-			embedHash: row.embed_hash == null ? '' : String(row.embed_hash),
 		});
 	}
 	return map;
@@ -363,11 +366,6 @@ export async function ingestDir<S extends GraphSchema>(
 	const idField = opts.idField ?? 'id';
 	const edgeFields = opts.edgeFields ?? {};
 	const edgeFieldKeys = new Set(Object.keys(edgeFields));
-	// The effective embed-cache key: sha256(body), optionally fingerprinted by the embedder
-	// identity so that swapping models (changing `embedId`) re-embeds even byte-identical bodies.
-	const embedId = opts.embedId;
-	const effEmbedHash = (f: ParsedFile): string =>
-		embedId ? createHash('sha256').update(`${embedId}\0${f.embedHash}`).digest('hex') : f.embedHash;
 	const result: IngestResult = {
 		added: 0,
 		updated: 0,
@@ -384,9 +382,6 @@ export async function ingestDir<S extends GraphSchema>(
 	const listed = await fileSource.list();
 	const keys = opts.exclude ? listed.filter((k) => !opts.exclude?.(k)) : listed;
 	const live = await loadLiveMap(g, keyPrefix);
-	// Clamp to >= 1 — a literal 0 would make mapWithConcurrency run no workers, silently
-	// leaving new nodes with no embedding.
-	const embedConcurrency = Math.max(1, opts.embedConcurrency ?? 8);
 
 	// link resolution keys by path; the live map / prune diff keys by identity (id: or file:).
 	const keyToId = new Map<string, string>();
@@ -447,8 +442,9 @@ export async function ingestDir<S extends GraphSchema>(
 		seenIdentity.add(identityKey);
 
 		const prior = live.get(identityKey);
-		if (prior && prior.hash === file.hash && prior.embedHash === effEmbedHash(file)) {
-			// Unchanged in content AND embedder identity: record id for link resolution, drop the body.
+		if (prior && prior.hash === file.hash) {
+			// Unchanged: record id for link resolution, drop the body. A model change is not
+			// detected here — that is `graphx reembed`'s job, over every node at once.
 			keyToId.set(file.key, prior.id);
 			result.unchanged++;
 		} else {
@@ -463,32 +459,56 @@ export async function ingestDir<S extends GraphSchema>(
 	// Every file has now been parsed, so aliases are complete — build the link index.
 	const index = buildPathIndex(keys, aliasMap);
 
-	// Step 2: Batch-embed — collect bodies needing an embed (new nodes + body-changed updates).
-	// Index-aligned: workItems[i] corresponds to embedInputs[i] and embeddings[i].
-	interface EmbedInput {
-		body: string;
-		needsEmbed: boolean;
-	}
-	const embedInputs: EmbedInput[] = workItems.map(({ file, prior }) => {
-		if (!prior) {
-			// New node — always embed.
-			return { body: file.body, needsEmbed: true };
-		}
-		// Update — re-embed if the body OR the embedder identity changed.
-		return { body: file.body, needsEmbed: prior.embedHash !== effEmbedHash(file) };
-	});
-
-	// Run embeds with bounded concurrency, preserving index alignment.
-	const embeddings: (number[] | undefined)[] = await mapWithConcurrency(
-		embedInputs,
-		embedConcurrency,
-		(input) => (input.needsEmbed ? opts.embed(input.body) : Promise.resolve(undefined)),
+	// Step 2: Batch-embed. One embedder call for the whole run, rather than one per node inside
+	// each write: every new node, plus every updated node whose embedding input (per the type's
+	// policy) hashes differently from the vector it already has. Nodes whose input is unchanged
+	// pass `embedding: false` so the write skips its own staleness check.
+	// Index-aligned: workItems[i] corresponds to embeddings[i].
+	const embeddings: (PreparedEmbedding | false | null | undefined)[] = workItems.map(
+		() => undefined,
 	);
+	if (g.embedder && g.embeddingMode === 'sync') {
+		const parseData = (type: string, data: Record<string, unknown>): Record<string, unknown> => {
+			const def = g.schema.nodes[type] as { parse?: (v: unknown) => unknown } | undefined;
+			try {
+				return def?.parse ? (def.parse(data) as Record<string, unknown>) : data;
+			} catch {
+				return data; // the write will reject it with a proper skip entry
+			}
+		};
+		const priorIds = workItems.filter((w) => w.prior).map((w) => (w.prior as LiveEntry).id);
+		const stored = await g.embeddingHashes(priorIds);
+		const toEmbed: number[] = [];
+		workItems.forEach(({ file, type, prior }, i) => {
+			const data = parseData(type, toData(file.frontmatter, edgeFieldKeys));
+			if (!prior) {
+				toEmbed.push(i);
+				return;
+			}
+			const want = g.embedHashFor(type, data, file.body);
+			const have = stored.get(prior.id);
+			if (want === null ? have === undefined : have === want) embeddings[i] = false;
+			else toEmbed.push(i);
+		});
+		const prepared = await g.prepareEmbeddings(
+			toEmbed.map((i) => {
+				const { file, type } = workItems[i] as WorkItem;
+				return {
+					type,
+					data: parseData(type, toData(file.frontmatter, edgeFieldKeys)),
+					body: file.body,
+				};
+			}),
+		);
+		toEmbed.forEach((i, j) => {
+			embeddings[i] = prepared[j] ?? null;
+		});
+	}
 
 	// Step 3: Write nodes sequentially (write txns).
 	for (let i = 0; i < workItems.length; i++) {
 		const { file, type, identityKey, prior } = workItems[i]!;
-		const emb = embeddings[i];
+		const embedding = embeddings[i];
 		const data = toData(file.frontmatter, edgeFieldKeys);
 		try {
 			if (!prior) {
@@ -498,24 +518,20 @@ export async function ingestDir<S extends GraphSchema>(
 					uri: keyPrefix + identityKey,
 					data,
 					content_hash: file.hash,
-					embed_hash: effEmbedHash(file),
-					emb,
+					...(embedding === undefined ? {} : { embedding: embedding ?? false }),
 				});
 				keyToId.set(file.key, node.id);
 				touched.push(file);
 				result.added++;
 			} else {
-				// emb is only set when body changed; otherwise core carries both emb + embed_hash forward.
 				const patch: Parameters<typeof g.updateNode>[1] = {
 					type,
 					body: file.body,
 					data,
 					content_hash: file.hash,
 				};
-				if (emb !== undefined) {
-					patch.emb = emb;
-					patch.embed_hash = effEmbedHash(file);
-				}
+				// `null` (policy yields no text) is left to the write, which removes stale vectors.
+				if (embedding !== undefined && embedding !== null) patch.embedding = embedding;
 				await g.updateNode(prior.id, patch);
 				keyToId.set(file.key, prior.id);
 				touched.push(file);
@@ -819,31 +835,4 @@ export async function ingestDir<S extends GraphSchema>(
 	}
 
 	return result;
-}
-
-/**
- * Run `fn` over each item in `items` with at most `limit` concurrent calls,
- * returning results index-aligned to `items`. A reorder is never performed —
- * results[i] always corresponds to items[i].
- */
-async function mapWithConcurrency<T, R>(
-	items: T[],
-	limit: number,
-	fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-	const results: R[] = Array.from({ length: items.length });
-	let next = 0;
-
-	async function worker(): Promise<void> {
-		while (true) {
-			const i = next++;
-			if (i >= items.length) return;
-			results[i] = await fn(items[i]!, i);
-		}
-	}
-
-	const slots = Math.min(limit, items.length);
-	if (slots === 0) return results;
-	await Promise.all(Array.from({ length: slots }, worker));
-	return results;
 }

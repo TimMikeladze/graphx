@@ -49,9 +49,8 @@ function SourceWarning({ uri }: { uri: string }) {
  * The selected node's markdown body — rendered, and editable in place. Saving `PATCH`es the node,
  * which the server records as a new bitemporal version (visible in the History tab).
  *
- * The write does NOT re-embed: `emb`/`embed_hash` carry forward, so vector and hybrid search keep
- * matching the pre-edit text until the node is re-ingested. That is surfaced after a save rather
- * than hidden.
+ * The write re-embeds when the body changed (the server hashes the embedding input and compares
+ * it with the stored vector's), so vector and hybrid search follow the edit immediately.
  */
 export function ContentTab({
 	tenant,
@@ -199,10 +198,7 @@ export function ContentTab({
 				<div className="min-w-0 flex-1 space-y-1">
 					{uri && <SourceWarning uri={uri} />}
 					{savedThisSession && (
-						<p className="text-[0.7rem] text-muted-foreground">
-							Saved. Vector and hybrid search still match the pre-edit text until this node is
-							re-embedded.
-						</p>
+						<p className="text-[0.7rem] text-muted-foreground">Saved as a new version.</p>
 					)}
 				</div>
 				<Button variant="outline" size="sm" disabled={readOnly} onClick={() => edit(body)}>

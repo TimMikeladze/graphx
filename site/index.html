@@ -40,9 +40,9 @@
 		<script>
 			// Apply the saved theme before first paint so there is no flash.
 			try {
-				const saved = localStorage.getItem('theme')
+				const saved = localStorage.getItem('theme');
 				if (saved === 'light' || saved === 'dark') {
-					document.documentElement.dataset.theme = saved
+					document.documentElement.dataset.theme = saved;
 				}
 			} catch {}
 		</script>

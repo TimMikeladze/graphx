@@ -7,6 +7,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { history } from '../../src/core/temporal.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P13 — bulk EDGE ingestion + historical (multi-version) bulk rows. dim 4.
 //
@@ -30,7 +31,7 @@ const SCHEMA = defineGraphSchema({
 
 async function mem(): Promise<DbClient> {
 	const c = makeTestDb().client;
-	await init(c, 4);
+	await init(c, hashEmbed(4));
 	return c;
 }
 

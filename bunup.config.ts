@@ -24,6 +24,7 @@ export default defineWorkspace([
 				'src/core/pg.ts',
 				'src/core/duck.ts',
 				'src/core/blob.ts',
+				'src/embedders/index.ts',
 				'src/react/index.ts',
 				'src/mcp/index.ts',
 				'src/ingest/index.ts',

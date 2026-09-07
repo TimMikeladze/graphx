@@ -6,6 +6,7 @@ import { Graph } from '../../src/core/graph.ts';
 import { match } from '../../src/core/pattern.ts';
 import { init } from '../../src/core/schema.ts';
 import { makeTestDb } from './harness.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P5 — PatternBuilder (§8). Verifies the fluent builder compiles to a valid SQL
 // JOIN chain, that param order matches textual placeholder order (acceptance §16 —
@@ -30,7 +31,7 @@ type Schema = typeof SCHEMA;
 
 async function freshGraph(): Promise<{ client: DbClient; g: Graph<Schema> }> {
 	const client = makeTestDb().client;
-	await init(client, 4);
+	await init(client, hashEmbed(4));
 	return { client, g: new Graph(client, SCHEMA) };
 }
 

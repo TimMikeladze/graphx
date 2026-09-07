@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createDuckClient } from '../../src/core/duck.ts';
 import { embParam } from '../../src/core/duck-value.ts';
 import {
-	annSeedsAsOf,
-	annSeedsLive,
+	annSeeds,
 	jsonArrayRows,
 	jsonEqArg,
 	jsonEqExpr,
@@ -11,6 +10,7 @@ import {
 	scalarMax,
 } from '../../src/core/dialect-sql.ts';
 import { init } from '../../src/core/schema.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 
 const FOREVER = 8640000000000000;
 
@@ -59,52 +59,31 @@ describe('duckdb fragments, executed', () => {
 		await c.end();
 	});
 
-	test('annSeedsAsOf excludes a candidate that is nearest but not yet valid at t', async () => {
-		// The highest-risk fragment here: it combines temporal filtering, true-cosine
-		// ranking, and two-phase truncation. A version of it that ignored the temporal
-		// filter would return a plausible, well-ordered, WRONG answer — so the case has to
-		// be built so the nearest vector is the one that must be excluded.
+	test('annSeeds returns vector rows ordered by true cosine distance with the distance', async () => {
 		const c = createDuckClient();
-		await init(c, 3);
-		for (const [id, vec, from] of [
-			['near', [1, 0, 0], 100],
-			['far', [0, 0, 1], 1],
-		] as const) {
-			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
-			await c.execute({
-				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
-				      VALUES (nextval('seq_ver'), ?, 'Doc', ?, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
-				args: [id, from, embParam([...vec])],
-			});
-		}
-		// As of t=50, 'near' does not exist yet — even though it is the closest vector.
-		const r = await c.execute({
-			sql: `WITH seeds AS (${annSeedsAsOf('duckdb')}) SELECT id FROM seeds`,
-			args: [embParam([1, 0, 0]), 10, 50, 50, 5],
-		});
-		expect(r.rows.map((x) => x.id)).toEqual(['far']);
-		await c.end();
-	});
-
-	test('annSeedsLive returns live ids ordered by cosine distance', async () => {
-		const c = createDuckClient();
-		await init(c, 3);
+		await init(c, hashEmbed(3));
 		for (const [id, vec] of [
 			['near', [1, 0, 0]],
 			['far', [0, 0, 1]],
+			['mid', [1, 1, 0]],
 		] as const) {
 			await c.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 			await c.execute({
-				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to, emb)
-				      VALUES (nextval('seq_ver'), ?, 'Doc', 1, ${FOREVER}, from_json(?, '["FLOAT"]'))`,
+				sql: `INSERT INTO node_versions (ver, id, type, valid_from, valid_to)
+				      VALUES (nextval('seq_ver'), ?, 'Doc', 1, ${FOREVER})`,
+				args: [id],
+			});
+			await c.execute({
+				sql: `INSERT INTO node_embeddings (id, chunk, emb, embed_hash)
+				      VALUES (?, 0, from_json(?, '["FLOAT"]'), 'h')`,
 				args: [id, embParam([...vec])],
 			});
 		}
-		const r = await c.execute({
-			sql: `WITH seeds AS (${annSeedsLive('duckdb')}) SELECT id FROM seeds`,
-			args: [embParam([1, 0, 0]), 2],
-		});
-		expect(r.rows[0]?.id).toBe('near');
+		const { sql, bind } = annSeeds('duckdb');
+		const r = await c.execute({ sql, args: bind(embParam([1, 0, 0]), 3) });
+		expect(r.rows.map((x) => x.id)).toEqual(['near', 'mid', 'far']);
+		expect(Number(r.rows[0]?.dist)).toBeCloseTo(0, 5);
+		expect(Number(r.rows[2]?.dist)).toBeCloseTo(1, 5);
 		await c.end();
 	});
 });

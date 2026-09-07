@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 import { expect, test } from 'bun:test';
-import { hashEmbed } from '../../src/core/retrieve.ts';
+import { hashEmbed } from '../../src/core/embedder.ts';
 import { GOLDEN, seedCorpus } from './fixtures/corpus.ts';
 import { makeTestDb, TEST_DRIVER } from './harness.ts';
 import { annScored, ftsSeeds } from './retrieval-legs.ts';
