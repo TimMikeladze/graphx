@@ -1,11 +1,42 @@
 {
 	"name": "graphx-monorepo",
 	"private": true,
+	"description": "Monorepo for graphx — temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB. Holds the graphx package, the admin SPA, the graphx.sh landing page, and the examples.",
+	"keywords": [
+		"bitemporal",
+		"bun",
+		"duckdb",
+		"embeddings",
+		"full-text-search",
+		"graph",
+		"graph-database",
+		"graphrag",
+		"hono",
+		"knowledge-graph",
+		"libsql",
+		"mcp",
+		"model-context-protocol",
+		"openapi",
+		"postgres",
+		"rag",
+		"react-query",
+		"rebac",
+		"sqlite",
+		"temporal",
+		"typescript",
+		"vector-search",
+		"zod"
+	],
 	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
 	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/TimMikeladze/graphx.git"

@@ -333,4 +333,4 @@ Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for contribution guidelines.
 
 ## License
 
-MIT
+MIT © [Tim Mikeladze](https://github.com/TimMikeladze)

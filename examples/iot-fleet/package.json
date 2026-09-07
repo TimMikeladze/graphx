@@ -3,6 +3,21 @@
 	"version": "0.0.0",
 	"private": true,
 	"description": "Vite + Bun + SQLite (libSQL) React example — an IoT fleet graph over graphx",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/iot-fleet"
+	},
 	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",

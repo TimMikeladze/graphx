@@ -1,6 +1,22 @@
 {
 	"name": "graphx-site",
 	"private": true,
+	"description": "The graphx.sh landing page — Vite, prerendered from the root README at build time.",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "site"
+	},
 	"type": "module",
 	"scripts": {
 		"dev": "vite",

@@ -3,6 +3,21 @@
 	"version": "0.0.0",
 	"private": true,
 	"description": "An occupations, skills and career-transition graph, built from skill-collector's SQLite database and browsed in the graphx admin SPA",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/skills-graph"
+	},
 	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",

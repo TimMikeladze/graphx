@@ -2,6 +2,22 @@
 	"name": "graphx-admin",
 	"version": "0.0.1",
 	"private": true,
+	"description": "Operator UI for graphx — a Vite + React SPA for browsing, querying, and editing a served graph. Not published.",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "packages/admin"
+	},
 	"type": "module",
 	"scripts": {
 		"dev": "vite",

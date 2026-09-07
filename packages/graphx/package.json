@@ -4,22 +4,39 @@
 	"description": "Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB — typed schema, bitemporal graph, vector + FTS retrieval, a served HTTP API, React Query hooks, and an MCP server",
 	"keywords": [
 		"bitemporal",
+		"bun",
 		"duckdb",
+		"embeddings",
+		"full-text-search",
 		"graph",
+		"graph-database",
 		"graphrag",
+		"hono",
+		"knowledge-graph",
 		"libsql",
 		"mcp",
+		"model-context-protocol",
+		"openapi",
 		"postgres",
 		"rag",
+		"react-query",
+		"rebac",
 		"sqlite",
 		"temporal",
-		"vector-search"
+		"typescript",
+		"vector-search",
+		"zod"
 	],
 	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
 	},
 	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/TimMikeladze/graphx.git",
@@ -102,6 +119,9 @@
 			}
 		},
 		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"scripts": {
 		"type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.core.json"
