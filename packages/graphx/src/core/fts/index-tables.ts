@@ -9,7 +9,7 @@
 
 import type { DbClient } from '../dialect.ts';
 import { buildIndex } from './build.ts';
-import { FOREVER } from '../db.ts';
+import { FOREVER } from '../runtime.ts';
 
 /** Every table the index occupies. Load order is irrelevant — no foreign keys between them. */
 export const FTS_TABLES = ['fts_dict', 'fts_docs', 'fts_terms', 'fts_stats'] as const;

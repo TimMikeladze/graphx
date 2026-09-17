@@ -1,4 +1,4 @@
-import { Buffer } from 'node:buffer';
+import { base64, utf8 } from '@scure/base';
 
 /**
  * P14 — query governance (§19.2) + pagination cursor codec (§19.7).
@@ -248,7 +248,7 @@ export function withTimeout<T>(work: Promise<T>, ms: number, ctx?: MetricsContex
  * keyset row (see `PatternBuilder.page`).
  */
 export function encodeCursor(key: string[]): string {
-	return Buffer.from(JSON.stringify(key), 'utf8').toString('base64');
+	return base64.encode(utf8.decode(JSON.stringify(key)));
 }
 
 /**
@@ -260,7 +260,7 @@ export function encodeCursor(key: string[]): string {
 export function decodeCursor(cursor: string): string[] {
 	let parsed: unknown;
 	try {
-		parsed = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8'));
+		parsed = JSON.parse(utf8.encode(base64.decode(cursor)));
 	} catch {
 		throw new Error('invalid cursor');
 	}

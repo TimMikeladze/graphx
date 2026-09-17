@@ -1,4 +1,4 @@
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import { type DbClient, dialectOf } from './dialect.ts';
 import { declareDuckUniqueProp } from './duck-constraints.ts';
 import type { GraphSchema } from './graph.ts';

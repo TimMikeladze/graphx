@@ -3,10 +3,10 @@ import { bm25Cte, FTS_DDL } from './fts/index-tables.ts';
 
 /**
  * Per-dialect SQL fragments. This is the home for every SQL string that genuinely
- * differs between backends. Each fragment currently implements the **libSQL** form
- * only; the Postgres branch throws until the Postgres adapter lands (it is never
- * reached while the only backend is libSQL). Later phases fill the Postgres branches
- * here instead of rewriting the call sites in schema.ts/constraints.ts/etc.
+ * differs between backends. Ordinary SQLite shares scalar, JSON and FTS5 SQL with libSQL, but binds
+ * vectors as JSON text and ranks them in portable code. Postgres and DuckDB use
+ * their own SQL forms. Keep new backend differences here instead of rewriting
+ * call sites in schema.ts/constraints.ts/etc.
  *
  * Keep the libSQL output byte-identical to the original inline SQL — the existing test
  * suite asserts behavior against these exact strings.
@@ -21,6 +21,7 @@ const FOREVER_LIT = '8640000000000000';
  */
 export function scalarMax(dialect: Dialect, a: string, b: string): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `MAX(${a}, ${b})`;
 		case 'postgres':
@@ -40,6 +41,7 @@ export function scalarMax(dialect: Dialect, a: string, b: string): string {
  */
 export function jsonField(dialect: Dialect, col: string, key: string): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `${col} ->> '${key}'`;
 		case 'postgres':
@@ -60,6 +62,7 @@ export function jsonField(dialect: Dialect, col: string, key: string): string {
  */
 export function epochIntType(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return 'INTEGER';
 		case 'postgres':
@@ -80,6 +83,7 @@ export function epochIntType(dialect: Dialect): string {
  */
 export function jsonEqExpr(dialect: Dialect, col: string, key: string): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `json_extract(${col}, '$.${key}') = ?`;
 		case 'postgres':
@@ -95,6 +99,7 @@ export function jsonEqExpr(dialect: Dialect, col: string, key: string): string {
 /** The bound value for a {@link jsonEqExpr} filter — text on Postgres (the `->>` is text). */
 export function jsonEqArg(dialect: Dialect, value: unknown): unknown {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return value;
 		case 'postgres':
@@ -125,6 +130,7 @@ export function distinctSelect(
 	cols: string,
 ): { select: string; group: string } {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return { select: `SELECT ${cols}`, group: `GROUP BY ${keys}` };
 		case 'postgres':
@@ -402,11 +408,21 @@ function notYet(fragment: string, dialect: Dialect): never {
 /**
  * The vector side table + its ANN index. Created by `init` once an embedder is known (libSQL and
  * Postgres bake the width into the column type; DuckDB's `FLOAT[]` is width-free, so its table
- * is part of the base schema and `dim` is ignored). One row per `(id, chunk)`; `text` is the
+ * is part of the base schema and `dim` is ignored). SQLite stores JSON text with
+ * an array-length constraint and no ANN index. One row per `(id, chunk)`; `text` is the
  * chunk's text, or NULL when the row is the node's whole embedding input.
  */
 export function embeddingsTableDDL(dialect: Dialect, dim: number): string {
 	switch (dialect) {
+		case 'sqlite':
+			return `CREATE TABLE IF NOT EXISTS node_embeddings (
+  id         TEXT NOT NULL REFERENCES node_identity(id),
+  chunk      INTEGER NOT NULL DEFAULT 0,
+  text       TEXT,
+  emb        TEXT NOT NULL CHECK (json_valid(emb) AND json_type(emb) = 'array' AND json_array_length(emb) = ${dim}),
+  embed_hash TEXT NOT NULL,
+  PRIMARY KEY (id, chunk)
+);`;
 		case 'libsql':
 			return `CREATE TABLE IF NOT EXISTS node_embeddings (
   id         TEXT NOT NULL REFERENCES node_identity(id),
@@ -450,6 +466,8 @@ ${embeddingsIndexDDL('postgres')}`;
  */
 export function embeddingsIndexDDL(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
+			return '';
 		case 'libsql':
 			return `CREATE INDEX IF NOT EXISTS ne_emb_idx ON node_embeddings(libsql_vector_idx(emb, 'metric=cosine'));`;
 		case 'postgres':
@@ -468,6 +486,8 @@ export function embeddingsIndexDDL(dialect: Dialect): string {
  */
 export function embValueExpr(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
+			return '?';
 		case 'libsql':
 			return 'vector(?)';
 		case 'postgres':
@@ -482,6 +502,8 @@ export function embValueExpr(dialect: Dialect): string {
 /** Read `emb` back as a JSON-array string. libSQL `vector_extract`; pgvector's text form IS `[..]`. */
 export function embReadExpr(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
+			return 'emb';
 		case 'libsql':
 			return 'vector_extract(emb)';
 		case 'postgres':
@@ -510,6 +532,8 @@ export function annSeeds(dialect: Dialect): {
 	bind: (qJson: string, k: number) => (string | number)[];
 } {
 	switch (dialect) {
+		case 'sqlite':
+			throw new Error('annSeeds: SQLite uses portable exact ranking; call vectorSeedRows instead');
 		case 'libsql':
 			return {
 				sql: `SELECT e.id AS id, e.chunk AS chunk, e.text AS text, vector_distance_cos(e.emb, vector(?)) AS dist
@@ -579,6 +603,7 @@ function tsQueryOr(): string {
  */
 export function ftsWhere(dialect: Dialect, alias: string): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `${alias}.ver IN (SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH ?)`;
 		case 'postgres':
@@ -602,6 +627,7 @@ export function ftsWhere(dialect: Dialect, alias: string): string {
  */
 export function ftsSeedLive(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `SELECT n.id AS id
 FROM nodes_fts
@@ -633,6 +659,7 @@ LIMIT ?`;
 /** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
 export function ftsSeedAsOf(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `SELECT n.id AS id
 FROM nodes_fts
@@ -673,6 +700,7 @@ export function insertOrIgnore(
 	values: string,
 ): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `INSERT OR IGNORE INTO ${table} (${columns}) VALUES ${values}`;
 		case 'postgres':
@@ -688,6 +716,7 @@ export function insertOrIgnore(
 /** Expand a JSON-array string param into a single `id` column of rows. libSQL `json_each`, PG `jsonb_array_elements_text`. */
 export function jsonArrayRows(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `SELECT value AS id FROM json_each(?)`;
 		case 'postgres':
@@ -708,6 +737,7 @@ export function jsonArrayRows(dialect: Dialect): string {
  */
 export function ftsTableDDL(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(body, content='node_versions', content_rowid='ver');`;
 		case 'postgres':
@@ -729,6 +759,7 @@ export function ftsTableDDL(dialect: Dialect): string {
  */
 export function ftsTriggerDDL(dialect: Dialect): string {
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return `CREATE TRIGGER IF NOT EXISTS nodes_fts_ai AFTER INSERT ON node_versions BEGIN
   INSERT INTO nodes_fts(rowid, body) VALUES (new.ver, new.body);

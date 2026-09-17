@@ -17,7 +17,7 @@
  * spins its own loop and its own cursor and cannot stall another's.
  */
 
-import { setTimeout as sleep } from 'node:timers/promises';
+import { sleep } from './runtime.ts';
 import { ulid } from 'ulidx';
 import type { DbClient, SqlValue } from './dialect.ts';
 import type { GraphEvent, GraphEventOp } from './events.ts';

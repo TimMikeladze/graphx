@@ -1,4 +1,4 @@
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import type { DbClient, SqlResult } from './dialect.ts';
 import { type QueryLimits, resolveLimits } from './governance.ts';
 

@@ -1,4 +1,4 @@
-import { setTimeout as sleep } from 'node:timers/promises';
+import { sleep } from './runtime.ts';
 import {
 	type DbClient,
 	type DbTransaction,
@@ -35,7 +35,7 @@ import {
 	ftsIndexOwner,
 	type ManagedWriter,
 	managedWriter,
-} from './db.ts';
+} from './runtime.ts';
 import { assertUniqueProps } from './duck-constraints.ts';
 import {
 	type GraphEvent,
@@ -53,6 +53,8 @@ import {
 	resolveLimits,
 } from './governance.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
+import { createLocalBlobStore, type LocalBlobStore } from './local-blobs.ts';
+import { createAtomicSession } from './atomic-session.ts';
 
 /**
  * P3 — data layer (§6). The temporal store front: ULID identity, close-and-insert
@@ -107,7 +109,7 @@ export interface AddNodeInput<S extends GraphSchema, K extends NodeType<S>> {
 	content_type?: string;
 }
 
-/** Patch for {@link Graph.updateNode}. Every field optional; omitted ones carry forward. */
+/** Patch for {@link Graph.updateNode}. Omitted fields carry forward; null clears content. */
 export interface UpdateNodePatch {
 	type?: string;
 	data?: Record<string, unknown>;
@@ -115,10 +117,10 @@ export interface UpdateNodePatch {
 	emb?: number[];
 	/** Prepared rows for the successor, or `false` to leave the stored vectors untouched. */
 	embedding?: PreparedEmbedding | false;
-	body?: string;
-	uri?: string;
-	content_hash?: string;
-	content_type?: string;
+	body?: string | null;
+	uri?: string | null;
+	content_hash?: string | null;
+	content_type?: string | null;
 }
 
 /** How a {@link Graph} embeds on write. */
@@ -212,6 +214,53 @@ export interface NodeContent {
 	uri: string | null;
 	contentType: string | null;
 	contentHash: string | null;
+}
+
+/** One consistent node snapshot. Revision identifies its immutable version row. */
+export type NodeVersion<S extends GraphSchema> = AnyNode<S> & NodeContent & { revision: string };
+
+export interface AtomicUpdateOptions {
+	expectedRevision: string;
+	/** Replace metadata completely; otherwise shallow-merge with the current version. */
+	replaceData?: boolean;
+}
+
+/** The requested immutable predecessor is no longer the live version. */
+export class RevisionConflict extends Error {
+	constructor(
+		readonly id: string,
+		readonly expectedRevision: string,
+		readonly actualRevision: string | null,
+	) {
+		super(`Node '${id}' no longer has revision '${expectedRevision}'`);
+		this.name = 'RevisionConflict';
+	}
+}
+
+/** A lexical-only, borrowed writer. Methods have no independent commit or retry. */
+export interface AtomicGraph<S extends GraphSchema> {
+	getNodeVersion(id: string): Promise<NodeVersion<S> | null>;
+	listNodes(opts?: NodeListOpts): Promise<NodeListPage<S>>;
+	graphSlice(opts?: GraphSliceOpts): Promise<GraphSlice>;
+	/** Read live edges, optionally restricted to an author's exact provenance. */
+	listEdges(opts?: {
+		src?: string;
+		dst?: string;
+		rel?: string;
+		source?: string;
+	}): Promise<Array<EdgeRef & { source: string | null }>>;
+	addNode<K extends NodeType<S>>(
+		input: Omit<AddNodeInput<S, K>, 'emb' | 'embedding'>,
+	): Promise<NodeVersion<S>>;
+	updateNode(
+		id: string,
+		patch: Omit<UpdateNodePatch, 'emb' | 'embedding'>,
+		options: AtomicUpdateOptions,
+	): Promise<NodeVersion<S>>;
+	addEdge<R extends Rel<S>>(input: AddEdgeInput<S, R>): Promise<EdgeRef>;
+	deleteEdge(id: string): Promise<void>;
+	purgeNode(id: string, options: Pick<AtomicUpdateOptions, 'expectedRevision'>): Promise<void>;
+	readonly blobs: Pick<LocalBlobStore, 'put' | 'get' | 'gc'>;
 }
 
 /** Result of {@link Graph.addEdge}. */
@@ -447,6 +496,8 @@ function backoff(attempt: number): Promise<void> {
 }
 
 export class Graph<S extends GraphSchema> {
+	/** Set only on the private view created by atomic(); never exposed to callers. */
+	private atomicTransaction?: DbTransaction;
 	/** Monotonic write clock high-water mark (M6) — avoids same-ms zero-width versions. */
 	private lastTs = 0;
 	/** id -> type cache, populated on write and on getNode/lookup (endpoint checks). */
@@ -524,6 +575,186 @@ export class Graph<S extends GraphSchema> {
 			await this.writer.reload();
 			throw e;
 		}
+	}
+
+	/**
+	 * Commit one SQLite/libSQL callback atomically, without replaying it. Use only
+	 * the passed scope for database work inside fn: root-client operations wait for
+	 * this lease. Any failed scoped operation aborts the transaction even if caught;
+	 * escaped scopes reject after the callback ends. Events publish after commit.
+	 *
+	 * This initial scope is lexical-only: configured/stored embeddings are rejected
+	 * before acquisition and the namespace is checked again under the writer lease.
+	 * Blob schema initialization also happens before acquisition.
+	 */
+	async atomic<T>(fn: (scope: AtomicGraph<S>) => Promise<T>): Promise<T> {
+		const dialect = dialectOf(this.raw);
+		if (dialect !== 'sqlite' && dialect !== 'libsql')
+			throw new Error(`Graph.atomic does not support ${dialect}`);
+		if (this.embedder || (await readEmbeddingMeta(this.raw)))
+			throw new Error('Graph.atomic requires a namespace without embeddings');
+		let blobs: LocalBlobStore | undefined;
+		let acquired: DbTransaction | undefined;
+		// Only acquisition/idempotent initialization may retry. fn is never replayed.
+		for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
+			try {
+				blobs = await createLocalBlobStore(this.raw);
+				acquired = await this.raw.transaction('write');
+				break;
+			} catch (error) {
+				if (!isRetryableContention(error)) throw error;
+				await backoff(attempt);
+			}
+		}
+		if (!acquired || !blobs) throw new Error('Graph.atomic: too much contention');
+		const tx = acquired;
+		const session = createAtomicSession(tx, dialect);
+		const events: GraphEvent[] = [];
+		let result: T;
+		try {
+			const inner = new Graph(session.client, this.schema, {
+				...this.options,
+				embedder: undefined,
+				embedding: 'off',
+				events: { ...this.eventOpts, sink: { emit: (event) => events.push(event) } },
+			});
+			inner.atomicTransaction = tx;
+			inner.lastTs = this.lastTs;
+			inner.embMeta = null;
+			const boundBlobs = blobs.inTransaction(tx);
+			const scope: AtomicGraph<S> = {
+				getNodeVersion: (id) => session.run(() => inner.getNodeVersion(id)),
+				listNodes: (opts) => session.run(() => inner.listNodes(opts)),
+				graphSlice: (opts) => session.run(() => inner.graphSlice(opts)),
+				listEdges: (opts = {}) =>
+					session.run(async () => {
+						const where = ['valid_to = ?'];
+						const args: SqlValue[] = [FOREVER];
+						for (const key of ['src', 'dst', 'rel', 'source'] as const) {
+							if (opts[key] !== undefined) {
+								where.push(`${key} = ?`);
+								args.push(opts[key]);
+							}
+						}
+						const result = await session.client.execute({
+							sql: `SELECT id, rel, src, dst, source FROM edge_versions WHERE ${where.join(' AND ')} ORDER BY id`,
+							args,
+						});
+						return result.rows.map((row) => ({
+							id: String(row.id),
+							rel: String(row.rel),
+							src: String(row.src),
+							dst: String(row.dst),
+							source: row.source == null ? null : String(row.source),
+						}));
+					}),
+				addNode: (input) =>
+					session.run(async () => {
+						const node = await inner.addNode(input);
+						return (await inner.getNodeVersion(node.id))!;
+					}),
+				updateNode: (id, patch, options) =>
+					session.run(async () => {
+						const current = await inner.getNodeVersion(id);
+						if (!current || current.revision !== options.expectedRevision)
+							throw new RevisionConflict(id, options.expectedRevision, current?.revision ?? null);
+						const type = patch.type ?? current.type;
+						const def = (this.schema.nodes as Record<string, RawNodeDef | undefined>)[type];
+						if (!def) throw new Error(`updateNode: unknown type '${type}'`);
+						const data = def.parse(
+							options.replaceData
+								? (patch.data ?? {})
+								: { ...(current.data as Record<string, unknown>), ...patch.data },
+						) as Record<string, unknown>;
+						await inner.updateNodeOnce(id, { ...patch, data }, undefined, {
+							...options,
+							replaceData: true,
+						});
+						inner.typeCache.delete(id);
+						return (await inner.getNodeVersion(id))!;
+					}),
+				addEdge: (input) => session.run(() => inner.addEdge(input)),
+				deleteEdge: (id) => session.run(() => inner.deleteEdge(id)),
+				purgeNode: (id, options) =>
+					session.run(() => inner.purgeNodeInTransaction(id, options.expectedRevision)),
+				blobs: {
+					put: (input) => {
+						let copy: Uint8Array;
+						try {
+							copy = new Uint8Array(input);
+						} catch (error) {
+							return session.run(() => Promise.reject(error));
+						}
+						return session.run(() => boundBlobs.put(copy));
+					},
+					get: (uri) => session.run(() => boundBlobs.get(uri)),
+					gc: () => session.run(() => boundBlobs.gc()),
+				},
+			};
+			// Schema/model initialization could have raced the pre-acquisition check.
+			if (await readEmbeddingMeta(session.client))
+				throw new Error('Graph.atomic requires a namespace without embeddings');
+			result = await fn(scope);
+			await session.finish();
+			await tx.commit();
+			this.lastTs = Math.max(this.lastTs, inner.lastTs);
+		} catch (error) {
+			await session.finish().catch(() => {});
+			if (!tx.closed) {
+				try {
+					await tx.rollback();
+				} catch (rollbackError) {
+					throw new AggregateError(
+						[error, rollbackError],
+						'Atomic graph operation and rollback failed',
+					);
+				}
+			}
+			throw error;
+		}
+		this.typeCache.clear();
+		for (const event of events) this.emit(event);
+		return result;
+	}
+
+	/** Hard deletion is confined to the atomic scope so references and GC can join it. */
+	private async purgeNodeInTransaction(id: string, expectedRevision: string): Promise<void> {
+		if (!this.atomicTransaction) throw new Error('Purge requires an atomic graph scope');
+		const current = await this.getNodeVersion(id);
+		if (!current || current.revision !== expectedRevision)
+			throw new RevisionConflict(id, expectedRevision, current?.revision ?? null);
+		const incident = await this.raw.execute({
+			sql: 'SELECT DISTINCT id FROM edge_versions WHERE src = ? OR dst = ?',
+			args: [id, id],
+		});
+		for (const edge of incident.rows) {
+			const edgeId = String(edge.id);
+			const live = await this.raw.execute({
+				sql: 'SELECT id FROM edges WHERE id = ?',
+				args: [edgeId],
+			});
+			if (live.rows.length) await this.deleteEdge(edgeId);
+			await this.raw.execute({ sql: 'DELETE FROM edge_versions WHERE id = ?', args: [edgeId] });
+			await this.raw.execute({ sql: 'DELETE FROM edge_identity WHERE id = ?', args: [edgeId] });
+		}
+		await this.deleteNode(id);
+		// External-content FTS must receive the old text before its content row goes.
+		await this.raw.execute({
+			sql: "INSERT INTO nodes_fts (nodes_fts, rowid, body) SELECT 'delete', ver, body FROM node_versions WHERE id = ?",
+			args: [id],
+		});
+		const vectors = await this.raw.execute(
+			"SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'node_embeddings'",
+		);
+		if (vectors.rows.length)
+			await this.raw.execute({ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] });
+		await this.raw.execute({ sql: 'DELETE FROM node_analytics WHERE id = ?', args: [id] });
+		await this.raw.execute({ sql: 'DELETE FROM node_versions WHERE id = ?', args: [id] });
+		await this.raw.execute({ sql: 'DELETE FROM node_identity WHERE id = ?', args: [id] });
+	}
+
+	private async commitMutation(tx: DbTransaction): Promise<void> {
+		if (!this.atomicTransaction) await tx.commit();
 	}
 
 	/**
@@ -1118,7 +1349,7 @@ export class Graph<S extends GraphSchema> {
 					const stmt = this.outboxStmt(ev);
 					if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
 				}
-				await tx.commit();
+				await this.commitMutation(tx);
 				events = evs;
 				return 'committed';
 			});
@@ -1168,7 +1399,27 @@ export class Graph<S extends GraphSchema> {
 		);
 		const row = r.rows[0];
 		if (!row) return null;
-		return this.rowToNode(row);
+		return this.rowToNode(row, !past);
+	}
+
+	/** Read metadata, content, and revision from the same temporal row. */
+	async getNodeVersion(id: string, opts: { asOf?: number } = {}): Promise<NodeVersion<S> | null> {
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const result = await this.raw.execute({
+			sql: `SELECT ver, id, type, data, body, uri, content_hash, content_type FROM node_versions nv
+WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
+			args: past ? [id, opts.asOf!, opts.asOf!] : [id, FOREVER],
+		});
+		const row = result.rows[0];
+		if (!row) return null;
+		return {
+			...this.rowToNode(row, !past),
+			revision: String(row.ver),
+			body: (row.body as string | null) ?? null,
+			uri: (row.uri as string | null) ?? null,
+			contentHash: (row.content_hash as string | null) ?? null,
+			contentType: (row.content_type as string | null) ?? null,
+		};
 	}
 
 	/**
@@ -1255,7 +1506,7 @@ export class Graph<S extends GraphSchema> {
 			resolveLimits(opts.limits).maxRows,
 		);
 		const r = await this.raw.execute({ sql, args: [...args, ...joinArgs] });
-		return r.rows.map((row) => this.rowToNode(row));
+		return r.rows.map((row) => this.rowToNode(row, !past));
 	}
 
 	/**
@@ -1299,7 +1550,7 @@ export class Graph<S extends GraphSchema> {
 			LIMIT ?`;
 		pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
 		const r = await this.raw.execute({ sql, args: pageArgs });
-		const rows = r.rows.map((row) => this.rowToNode(row));
+		const rows = r.rows.map((row) => this.rowToNode(row, !past));
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return { rows: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
@@ -1370,7 +1621,8 @@ export class Graph<S extends GraphSchema> {
 			LIMIT ?`;
 		args.push(pageSize + 1); // over-fetch one to detect a next page
 		const r = await this.raw.execute({ sql, args });
-		const rows = r.rows.map((row) => this.rowToNode(row));
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const rows = r.rows.map((row) => this.rowToNode(row, !past));
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return { nodes: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
@@ -1448,6 +1700,10 @@ export class Graph<S extends GraphSchema> {
 	 * than surfacing as a lost write. Other errors (constraint, etc.) propagate.
 	 */
 	private async runWriteBatch(label: string, run: () => Promise<unknown>): Promise<void> {
+		if (this.atomicTransaction) {
+			await run();
+			return;
+		}
 		await this.serialize(async () => {
 			for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
 				try {
@@ -1477,6 +1733,11 @@ export class Graph<S extends GraphSchema> {
 		label: string,
 		body: (tx: DbTransaction, now: number) => Promise<'committed' | 'superseded'>,
 	): Promise<void> {
+		if (this.atomicTransaction) {
+			const result = await body(this.atomicTransaction, this.now());
+			if (result !== 'committed') throw new Error(`${label}: atomic predecessor was superseded`);
+			return;
+		}
 		await this.serialize(async () => {
 			for (let attempt = 0; attempt < WRITE_MAX_RETRIES; attempt++) {
 				let tx: DbTransaction | undefined;
@@ -1504,8 +1765,8 @@ export class Graph<S extends GraphSchema> {
 	 * retry instead of creating overlapping intervals.
 	 *
 	 * Carry-forward (B4): every column the patch omits is copied from the current live
-	 * version — `body/uri/content_hash/content_type/type` via `patch.X ?? cur.X`, data by
-	 * shallow-merge.
+	 * version — undefined content fields carry forward while null explicitly clears
+	 * them; type carries forward when omitted, and data is shallow-merged.
 	 *
 	 * Vectors: the successor's embedding input is hashed and compared with the stored
 	 * `embed_hash`. Unchanged ⇒ the stored vectors stand. Changed ⇒ the node is re-embedded —
@@ -1531,6 +1792,7 @@ export class Graph<S extends GraphSchema> {
 		id: string,
 		patch: UpdateNodePatch,
 		pre: PreparedEmbedding | undefined,
+		options?: AtomicUpdateOptions,
 	): Promise<void> {
 		let event: GraphEvent | undefined;
 		let embeddingTouched = false;
@@ -1545,11 +1807,13 @@ export class Graph<S extends GraphSchema> {
 		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
 			const cur = (
 				await tx.execute({
-					sql: `SELECT type, body, uri, content_hash, content_type, data, valid_from
+					sql: `SELECT ver, type, body, uri, content_hash, content_type, data, valid_from
 						FROM node_versions WHERE id = ? AND valid_to = ?`,
 					args: [id, FOREVER],
 				})
 			).rows[0];
+			if (options && (!cur || String(cur.ver) !== options.expectedRevision))
+				throw new RevisionConflict(id, options.expectedRevision, cur ? String(cur.ver) : null);
 			if (!cur) throw new Error(`updateNode: no live version for '${id}'`);
 
 			// M6 data-derived bump: the successor opens (and the predecessor closes) strictly
@@ -1558,11 +1822,14 @@ export class Graph<S extends GraphSchema> {
 			// (the per-instance high-water mark alone can't see other instances' writes).
 			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
 			const closed = await tx.execute({
-				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
-				args: [now, id, FOREVER],
+				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ? AND ver = ?',
+				args: [now, id, FOREVER, cur.ver as SqlValue],
 			});
 			// Superseded between SELECT and UPDATE -> nothing closed -> retry.
-			if (closed.rowsAffected !== 1) return 'superseded';
+			if (closed.rowsAffected !== 1) {
+				if (options) throw new RevisionConflict(id, options.expectedRevision, null);
+				return 'superseded';
+			}
 
 			// P12: produce a successor that is genuinely current-shaped and honestly `_v`-stamped
 			// (never "v2-tagged but v1-shaped"). The OLD version row is untouched (closed above) —
@@ -1571,7 +1838,9 @@ export class Graph<S extends GraphSchema> {
 			const successorType = patch.type ?? String(cur.type);
 			const curRaw = JSON.parse(String(cur.data)) as Record<string, unknown>;
 			let plain: Record<string, unknown>;
-			if (
+			if (options?.replaceData) {
+				plain = patch.data ?? {};
+			} else if (
 				successorType !== String(cur.type) &&
 				this.upcaster.stampVersion(successorType) !== undefined
 			) {
@@ -1598,7 +1867,7 @@ export class Graph<S extends GraphSchema> {
 			if (dialectOf(this.raw) === 'duckdb') {
 				await assertUniqueProps(tx, successorType, data, id);
 			}
-			const body = patch.body ?? (cur.body as string | null) ?? null;
+			const body = patch.body === undefined ? ((cur.body as string | null) ?? null) : patch.body;
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
 			const successor: SqlStatement = {
@@ -1608,9 +1877,13 @@ export class Graph<S extends GraphSchema> {
 					id,
 					successorType,
 					body,
-					patch.uri ?? (cur.uri as SqlValue) ?? null,
-					patch.content_hash ?? (cur.content_hash as SqlValue) ?? null,
-					patch.content_type ?? (cur.content_type as SqlValue) ?? null,
+					patch.uri === undefined ? ((cur.uri as SqlValue) ?? null) : patch.uri,
+					patch.content_hash === undefined
+						? ((cur.content_hash as SqlValue) ?? null)
+						: patch.content_hash,
+					patch.content_type === undefined
+						? ((cur.content_type as SqlValue) ?? null)
+						: patch.content_type,
 					JSON.stringify(data),
 					now,
 				],
@@ -1658,7 +1931,7 @@ export class Graph<S extends GraphSchema> {
 			};
 			const stmt = this.outboxStmt(ev);
 			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
-			await tx.commit();
+			await this.commitMutation(tx);
 			event = ev;
 			return 'committed';
 		});
@@ -1720,7 +1993,7 @@ export class Graph<S extends GraphSchema> {
 			};
 			const stmt = this.outboxStmt(ev);
 			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
-			await tx.commit();
+			await this.commitMutation(tx);
 			event = ev;
 			return 'committed';
 		});
@@ -1770,7 +2043,7 @@ export class Graph<S extends GraphSchema> {
 			};
 			const stmt = this.outboxStmt(ev);
 			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
-			await tx.commit();
+			await this.commitMutation(tx);
 			event = ev;
 			return 'committed';
 		});
@@ -1795,9 +2068,9 @@ export class Graph<S extends GraphSchema> {
 	 * the P12 read-time upcaster (§15): stored data are migrated from their `_v` to the
 	 * latest shape and Zod-parsed. Empty registry ⇒ identity (raw JSON, pre-P12).
 	 */
-	private rowToNode(row: SqlRow): AnyNode<S> {
+	private rowToNode(row: SqlRow, cacheLiveType: boolean): AnyNode<S> {
 		const type = String(row.type);
-		this.typeCache.set(String(row.id), type);
+		if (cacheLiveType) this.typeCache.set(String(row.id), type);
 		return {
 			id: String(row.id),
 			type,

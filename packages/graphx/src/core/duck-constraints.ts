@@ -1,4 +1,4 @@
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import type { DbClient, SqlResult, SqlStatement } from './dialect.ts';
 
 /**

@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { DbClient } from './dialect.ts';
 import { ulid } from 'ulidx';
-import { applyConnPragmas } from './db.ts';
+import { applyConnPragmas } from './runtime.ts';
 
 /**
  * §3.2 control-plane DDL — the shared registry DB (separate from every project DB).

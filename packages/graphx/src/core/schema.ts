@@ -1,5 +1,5 @@
-import { applyConnPragmas } from './db.ts';
-import { type DbClient, dialectOf } from './dialect.ts';
+import { applyConnPragmas } from './runtime.ts';
+import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
 import {
 	duckdbSchema,
 	embeddingsIndexDDL,
@@ -32,7 +32,7 @@ export const NODES_FTS_TRIGGER_DDL: string = ftsTriggerDDL('libsql');
  * (`content_rowid='ver'`) kept in sync by `nodes_fts_ai`; both are additive and join
  * the lexical seed list into hybrid retrieval.
  */
-export function schema(): string {
+export function schema(dialect: Extract<Dialect, 'libsql' | 'sqlite'> = 'libsql'): string {
 	return `
 CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);   -- ULID
 CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
@@ -56,8 +56,8 @@ CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 
 -- P13 (M2/§19.3): external-content FTS5 over node_versions, synced by the trigger below.
-${ftsTableDDL('libsql')}
-${NODES_FTS_TRIGGER_DDL}
+${ftsTableDDL(dialect)}
+${ftsTriggerDDL(dialect)}
 
 CREATE TABLE IF NOT EXISTS edge_versions (
   ver        INTEGER PRIMARY KEY,
@@ -183,7 +183,8 @@ export async function readEmbeddingMeta(client: DbClient): Promise<EmbeddingMeta
  * `graphx reembed` is the sanctioned way to switch models.
  */
 export async function init(client: DbClient, embedder?: Embedder): Promise<void> {
-	switch (dialectOf(client)) {
+	const dialect = dialectOf(client);
+	switch (dialect) {
 		case 'postgres':
 			// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
 			// `vector` extension is expected to exist in `public` (on the search_path).
@@ -194,11 +195,21 @@ export async function init(client: DbClient, embedder?: Embedder): Promise<void>
 			// lock-based contention to time out — the writer is serialized in-process.
 			await client.executeMultiple(duckdbSchema());
 			break;
-		default:
+		case 'libsql':
 			await client.execute('PRAGMA journal_mode = WAL');
 			await applyConnPragmas(client);
-			await client.executeMultiple(schema());
+			await client.executeMultiple(schema(dialect));
 			break;
+		case 'sqlite':
+			// The platform driver owns journal mode (OPFS may require rollback journaling).
+			await applyConnPragmas(client);
+			await client.executeMultiple(schema(dialect));
+			// Require a working FTS index even if an executor failed to surface a DDL
+			// error from its script API. Search must never silently become unavailable.
+			await client.execute("SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'graphx' LIMIT 0");
+			break;
+		default:
+			assertNever(dialect, 'init');
 	}
 	if (embedder) await ensureEmbeddings(client, embedder);
 }

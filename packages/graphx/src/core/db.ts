@@ -1,24 +1,16 @@
 import process from 'node:process';
 import { createClient } from '@libsql/client';
-import { type DbClient, type Dialect, dialectOf } from './dialect.ts';
+import { type DbClient, type Dialect } from './dialect.ts';
 
-/** Max JS Date ms — the open-interval sentinel for `valid_to` (§4). */
-export const FOREVER = 8640000000000000;
-
-/**
- * Per-connection pragmas (libSQL). `foreign_keys` & `busy_timeout` do NOT persist in
- * the file — they must run on every fresh client/connection, not only at init (§2.5,
- * §4.1). On Postgres these are inherent (FKs always enforced, MVCC, `lock_timeout`),
- * so this is a no-op there.
- */
-export async function applyConnPragmas(client: DbClient): Promise<void> {
-	// libSQL only. Postgres has these inherently (FKs always enforced, MVCC,
-	// lock_timeout). DuckDB has no equivalent knobs and no lock-based contention —
-	// its writer is serialized in-process by the adapter's mutex instead.
-	if (dialectOf(client) !== 'libsql') return;
-	await client.execute('PRAGMA foreign_keys = ON');
-	await client.execute('PRAGMA busy_timeout = 5000');
-}
+// Preserve the existing native entry's helper imports; ownership lives in runtime.ts.
+export {
+	FOREVER,
+	applyConnPragmas,
+	managedWriter,
+	ftsIndexOwner,
+	type ManagedWriter,
+	type FtsIndexOwner,
+} from './runtime.ts';
 
 /**
  * Connection config for {@link getDb}. The `driver` discriminator selects the backend
@@ -58,51 +50,6 @@ export interface DbConfig {
 	snapshot?: number;
 }
 
-/**
- * A client that manages its own writer serialization, and whose durable state may live
- * outside the local database. Only the DuckDB adapter implements it.
- *
- * Declared here and probed structurally so that `graph.ts` and `bulk.ts` — which both have
- * to honor it — never import `duck.ts`, keeping `@duckdb/node-api` (~123MB) off the import
- * path of every consumer who did not opt into that backend.
- */
-export interface ManagedWriter {
-	/** True when `commit` publishes to a snapshot chain. False for a plain local DuckDB. */
-	readonly durable: boolean;
-	/** Run `fn` with every other write on this client held back. */
-	serializeWrite<T>(fn: () => Promise<T>): Promise<T>;
-	/** Publish the local state as the next snapshot. `dirty` names the tables that changed. */
-	commit(dirty: Set<string>): Promise<unknown>;
-	/** Discard local state and re-materialize the current snapshot — the rollback path. */
-	reload(): Promise<void>;
-}
-
-/** `raw` as a {@link ManagedWriter}, or null when the backend manages neither concern. */
-export function managedWriter(raw: DbClient): ManagedWriter | null {
-	const c = raw as Partial<ManagedWriter>;
-	return typeof c.serializeWrite === 'function' ? (c as ManagedWriter) : null;
-}
-
-/**
- * A client whose full-text index is a derived artifact it maintains itself.
- *
- * Declared here and probed structurally for the same reason as {@link ManagedWriter}:
- * `graph.ts`, `hybrid.ts`, and `bulk.ts` all have to honor it, and none of them may import
- * `duck.ts` and drag the optional `@duckdb/node-api` peer onto every consumer's path.
- */
-export interface FtsIndexOwner {
-	/** Note that the indexed corpus changed. Cheap — no work happens here. */
-	markFtsStale(): void;
-	/** Rebuild if stale, then return. Called before anything reads the index. */
-	ensureFtsFresh(): Promise<void>;
-}
-
-/** `raw` as an {@link FtsIndexOwner}, or null when the backend maintains no such index. */
-export function ftsIndexOwner(raw: DbClient): FtsIndexOwner | null {
-	const c = raw as Partial<FtsIndexOwner>;
-	return typeof c.ensureFtsFresh === 'function' ? (c as FtsIndexOwner) : null;
-}
-
 /** Builds a Postgres {@link DbClient} for a namespace. Registered by `core/pg` on import. */
 export type PgDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
 let pgFactory: PgDriverFactory | undefined;
@@ -132,7 +79,7 @@ export function registerDuckDriver(factory: DuckDriverFactory): void {
 function resolveDriver(cfg: DbConfig): Dialect {
 	if (cfg.driver) return cfg.driver;
 	const env = process.env.GRAPHX_DB_DRIVER;
-	if (env === 'postgres' || env === 'duckdb') return env;
+	if (env === 'postgres' || env === 'duckdb' || env === 'sqlite') return env;
 	return 'libsql';
 }
 
@@ -148,9 +95,17 @@ const clients = new Map<string, DbClient>();
  * (requires importing `core/pg` to register the adapter).
  */
 export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
+	const driver = resolveDriver(cfg);
+	if (driver === 'sqlite') {
+		throw new Error(
+			"getDb: sqlite requires a platform connection; use createConnectionClient(connection, 'sqlite') from 'graphx/core'",
+		);
+	}
+	if (driver !== 'libsql' && driver !== 'postgres' && driver !== 'duckdb') {
+		throw new Error(`getDb: unsupported driver ${String(driver)}`);
+	}
 	const existing = clients.get(namespace);
 	if (existing) return existing;
-	const driver = resolveDriver(cfg);
 	let client: DbClient;
 	if (driver === 'postgres') {
 		if (!pgFactory) {

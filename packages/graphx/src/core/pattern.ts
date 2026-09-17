@@ -1,6 +1,6 @@
 import { type DbClient, type Dialect, dialectOf, type SqlRow } from './dialect.ts';
 import { distinctSelect, jsonEqArg, jsonEqExpr } from './dialect-sql.ts';
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import type { GraphSchema } from './graph.ts';
 import type { NodeType, NodeOf } from './define-graph-schema.ts';
 import {

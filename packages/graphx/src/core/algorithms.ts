@@ -1,5 +1,5 @@
 import { type DbClient, dialectOf } from './dialect.ts';
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 
 /**
  * P8 — graph algorithms (§11; D3/D4, B8/B9/B10, M15/M17).
@@ -345,11 +345,11 @@ async function sqlShortestPath(
 	// the OUTER `ORDER BY cost LIMIT 1` still selects the optimum (no pruning, fine for
 	// small graphs).
 	const d = dialectOf(raw);
-	const orderClause = d === 'libsql' ? `\n  ORDER BY w.cost + ${costExpr}` : '';
+	const orderClause = d === 'libsql' || d === 'sqlite' ? `\n  ORDER BY w.cost + ${costExpr}` : '';
 	// Postgres and DuckDB both require the recursive column types to match the
 	// non-recursive term; the running cost is `double precision` (weight is `real`), so
 	// the anchor's 0 is cast.
-	const zeroCost = d === 'libsql' ? '0.0' : 'CAST(0.0 AS double precision)';
+	const zeroCost = d === 'libsql' || d === 'sqlite' ? '0.0' : 'CAST(0.0 AS double precision)';
 	const sql = `
 WITH RECURSIVE walk(node, cost, path, depth) AS (
   SELECT ?, ${zeroCost}, ',' || ? || ',', 0

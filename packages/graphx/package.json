@@ -1,7 +1,7 @@
 {
 	"name": "graphx",
 	"version": "0.1.0",
-	"description": "Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB — typed schema, bitemporal graph, vector + FTS retrieval, a served HTTP API, React Query hooks, and an MCP server",
+	"description": "Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB \u2014 typed schema, bitemporal graph, vector + FTS retrieval, a served HTTP API, React Query hooks, and an MCP server",
 	"keywords": [
 		"bitemporal",
 		"bun",
@@ -56,6 +56,24 @@
 			"import": {
 				"types": "./dist/core/index.d.ts",
 				"default": "./dist/core/index.js"
+			}
+		},
+		"./core": {
+			"import": {
+				"types": "./dist/core/portable.d.ts",
+				"default": "./dist/core/portable.js"
+			}
+		},
+		"./browser": {
+			"import": {
+				"types": "./dist/core/browser.d.ts",
+				"default": "./dist/core/browser.js"
+			}
+		},
+		"./expo": {
+			"import": {
+				"types": "./dist/core/expo.d.ts",
+				"default": "./dist/core/expo.js"
 			}
 		},
 		"./pg": {
@@ -118,7 +136,13 @@
 				"default": "./dist/auth/index.js"
 			}
 		},
-		"./package.json": "./package.json"
+		"./package.json": "./package.json",
+		"./local": {
+			"import": {
+				"types": "./dist/core/local.d.ts",
+				"default": "./dist/core/local.js"
+			}
+		}
 	},
 	"publishConfig": {
 		"access": "public"
@@ -130,8 +154,11 @@
 		"@hono/zod-openapi": "^1.5.1",
 		"@hono/zod-validator": "^0.9.0",
 		"@libsql/client": "^0.17.3",
+		"@noble/hashes": "^2.4.0",
+		"@scure/base": "^2.4.0",
 		"gray-matter": "^4.0.3",
 		"hono": "^4.12.23",
+		"libsql": "0.5.29",
 		"ulidx": "^2.4.1",
 		"zod": "^4.4.3"
 	},
@@ -143,6 +170,7 @@
 		"@hono/mcp": "^0.3.1",
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@seriousme/openapi-schema-validator": "^2.9.0",
+		"@sqlite.org/sqlite-wasm": "^3.53.0-build1",
 		"@tanstack/react-query": "^5.101.0",
 		"@testing-library/react": "^16.1.0",
 		"@types/node": "^25.9.1",
@@ -156,6 +184,7 @@
 		"react-dom": "^19.2.6"
 	},
 	"peerDependencies": {
+		"@sqlite.org/sqlite-wasm": "^3.53.0-build1",
 		"@aws-sdk/client-s3": "^3.0.0",
 		"@aws-sdk/s3-request-presigner": "^3.0.0",
 		"@duckdb/node-api": "^1.5.5-r.2",
@@ -167,6 +196,9 @@
 		"typescript": ">=4.5.0"
 	},
 	"peerDependenciesMeta": {
+		"@sqlite.org/sqlite-wasm": {
+			"optional": true
+		},
 		"@aws-sdk/client-s3": {
 			"optional": true
 		},

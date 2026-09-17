@@ -1,6 +1,6 @@
 import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
 import { epochIntType, jsonField, scalarMax } from './dialect-sql.ts';
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import {
 	applyLimit,
 	type MetricsContext,

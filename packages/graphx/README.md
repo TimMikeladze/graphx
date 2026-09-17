@@ -25,6 +25,9 @@ optional peer only reaches your import path if you actually import the subpath t
 | Import          | What it is                                        | Optional peer                    |
 | --------------- | ------------------------------------------------- | -------------------------------- |
 | `graphx`        | The SDK                                           | —                                |
+| `graphx/core`   | Driver-free graph engine for local hosts           | —                                |
+| `graphx/browser` | Persistent OPFS / SQLite WASM driver             | `@sqlite.org/sqlite-wasm`         |
+| `graphx/expo`   | Expo native SQLite driver (injected module)        | Host supplies `expo-sqlite`       |
 | `graphx/pg`     | Registers the Postgres driver (side effect)       | `pg`                             |
 | `graphx/duck`   | Registers the DuckDB driver (side effect)         | `@duckdb/node-api` (~123MB)      |
 | `graphx/blob`   | Content-addressed blob store                      | `@aws-sdk/client-s3`             |
@@ -35,6 +38,52 @@ optional peer only reaches your import path if you actually import the subpath t
 | `graphx/auth`   | ReBAC over the graph                              | —                                |
 
 One binary ships with the package: `graphx` — `new`, `ingest`, `serve`, `triggers`, `mcp`.
+
+### Local browser and native hosts
+
+`graphx/core` exposes the same graph, schema, temporal, retrieval, constraint, and
+algorithm implementation without native connection factories or HTTP/control-plane
+APIs. Supply a `DbClient` from the host. `createConnectionClient` adapts an
+exclusively owned SQLite-family connection and queues unrelated work until an
+interactive transaction commits or rolls back. Await its `close()` to observe
+shutdown errors.
+
+`openBrowserDb(sqlite3, '/vault.sqlite3')` from `graphx/browser` accepts an
+initialized SQLite WASM module inside a dedicated worker. The host must serve
+the module, WASM and OPFS proxy worker assets locally and supply COOP/COEP
+isolation headers. Missing OPFS fails explicitly. The driver uses standard OPFS
+with DELETE journaling and FULL synchronization; competing writers may report
+SQLITE_BUSY and callers must retry the complete operation. Keep domain operations
+inside the worker and expose those operations to the UI. The test harness
+`bun scripts/test-browser-driver.ts` exercises durable reopen and interrupted
+transactions in a browser; add `?peer` to open a tab for cross-tab tests.
+
+`openExpoDb(SQLite, 'vault.sqlite3')` from `graphx/expo` accepts the native
+`expo-sqlite` module and opens its own connection. It requires a persistent native
+directory, uses WAL/FULL synchronization, and rejects unsafe numeric bindings.
+Named bindings must include their SQL prefix (`:name`, `@name` or `$name`);
+positional arrays work across every driver. Expo does not expose parameter-name
+introspection, so bare named keys fail instead of guessing which prefix to bind.
+An existing, exclusively owned database can use `createExpoClient(database)`.
+The adapter matches Expo SDK 57; native-device persistence requires testing in
+the consuming app.
+
+Both drivers use the explicit `sqlite` dialect: FTS5 is required, embeddings use
+JSON arrays, and exact cosine retrieval reads all stored vector components.
+That costs O(total vector components) read/memory work plus O(nodes log nodes)
+sorting per vector query. Journal mode belongs to the driver. Native libSQL
+continues to use its vector functions and file database driver.
+
+`createLocalBlobStore(client)` from `graphx/core` stores attachment bytes in the
+same SQLite/libSQL database under SHA-256 addresses. Initialize the graph first.
+Use `store.inTransaction(tx)` to commit bytes with their graph references;
+`gc()` is explicit and preserves references in all historical node versions.
+
+Hosts need standard timers and secure `crypto.getRandomValues` for graph IDs.
+On Hermes, install a secure randomness provider before creating graph identities.
+Hashing and cursor encoding do not require Node's `Buffer`, `TextEncoder`,
+`TextDecoder`, `atob`, or `btoa`. Native connections and server APIs remain in
+`graphx`; remote embedding adapters remain in `graphx/embedders`.
 
 ## Quickstart
 

@@ -1,6 +1,6 @@
 import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
 import { embReadExpr, ftsSeedAsOf, ftsSeedLive } from './dialect-sql.ts';
-import { FOREVER, ftsIndexOwner } from './db.ts';
+import { FOREVER, ftsIndexOwner } from './runtime.ts';
 import type { Embedder } from './embedder.ts';
 import { tokenize } from './fts/tokenize.ts';
 import type { QueryLimits } from './governance.ts';
@@ -107,6 +107,7 @@ export function sanitizeMatch(query: string): string | null {
 export function ftsArg(dialect: Dialect, query: string): string | null {
 	if (tokenize(query).length === 0) return null;
 	switch (dialect) {
+		case 'sqlite':
 		case 'libsql':
 			return sanitizeMatch(query);
 		case 'postgres':

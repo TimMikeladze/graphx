@@ -1,4 +1,6 @@
-import { createHash } from 'node:crypto';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { utf8 } from '@scure/base';
 
 /**
  * Embedders, embedding input, chunking, and the errors the embedding layer raises.
@@ -237,7 +239,10 @@ export function chunkText(text: string, opts: ChunkOptions): string[] {
 
 /** The staleness key stored beside every vector: the model AND the text it was computed from. */
 export function embedHash(modelId: string, text: string): string {
-	return createHash('sha256').update(`${modelId}\0${text}`).digest('hex');
+	// Node's UTF-8 encoder replaces lone UTF-16 surrogates with U+FFFD. The Unicode
+	// regexp preserves valid surrogate pairs while matching only unpaired code units.
+	const input = `${modelId}\0${text}`.replace(/[\uD800-\uDFFF]/gu, '\uFFFD');
+	return bytesToHex(sha256(utf8.decode(input)));
 }
 
 /** One node's vectors, ready to write: the hash they were computed under and one row per chunk. */

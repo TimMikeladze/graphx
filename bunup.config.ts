@@ -21,6 +21,10 @@ export default defineWorkspace([
 		config: {
 			entry: [
 				'src/core/index.ts',
+				'src/core/portable.ts',
+				'src/core/browser.ts',
+				'src/core/expo.ts',
+				'src/core/local.ts',
 				'src/core/pg.ts',
 				'src/core/duck.ts',
 				'src/core/blob.ts',
@@ -32,7 +36,14 @@ export default defineWorkspace([
 				'src/auth/index.ts',
 			],
 			sourceBase: './src',
-			dts: { inferTypes: true },
+			// One build shares public classes across core, native and adapter entries.
+			// Browser conditions select ulidx's portable implementation; native builtins
+			// stay external and are reachable only through the native/server entry graph.
+			target: 'browser',
+			external: ['node:*'],
+			noExternal: ['ulidx', 'layerr'],
+			// Share declarations too: duplicated Graph private members break assignability.
+			dts: { inferTypes: true, splitting: true },
 		},
 	},
 	{

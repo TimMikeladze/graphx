@@ -1,6 +1,6 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FOREVER } from './db.ts';
+import { FOREVER } from './runtime.ts';
 import type { DbClient } from './dialect.ts';
 import { SNAPSHOT_TABLES } from './duck-materialize.ts';
 import { rebuildIndex } from './fts/index-tables.ts';

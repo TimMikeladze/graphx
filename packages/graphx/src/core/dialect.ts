@@ -1,7 +1,7 @@
 import type { InStatement, InValue } from '@libsql/client';
 
 /**
- * Backend dialect seam. graphx speaks SQL to one of two backends; this module is the
+ * Backend dialect seam. graphx speaks SQL to multiple backends; this module is the
  * single place that names them and defines the driver-neutral DB types every other
  * module programs against. Call sites depend on {@link DbClient}, never on
  * `@libsql/client.Client`, so either driver can be slotted in behind it.
@@ -13,7 +13,7 @@ import type { InStatement, InValue } from '@libsql/client';
  */
 
 /** Which SQL backend a client speaks. Absent ⇒ libSQL (the original / default). */
-export type Dialect = 'libsql' | 'postgres' | 'duckdb';
+export type Dialect = 'libsql' | 'sqlite' | 'postgres' | 'duckdb';
 
 /** Transaction mode for {@link DbClient.batch} / {@link DbClient.transaction}. */
 export type TransactionMode = 'write' | 'read' | 'deferred';
@@ -55,6 +55,8 @@ export interface DbClient {
 	sync?(): Promise<unknown>;
 	close(): void;
 	readonly dialect?: Dialect;
+	/** Driver-owned SQLite busy timeout; zero lets synchronous native drivers fail fast. */
+	readonly busyTimeoutMs?: number;
 }
 
 /** Resolve a client's dialect; an untagged client is libSQL (the original backend). */
@@ -64,7 +66,7 @@ export function dialectOf(client: { dialect?: Dialect }): Dialect {
 
 /**
  * Exhaustiveness guard for dialect switches. Every `switch (dialect)` in the codebase
- * ends in `default: return assertNever(dialect, '<fragmentName>')`, so adding a fourth
+ * ends in `default: return assertNever(dialect, '<fragmentName>')`, so adding another
  * backend surfaces as a compile error at every branch that has not been taught about it
  * — rather than as a silent fall-through to the libSQL arm, which is what the two-way
  * ternaries this replaced would have done.

@@ -1,4 +1,4 @@
-import { FOREVER, ftsIndexOwner, managedWriter } from './db.ts';
+import { FOREVER, ftsIndexOwner, managedWriter } from './runtime.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embValueExpr, insertOrIgnore } from './dialect-sql.ts';
 import { ulid } from 'ulidx';
@@ -259,6 +259,7 @@ export async function bulkLoad<S extends GraphSchema>(
 	// libSQL defers the ANN index and FTS trigger across a bulk load and rebuilds after.
 	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
 	// index-free and its FTS index is built at commit time — so the whole bracket is skipped.
+	// Ordinary SQLite keeps FTS5 triggers active; its exact vector scan has no ANN index.
 	const deferIndexes = d === 'libsql';
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 
