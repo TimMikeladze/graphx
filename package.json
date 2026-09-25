@@ -48,6 +48,7 @@
 	"type": "module",
 	"scripts": {
 		"bench": "bun scripts/bench/index.ts",
+		"bench:benchable": "bun scripts/bench/benchable.ts",
 		"build": "bunup",
 		"clean:db": "bun scripts/clean-db.ts",
 		"dev": "bunup --watch",

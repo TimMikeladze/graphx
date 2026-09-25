@@ -45,6 +45,8 @@ jobs:
       ITERS: ${{ inputs.iters }}
       BAND: ${{ inputs.band }}
       REPO: ${{ github.repository }}
+      # Job-level so the Benchable step's `if:` can see it; step-level env is not visible there.
+      BENCHABLE_KEY: ${{ secrets.BENCHABLE_KEY }}
       # The corpus and results paths are NOT here — see the "Resolve paths" step. They are derived
       # from the runner's temp directory, and the `runner` context is unavailable in a job-level
       # `env:` block; using it there makes the file unparseable to GitHub, which reports "a
@@ -155,6 +157,19 @@ jobs:
           cat "$SUMMARY" >> "$GITHUB_STEP_SUMMARY"
           cp "$BASE_JSON" "$RUNNER_TEMP/base.json"
           cp "$HEAD_JSON" "$RUNNER_TEMP/head.json"
+
+      # Record the head run in Benchable, which keeps the history and judges each case against its
+      # own baseline with a significance test. Skipped when no key is configured; never fails the job.
+      - name: Send head run to Benchable
+        if: ${{ env.BENCHABLE_KEY != '' }}
+        continue-on-error: true
+        working-directory: head
+        env:
+          GRAPHX_BENCH_RESULTS_DIR: ${{ runner.temp }}/results-head
+        run: |
+          set -euo pipefail
+          bun run bench:benchable --latest --out "$RUNNER_TEMP/benchable.json"
+          bunx benchable submit --metrics "$RUNNER_TEMP/benchable.json"
 
       - name: Upload results
         uses: actions/upload-artifact@v4

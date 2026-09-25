@@ -50,3 +50,4 @@ yarn-error.log*
 
 # Scratch directory the README-examples test compiles in (inside the repo so `graphx` resolves).
 .readme-examples-*/
+bench/benchable.json

@@ -22,6 +22,10 @@ export interface Stats {
 	p95: number;
 	min: number;
 	max: number;
+	/** Arithmetic mean in ms — with `stddev`, what a significance test needs. */
+	mean: number;
+	/** Sample standard deviation in ms (n − 1); 0 for a single sample. */
+	stddev: number;
 	/** Measured samples (excludes warmup). */
 	iters: number;
 	/** Derived from p50, not from the total: `1000 / p50`. */
@@ -56,11 +60,16 @@ export function percentile(samples: number[], p: number): number {
 
 export function summarize(samples: number[]): Stats {
 	const p50 = percentile(samples, 0.5);
+	const n = samples.length;
+	const mean = n === 0 ? Number.NaN : samples.reduce((a, b) => a + b, 0) / n;
+	const variance = n < 2 ? 0 : samples.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1);
 	return {
 		p50,
 		p95: percentile(samples, 0.95),
 		min: samples.length === 0 ? Number.NaN : Math.min(...samples),
 		max: samples.length === 0 ? Number.NaN : Math.max(...samples),
+		mean,
+		stddev: Math.sqrt(variance),
 		iters: samples.length,
 		opsPerSec: p50 > 0 ? 1000 / p50 : Number.NaN,
 	};

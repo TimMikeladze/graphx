@@ -30,6 +30,9 @@ test('summarize: reports p50/p95/min/max/iters and derives ops/sec from p50', ()
 	expect(stats.max).toBe(8);
 	expect(stats.iters).toBe(4);
 	expect(stats.opsPerSec).toBe(500); // 1000 / 2ms
+	expect(stats.mean).toBe(3.75);
+	expect(stats.stddev).toBeCloseTo(3.0957, 4); // sample stddev, n − 1
+	expect(summarize([5]).stddev).toBe(0);
 });
 
 test('measure: warmup iterations are excluded from the samples', async () => {
