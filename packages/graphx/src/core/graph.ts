@@ -241,6 +241,7 @@ export class RevisionConflict extends Error {
 export interface AtomicGraph<S extends GraphSchema> {
 	getNodeVersion(id: string): Promise<NodeVersion<S> | null>;
 	listNodes(opts?: NodeListOpts): Promise<NodeListPage<S>>;
+	listNodeVersions(opts?: NodeListOpts): Promise<NodeVersionPage<S>>;
 	graphSlice(opts?: GraphSliceOpts): Promise<GraphSlice>;
 	/** Read live edges, optionally restricted to an author's exact provenance. */
 	listEdges(opts?: {
@@ -315,6 +316,48 @@ export interface NodeListOpts {
 /** One page of {@link Graph.listNodes}: the rows + the cursor for the next page. */
 export interface NodeListPage<S extends GraphSchema> {
 	nodes: AnyNode<S>[];
+	/** `null` when this is the last page. */
+	nextCursor: string | null;
+}
+
+/** One page of {@link Graph.listNodeVersions}: complete versions + the cursor for the next page. */
+export interface NodeVersionPage<S extends GraphSchema> {
+	nodes: NodeVersion<S>[];
+	/** `null` when this is the last page. */
+	nextCursor: string | null;
+}
+
+/** Filters + keyset pagination for {@link Graph.listEdges}. */
+export interface EdgeListOpts {
+	rel?: string;
+	src?: string;
+	dst?: string;
+	/** Only edges written with this provenance tag (e.g. `jev`, `ingest:<source>:`). */
+	source?: string;
+	/** As-of epoch ms. Omit ⇒ live edges. */
+	asOf?: number;
+	/** Page size; clamped to `maxRows`. */
+	limit?: number;
+	/** Opaque cursor from a prior page's `nextCursor`. */
+	cursor?: string;
+	limits?: Partial<QueryLimits>;
+}
+
+/** One edge as {@link Graph.listEdges} returns it — everything but its interval. */
+export interface EdgeRecord {
+	id: string;
+	rel: string;
+	src: string;
+	dst: string;
+	weight: number;
+	data: Record<string, unknown>;
+	/** Provenance tag, or `null` for an untagged write. */
+	source: string | null;
+}
+
+/** One page of {@link Graph.listEdges}. */
+export interface EdgeListPage {
+	edges: EdgeRecord[];
 	/** `null` when this is the last page. */
 	nextCursor: string | null;
 }
@@ -625,6 +668,7 @@ export class Graph<S extends GraphSchema> {
 			const scope: AtomicGraph<S> = {
 				getNodeVersion: (id) => session.run(() => inner.getNodeVersion(id)),
 				listNodes: (opts) => session.run(() => inner.listNodes(opts)),
+				listNodeVersions: (opts) => session.run(() => inner.listNodeVersions(opts)),
 				graphSlice: (opts) => session.run(() => inner.graphSlice(opts)),
 				listEdges: (opts = {}) =>
 					session.run(async () => {
@@ -749,6 +793,7 @@ export class Graph<S extends GraphSchema> {
 		if (vectors.rows.length)
 			await this.raw.execute({ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] });
 		await this.raw.execute({ sql: 'DELETE FROM node_analytics WHERE id = ?', args: [id] });
+		await this.raw.execute({ sql: 'DELETE FROM node_scores WHERE id = ?', args: [id] });
 		await this.raw.execute({ sql: 'DELETE FROM node_versions WHERE id = ?', args: [id] });
 		await this.raw.execute({ sql: 'DELETE FROM node_identity WHERE id = ?', args: [id] });
 	}
@@ -1411,9 +1456,13 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			args: past ? [id, opts.asOf!, opts.asOf!] : [id, FOREVER],
 		});
 		const row = result.rows[0];
-		if (!row) return null;
+		return row ? this.rowToVersion(row, !past) : null;
+	}
+
+	/** A `node_versions` row with its content columns → a complete {@link NodeVersion}. */
+	private rowToVersion(row: Record<string, unknown>, live: boolean): NodeVersion<S> {
 		return {
-			...this.rowToNode(row, !past),
+			...this.rowToNode(row, live),
 			revision: String(row.ver),
 			body: (row.body as string | null) ?? null,
 			uri: (row.uri as string | null) ?? null,
@@ -1626,6 +1675,101 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return { nodes: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
+		}
+		return { nodes: rows, nextCursor: null };
+	}
+
+	/**
+	 * Live (or as-of) edges filtered by rel, endpoint and provenance, with their weight and data,
+	 * keyset-paginated by id — e.g. every `maybeSameAs` link `graphx/jev` wrote, for a curator.
+	 */
+	async listEdges(opts: EdgeListOpts = {}): Promise<EdgeListPage> {
+		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+			throw new Error(`listEdges: limit must be a positive integer, got ${opts.limit}`);
+		}
+		const where: string[] = [];
+		const args: SqlValue[] = [];
+		if (opts.asOf !== undefined) {
+			where.push('ev.valid_from <= ? AND ? < ev.valid_to');
+			args.push(opts.asOf, opts.asOf);
+		} else {
+			where.push('ev.valid_to = ?');
+			args.push(FOREVER);
+		}
+		for (const key of ['rel', 'src', 'dst', 'source'] as const) {
+			if (opts[key] !== undefined) {
+				where.push(`ev.${key} = ?`);
+				args.push(opts[key]);
+			}
+		}
+		if (opts.cursor) {
+			where.push('ev.id > ?');
+			args.push(decodeCursor(opts.cursor)[0] as string);
+		}
+		const maxRows = resolveLimits(opts.limits).maxRows;
+		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+		args.push(pageSize + 1);
+		const r = await this.raw.execute({
+			sql: `SELECT ev.id AS id, ev.rel AS rel, ev.src AS src, ev.dst AS dst, ev.weight AS weight,
+					ev.data AS data, ev.source AS source
+				FROM edge_versions ev WHERE ${where.join(' AND ')} ORDER BY ev.id LIMIT ?`,
+			args,
+		});
+		const rows: EdgeRecord[] = r.rows.map((row) => ({
+			id: String(row.id),
+			rel: String(row.rel),
+			src: String(row.src),
+			dst: String(row.dst),
+			weight: Number(row.weight),
+			data: parseData(row.data),
+			source: row.source === null || row.source === undefined ? null : String(row.source),
+		}));
+		if (rows.length > pageSize) {
+			const page = rows.slice(0, pageSize);
+			return { edges: page, nextCursor: encodeCursor([(page[page.length - 1] as EdgeRecord).id]) };
+		}
+		return { edges: rows, nextCursor: null };
+	}
+
+	/**
+	 * {@link listNodes}, but each row is the complete version — data, body, content metadata and
+	 * revision — read from the same temporal row in one query, so content always matches the data
+	 * beside it (live, or as of `asOf`).
+	 */
+	async listNodeVersions(opts: NodeListOpts = {}): Promise<NodeVersionPage<S>> {
+		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
+			throw new Error(`listNodeVersions: limit must be a positive integer, got ${opts.limit}`);
+		}
+		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
+		const filter = this.nodeFilter(opts);
+		if (filter === null) return { nodes: [], nextCursor: null };
+		const maxRows = resolveLimits(opts.limits).maxRows;
+		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
+		const args = [...filter.args];
+		let cursorClause = '';
+		if (opts.cursor) {
+			const [lastId] = decodeCursor(opts.cursor);
+			cursorClause = ' AND nv.id > ?';
+			args.push(lastId as string);
+		}
+		args.push(pageSize + 1); // over-fetch one to detect a next page
+		const r = await this.raw.execute({
+			sql: `SELECT nv.ver AS ver, nv.id AS id, nv.type AS type, nv.data AS data, nv.body AS body,
+					nv.uri AS uri, nv.content_hash AS content_hash, nv.content_type AS content_type
+				FROM node_versions nv
+				WHERE ${filter.where}${cursorClause}
+				ORDER BY nv.id
+				LIMIT ?`,
+			args,
+		});
+		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
+		const rows = r.rows.map((row) => this.rowToVersion(row, !past));
+		if (rows.length > pageSize) {
+			const page = rows.slice(0, pageSize);
+			return {
+				nodes: page,
+				nextCursor: encodeCursor([(page[page.length - 1] as NodeVersion<S>).id]),
+			};
 		}
 		return { nodes: rows, nextCursor: null };
 	}

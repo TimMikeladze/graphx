@@ -90,9 +90,15 @@ export type CentralityKind = 'degree' | 'in' | 'out';
 /** A persisted analytics metric, orderable by {@link topNodes}. */
 export type Metric = 'pagerank' | 'community' | 'degree';
 
+/**
+ * A metric orderable by {@link topNodes}: a built-in analytic, or `score:<name>` for a score
+ * written with {@link persistScores} (e.g. a Jev-judged dimension from `graphx/jev`).
+ */
+export type TopNodesMetric = Metric | `score:${string}`;
+
 /** Options for {@link topNodes}. `by` orders the result; `type` filters node type. */
 export interface TopNodesOpts {
-	by: Metric;
+	by: TopNodesMetric;
 	type?: string;
 	limit?: number;
 }
@@ -104,6 +110,8 @@ export interface TopNode {
 	pagerank: number | null;
 	community: number | null;
 	degree: number | null;
+	/** The `score:<name>` value when ordered by one; `null` for a built-in metric. */
+	score: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,6 +435,33 @@ async function persist(
 	}
 }
 
+/** A custom score name: letters, digits, `_`, `-`, `.` and `:`. */
+const SCORE_NAME = /^[\w.:-]{1,64}$/;
+
+/**
+ * Persist a named per-node score (UPSERT into `node_scores`), orderable with
+ * `topNodes({ by: 'score:<metric>' })`. Scores are derived data like the built-in analytics:
+ * current values, not versioned, and dropped with the node on purge.
+ */
+export async function persistScores(
+	raw: DbClient,
+	metric: string,
+	rows: Array<[id: string, score: number]>,
+): Promise<void> {
+	if (!SCORE_NAME.test(metric)) throw new Error(`persistScores: invalid metric name '${metric}'`);
+	if (rows.length === 0) return;
+	const now = Date.now();
+	const stmts = rows.map(([id, score]) => ({
+		sql: `INSERT INTO node_scores (id, metric, score, computed_at) VALUES (?, ?, ?, ?)
+			ON CONFLICT(id, metric) DO UPDATE SET score = excluded.score, computed_at = excluded.computed_at`,
+		args: [id, metric, score, now] as (string | number)[],
+	}));
+	const CHUNK = 500;
+	for (let i = 0; i < stmts.length; i += CHUNK) {
+		await raw.batch(stmts.slice(i, i + CHUNK), 'write');
+	}
+}
+
 /** Build a symmetric (undirected) adjacency from a directed CSR's out-edges. */
 function buildUndirected(csr: CSR): { uOff: Int32Array; uTar: Int32Array } {
 	const { n, offsets, targets } = csr;
@@ -631,10 +666,25 @@ export async function topNodes(raw: DbClient, opts: TopNodesOpts): Promise<TopNo
 	// Own-property check: a plain-object lookup would inherit Object.prototype keys
 	// ('constructor', '__proto__', ...) as truthy, letting an untrusted `by` (P11
 	// serves this over the wire) escape the whitelist into the interpolated ORDER BY.
-	if (!Object.hasOwn(METRIC_COL, opts.by)) throw new Error(`topNodes: unknown metric '${opts.by}'`);
-	const col = METRIC_COL[opts.by];
 	const limit = opts.limit ?? 10;
 	const typeClause = opts.type ? ' AND n.type = ?' : '';
+	if (opts.by.startsWith('score:')) {
+		const metric = opts.by.slice('score:'.length);
+		if (!SCORE_NAME.test(metric)) throw new Error(`topNodes: unknown metric '${opts.by}'`);
+		const r = await raw.execute({
+			sql: `SELECT n.id AS id, n.type AS type, na.pagerank AS pagerank, na.community AS community,
+					na.degree AS degree, ns.score AS score
+				FROM node_scores ns JOIN nodes n ON n.id = ns.id
+				LEFT JOIN node_analytics na ON na.id = ns.id
+				WHERE ns.metric = ?${typeClause}
+				ORDER BY ns.score DESC
+				LIMIT ?`,
+			args: opts.type ? [metric, opts.type, limit] : [metric, limit],
+		});
+		return r.rows.map(toTopNode);
+	}
+	if (!Object.hasOwn(METRIC_COL, opts.by)) throw new Error(`topNodes: unknown metric '${opts.by}'`);
+	const col = METRIC_COL[opts.by as Metric];
 	const sql = `SELECT n.id AS id, n.type AS type, na.pagerank AS pagerank, na.community AS community, na.degree AS degree
 		FROM node_analytics na JOIN nodes n ON n.id = na.id
 		WHERE na.${col} IS NOT NULL${typeClause}
@@ -642,11 +692,18 @@ export async function topNodes(raw: DbClient, opts: TopNodesOpts): Promise<TopNo
 		LIMIT ?`;
 	const args: (string | number)[] = opts.type ? [opts.type, limit] : [limit];
 	const r = await raw.execute({ sql, args });
-	return r.rows.map((row) => ({
+	return r.rows.map(toTopNode);
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+function toTopNode(row: Record<string, unknown>): TopNode {
+	return {
 		id: String(row.id),
 		type: String(row.type),
-		pagerank: row.pagerank === null ? null : Number(row.pagerank),
-		community: row.community === null ? null : Number(row.community),
-		degree: row.degree === null ? null : Number(row.degree),
-	}));
+		pagerank: num(row.pagerank),
+		community: num(row.community),
+		degree: num(row.degree),
+		score: num(row.score),
+	};
 }

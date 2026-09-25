@@ -259,6 +259,14 @@ CREATE TABLE IF NOT EXISTS node_analytics (
 );
 CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
 CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE TABLE IF NOT EXISTS node_scores (
+  id          text NOT NULL REFERENCES node_identity(id),
+  metric      text NOT NULL,
+  score       double precision NOT NULL,
+  computed_at bigint NOT NULL,
+  PRIMARY KEY (id, metric)
+);
+CREATE INDEX IF NOT EXISTS ns_metric_score ON node_scores(metric, score);
 CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
@@ -396,6 +404,14 @@ CREATE TABLE IF NOT EXISTS node_analytics (
 );
 CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
 CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE TABLE IF NOT EXISTS node_scores (
+  id          TEXT NOT NULL,
+  metric      TEXT NOT NULL,
+  score       DOUBLE NOT NULL,
+  computed_at BIGINT NOT NULL,
+  PRIMARY KEY (id, metric)
+);
+CREATE INDEX IF NOT EXISTS ns_metric_score ON node_scores(metric, score);
 CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 ${FTS_DDL}
 `;

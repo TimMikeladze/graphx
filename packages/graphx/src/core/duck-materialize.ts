@@ -30,6 +30,7 @@ export const SNAPSHOT_TABLES = [
 	'node_embeddings',
 	'graph_outbox',
 	'node_analytics',
+	'node_scores',
 	'trigger_cursors',
 	'trigger_dead_letters',
 	'archival_state',

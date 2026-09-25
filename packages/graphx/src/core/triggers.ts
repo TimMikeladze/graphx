@@ -144,11 +144,23 @@ export type TriggerAction<S extends GraphSchema> = (
 	graph: Graph<S>,
 ) => Promise<void> | void;
 
+/** A content condition for a {@link Trigger}: `true` fires the action. */
+export type TriggerCondition<S extends GraphSchema> = (
+	event: GraphEvent,
+	graph: Graph<S>,
+) => boolean | Promise<boolean>;
+
 /** A rule: match some subset of events, run an action. */
 export interface Trigger<S extends GraphSchema> {
 	/** Stable — it keys the dead-letter rows and the provenance tag on derived writes. */
 	name: string;
 	match: TriggerMatch;
+	/**
+	 * A condition on the event's content, checked after `match` and before `action` — e.g.
+	 * `jevCondition(...)` from `graphx/jev`. `false` means the trigger does not fire. It runs
+	 * inside the attempt, so a throw is retried and dead-lettered like a failing action.
+	 */
+	when?: TriggerCondition<S>;
 	action: TriggerAction<S>;
 	/** Attempts before dead-lettering. Overrides the runner default. */
 	retries?: number;
@@ -369,27 +381,36 @@ export class TriggerRunner<S extends GraphSchema> {
 		let deadLettered = 0;
 		for (const trigger of this.triggers) {
 			if (!matchesTrigger(event, trigger.match)) continue;
-			if (await this.deliver(trigger, event)) delivered++;
-			else deadLettered++;
+			const outcome = await this.deliver(trigger, event);
+			if (outcome === 'delivered') delivered++;
+			else if (outcome === 'dead') deadLettered++;
 		}
 		return { delivered, deadLettered };
 	}
 
-	/** Attempt one trigger with backoff. `false` ⇒ attempts exhausted and a dead letter written. */
-	private async deliver(trigger: Trigger<S>, event: GraphEvent): Promise<boolean> {
+	/**
+	 * Attempt one trigger with backoff: `'skipped'` when its `when` said no, `'dead'` when attempts
+	 * ran out and a dead letter was written.
+	 */
+	private async deliver(
+		trigger: Trigger<S>,
+		event: GraphEvent,
+	): Promise<'delivered' | 'skipped' | 'dead'> {
 		const attempts = trigger.retries ?? this.retries;
 		let lastError = '';
 		for (let attempt = 0; attempt < attempts; attempt++) {
 			try {
-				await trigger.action(event, this.graphFor(trigger.name));
-				return true;
+				const graph = this.graphFor(trigger.name);
+				if (trigger.when && !(await trigger.when(event, graph))) return 'skipped';
+				await trigger.action(event, graph);
+				return 'delivered';
 			} catch (e) {
 				lastError = e instanceof Error ? (e.stack ?? e.message) : String(e);
 				if (attempt < attempts - 1) await this.backoff(attempt);
 			}
 		}
 		await this.recordDeadLetter(trigger, event, lastError, attempts);
-		return false;
+		return 'dead';
 	}
 
 	private graphFor(name: string): Graph<S> {

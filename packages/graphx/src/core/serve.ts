@@ -39,6 +39,7 @@ import {
 	type GraphSchema,
 } from './graph.ts';
 import { type GraphEventOptions, scopeEvents } from './events.ts';
+import type { RerankCandidate, RerankFn } from './hybrid.ts';
 import { journey } from './journey.ts';
 import { match, type PatternBuilder } from './pattern.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
@@ -94,6 +95,18 @@ export interface ServeConfig<S extends GraphSchema> {
 	/** How project graphs embed on write — see {@link GraphOptions.embedding}. Default `'sync'`. */
 	embedding?: GraphOptions['embedding'];
 	/**
+	 * Reranks every `/hybrid` result set (e.g. `jevRerank()` from `graphx/jev`). A function, so it
+	 * is the operator's to set and never part of the wire body. Omit ⇒ fused order.
+	 */
+	rerank?: RerankFn;
+	/**
+	 * Screens every `/retrieve` and `/hybrid` result set before it leaves the server (e.g.
+	 * `jevGuard()` from `graphx/jev`, which drops text that tries to instruct a model). Rows whose
+	 * ids it does not return are withheld; the rest keep their order. Reads addressed by id —
+	 * a node's content, its history — are not screened. Omit ⇒ no screening.
+	 */
+	guard?: RerankFn;
+	/**
 	 * §19.2 governance caps enforced server-side on every read route (row cap, fan-out
 	 * guard, fail-safe timeout). Set by the operator — NOT client-overridable, so a
 	 * tenant can't raise its own limits. Omit for {@link DEFAULT_LIMITS}.
@@ -146,6 +159,17 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * air-gapped deployment set `docs: false` and self-host the reference. `/openapi.json` works offline.
 	 */
 	docs?: boolean;
+}
+
+/** Keep the rows the guard returns, in their original order. No guard ⇒ every row. */
+async function screen<R extends RerankCandidate>(
+	guard: RerankFn | undefined,
+	query: string,
+	rows: R[],
+): Promise<R[]> {
+	if (!guard || rows.length === 0) return rows;
+	const keep = new Set((await guard(query, rows)).map((s) => s.id));
+	return rows.filter((r) => keep.has(r.id));
 }
 
 /** Options accepted by Hono's {@link cors} middleware (origin/methods/headers/credentials/…). */
@@ -306,6 +330,32 @@ const nodeListQuerySchema = z.object({
 	cursor: z.string().optional(),
 });
 
+/** GET /edges query — rel/endpoint/provenance filters + keyset pagination. */
+const edgeListQuerySchema = z.object({
+	rel: z.string().optional(),
+	src: z.string().optional(),
+	dst: z.string().optional(),
+	source: z.string().optional(),
+	asOf: numQuery.optional(),
+	limit: numQuery.optional(),
+	cursor: z.string().optional(),
+});
+
+const edgeListPageSchema = z.object({
+	edges: z.array(
+		z.object({
+			id: z.string(),
+			rel: z.string(),
+			src: z.string(),
+			dst: z.string(),
+			weight: z.number(),
+			data: z.record(z.string(), z.unknown()),
+			source: z.string().nullable(),
+		}),
+	),
+	nextCursor: z.string().nullable(),
+});
+
 /** GET /graph query — type/full-text/as-of filters for the canvas slice. */
 const graphSliceQuerySchema = z.object({
 	type: z.string().optional(),
@@ -338,7 +388,11 @@ const centralitySchema = z.object({ type: z.enum(['degree', 'in', 'out']).option
 
 /** GET /algorithms/top query — `by` is whitelisted to the persisted metric columns. */
 const topNodesQuerySchema = z.object({
-	by: z.enum(['pagerank', 'community', 'degree']),
+	// A built-in analytic, or `score:<name>` for a score written with `persistScores`.
+	by: z.union([
+		z.enum(['pagerank', 'community', 'degree']),
+		z.templateLiteral(['score:', z.string().regex(/^[\w.:-]{1,64}$/)]),
+	]),
 	type: z.string().optional(),
 	limit: posIntQuery.optional(),
 });
@@ -396,7 +450,7 @@ const bulkInputSchema = z.object({
 
 /**
  * POST /hybrid body (§19.3–19.4). Superset of `retrieve` plus fusion/diversification knobs.
- * `rerank` is omitted by design — it's a server-injected function, not wire-serializable.
+ * `rerank` is omitted by design — it's the operator's `ServeConfig.rerank`, not wire-serializable.
  */
 const hybridInputSchema = z.object({
 	query: z.string(),
@@ -608,6 +662,7 @@ const topNodeSchema = z.object({
 	pagerank: z.number().nullable(),
 	community: z.number().nullable(),
 	degree: z.number().nullable(),
+	score: z.number().nullable(),
 });
 
 type WireNode = z.infer<typeof nodeSchema>;
@@ -1070,6 +1125,25 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 		.openapi(
 			createRoute({
 				method: 'get',
+				path: '/t/{tenant}/p/{project}/edges',
+				operationId: 'list_edges',
+				tags: ['read'],
+				summary: 'List edges with their data (keyset paginated)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'read')],
+				request: { params: scopeParams, query: edgeListQuerySchema },
+				responses: { 200: json('OK', edgeListPageSchema), ...READ_ERRORS },
+			}),
+			async (c) => {
+				const page = await c
+					.get('graph')
+					.listEdges({ ...c.req.valid('query'), limits: cfg.limits });
+				return c.json(page, 200);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'get',
 				path: '/t/{tenant}/p/{project}/graph',
 				operationId: 'graph_slice',
 				tags: ['read'],
@@ -1183,14 +1257,18 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			}),
 			async (c) => {
 				if (!cfg.embedder) throw new HTTPException(501, { message: 'retrieve not configured' });
+				const query = c.req.valid('query');
 				const rows = await c.get('graph').retrieve({
-					...c.req.valid('query'),
+					...query,
 					limits: cfg.limits,
 					metrics: cfg.metrics
 						? { sink: cfg.metrics, op: 'retrieve', tenant: c.get('principal').tenantId }
 						: undefined,
 				});
-				return c.json(rows as unknown as WireRetrieved[], 200);
+				return c.json(
+					(await screen(cfg.guard, query.query, rows)) as unknown as WireRetrieved[],
+					200,
+				);
 			},
 		)
 		.openapi(
@@ -1360,8 +1438,8 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				return c.json(t, 200);
 			},
 		)
-		// Hybrid GraphRAG search (ANN + FTS5 → RRF → walk → MMR). Needs an embedder (501
-		// otherwise, like /retrieve); `rerank` is SDK-only (not wire-serializable).
+		// Hybrid GraphRAG search (ANN + FTS5 → RRF → walk → rerank → MMR). Needs an embedder (501
+		// otherwise, like /retrieve); the reranker is the operator's `cfg.rerank`.
 		.openapi(
 			createRoute({
 				method: 'post',
@@ -1385,11 +1463,16 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				if (!cfg.embedder) {
 					throw new HTTPException(501, { message: 'hybrid retrieve not configured' });
 				}
+				const body = c.req.valid('json');
 				const rows = await c.get('graph').hybridRetrieve({
-					...c.req.valid('json'),
+					...body,
+					rerank: cfg.rerank,
 					limits: cfg.limits,
 				});
-				return c.json(rows as unknown as WireRetrieved[], 200);
+				return c.json(
+					(await screen(cfg.guard, body.query, rows)) as unknown as WireRetrieved[],
+					200,
+				);
 			},
 		)
 		// Batch node ingestion (§19.8). Validates every row up front (unknown type / bad data →
@@ -1620,6 +1703,10 @@ export interface DevServeConfig<S extends GraphSchema> {
 	embedder?: Embedder;
 	/** See {@link ServeConfig.embedding}. */
 	embedding?: GraphOptions['embedding'];
+	/** See {@link ServeConfig.rerank}. */
+	rerank?: RerankFn;
+	/** See {@link ServeConfig.guard}. */
+	guard?: RerankFn;
 	limits?: Partial<QueryLimits>;
 	upcasters?: UpcasterRegistry;
 	metrics?: MetricsSink;

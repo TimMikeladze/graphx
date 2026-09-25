@@ -100,6 +100,8 @@ export async function runMcp(args: McpBinArgs): Promise<void> {
 			db: namespaceOf(cfg),
 			embedder: cfg.embedder,
 			embedding: cfg.embedding,
+			rerank: cfg.rerank,
+			guard: cfg.guard,
 		});
 		app = dev.app;
 		backend = localBackend(dev.app, { 'x-user': dev.user, 'x-tenant': dev.tenant });
@@ -114,6 +116,11 @@ export async function runMcp(args: McpBinArgs): Promise<void> {
 		if (!cfg.embedder) {
 			process.stderr.write(
 				'graphx mcp: the config has no `embedder`; retrieve / hybrid_search will answer 501\n',
+			);
+		}
+		if (cfg.embedder && !cfg.guard) {
+			process.stderr.write(
+				'graphx mcp: the config has no `guard`; retrieved node bodies reach the agent unscreened (jevGuard() in graphx/jev screens them)\n',
 			);
 		}
 	}

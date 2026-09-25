@@ -1,6 +1,7 @@
 import type { DbConfig } from './db.ts';
 import type { Embedder } from './embedder.ts';
 import type { EmbeddingMode, GraphSchema } from './graph.ts';
+import type { RerankFn } from './hybrid.ts';
 import type { Trigger, TriggerRunnerOptions } from './triggers.ts';
 
 /**
@@ -17,6 +18,17 @@ export interface GraphxConfig<S extends GraphSchema = GraphSchema> {
 	embedder?: Embedder;
 	/** `'sync'` (default) embeds inside each write; `'lazy'` leaves it to `embedTrigger`. */
 	embedding?: EmbeddingMode;
+	/**
+	 * Reranks `hybrid_search` results for `graphx serve` and `graphx mcp` — e.g. `jevRerank()`
+	 * from `graphx/jev`. Omit ⇒ fused order.
+	 */
+	rerank?: RerankFn;
+	/**
+	 * Screens `retrieve` and `hybrid_search` results for `graphx serve` and `graphx mcp` — e.g.
+	 * `jevGuard()` from `graphx/jev`, so an agent never reads a node body that tries to instruct
+	 * it. Omit ⇒ no screening.
+	 */
+	guard?: RerankFn;
 	/** Backend selection; `{ driver: 'postgres', connectionString }` or `{ driver: 'duckdb', ... }`. */
 	db?: DbConfig;
 	/** Project DB namespace (libSQL file / PG schema / DuckDB prefix). Default `'graphx'`. */

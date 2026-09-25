@@ -44,7 +44,13 @@ export interface RerankScore {
  * the returned list are dropped; the survivors are ordered by `score` descending. No local
  * cross-encoder is bundled — bring your own (a cross-encoder call, an LLM judge, etc.).
  */
-export type RerankFn = (query: string, candidates: RetrievedNode[]) => Promise<RerankScore[]>;
+export type RerankFn = (query: string, candidates: RerankCandidate[]) => Promise<RerankScore[]>;
+
+/** What a reranker reads of a candidate. Every schema's `RetrievedNode` is one. */
+export type RerankCandidate = Omit<RetrievedNode, 'type' | 'data'> & {
+	type: string;
+	data: unknown;
+};
 
 /**
  * MMR options (§19.4). `k` = final number of results to return after diversification;
@@ -332,7 +338,7 @@ export async function hybridRetrieve<S extends GraphSchema = GraphSchema>(
 
 	let rerankScore: Map<string, number> | null = null;
 	if (opts.rerank) {
-		const scores = await opts.rerank(opts.query, candidates as unknown as RetrievedNode[]);
+		const scores = await opts.rerank(opts.query, candidates);
 		rerankScore = new Map(scores.map((s) => [s.id, s.score]));
 		candidates = candidates
 			.filter((c) => rerankScore?.has(c.id))

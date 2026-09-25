@@ -37,6 +37,16 @@ export async function loadConfig(configPath: string): Promise<GraphxConfig> {
 			`graphx: ${configPath} \`embedder\` is not an Embedder — build it with defineEmbedder({ id, embed }) or hashEmbed()`,
 		);
 	}
+	if (cfg.rerank !== undefined && typeof cfg.rerank !== 'function') {
+		throw new Error(
+			`graphx: ${configPath} \`rerank\` is not a function — build it with jevRerank() from graphx/jev, or write (query, candidates) => scores`,
+		);
+	}
+	if (cfg.guard !== undefined && typeof cfg.guard !== 'function') {
+		throw new Error(
+			`graphx: ${configPath} \`guard\` is not a function — build it with jevGuard() from graphx/jev, or write (query, candidates) => kept ids`,
+		);
+	}
 	if (cfg.db?.driver === 'postgres') await import('./core/pg.ts');
 	if (cfg.db?.driver === 'duckdb') await import('./core/duck.ts');
 	return cfg;

@@ -141,6 +141,14 @@ CREATE TABLE IF NOT EXISTS node_analytics (
 );
 CREATE INDEX IF NOT EXISTS na_pagerank ON node_analytics(pagerank);
 CREATE INDEX IF NOT EXISTS na_community ON node_analytics(community);
+CREATE TABLE IF NOT EXISTS node_scores (
+  id          TEXT NOT NULL REFERENCES node_identity(id),
+  metric      TEXT NOT NULL,
+  score       REAL NOT NULL,
+  computed_at INTEGER NOT NULL,
+  PRIMARY KEY (id, metric)
+);
+CREATE INDEX IF NOT EXISTS ns_metric_score ON node_scores(metric, score);
 CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
 `;
 }
