@@ -27,7 +27,7 @@ import {
 	ensureEmbeddings,
 	readEmbeddingMeta,
 } from './schema.ts';
-import { ulid } from 'ulidx';
+import { newId } from './ids.ts';
 import type { z } from 'zod';
 import {
 	FOREVER,
@@ -1222,7 +1222,7 @@ export class Graph<S extends GraphSchema> {
 			n.body,
 			n,
 		);
-		const id = ulid();
+		const id = newId();
 		const ts = this.now();
 
 		// P12: stamp the type's current `_v` into the STORED data (so future readers
@@ -1314,7 +1314,7 @@ export class Graph<S extends GraphSchema> {
 			}
 		}
 
-		const id = ulid();
+		const id = newId();
 		const data = JSON.stringify(parsedData);
 		const weight = e.weight ?? 1.0;
 		const insertEdge = (ts: number): SqlStatement[] => [

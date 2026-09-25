@@ -1,7 +1,7 @@
 import { FOREVER, ftsIndexOwner, managedWriter } from './runtime.ts';
 import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
 import { embValueExpr, insertOrIgnore } from './dialect-sql.ts';
-import { ulid } from 'ulidx';
+import { newId } from './ids.ts';
 import type { NodeType, Rel } from './define-graph-schema.ts';
 import {
 	assertVector,
@@ -269,7 +269,7 @@ export async function bulkLoad<S extends GraphSchema>(
 		if (!def) throw new Error(`bulkLoad: unknown type '${String(row.type)}'`);
 		const parsed = def.parse(row.data) as Record<string, unknown>;
 		return {
-			id: row.id ?? ulid(),
+			id: row.id ?? newId(),
 			type: String(row.type),
 			body: row.body ?? null,
 			uri: row.uri ?? null,
@@ -517,7 +517,7 @@ export async function bulkEdges<S extends GraphSchema>(
 		}
 
 		return {
-			id: row.id ?? ulid(),
+			id: row.id ?? newId(),
 			src: row.src,
 			dst: row.dst,
 			rel: String(row.rel),
