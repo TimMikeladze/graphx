@@ -47,3 +47,6 @@ yarn-error.log*
 # DuckDB scratch databases + spill (see duck-pool.ts duckDataDir)
 .graphx-data/
 .vercel
+
+# Scratch directory the README-examples test compiles in (inside the repo so `graphx` resolves).
+.readme-examples-*/

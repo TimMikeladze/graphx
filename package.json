@@ -59,6 +59,7 @@
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",
 		"release": "bumpp -r --commit --push --tag",
+		"sync:readme": "bun scripts/sync-package-readme.ts",
 		"test": "bun test --timeout 30000",
 		"test:coverage": "bun test --coverage",
 		"test:watch": "bun test --watch",
