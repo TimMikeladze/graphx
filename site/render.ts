@@ -12,7 +12,7 @@ import vitesseDark from '@shikijs/themes/vitesse-dark';
 import vitesseLight from '@shikijs/themes/vitesse-light';
 import { Marked } from 'marked';
 import { createHighlighterCore } from 'shiki/core';
-import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
+import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import {
 	agents,
 	boundaries,
@@ -52,7 +52,10 @@ async function makeHighlighter() {
 	return createHighlighterCore({
 		themes: [vitesseDark, vitesseLight],
 		langs: [typescript, tsx, bash, json, sql],
-		engine: createJavaScriptRegexEngine({ forgiving: true }),
+		// Oniguruma (WASM), not the JavaScript engine: the JS engine compiles grammars to the host's
+		// RegExp and, when forgiving, skips what it cannot compile — so the highlighting, and with it
+		// the committed output, changed with the Bun version. WASM depends only on the lockfile.
+		engine: createOnigurumaEngine(import('shiki/wasm')),
 	});
 }
 type Highlighter = Awaited<ReturnType<typeof makeHighlighter>>;
