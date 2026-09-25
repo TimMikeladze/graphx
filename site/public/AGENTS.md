@@ -56,7 +56,7 @@ await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
 | `expectedRevision` | update option | Concurrent writer surfaces as RevisionConflict |
 | `embedding: 'lazy' \| 'off'` | Graph option | Defer embedding to an embedTrigger, or never embed |
 | `limits` | read option | Row cap, fan-out guard and timeout |
-| `driver` | getDb config \| 'postgres' or 'duckdb'; default is libSQL |
+| `driver` | getDb config | 'postgres' or 'duckdb'; default is libSQL |
 
 ## Three mistakes that break it
 

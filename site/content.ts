@@ -56,7 +56,7 @@ export const links: LinkEntry[] = [
 	{ label: 'graphx on GitHub', href: 'repo', icon: 'github', where: ['header', 'footer'] },
 	{ label: 'linesofcode on X', href: 'https://x.com/linesofcode', icon: 'x', where: ['header', 'footer'] },
 	{
-		label: 'Tim Mikeladze on LinkedIn',
+		label: 'linesofcode on LinkedIn',
 		href: 'https://www.linkedin.com/in/tim-mikeladze',
 		icon: 'linkedin',
 		where: ['header', 'footer'],

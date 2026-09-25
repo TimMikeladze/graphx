@@ -420,7 +420,7 @@ ${agents.minimal.map((r) => fenceFor(m, r)).join('\n\n')}
 
 | Option | Where | Effect |
 | --- | --- | --- |
-${agents.options.map((o) => `| \`${o[0]}\` | ${o[1]} | ${o[2]} |`.replace(/(?<=\S) \| (?=')/g, ' \\| ')).join('\n')}
+${agents.options.map((o) => o.map((c) => c.replace(/\|/g, '\\|'))).map((o) => `| \`${o[0]}\` | ${o[1]} | ${o[2]} |`).join('\n')}
 
 ## Three mistakes that break it
 
