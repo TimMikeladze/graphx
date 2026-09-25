@@ -177,6 +177,76 @@ export default { schema, embedder: hashEmbed(8), db: { driver: 'libsql' }, names
 	},
 );
 
+// The config's `rerank` reaches `/hybrid` — the path both `graphx serve` and `graphx mcp` take.
+test.skipIf(NOT_LIBSQL)('buildServeApp: the config rerank orders /hybrid results', async () => {
+	const ns = `cli-rerank-${Date.now()}`;
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema, hashEmbed } from '../../src/core/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({ title: z.string() }) }, edges: {} });
+// Reverses the fused order, so the test can tell it ran.
+const rerank = async (_q, cs) => cs.map((c, i) => ({ id: c.id, score: i }));
+export default { schema, embedder: hashEmbed(8), rerank, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		const { app, control, tenant, project, graph } = await buildServeApp(configPath);
+		await graph.addNode({ type: 'note', data: { title: 'a' }, body: 'router gateway' });
+		await graph.addNode({ type: 'note', data: { title: 'b' }, body: 'switch gateway' });
+		const hybrid = async (body: unknown) =>
+			(await (
+				await app.request(`/t/${tenant}/p/${project}/hybrid`, {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(body),
+				})
+			).json()) as Array<{ id: string }>;
+		const rows = await hybrid({ query: 'gateway', k: 10, maxDepth: 0 });
+		expect(rows).toHaveLength(2);
+		const fused = await graph.hybridRetrieve({ query: 'gateway', k: 10, maxDepth: 0 });
+		expect(rows.map((r) => r.id)).toEqual(fused.map((r) => r.id).reverse());
+		control.close();
+	} finally {
+		await rm(configPath, { force: true });
+		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
+	}
+});
+
+test('buildServeApp: a `rerank` or `guard` that is not a function is refused', async () => {
+	const ns = `cli-badrerank-${Date.now()}`;
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema } from '../../src/core/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({}) }, edges: {} });
+export default { schema, rerank: { model: 'jev-latest' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		await expect(buildServeApp(configPath)).rejects.toThrow(/`rerank` is not a function/);
+		// A second file: a module import is cached by path, so rewriting the first would not reload.
+		const guardPath = join(import.meta.dir, `${ns}-guard.config.ts`);
+		await writeFile(
+			guardPath,
+			`import { defineGraphSchema } from '../../src/core/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({}) }, edges: {} });
+export default { schema, guard: true, namespace: '${ns}-g' };
+`,
+		);
+		try {
+			await expect(buildServeApp(guardPath)).rejects.toThrow(/`guard` is not a function/);
+		} finally {
+			await rm(guardPath, { force: true });
+		}
+	} finally {
+		await rm(configPath, { force: true });
+	}
+});
+
 // buildServeApp opens the config's backend itself (cached under the namespace) rather than
 // bridging it through process env, so a failing postgres config must leave the env untouched.
 // Uses a refused port so the build fails fast.

@@ -6,6 +6,7 @@ import { createApp, Graph, init, TriggerRunner } from './core/index.ts';
 import { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 import { ingestDir, watchDir } from './ingest/index.ts';
 import type { IngestResult } from './ingest/index.ts';
+import { askGraph, type PairJudgment, resolveEntities } from './jev/index.ts';
 
 export { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 
@@ -156,6 +157,80 @@ export function parseMcpArgs(argv: string[]): ParsedMcpArgs {
 	};
 }
 
+export interface ParsedDedupeArgs {
+	type: string;
+	config: string;
+	fields?: string[];
+	candidates: number;
+	limit?: number;
+	sameRel?: string;
+	reviewRel?: string;
+	dryRun: boolean;
+}
+
+export function parseDedupeArgs(argv: string[]): ParsedDedupeArgs {
+	const { values, positionals } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			fields: { type: 'string' },
+			candidates: { type: 'string', default: '5' },
+			limit: { type: 'string' },
+			'same-rel': { type: 'string' },
+			'review-rel': { type: 'string' },
+			'dry-run': { type: 'boolean', default: false },
+		},
+	});
+	const type = positionals[1];
+	if (!type) throw new Error('dedupe: missing <type> — the node type to resolve');
+	const int = (flag: string, raw: string | undefined): number | undefined => {
+		if (raw === undefined) return undefined;
+		const n = Number(raw);
+		if (!Number.isInteger(n) || n < 1)
+			throw new Error(`dedupe: --${flag} must be a positive integer`);
+		return n;
+	};
+	const dryRun = (values['dry-run'] as boolean | undefined) ?? false;
+	return {
+		type,
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		fields: (values.fields as string | undefined)
+			?.split(',')
+			.map((f) => f.trim())
+			.filter(Boolean),
+		candidates: int('candidates', values.candidates as string | undefined) ?? 5,
+		limit: int('limit', values.limit as string | undefined),
+		sameRel: dryRun ? undefined : (values['same-rel'] as string | undefined),
+		reviewRel: dryRun ? undefined : (values['review-rel'] as string | undefined),
+		dryRun,
+	};
+}
+
+export interface ParsedAskArgs {
+	question: string;
+	config: string;
+	limit: number;
+}
+
+export function parseAskArgs(argv: string[]): ParsedAskArgs {
+	const { values, positionals } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			limit: { type: 'string', default: '10' },
+		},
+	});
+	const question = positionals.slice(1).join(' ').trim();
+	if (!question)
+		throw new Error('ask: missing the question — graphx ask "which gateways raised alerts?"');
+	const limit = Number(values.limit ?? 10);
+	if (!Number.isInteger(limit) || limit < 1)
+		throw new Error('ask: --limit must be a positive integer');
+	return { question, config: (values.config as string | undefined) ?? './graphx.config.ts', limit };
+}
+
 export interface ParsedNewArgs {
 	dir: string;
 }
@@ -204,6 +279,8 @@ Usage:
   graphx mcp [options]            Serve the graph to an MCP client over stdio
   graphx reembed [options]        Re-embed every live node with the configured embedder
   graphx doctor [options]         Report the namespace's embedding model, width, and health
+  graphx dedupe <type> [options]  Find duplicate nodes of a type and judge them with Jev
+  graphx ask "<question>"         Plan a plain-language question as a graph call with Jev, and run it
   graphx new <dir>                Scaffold a starter graphx project
 
 ingest options:
@@ -230,6 +307,21 @@ reembed options:
 
 doctor options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+
+dedupe options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --fields <a,b>          Data fields Jev sees and compares (default: all)
+  --candidates <n>        Nearest same-type neighbours judged per node (default: 5)
+  --limit <n>             Resolve only the first n nodes
+  --same-rel <rel>        Link same-entity pairs with this rel
+  --review-rel <rel>      Link pairs for a curator with this rel
+  --dry-run               Judge and report; write nothing
+  TYPESAFE_API_KEY        Jev API key
+
+ask options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --limit <n>             Rows to return (default: 10)
+  TYPESAFE_API_KEY        Jev API key
 
 mcp options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts) — local mode
@@ -267,6 +359,10 @@ export async function run(argv: string[]): Promise<void> {
 			return runReembed(argv);
 		case 'doctor':
 			return runDoctor(argv);
+		case 'dedupe':
+			return runDedupe(argv);
+		case 'ask':
+			return runAsk(argv);
 		case 'mcp':
 			// Dynamic: `@modelcontextprotocol/sdk` is an OPTIONAL peer, so a static import would
 			// put it on the load path of every other subcommand and break installs that never
@@ -341,6 +437,8 @@ export async function buildServeApp(configPath: string): Promise<CreateAppResult
 		schema: cfg.schema,
 		embedder: cfg.embedder,
 		embedding: cfg.embedding,
+		rerank: cfg.rerank,
+		guard: cfg.guard,
 		db: namespaceOf(cfg),
 	});
 }
@@ -420,6 +518,98 @@ async function runReembed(argv: string[]): Promise<void> {
 	console.log(
 		`reembedded nodes=${result.nodes} embedded=${result.embedded} skipped=${result.skipped}`,
 	);
+}
+
+/**
+ * `graphx dedupe` — resolve duplicate nodes of one type with Jev. Candidates come from the
+ * config's embedder, so it needs one. Without a rel flag nothing is written: the run is a report.
+ */
+async function runDedupe(argv: string[]): Promise<void> {
+	const args = parseDedupeArgs(argv);
+	const cfg = await loadConfig(args.config);
+	if (!cfg.embedder)
+		throw new Error('dedupe: the config has no `embedder` to find candidates with');
+	if (!(args.type in cfg.schema.nodes)) throw new Error(`dedupe: unknown node type '${args.type}'`);
+	for (const rel of [args.sameRel, args.reviewRel]) {
+		if (rel && !(rel in cfg.schema.edges)) throw new Error(`dedupe: unknown rel '${rel}'`);
+	}
+	const graph = await openGraph(cfg);
+	const label = new Map<string, string>();
+	const name = async (id: string): Promise<string> => {
+		if (!label.has(id)) {
+			const data = ((await graph.getNode(id))?.data ?? {}) as Record<string, unknown>;
+			const first = Object.values(data).find((v) => typeof v === 'string' && v);
+			label.set(id, String(first ?? id).slice(0, 40));
+		}
+		return label.get(id)!;
+	};
+	let done = 0;
+	const report = await resolveEntities(graph, {
+		type: args.type,
+		fields: args.fields,
+		candidates: args.candidates,
+		limit: args.limit,
+		rels: { same: args.sameRel, review: args.reviewRel },
+		onJudgment: () => process.stderr.write(`  judged ${++done}\r`),
+	});
+	process.stderr.write('\n');
+	const line = async (p: PairJudgment): Promise<string> => {
+		const disagree = Object.entries(p.fields)
+			.filter(([, v]) => v < 0.5)
+			.map(([k, v]) => `${k} ${v.toFixed(2)}`);
+		return (
+			`  ${(await name(p.a)).padEnd(40)} ~ ${(await name(p.b)).padEnd(40)} ` +
+			`score ${p.score.toFixed(2)} conf ${p.confidence.toFixed(2)}` +
+			(disagree.length ? `  disagree: ${disagree.join(', ')}` : '') +
+			`  [${p.a} ${p.b}]`
+		);
+	};
+	for (const outcome of ['same', 'review'] as const) {
+		const rows = report.pairs.filter((p) => p.outcome === outcome);
+		if (rows.length === 0) continue;
+		console.log(outcome === 'same' ? 'same entity:' : 'for a curator:');
+		for (const p of rows) console.log(await line(p));
+	}
+	for (const f of report.failed) console.log(`  failed ${f.a} ~ ${f.b}: ${f.error}`);
+	console.log(
+		`same=${report.same} review=${report.review} different=${report.different} ` +
+			`skipped=${report.skipped} failed=${report.failed.length} written=${report.written} ` +
+			`inputTokens=${report.inputTokens}${args.dryRun ? ' (dry run)' : ''}`,
+	);
+}
+
+/**
+ * `graphx ask` — one Jev request turns the question into a typed call (search, list, or rank;
+ * which node type; which metric), then it runs. Persisted `score:` metrics are offered too.
+ */
+async function runAsk(argv: string[]): Promise<void> {
+	const args = parseAskArgs(argv);
+	const cfg = await loadConfig(args.config);
+	const graph = await openGraph(cfg);
+	const scored = await graph.raw.execute('SELECT DISTINCT metric FROM node_scores');
+	const metrics = Object.fromEntries(
+		scored.rows.map((r) => [String(r.metric), `The ${String(r.metric)} score`]),
+	);
+	const { plan, rows } = await askGraph(graph, args.question, { limit: args.limit, metrics });
+	console.log(
+		`plan: ${plan.op}${plan.type ? ` ${plan.type}` : ''}${plan.metric ? ` by ${plan.metric}` : ''} ` +
+			`(confidence ${plan.confidence.toFixed(2)}, type ${plan.typeConfidence.toFixed(2)})`,
+	);
+	if (rows === null) {
+		console.log('not confident enough to run it — rephrase, or be specific about what to find');
+		return;
+	}
+	for (const r of rows) {
+		const label = Object.values(r.data as Record<string, unknown>).find(
+			(v) => typeof v === 'string' && v,
+		);
+		console.log(
+			`  ${r.type.padEnd(12)} ${String(label ?? '')
+				.slice(0, 60)
+				.padEnd(60)} ${r.id}`,
+		);
+	}
+	console.log(`${rows.length} row(s)`);
 }
 
 /** `graphx doctor` — the namespace's embedding model, width, counts, and staleness. */

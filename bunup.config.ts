@@ -29,6 +29,7 @@ export default defineWorkspace([
 				'src/core/duck.ts',
 				'src/core/blob.ts',
 				'src/embedders/index.ts',
+				'src/jev/index.ts',
 				'src/react/index.ts',
 				'src/mcp/index.ts',
 				'src/ingest/index.ts',

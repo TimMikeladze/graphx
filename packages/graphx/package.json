@@ -100,6 +100,12 @@
 				"default": "./dist/embedders/index.js"
 			}
 		},
+		"./jev": {
+			"import": {
+				"types": "./dist/jev/index.d.ts",
+				"default": "./dist/jev/index.js"
+			}
+		},
 		"./cli": {
 			"import": {
 				"types": "./dist/cli.d.ts",
