@@ -35,6 +35,13 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      # site/ is not a workspace — it has its own lockfile, so it installs and tests on its own.
+      - name: Site tests
+        working-directory: site
+        run: |
+          bun install --frozen-lockfile
+          bun test
+
   # Postgres backend — the same suite under GRAPHX_TEST_DRIVER=postgres against a
   # pgvector service container.
   test-postgres:

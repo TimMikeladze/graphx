@@ -1,2 +1,8 @@
 [install]
 linker = "hoisted"
+
+[test]
+# site/ is not a workspace: it has its own lockfile and dependencies, and CI tests it in its own
+# step after installing them. Collected from the root, its tests would import packages the root
+# install never provides.
+pathIgnorePatterns = ["site/**"]
