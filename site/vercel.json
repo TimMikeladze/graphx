@@ -1,0 +1,10 @@
+{
+	"cleanUrls": true,
+	"trailingSlash": false,
+	"outputDirectory": "public",
+	"buildCommand": null,
+	"headers": [
+		{ "source": "/(.*)\\.md", "headers": [{ "key": "Content-Type", "value": "text/markdown; charset=utf-8" }] },
+		{ "source": "/AGENTS.md", "headers": [{ "key": "Content-Type", "value": "text/markdown; charset=utf-8" }] }
+	]
+}

@@ -1,40 +1,41 @@
 # graphx.sh
 
-The landing page for [graphx.sh](https://graphx.sh). Vite, no framework, no client-side markdown.
+The landing page and reference for [graphx.sh](https://graphx.sh), generated from the root `README.md`.
+No framework and no bundler; the output is static files in `public/`, committed.
 
 ```sh
-bun install   # this directory has its own lockfile — it is not a workspace of the root
-bun run dev   # http://localhost:5173
-bun run build # → dist/
+bun install       # this directory has its own lockfile — it is not a workspace of the root
+bun run build     # rewrites public/
+bun run serve     # first free port from 4173 (PORT to change the start)
+bun test          # every reference resolves, output equals a fresh render
 ```
 
-## How it works
+## Shape
 
-The repo's `README.md` is the only source of content. At build time `prerender.ts` reads it and
-emits static HTML — the hero title, tagline and install command, the section rail, and the whole
-docs body, with code highlighted by [shiki](https://shiki.style) at build time. The browser
-downloads no markdown parser and no highlighter; `src/main.ts` only wires up the theme toggle, the
-copy buttons, the tabs and the scroll spy (2.8 kB before gzip).
+- `content.ts` — the page model: copy, section order, which README example each section shows, links.
+  No markup.
+- `render.ts` (+ `readme.ts`, `icons.ts`, `styles.ts`) — resolves references, emits the HTML and every
+  sibling artefact. No copy.
+- `card.ts` — draws `og.png` (satori + resvg, no browser) from the same model.
+- `site.test.ts` — the drift guard.
 
-Editing `../README.md` reloads the dev page. The same pass emits two more files from that README,
-so neither can drift out of step with the page:
+**Authored copy lives in `content.ts`; examples never do.** `terminal("graphx doctor")` finds the README
+fence whose first line is `$ graphx doctor`; `snippet("some unique line", "label")` finds the one fence
+containing that line. A reference that matches zero or two blocks throws and fails the build, so
+editing an example in the README breaks the build instead of leaving the page wrong. Add a section by
+adding an entry to `capabilities`.
 
-- `/llms.txt`, from the same headings the rail is built from.
-- `/og.png`, the 1200×630 social card — `og/card.ts` lays it out with
-  [satori](https://github.com/vercel/satori) and rasterises it with resvg, both in plain JavaScript,
-  because the deploy has no browser. Its code crop is highlighted by the same shiki theme the docs
-  use. Nothing is committed: change the tagline and the next deploy carries it onto every share.
+## Output (`public/`)
 
-Four things are written here rather than derived, and every one of them restates something the
-README already says — check them when it changes:
+`index.html`, `reference.html` (the whole README behind a contents column), `index.md`, `reference.md`,
+`llms.txt`, `AGENTS.md`, `sitemap.xml`, `robots.txt`, `favicon.svg`, `og.png`. `vercel.json` turns on
+clean URLs and serves `public/`.
 
-| Where                      | What                                          |
-| -------------------------- | --------------------------------------------- |
-| `prerender.ts` → `PILLARS` | The three claims in the band under the hero   |
-| `prerender.ts` → `PANELS`  | The three code samples in the hero card       |
-| `og/card.ts` → `SNIPPET`   | The code crop on the social card              |
-| `og/card.ts` → `CLAIMS`    | The two lines of card copy under the headline |
+Two inline scripts ship: the theme boot in `<head>` (key `graphx-theme`, sets `data-theme` before the
+stylesheet) and a small one for the theme toggle and copy buttons. Without them the page is dark by
+default and follows the OS through a `prefers-color-scheme` media query.
 
 ## Not done yet
 
-- **No analytics.**
+- No analytics.
+- No benchmark figures: the README holds no captured run to reference.

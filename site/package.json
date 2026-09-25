@@ -1,7 +1,7 @@
 {
 	"name": "graphx-site",
 	"private": true,
-	"description": "The graphx.sh landing page — Vite, prerendered from the root README at build time.",
+	"description": "The graphx.sh landing page and reference \u2014 generated from the root README into public/.",
 	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
@@ -19,13 +19,9 @@
 	},
 	"type": "module",
 	"scripts": {
-		"dev": "vite",
-		"build": "vite build",
-		"preview": "vite preview"
-	},
-	"dependencies": {
-		"@fontsource/geist-mono": "^5.3.0",
-		"@fontsource/geist-sans": "^5.3.0"
+		"build": "bun build.ts",
+		"serve": "bun serve.ts",
+		"test": "bun test"
 	},
 	"devDependencies": {
 		"@resvg/resvg-wasm": "^2.6.2",
@@ -36,6 +32,8 @@
 		"satori": "^0.29.0",
 		"shiki": "^3.13.0",
 		"typescript": "^5.9.3",
-		"vite": "^7.1.9"
+		"@fontsource/geist-mono": "^5.3.0",
+		"@fontsource/geist-sans": "^5.3.0",
+		"@types/bun": "latest"
 	}
 }

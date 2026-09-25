@@ -1,0 +1,262 @@
+/**
+ * The page model: composition, copy, section order, which captured example each section shows, and
+ * the link table. No markup — render.ts owns that. Copy is authored here; examples are not. Every
+ * `terminal()` / `snippet()` / `table()` below is resolved against the README's fenced blocks at
+ * build time, and a reference that resolves to zero or two blocks fails the build.
+ */
+
+export const origin = 'https://graphx.sh';
+export const repo = 'https://github.com/TimMikeladze/graphx';
+export const npm = 'https://www.npmjs.com/package/graphx';
+
+/** The one place an absolute URL is made, so head, sitemap, llms.txt and the card cannot disagree. */
+export function url(pagePath = '/'): string {
+	const clean = pagePath.replace(/index\.html$/, '').replace(/\.html$/, '');
+	return origin + (clean.startsWith('/') ? clean : `/${clean}`);
+}
+
+export type Ref =
+	/** A fenced block whose first line is `$ <command>` — a captured run. */
+	| { kind: 'terminal'; command: string }
+	/** A fenced block containing exactly this line, for blocks with no command. */
+	| { kind: 'snippet'; line: string; label: string };
+
+export const terminal = (command: string): Ref => ({ kind: 'terminal', command });
+export const snippet = (line: string, label: string): Ref => ({ kind: 'snippet', line, label });
+
+export type Demo =
+	| { kind: 'code'; ref: Ref }
+	/** One capability, several labelled instances side by side. `caption` is the option each shows. */
+	| { kind: 'variants'; items: { ref: Ref; caption: string }[] }
+	/** A set rendered as a table, read from the README table whose first header cell is `header`. */
+	| { kind: 'table'; header: string };
+
+export interface Capability {
+	id: string;
+	/** ≤ 6 words, sentence case, no full stop. */
+	title: string;
+	/** 1–3 sentences of inline markdown; must name the real option in `code`. */
+	body: string;
+	demo: Demo;
+	/** One sentence between this section and the next, offering the adjacent thing. */
+	aside?: string;
+}
+
+export type IconName = 'github' | 'x' | 'linkedin' | 'discord' | 'text';
+
+export interface LinkEntry {
+	label: string;
+	/** `repo` follows the repo variable rather than repeating a URL. */
+	href: string;
+	icon: IconName;
+	where: ('header' | 'footer')[];
+}
+
+export const links: LinkEntry[] = [
+	{ label: 'graphx on GitHub', href: 'repo', icon: 'github', where: ['header', 'footer'] },
+	{ label: 'linesofcode on X', href: 'https://x.com/linesofcode', icon: 'x', where: ['header', 'footer'] },
+	{
+		label: 'Tim Mikeladze on LinkedIn',
+		href: 'https://www.linkedin.com/in/tim-mikeladze',
+		icon: 'linkedin',
+		where: ['header', 'footer'],
+	},
+	{
+		label: 'linesofcode on Discord',
+		href: 'https://discord.com/users/linesofcode',
+		icon: 'discord',
+		where: ['footer'],
+	},
+	{ label: 'graphx.sh', href: origin, icon: 'text', where: ['footer'] },
+	{ label: 'graphx on npm', href: npm, icon: 'text', where: ['footer'] },
+];
+
+export const page = {
+	name: 'graphx',
+	/** The <title> and og:title suffix. */
+	tagline: 'temporal GraphRAG for TypeScript',
+	h1: 'Temporal GraphRAG for TypeScript',
+	/** Inline markdown. Three facts: what it is, what it is built on, who made it. */
+	lede:
+		'`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, ' +
+		'and packed with retrieval, traversal and serving. Made by [linesofcode](https://x.com/linesofcode).',
+	/** The description meta: the lede's first sentence, extended to be useful in a result list. */
+	description:
+		'graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.',
+	license: 'MIT',
+	category: 'DeveloperApplication',
+	year: 2026,
+	credit:
+		'graphx is built and maintained by linesofcode. It is MIT licensed, and the README in the repository is the documentation this site is generated from.',
+	nav: [
+		{ label: 'Reference', href: '/reference', external: false },
+		{ label: 'Boundaries', href: '#boundaries', external: false },
+		{ label: 'Start', href: '#start', external: false },
+		{ label: 'npm', href: npm, external: true },
+	],
+};
+
+export const capabilities: Capability[] = [
+	{
+		id: 'one-schema',
+		title: 'One schema, no codegen',
+		body:
+			'Describe nodes and edges with Zod objects in `defineGraphSchema`. Typed writes, pattern matching, HTTP routes, hooks and MCP tools are all inferred from that one `Schema` type, so there is no generate step to run.',
+		demo: { kind: 'code', ref: snippet('type Schema = typeof schema;', 'graphx.config.ts') },
+	},
+	{
+		id: 'bitemporal',
+		title: 'Every write is bitemporal',
+		body:
+			'Versions carry `valid_from` and `valid_to`, so a delete closes an interval instead of erasing a row. Pass `asOf` to any read to see the graph as it stood at that instant.',
+		demo: { kind: 'code', ref: terminal('bun run examples/basic-demo.ts') },
+		aside: 'Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` from `graphx/react`.',
+	},
+	{
+		id: 'retrieval',
+		title: 'Vector, text and graph together',
+		body:
+			'Call `hybridRetrieve` to fuse vector and full-text results with reciprocal rank fusion, then walk out from the seeds along edges valid at that time. Each row says which leg matched it in `via`.',
+		demo: { kind: 'code', ref: snippet('rrfK: 60,', 'retrieve.ts') },
+	},
+	{
+		id: 'pattern-matching',
+		title: 'Typed pattern matching',
+		body:
+			'Chain `match(schema, db)` with `.node()`, `.out()` and `.in()`. It compiles to one SQL statement and returns rows typed per alias, with `page()` for keyset pagination over the same pattern.',
+		demo: { kind: 'code', ref: snippet("const page = await q.page({ limit: 100 });", 'match.ts') },
+	},
+	{
+		id: 'embeddings',
+		title: 'The graph owns embedding',
+		body:
+			'Every write embeds through the graph’s `embedder`, and re-embeds only when the input hash changes. Run `graphx doctor` to see the stored model, its width and how many nodes are stale.',
+		demo: { kind: 'code', ref: terminal('graphx doctor') },
+	},
+	{
+		id: 'backends',
+		title: 'Backend is configuration',
+		body:
+			'Pick a store with the `driver` option on `getDb`. Every public type, method, route and payload is identical across libSQL, Postgres with pgvector and DuckDB over an object store.',
+		demo: {
+			kind: 'variants',
+			items: [
+				{ ref: snippet("const db = getDb('acme__alpha'); // file:acme__alpha.db", 'libsql'), caption: 'default, no driver' },
+				{ ref: snippet("connectionString: 'postgresql://user:pass@host:5432/graphx',", 'postgres'), caption: "driver: 'postgres'" },
+				{ ref: snippet("const db = getDb('acme__alpha', { driver: 'duckdb' });", 'duckdb'), caption: "driver: 'duckdb'" },
+			],
+		},
+	},
+	{
+		id: 'runtimes',
+		title: 'Runs in browsers and phones',
+		body:
+			'Import from `graphx/core` and hand it a `DbClient`. `openLocalDb`, `openBrowserDb` and `openExpoDb` each own their connection and verify the pragmas they depend on, so a host without durable storage fails loudly.',
+		demo: {
+			kind: 'variants',
+			items: [
+				{ ref: snippet("import { openLocalDb, openMemoryDb } from 'graphx/local';", 'node.ts'), caption: 'graphx/local, Node or Bun' },
+				{ ref: snippet("import { openBrowserDb } from 'graphx/browser';", 'browser.ts'), caption: 'graphx/browser, SQLite WASM on OPFS' },
+				{ ref: snippet("import { openExpoDb } from 'graphx/expo';", 'expo.ts'), caption: 'graphx/expo, iOS and Android' },
+			],
+		},
+		aside: 'Want it over the network instead? Serve the same graph with `createApp`.',
+	},
+	{
+		id: 'http',
+		title: 'Typed HTTP with OpenAPI',
+		body:
+			'Pass your schema to `createApp` and get typed routes, a generated `GET /openapi.json` and an interactive reference at `/docs`. Every route sits under `/t/{tenant}/p/{project}`, so tenant isolation holds by construction.',
+		demo: { kind: 'code', ref: snippet('// Typed routes + GET /openapi.json + an interactive reference at /docs', 'server.ts') },
+	},
+	{
+		id: 'react',
+		title: 'Hooks with no generated client',
+		body:
+			'`createGraphHooks<Schema>()` types every React Query hook from the schema type alone. The browser bundle carries no SDK runtime, and `useChangeFeedSync` invalidates exactly the keys that moved.',
+		demo: { kind: 'code', ref: snippet('const g = createGraphHooks<Schema>();', 'hooks.tsx') },
+	},
+	{
+		id: 'mcp',
+		title: 'An MCP server for free',
+		body:
+			'Run `graphx mcp` and every serving route becomes a tool over stdio, validated against your `graphx.config.ts`. Add `--read-only` to expose only the read tools.',
+		demo: { kind: 'code', ref: snippet('"mcpServers": {', 'mcp.json') },
+	},
+	{
+		id: 'access-control',
+		title: 'Access control in the graph',
+		body:
+			'`graphx/auth` stores relationship tuples as edges, so `auth.check` is a temporal graph query. Pass `asOf` to ask what a user could do last week.',
+		demo: { kind: 'code', ref: snippet('const auth = new Auth(g, model);', 'auth.ts') },
+	},
+	{
+		id: 'entry-points',
+		title: 'One package, many entry points',
+		body:
+			'Everything is a subpath of `graphx`, and each is a separate entry point. An optional peer such as `pg` only lands on your import path if you import `graphx/pg`.',
+		demo: { kind: 'table', header: 'Import' },
+	},
+];
+
+/** Three counted columns. Authored judgement, each item backed by a sentence in the README. */
+export const boundaries = {
+	title: 'Boundaries',
+	intro:
+		'Three lists, counted. The first is exercised by the test suite, the second is opinion, and the third is what you should not assume.',
+	titles: { holds: 'What holds', judgements: 'What is a judgement', missing: 'What is not here yet' },
+	holds: [
+		'Every TypeScript block in the README is compiled against the built package by the test suite.',
+		'History is append-only: a delete closes a version, and `asOf` reads reconstruct the graph exactly.',
+		'Tenant isolation is by route construction, not by a `WHERE` clause.',
+		'A namespace refuses a different embedding model until `graphx reembed` switches it.',
+	],
+	judgements: [
+		'`hashEmbed` is lexical and model-free. It suits tests and demos; retrieval quality in production is your embedder’s.',
+		'Delivery of triggers is at-least-once, so actions must be idempotent. That is a design choice, not a bug to be fixed.',
+		'Calling it “temporal GraphRAG” is our description of retrieve-then-walk, not a benchmarked claim.',
+	],
+	missing: [
+		'No benchmark figures on this page. `bun run bench` exists, but the README holds no captured run to reference.',
+		'DuckDB allows one writer process per namespace; two rewriting the same table raise `SnapshotConflictError`.',
+		'`Graph.atomic` needs a namespace with no embeddings, and browser writers can still hit `SQLITE_BUSY`.',
+		'The admin SPA is not published. It runs from the repository.',
+	],
+};
+
+export const start = {
+	title: 'Start with a scaffold',
+	body:
+		'Run `graphx new` to write a runnable `graphx.config.ts`, then `bun run serve`. Contributing to graphx itself runs the same gate CI does.',
+	install: terminal('bunx graphx new my-app'),
+	gate: snippet('bun run type-check', 'contributing'),
+};
+
+/** Sections of the README are the reference page; this is only its intro line. */
+export const reference = {
+	title: 'Reference',
+	intro: 'The whole README, in full. It is the documentation, and this page is generated from it.',
+	description: 'The complete graphx documentation: install, schema, writing, retrieval, time travel, serving, backends and the CLI.',
+};
+
+/** For AGENTS.md: the option table and the three mistakes that break it. Authored; each is in the README. */
+export const agents = {
+	summary: 'Use graphx to store, query and serve a temporal graph from TypeScript. Import from the `graphx` package and its subpaths.',
+	minimal: [
+		snippet("export default defineConfig({ schema, embedder: hashEmbed(), namespace: 'graphx' });", 'graphx.config.ts'),
+		snippet('const g = new Graph(db, schema, { embedder });', 'app.ts'),
+	],
+	options: [
+		['asOf', 'epoch ms on any read', 'Point-in-time view'],
+		['single: true', 'edge definition', 'Single-valued rel; each addEdge closes the previous live one'],
+		['expectedRevision', 'update option', 'Concurrent writer surfaces as RevisionConflict'],
+		["embedding: 'lazy' | 'off'", 'Graph option', 'Defer embedding to an embedTrigger, or never embed'],
+		['limits', 'read option', 'Row cap, fan-out guard and timeout'],
+		['driver', 'getDb config', "'postgres' or 'duckdb'; default is libSQL"],
+	],
+	mistakes: [
+		"Importing `getDb` with `driver: 'postgres'` or `'duckdb'` without `import 'graphx/pg'` / `import 'graphx/duck'` first. The adapter is a side effect, and `getDb` throws without it.",
+		'Switching the embedder model without running `graphx reembed`. The namespace records the model and width and refuses a different one.',
+		'Calling `journey` without `from` (epoch ms). It is required, and only edges valid at each step are followed.',
+	],
+};
