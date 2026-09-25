@@ -21,6 +21,7 @@
 	"type": "module",
 	"scripts": {
 		"server": "bun run server.ts",
+		"eval:rerank": "bun run eval-rerank.ts",
 		"test": "bun test",
 		"type-check": "tsc --noEmit"
 	},

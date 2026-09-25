@@ -13,6 +13,7 @@
  */
 import { z } from 'zod';
 import { defineGraphSchema } from 'graphx';
+import { sameEntityData } from 'graphx/jev';
 
 export const pantheonSchema = defineGraphSchema({
 	nodes: {
@@ -54,18 +55,32 @@ export const pantheonSchema = defineGraphSchema({
 		sibling_of: { from: 'deity', to: 'deity' },
 		consort_of: { from: 'deity', to: 'deity' },
 		/**
-		 * Cross-source identity, NOT a merge. `weight` is the collector's confidence and
-		 * `data.method` is how it was decided (`asserted_in_source` ⇒ 1.0, `fuzzy` ⇒ a name match).
+		 * Cross-source identity, NOT a merge. `weight` is the confidence and `data.method` is how it
+		 * was decided: `asserted_in_source` (1.0), `fuzzy` (the collector's name match — used only
+		 * when no Jev key is set), or `jev` (Jev judged the pair the same figure; the rest of `data`
+		 * is its judgment). A curator's acceptance keeps Jev's judgment and says `curator`.
 		 */
 		same_as: {
 			from: 'deity',
 			to: 'deity',
-			data: z.object({ method: z.string() }),
+			data: z.object({
+				method: z.string(),
+				model: z.string().optional(),
+				score: z.number().optional(),
+				confidence: z.number().optional(),
+				fields: z.record(z.string(), z.number()).optional(),
+			}),
 		},
+		/**
+		 * A pair Jev could not settle — related, possibly the same figure (a namesake, an epithet,
+		 * an aspect). The curator's queue: the admin UI's Review page accepts it into `same_as` or
+		 * rejects it; either way the edge closes and its history stays.
+		 */
+		maybe_same_as: { from: 'deity', to: 'deity', data: sameEntityData },
 	},
 });
 
 export type PantheonSchema = typeof pantheonSchema;
 
 /** Bumped by hand when the schema or the loader's output changes shape; invalidates the cache. */
-export const PANTHEON_SCHEMA_VERSION = 1;
+export const PANTHEON_SCHEMA_VERSION = 2;

@@ -1,5 +1,5 @@
 {
 	"extends": "../../tsconfig.base.json",
 	"compilerOptions": { "noEmit": true, "types": ["bun", "node"] },
-	"include": ["load.ts", "load.test.ts", "schema.ts", "server.ts"]
+	"include": ["eval-rerank.ts", "load.ts", "load.test.ts", "schema.ts", "server.ts"]
 }

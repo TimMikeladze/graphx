@@ -31,6 +31,7 @@ import {
 	initControl,
 	type Principal,
 } from 'graphx';
+import { jevRerank, judgePairs } from 'graphx/jev';
 import { loadPantheon } from './load.ts';
 import { PANTHEON_SCHEMA_VERSION, pantheonSchema } from './schema.ts';
 
@@ -38,6 +39,12 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev';
 const PORT = Number(process.env.PORT ?? 8788);
 const COLLECTOR_DB = process.env.COLLECTOR_DB ?? '../../../pantheon-collector/pantheon_graph.db';
 const EMBED_CAP = Number(process.env.EMBED_CAP ?? 5_000);
+/**
+ * With a TypeSafe key, Jev judges the collector's fuzzy name matches instead of trusting them —
+ * same figure ⇒ `same_as`, unsure ⇒ `maybe_same_as` for the Review page, different ⇒ dropped —
+ * and reranks and screens `/hybrid`. `JEV=0` keeps the collector's links as they are.
+ */
+const JEV = Boolean(process.env.TYPESAFE_API_KEY) && process.env.JEV !== '0';
 
 const NAMESPACE = 'pantheon_demo';
 const CACHE_FILE = '.seed-cache.json';
@@ -74,6 +81,7 @@ const fingerprint = JSON.stringify({
 	// A database built with another embedder must not be reused — init refuses a model mismatch.
 	embedder: embedder.id,
 	embedCap: EMBED_CAP,
+	jev: JEV,
 	collector: { size: source.size, mtime: source.mtimeMs },
 });
 
@@ -137,13 +145,31 @@ if (rebuild) {
 		{ embedder },
 	);
 	await bulkLoad(graph.raw, pantheonSchema, rows, { chunkSize: 200, embedder });
+	// The collector's fuzzy name matches are candidates, not facts: with Jev on, they are judged
+	// below rather than loaded.
+	const fuzzy = (e: (typeof plan.edges)[number]) =>
+		e.rel === 'same_as' && (e.data as { method?: string } | undefined)?.method === 'fuzzy';
+	const edges = JEV ? plan.edges.filter((e) => !fuzzy(e)) : plan.edges;
 	// One `bulkEdges` call is one batch, so slice to bound peak statement size.
 	const SLICE = 10_000;
-	for (let i = 0; i < plan.edges.length; i += SLICE) {
-		await bulkEdges(graph.raw, pantheonSchema, plan.edges.slice(i, i + SLICE), {
+	for (let i = 0; i < edges.length; i += SLICE) {
+		await bulkEdges(graph.raw, pantheonSchema, edges.slice(i, i + SLICE), {
 			chunkSize: 200,
 			types: plan.types,
 		});
+	}
+	if (JEV) {
+		const pairs = plan.edges.filter(fuzzy).map((e): [string, string] => [e.src, e.dst]);
+		console.log(`[pantheon] Jev is judging ${pairs.length} fuzzy name matches…`);
+		const judged = await judgePairs(graph, pairs, {
+			// What the figure is, not which dataset said so.
+			fields: ['name', 'nativeName', 'pantheon', 'description'],
+			rels: { same: 'same_as', review: 'maybe_same_as' },
+		});
+		console.log(
+			`[pantheon] Jev: ${judged.same} same_as, ${judged.review} for review, ${judged.different} dropped, ` +
+				`${judged.skipped} repeats skipped${judged.failed.length ? `, ${judged.failed.length} failed` : ''}`,
+		);
 	}
 
 	writeFileSync(CACHE_FILE, `${JSON.stringify({ fingerprint } satisfies Cache, null, 2)}\n`);
@@ -175,7 +201,15 @@ function adminAuthenticate(c: Context): void {
 	if (bearer(c) !== ADMIN_TOKEN) throw new Error('unauthorized');
 }
 
-const app = createApp({ control, schema: pantheonSchema, authenticate, embedder, cors: true });
+const app = createApp({
+	control,
+	schema: pantheonSchema,
+	authenticate,
+	embedder,
+	cors: true,
+	// Jev reads each hybrid candidate for relevance and for text aimed at a model, in one request.
+	...(JEV ? { rerank: jevRerank({ guard: true, onError: 'keep' }) } : {}),
+});
 app.route('/admin', createAdminApp({ control, authenticate: adminAuthenticate }));
 
 Bun.serve({ port: PORT, fetch: app.fetch });
