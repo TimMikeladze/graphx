@@ -212,3 +212,20 @@ export interface ExplorerFilters {
 	/** Absent ⇒ `text`. */
 	mode?: SearchMode;
 }
+
+/** One edge as `GET /edges` returns it — its weight, data and provenance tag. */
+export interface EdgeRecord {
+	id: string;
+	rel: string;
+	src: string;
+	dst: string;
+	weight: number;
+	data: Record<string, unknown>;
+	source: string | null;
+}
+
+/** `GET /edges` — one keyset page. */
+export interface EdgeListPage {
+	edges: EdgeRecord[];
+	nextCursor: string | null;
+}

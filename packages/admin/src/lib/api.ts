@@ -1,4 +1,5 @@
 import type {
+	EdgeListPage,
 	ExplorerFilters,
 	GraphNode,
 	GraphSlice,
@@ -213,6 +214,15 @@ export const api = {
 	/** Retract a node: its live version is closed, its history stays readable as-of earlier times. */
 	deleteNode: (tenant: string, project: string, id: string) =>
 		request<void>(`${tp(tenant, project)}/nodes/${id}`, { method: 'DELETE' }),
+	/** Live edges of one rel (optionally one provenance tag), with their data — keyset paged. */
+	listEdges: (
+		tenant: string,
+		project: string,
+		opts: { rel?: string; source?: string; limit?: number; cursor?: string } = {},
+	) =>
+		request<EdgeListPage>(
+			`${tp(tenant, project)}/edges${qs({ rel: opts.rel, source: opts.source, limit: opts.limit, cursor: opts.cursor })}`,
+		),
 	createEdge: (tenant: string, project: string, input: EdgeInput) =>
 		request<{ id: string }>(`${tp(tenant, project)}/edges`, {
 			method: 'POST',

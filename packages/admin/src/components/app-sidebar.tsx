@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { Cancel01Icon, ChartRelationshipIcon, Key01Icon } from '@hugeicons/core-free-icons';
+import {
+	Cancel01Icon,
+	ChartRelationshipIcon,
+	CheckListIcon,
+	Key01Icon,
+} from '@hugeicons/core-free-icons';
 import { Combobox } from '@/components/combobox';
 import { KindFilter } from '@/components/filters/kind-filter';
 import { ModeToggle } from '@/components/filters/mode-toggle';
@@ -223,6 +228,12 @@ export function AppSidebar({
 			</SidebarContent>
 
 			<SidebarFooter className="border-t">
+				<Link to="/t/$tenant/p/$project/review" params={{ tenant, project }} search={{}}>
+					<Button variant="ghost" size="sm" className="w-full justify-start">
+						<HugeiconsIcon icon={CheckListIcon} strokeWidth={2} />
+						Review queue
+					</Button>
+				</Link>
 				<Link to="/admin">
 					<Button variant="ghost" size="sm" className="w-full justify-start">
 						<HugeiconsIcon icon={Key01Icon} strokeWidth={2} />

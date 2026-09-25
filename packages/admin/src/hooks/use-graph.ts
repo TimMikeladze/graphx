@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type EdgeInput, type NodeInput, type NodePatch } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
-import type { ExplorerFilters } from '@/lib/types';
+import { acceptedData } from '@/lib/review';
+import type { EdgeRecord, ExplorerFilters } from '@/lib/types';
 
 /** All tenants (control plane). */
 export function useTenants() {
@@ -309,5 +310,50 @@ export function useTimeline(
 		// a tenant/project switch would keep showing the previous project's extent and ticks, since
 		// `ExplorerPage` doesn't remount across that switch either.
 		placeholderData: sameScopePlaceholder(tenant ?? '', project ?? ''),
+	});
+}
+
+/** A review queue: the live edges of one rel, keyset-paged. */
+export function useEdges(tenant?: string, project?: string, rel?: string) {
+	return useInfiniteQuery({
+		queryKey: qk.edges(tenant ?? '', project ?? '', rel ?? ''),
+		enabled: Boolean(tenant && project && rel),
+		initialPageParam: undefined as string | undefined,
+		queryFn: ({ pageParam }) =>
+			api.listEdges(tenant as string, project as string, { rel, cursor: pageParam, limit: 25 }),
+		getNextPageParam: (last) => last.nextCursor ?? undefined,
+	});
+}
+
+/**
+ * Settle one review edge. Accepting writes the pair into `promote` with the judgment kept and
+ * `method: 'curator'`, then closes the review edge; rejecting only closes it. Both are bitemporal
+ * writes, so the queue's history — what Jev proposed, what a person decided — stays readable.
+ */
+export function useSettleReview(tenant?: string, project?: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async (v: { edge: EdgeRecord; accept: boolean; promote?: string }) => {
+			const t = tenant as string;
+			const p = project as string;
+			if (v.accept) {
+				if (!v.promote) throw new Error('choose the rel an accepted pair is written into');
+				await api.createEdge(t, p, {
+					rel: v.promote,
+					src: v.edge.src,
+					dst: v.edge.dst,
+					weight: v.edge.weight,
+					data: acceptedData(v.edge.data),
+				});
+			}
+			await api.deleteEdge(t, p, v.edge.id);
+		},
+		onSuccess: (_d, v) => {
+			qc.invalidateQueries({ queryKey: qk.allEdges(tenant ?? '', project ?? '') });
+			invalidateGraphViews(qc, tenant, project);
+			for (const id of [v.edge.src, v.edge.dst]) {
+				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+			}
+		},
 	});
 }

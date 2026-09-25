@@ -36,6 +36,9 @@ export const qk = {
 		['history', tenant, project, id] as const,
 	retrieval: (tenant: string, project: string, mode: string, filters: ExplorerFilters) =>
 		['retrieval', tenant, project, mode, filters] as const,
+	/** A review queue: the live edges of one rel. */
+	edges: (tenant: string, project: string, rel: string) => ['edges', tenant, project, rel] as const,
+	allEdges: (tenant: string, project: string) => ['edges', tenant, project] as const,
 	timeline: (tenant: string, project: string, window: { from?: number; to?: number } = {}) =>
 		['timeline', tenant, project, window.from ?? null, window.to ?? null] as const,
 };
