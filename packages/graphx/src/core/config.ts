@@ -29,7 +29,8 @@ export interface GraphxConfig<S extends GraphSchema = GraphSchema> {
 	 * it. Omit ⇒ no screening.
 	 */
 	guard?: RerankFn;
-	/** Backend selection; `{ driver: 'postgres', connectionString }` or `{ driver: 'duckdb', ... }`. */
+	/** Backend selection; `{ driver: 'postgres', connectionString }`, `{ driver: 'duckdb', ... }`
+	 *  or `{ driver: 'bunql', bunqlUrl }`. The CLI imports that driver's subpath for you. */
 	db?: DbConfig;
 	/** Project DB namespace (libSQL file / PG schema / DuckDB prefix). Default `'graphx'`. */
 	namespace?: string;

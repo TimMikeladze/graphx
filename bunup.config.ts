@@ -25,6 +25,7 @@ export default defineWorkspace([
 				'src/core/browser.ts',
 				'src/core/expo.ts',
 				'src/core/local.ts',
+				'src/core/bunql.ts',
 				'src/core/pg.ts',
 				'src/core/duck.ts',
 				'src/core/blob.ts',

@@ -9,6 +9,7 @@ export {
 	applyConnPragmas,
 	closeAll,
 	type DbConfig,
+	type Driver,
 	evict,
 	FOREVER,
 	getDb,

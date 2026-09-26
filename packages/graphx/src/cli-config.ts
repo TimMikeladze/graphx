@@ -49,6 +49,7 @@ export async function loadConfig(configPath: string): Promise<GraphxConfig> {
 	}
 	if (cfg.db?.driver === 'postgres') await import('./core/pg.ts');
 	if (cfg.db?.driver === 'duckdb') await import('./core/duck.ts');
+	if (cfg.db?.driver === 'bunql') await import('./core/bunql.ts');
 	return cfg;
 }
 

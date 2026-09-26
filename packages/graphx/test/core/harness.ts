@@ -4,7 +4,9 @@ import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { test } from 'bun:test';
 import { ulid } from 'ulidx';
-import { type DbClient, type Dialect, dialectOf } from '../../src/core/dialect.ts';
+import { createBunqlRemoteClient } from '../../src/core/bunql.ts';
+import type { Driver } from '../../src/core/db.ts';
+import { type DbClient, dialectOf } from '../../src/core/dialect.ts';
 import {
 	embReadExpr,
 	embValueExpr,
@@ -135,10 +137,10 @@ function sweepStaleScratchDirs(): void {
 sweepStaleScratchDirs();
 
 /** Selected backend. `libsql` (default) preserves current behavior; others opt in via env. */
-const DRIVER = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') as Dialect;
+const DRIVER = (process.env.GRAPHX_TEST_DRIVER ?? 'libsql') as Driver;
 
 /** The active test backend. */
-export const TEST_DRIVER: Dialect = DRIVER;
+export const TEST_DRIVER: Driver = DRIVER;
 
 /**
  * Gate for probes that assert libSQL INTERNALS — PRAGMA output, `sqlite_master` rows,
@@ -148,6 +150,17 @@ export const TEST_DRIVER: Dialect = DRIVER;
  * user-facing contracts they cover are exercised by cross-backend tests.
  */
 export const libsqlOnly = DRIVER === 'libsql' ? test : test.skip;
+
+/**
+ * Gate for probes that need a LOCAL connection: `PRAGMA` in its setting form, `journal_mode`,
+ * an ATTACH, a second connection to a file this process owns.
+ *
+ * Under the `bunql` driver the database lives in a BunQL server, whose authorizer answers
+ * `SQLITE_DENY` to a pragma that sets anything — the server states every connection setting
+ * itself, which is what `DbClient.managedPragmas` records. Nothing here is a gap in the backend;
+ * the setting is simply not the tenant's to make.
+ */
+export const localConnectionOnly = DRIVER === 'bunql' ? test.skip : test;
 
 /**
  * Gate for probes that need TWO genuine writers against ONE database — write-lock
@@ -235,6 +248,27 @@ export function insertOrIgnoreSql(
 	return insertOrIgnore(dialectOf(client), table, columns, values);
 }
 
+/** A running BunQL server for `GRAPHX_TEST_DRIVER=bunql`: its ORIGIN, and an admin key. */
+const BUNQL_URL = process.env.GRAPHX_BUNQL_URL ?? 'http://127.0.0.1:4321';
+const BUNQL_TOKEN = process.env.GRAPHX_BUNQL_TOKEN;
+
+/** `DELETE /v1/db/:db` on teardown — creation is the driver's own job (`ensureDatabase`). An
+ *  admin route, so the token must be an admin key. */
+async function bunqlAdmin(path: string, init: RequestInit): Promise<void> {
+	const response = await fetch(`${BUNQL_URL}${path}`, {
+		...init,
+		headers: {
+			'content-type': 'application/json',
+			...(BUNQL_TOKEN ? { authorization: `Bearer ${BUNQL_TOKEN}` } : {}),
+		},
+	});
+	if (!response.ok) {
+		throw new Error(
+			`BunQL ${init.method} ${path} failed: ${response.status} ${await response.text()}`,
+		);
+	}
+}
+
 /** Postgres test connection string; override via env for CI / a different host. */
 const PG_URL =
 	process.env.GRAPHX_TEST_PG_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5455/graphx_test';
@@ -247,6 +281,11 @@ if (DRIVER === 'postgres') {
 }
 if (DRIVER === 'duckdb') {
 	process.env.GRAPHX_DB_DRIVER = 'duckdb';
+}
+// getDb() (multi-tenant project DBs) goes to the same BunQL server, one database per namespace.
+if (DRIVER === 'bunql') {
+	process.env.GRAPHX_DB_DRIVER = 'bunql';
+	process.env.GRAPHX_BUNQL_URL = BUNQL_URL;
 }
 
 /** Provision a fresh, isolated test database + its teardown. */
@@ -305,6 +344,30 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 				} finally {
 					await admin.end();
 				}
+			},
+		};
+	}
+	if (DRIVER === 'bunql') {
+		// One BunQL database per test, which is the isolation model BunQL is built for — the
+		// analog of a fresh libSQL file or a fresh PG schema. Lower case: BunQL's name rule is
+		// `[a-z0-9][a-z0-9_-]{0,63}`.
+		const database = `t${ulid().toLowerCase()}`;
+		const client = (): DbClient =>
+			createBunqlRemoteClient({ url: BUNQL_URL, database, authToken: BUNQL_TOKEN });
+		const clients = [client()];
+		return {
+			client: clients[0]!,
+			// A second client on the same BunQL database: two genuine writers, serialized by the
+			// server's own single-writer lease rather than by SQLite's file lock.
+			sibling: () => {
+				const next = client();
+				clients.push(next);
+				return next;
+			},
+			teardown: async () => {
+				for (const entry of clients) entry.close();
+				// A database the driver never provisioned answers 404, which this ignores.
+				await bunqlAdmin(`/v1/db/${database}`, { method: 'DELETE' }).catch(() => {});
 			},
 		};
 	}

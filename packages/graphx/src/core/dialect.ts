@@ -57,6 +57,20 @@ export interface DbClient {
 	readonly dialect?: Dialect;
 	/** Driver-owned SQLite busy timeout; zero lets synchronous native drivers fail fast. */
 	readonly busyTimeoutMs?: number;
+	/**
+	 * The driver — not graphx — owns connection-level settings, so
+	 * {@link import('./runtime.ts').applyConnPragmas} must not issue them.
+	 *
+	 * Set by a client whose connection is configured somewhere graphx cannot reach, or where
+	 * issuing a pragma is an ERROR rather than a no-op. The BunQL driver is the reason it exists:
+	 * a BunQL server states every connection setting itself (`[sqlite]` in its config) and its
+	 * authorizer answers `SQLITE_DENY` to a pragma in its *setting* form, so
+	 * `PRAGMA foreign_keys = ON` from a tenant statement throws instead of being ignored.
+	 *
+	 * A client that sets this is asserting that `foreign_keys` is ON and a busy timeout is in
+	 * place — graphx's schema declares foreign keys and relies on them being enforced.
+	 */
+	readonly managedPragmas?: boolean;
 }
 
 /** Resolve a client's dialect; an untagged client is libSQL (the original backend). */
