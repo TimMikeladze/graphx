@@ -1166,9 +1166,7 @@ neither can drift: `packages/graphx/README.md`, the copy npm shows on the packag
 from it (`site/`, output committed in `site/public/`). Every TypeScript block here is compiled against the built package
 by `test/readme-examples.test.ts`.
 
-The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo.
-graphx Cloud (`cloud/`), the hosted multi-tenant offering, is a Next.js workspace that mounts
-graphx's own `createApp` per project environment; see [cloud/README.md](https://github.com/TimMikeladze/graphx/blob/main/cloud/README.md). To
+The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo. To
 hack on graphx from another project, add that project's path to the root `package.json` `workspaces`
 array so the `workspace:` dependency resolves.
 

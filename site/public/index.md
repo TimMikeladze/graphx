@@ -1,6 +1,6 @@
 # graphx — Temporal GraphRAG for TypeScript
 
-`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, and packed with retrieval, traversal and serving.
+Define your graph once with [Zod](https://zod.dev). Retrieve with vector search, full-text search and typed traversal. Use `asOf` to [query any point in its history](/reference#time-travel).
 
 Currently v0.1.0. Install: `bun add graphx`
 

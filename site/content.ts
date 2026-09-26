@@ -93,10 +93,10 @@ export const page = {
 	/** The <title> and og:title suffix. */
 	tagline: 'temporal GraphRAG for TypeScript',
 	h1: 'Temporal GraphRAG for TypeScript',
-	/** Inline markdown. Three facts: what it is, what it is built on, who made it. */
+	/** Inline markdown: the schema, the retrieval model and a route into the reference. */
 	lede:
-		'`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, ' +
-		'and packed with retrieval, traversal and serving.',
+		'Define your graph once with [Zod](https://zod.dev). Retrieve with vector search, full-text search and typed traversal. ' +
+		'Use `asOf` to [query any point in its history](/reference#time-travel).',
 	/** The description meta: the lede's first sentence, extended to be useful in a result list. */
 	description:
 		'graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.',
