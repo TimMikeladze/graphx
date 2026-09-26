@@ -18,7 +18,7 @@ nothing to keep in lockstep.
 | `graphx/expo`      | `openExpoDb` / `createExpoClient` — Expo SQLite on iOS and Android                                  |
 | `graphx/pg`        | Registers the Postgres driver with `getDb` (side effect)                                            |
 | `graphx/duck`      | Registers the DuckDB driver with `getDb` (side effect)                                              |
-| `graphx/bunql`     | BunQL: a server over Hrana, or its embedded `bun:ffi` driver — `driver: 'bunql'`                    |
+| `graphx/bql`       | bql.sh: a server over Hrana, or its embedded `bun:ffi` driver — `driver: 'bql'`                     |
 | `graphx/embedders` | `fetch`-based embedders for OpenAI, Voyage and Ollama (no SDKs)                                     |
 | `graphx/jev`       | Judgments with Jev: reranking, screening, entity resolution, typing, scoring — `fetch`, no SDK      |
 | `graphx/blob`      | S3-backed blob store for node bodies                                                                |
@@ -32,9 +32,9 @@ Each subpath is a **separate entry point**, so an optional peer only lands on yo
 reach for it: `pg` by `graphx/pg`, `@duckdb/node-api` (~123 MB installed) by `graphx/duck`,
 `@aws-sdk/client-s3` by `graphx/blob` and `graphx/ingest/s3`, `@modelcontextprotocol/sdk` by
 `graphx/mcp`, React + React Query by `graphx/react`, and `@sqlite.org/sqlite-wasm` by
-`graphx/browser`. Importing `graphx` alone drags in none of them; `graphx/expo` and `graphx/bunql`
-depend on nothing at all — they type Expo's SQLite module and BunQL's driver structurally, so neither
-ever loads React Native or `@bunql/db`.
+`graphx/browser`. Importing `graphx` alone drags in none of them; `graphx/expo` and `graphx/bql`
+depend on nothing at all — they type Expo's SQLite module and bql.sh's driver structurally, so neither
+ever loads React Native or `bql.sh` itself.
 
 ## Why graphx
 
@@ -54,7 +54,7 @@ closes a version. An `asOf` read reconstructs the graph exactly as it stood at a
 
 ### One contract, everywhere it runs
 
-libSQL/SQLite, Postgres with pgvector, DuckDB over an object store, a BunQL server, SQLite WASM in a
+libSQL/SQLite, Postgres with pgvector, DuckDB over an object store, a bql.sh server, SQLite WASM in a
 browser tab, or Expo SQLite on a phone. The backend is a configuration choice; every public type, method, HTTP route
 and JSON payload is identical across all of them.
 
@@ -966,7 +966,9 @@ const db = getDb('acme__alpha', {
 ```
 
 `GRAPHX_DB_DRIVER=postgres` (with `GRAPHX_PG_URL`) selects it globally, but the `import 'graphx/pg'`
-is still required or `getDb` throws.
+is still required or `getDb` throws. Each namespace holds its own pool (10 connections unless
+`poolMax` says otherwise); a host serving many namespaces sets `GRAPHX_PG_POOL_MAX` to shrink every
+pool it did not size explicitly.
 
 Each namespace maps to a Postgres **schema** on a shared pool, created lazily — one server credential
 serves every tenant. **Behind a transaction pooler** (PgBouncer, pgcat, Supavisor) there is nothing
@@ -1005,57 +1007,57 @@ Local database files and DuckDB's temp spill are anchored under `./.graphx-data/
 process working directory — override with `GRAPHX_DATA_DIR`. Spill is capped by `GRAPHX_DUCK_MAX_TEMP`
 (default `16GB`), so a query that outgrows memory fails as a query instead of filling the disk.
 
-### BunQL
+### bql.sh
 
-[BunQL](https://github.com/TimMikeladze/bunql) is SQLite as a multi-tenant server for Bun: thousands
+[bql.sh](https://bql.sh) is SQLite as a multi-tenant server for Bun: thousands
 of small databases in one process, their WAL frames streamed to replicas, continuous backup to any
 S3-compatible bucket with point-in-time restore, and realtime driven by SQLite's own hooks. graphx's
-namespace-per-tenant model is the shape BunQL was built for, so one namespace is one BunQL database.
+namespace-per-tenant model is the shape bql.sh was built for, so one namespace is one bql.sh database.
 
 It is a **plain libsqlite3**, so graphx speaks the `sqlite` dialect to it — the one the browser and
 Expo drivers use — rather than the libSQL one, whose `F32_BLOB` and `vector_top_k` exist only in
-libSQL's fork. FTS5 is compiled into BunQL's pinned build, so lexical retrieval is unchanged; vector
+libSQL's fork. FTS5 is compiled into bql.sh's pinned build, so lexical retrieval is unchanged; vector
 search is exact rather than ANN.
 
 ```ts
-import 'graphx/bunql'; // registers the BunQL driver (side effect)
+import 'graphx/bql'; // registers the bql.sh driver (side effect)
 
 const db = getDb('acme__alpha', {
-	driver: 'bunql',
-	bunqlUrl: 'http://127.0.0.1:4321', // the server's ORIGIN
-	authToken: process.env.BUNQL_TOKEN,
+	driver: 'bql',
+	bqlUrl: 'http://127.0.0.1:4321', // the server's ORIGIN
+	authToken: process.env.BQL_TOKEN,
 });
 ```
 
-`GRAPHX_DB_DRIVER=bunql` with `GRAPHX_BUNQL_URL` / `GRAPHX_BUNQL_TOKEN` selects it globally, and the
-`import 'graphx/bunql'` is still required or `getDb` throws. The namespace becomes the database name,
-case-folded — BunQL names are lower case and a ULID is not. The driver creates that database on first
+`GRAPHX_DB_DRIVER=bql` with `GRAPHX_BQL_URL` / `GRAPHX_BQL_TOKEN` selects it globally, and the
+`import 'graphx/bql'` is still required or `getDb` throws. The namespace becomes the database name,
+case-folded — a bql.sh database name is lower case and a ULID is not. The driver creates that database on first
 use, the way the Postgres adapter creates a tenant's schema; creating one is an admin route, so the
-token has to be an admin key. Call `createBunqlRemoteClient` with `ensureDatabase: false` when
+token has to be an admin key. Call `createBqlRemoteClient` with `ensureDatabase: false` when
 namespaces are provisioned outside graphx.
 
 Two things to know before choosing it:
 
 - **Vector search is exact, not ANN.** This dialect stores embeddings as JSON text and ranks them in
   the client, so every vector in the namespace crosses the socket on every query and a large one
-  meets BunQL's `maxRows` cap first. Fine for a lexical-first graph or a small vector set; libSQL and
+  meets bql.sh's `maxRows` cap first. Fine for a lexical-first graph or a small vector set; libSQL and
   Postgres are the ANN-backed backends.
-- **Foreign keys are off by default in BunQL**, and graphx's schema declares them. The driver turns
+- **Foreign keys are off by default in bql.sh**, and graphx's schema declares them. The driver turns
   them on for a database it creates (`PATCH /v1/db/{db}`); for one you provisioned, set `[sqlite]
 foreignKeys` on the node or configure that database. A tenant statement cannot set a pragma at all
-  — BunQL's authorizer denies it — so this client is tagged `managedPragmas` and graphx issues none.
+  — bql.sh's authorizer denies it — so this client is tagged `managedPragmas` and graphx issues none.
 
 Writes must address the primary: a replica's Hrana surface answers `NOT_PRIMARY` rather than
 forwarding.
 
-**Embedded**, BunQL's `bun:ffi` driver replaces the `libsql` package inside your own process and adds
+**Embedded**, bql.sh's `bun:ffi` driver replaces the `libsql` package inside your own process and adds
 what no other graphx driver has — commit and preupdate hooks, an authorizer, session changesets, a
-statement deadline and `interrupt()`. Pass the module; `graphx/bunql` never imports it.
+statement deadline and `interrupt()`. Pass the module; `graphx/bql` never imports it.
 
 ```ts
-import { openBunqlDb } from 'graphx/bunql';
+import { openBqlDb } from 'graphx/bql';
 
-const client = await openBunqlDb(bunqlSqlite, '/var/lib/graphx/acme__alpha.db');
+const client = await openBqlDb(bqlSqlite, '/var/lib/graphx/acme__alpha.db');
 await init(client, embedder);
 
 // A change feed with nothing to poll: the hook fires on the mutation's own commit.
@@ -1064,7 +1066,7 @@ client.database.onCommit(() => {
 });
 ```
 
-It needs a C compiler once, to build the libsqlite3 BunQL pins (`bun run db sqlite:build`), which is
+It needs a C compiler once, to build the libsqlite3 bql.sh pins (`bun run db sqlite:build`), which is
 why it is opt-in rather than the default.
 
 ## Local-first runtimes
@@ -1164,7 +1166,9 @@ neither can drift: `packages/graphx/README.md`, the copy npm shows on the packag
 from it (`site/`, output committed in `site/public/`). Every TypeScript block here is compiled against the built package
 by `test/readme-examples.test.ts`.
 
-The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo. To
+The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo.
+graphx Cloud (`cloud/`), the hosted multi-tenant offering, is a Next.js workspace that mounts
+graphx's own `createApp` per project environment; see [cloud/README.md](https://github.com/TimMikeladze/graphx/blob/main/cloud/README.md). To
 hack on graphx from another project, add that project's path to the root `package.json` `workspaces`
 array so the `workspace:` dependency resolves.
 

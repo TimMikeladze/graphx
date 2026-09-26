@@ -266,7 +266,7 @@ Everything is a subpath of `graphx`, and each is a separate entry point. An opti
 | `graphx/expo` | `openExpoDb` / `createExpoClient` — Expo SQLite on iOS and Android |
 | `graphx/pg` | Registers the Postgres driver with `getDb` (side effect) |
 | `graphx/duck` | Registers the DuckDB driver with `getDb` (side effect) |
-| `graphx/bunql` | BunQL: a server over Hrana, or its embedded `bun:ffi` driver — `driver: 'bunql'` |
+| `graphx/bql` | bql.sh: a server over Hrana, or its embedded `bun:ffi` driver — `driver: 'bql'` |
 | `graphx/embedders` | `fetch`-based embedders for OpenAI, Voyage and Ollama (no SDKs) |
 | `graphx/jev` | Judgments with Jev: reranking, screening, entity resolution, typing, scoring — `fetch`, no SDK |
 | `graphx/blob` | S3-backed blob store for node bodies |

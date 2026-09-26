@@ -44,7 +44,7 @@ declare const upcasters: GXT.UpcasterRegistry;
 declare const s3: import('@aws-sdk/client-s3').S3Client;
 declare const sqlite3: import('@sqlite.org/sqlite-wasm').Sqlite3Static;
 declare const SQLite: import('graphx/expo').ExpoSqliteModule;
-declare const bunqlSqlite: import('graphx/bunql').BunqlModule;
+declare const bqlSqlite: import('graphx/bql').BqlModule;
 declare function refresh(): void;
 declare const bytes: Uint8Array;
 declare const title: string;
@@ -84,7 +84,7 @@ const CARRIED: Record<string, string> = {
 	embedTrigger: 'graphx',
 	webhookAction: 'graphx',
 	deadLetters: 'graphx',
-	openBunqlDb: 'graphx/bunql',
+	openBqlDb: 'graphx/bql',
 	openai: 'graphx/embedders',
 	ingestDir: 'graphx/ingest',
 	watchDir: 'graphx/ingest',

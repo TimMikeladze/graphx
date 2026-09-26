@@ -62,8 +62,8 @@ export interface DbClient {
 	 * {@link import('./runtime.ts').applyConnPragmas} must not issue them.
 	 *
 	 * Set by a client whose connection is configured somewhere graphx cannot reach, or where
-	 * issuing a pragma is an ERROR rather than a no-op. The BunQL driver is the reason it exists:
-	 * a BunQL server states every connection setting itself (`[sqlite]` in its config) and its
+	 * issuing a pragma is an ERROR rather than a no-op. The bql.sh driver is the reason it exists:
+	 * a bql.sh server states every connection setting itself (`[sqlite]` in its config) and its
 	 * authorizer answers `SQLITE_DENY` to a pragma in its *setting* form, so
 	 * `PRAGMA foreign_keys = ON` from a tenant statement throws instead of being ignored.
 	 *

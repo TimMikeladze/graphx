@@ -142,7 +142,7 @@ export const figures: { label: string; source: FigureSource }[] = [
 export const ecosystem = {
 	title: 'Runs where your data already is',
 	lede:
-		'SQLite and libSQL, Postgres with pgvector, DuckDB, BunQL, SQLite WASM in a browser tab and Expo on a phone. Served through Hono and OpenAPI, typed by Zod, read by React Query and MCP clients.',
+		'SQLite and libSQL, Postgres with pgvector, DuckDB, bql.sh, SQLite WASM in a browser tab and Expo on a phone. Served through Hono and OpenAPI, typed by Zod, read by React Query and MCP clients.',
 	marks: [
 		{ name: 'sqlite', label: 'SQLite', href: 'https://sqlite.org' },
 		{ name: 'postgresql', label: 'PostgreSQL', href: 'https://www.postgresql.org' },
@@ -174,7 +174,7 @@ export const showcase = {
 	body:
 		'The same `Graph` object writes, reads and walks. `match` compiles a typed pattern to one SQL statement, and `createApp` serves all of it with a generated OpenAPI contract.',
 	supports: ['sqlite', 'postgresql', 'duckdb', 'bun', 'expo'] satisfies EcoName[],
-	more: '+ browser and BunQL',
+	more: '+ browser and bql.sh',
 	tabs: [
 		{ label: 'Write', ref: snippet("await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });", 'app.ts') },
 		{ label: 'Query', ref: snippet('const rows = await q.run(); // rows[0].g.data, rows[0].a.data', 'query.ts') },
@@ -212,7 +212,7 @@ export const footerColumns: { title: string; links: { label: string; href: strin
 			{ label: 'libSQL and SQLite', href: '/reference#libsql-and-sqlite-default' },
 			{ label: 'Postgres', href: '/reference#postgres' },
 			{ label: 'DuckDB', href: '/reference#duckdb-over-an-object-store' },
-			{ label: 'BunQL', href: '/reference#bunql', isNew: '2026-09-25' },
+			{ label: 'bql.sh', href: '/reference#bqlsh', isNew: '2026-09-25' },
 			{ label: 'Local-first', href: '/reference#local-first-runtimes' },
 		],
 	},

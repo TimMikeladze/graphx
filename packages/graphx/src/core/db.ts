@@ -15,12 +15,12 @@ export {
 /**
  * Which backend implementation {@link getDb} builds.
  *
- * A superset of {@link Dialect}, and deliberately a SEPARATE type: `bunql` is a driver, not a
- * dialect. BunQL is a plain libsqlite3, so its clients speak the `sqlite` dialect graphx already
+ * A superset of {@link Dialect}, and deliberately a SEPARATE type: `bql` is a driver, not a
+ * dialect. bql.sh is a plain libsqlite3, so its clients speak the `sqlite` dialect graphx already
  * has — widening `Dialect` instead would turn every exhaustive `switch (dialect)` in the codebase
  * into a compile error for a backend that needs no new SQL at all.
  */
-export type Driver = Dialect | 'bunql';
+export type Driver = Dialect | 'bql';
 
 /**
  * Connection config for {@link getDb}. The `driver` discriminator selects the backend
@@ -46,10 +46,10 @@ export interface DbConfig {
 	authToken?: string;
 	syncUrl?: string;
 	syncInterval?: number;
-	// BunQL
-	/** A BunQL server's ORIGIN (or `GRAPHX_BUNQL_URL`); the namespace becomes the database name.
-	 *  `authToken` is the BunQL admin key or a minted token (or `GRAPHX_BUNQL_TOKEN`). */
-	bunqlUrl?: string;
+	// bql.sh
+	/** A bql.sh server's ORIGIN (or `GRAPHX_BQL_URL`); the namespace becomes the database name.
+	 *  `authToken` is the bql.sh admin key or a minted token (or `GRAPHX_BQL_TOKEN`). */
+	bqlUrl?: string;
 	// DuckDB
 	/** Local database path. Defaults to `<namespace>.duckdb`, or `:memory:` when `bucket`
 	 *  is set — a bucket-backed local database is a disposable materialization. */
@@ -90,23 +90,23 @@ export function registerDuckDriver(factory: DuckDriverFactory): void {
 	duckFactory = factory;
 }
 
-/** Builds a BunQL {@link DbClient} for a namespace. Registered by `core/bunql` on import. */
-export type BunqlDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
-let bunqlFactory: BunqlDriverFactory | undefined;
+/** Builds a bql.sh {@link DbClient} for a namespace. Registered by `core/bql` on import. */
+export type BqlDriverFactory = (namespace: string, cfg: DbConfig) => DbClient;
+let bqlFactory: BqlDriverFactory | undefined;
 
 /**
- * Register the BunQL adapter factory. Called as a side effect of importing the `core/bunql`
- * subpath, so `@bunql/db` stays an OPTIONAL peer — the remote driver needs only
+ * Register the bql.sh adapter factory. Called as a side effect of importing the `core/bql`
+ * subpath, so `bql.sh` stays an OPTIONAL peer — the remote driver needs only
  * `@libsql/client`, and the embedded one is typed structurally.
  */
-export function registerBunqlDriver(factory: BunqlDriverFactory): void {
-	bunqlFactory = factory;
+export function registerBqlDriver(factory: BqlDriverFactory): void {
+	bqlFactory = factory;
 }
 
 function resolveDriver(cfg: DbConfig): Driver {
 	if (cfg.driver) return cfg.driver;
 	const env = process.env.GRAPHX_DB_DRIVER;
-	if (env === 'postgres' || env === 'duckdb' || env === 'sqlite' || env === 'bunql') return env;
+	if (env === 'postgres' || env === 'duckdb' || env === 'sqlite' || env === 'bql') return env;
 	return 'libsql';
 }
 
@@ -120,8 +120,8 @@ const clients = new Map<string, DbClient>();
  * libSQL: a file/replica per namespace (addressed off `SQLD_URL` in replica mode).
  * Postgres: schema-per-tenant — the namespace becomes a PG schema on a shared pool
  * (requires importing `core/pg` to register the adapter).
- * BunQL: one BunQL database per namespace on a server that holds thousands of them
- * (requires importing `core/bunql`; the client speaks the `sqlite` dialect).
+ * bql.sh: one bql.sh database per namespace on a server that holds thousands of them
+ * (requires importing `core/bql`; the client speaks the `sqlite` dialect).
  */
 export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 	const driver = resolveDriver(cfg);
@@ -130,7 +130,7 @@ export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 			"getDb: sqlite requires a platform connection; use createConnectionClient(connection, 'sqlite') from 'graphx/core'",
 		);
 	}
-	if (driver !== 'libsql' && driver !== 'postgres' && driver !== 'duckdb' && driver !== 'bunql') {
+	if (driver !== 'libsql' && driver !== 'postgres' && driver !== 'duckdb' && driver !== 'bql') {
 		throw new Error(`getDb: unsupported driver ${String(driver)}`);
 	}
 	const existing = clients.get(namespace);
@@ -150,13 +150,13 @@ export function getDb(namespace: string, cfg: DbConfig = {}): DbClient {
 			);
 		}
 		client = duckFactory(namespace, cfg);
-	} else if (driver === 'bunql') {
-		if (!bunqlFactory) {
+	} else if (driver === 'bql') {
+		if (!bqlFactory) {
 			throw new Error(
-				"getDb: bunql driver selected but the BunQL adapter is not registered — import 'graphx/bunql'",
+				"getDb: bql driver selected but the bql.sh adapter is not registered — import 'graphx/bql'",
 			);
 		}
-		client = bunqlFactory(namespace, cfg);
+		client = bqlFactory(namespace, cfg);
 	} else {
 		const base = cfg.syncUrl ?? process.env.SQLD_URL;
 		const syncUrl = base ? `${base}/${namespace}` : undefined;

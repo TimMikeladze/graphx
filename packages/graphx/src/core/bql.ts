@@ -1,23 +1,23 @@
 /**
- * BunQL as a graphx backend — the embedded `bun:ffi` driver, and a BunQL *server* over Hrana.
+ * bql.sh as a graphx backend — the embedded `bun:ffi` driver, and a bql.sh *server* over Hrana.
  *
- * BunQL is a plain libsqlite3 (a pinned build with FTS5, RTREE, math, session, preupdate and
+ * bql.sh is a plain libsqlite3 (a pinned build with FTS5, RTREE, math, session, preupdate and
  * snapshot compiled in), so graphx speaks to it with the `sqlite` dialect it already has for
  * WASM and Expo — NOT `libsql`. The libSQL arm emits `F32_BLOB`, `libsql_vector_idx`,
  * `vector()` and `vector_top_k`, none of which exist outside libSQL's own fork; `init` would
  * fail on the embeddings DDL. Every client this module builds is therefore tagged
  * `dialect: 'sqlite'`, which means exact vector ranking (`retrieve.ts`) rather than ANN.
  *
- * Nothing here imports `@bunql/db`. The embedded driver is typed STRUCTURALLY — the same
+ * Nothing here imports `bql.sh`. The embedded driver is typed STRUCTURALLY — the same
  * trick `expo.ts` uses for Expo's SQLite module — so this subpath adds no dependency and the
  * host passes its own `Database`. The remote driver is `@libsql/client`, which graphx already
- * depends on, pointed at BunQL's Hrana surface.
+ * depends on, pointed at bql.sh's Hrana surface.
  */
 
 import process from 'node:process';
 import { createClient } from '@libsql/client';
 import { createConnectionClient, type ConnectionClient } from './connection.ts';
-import { registerBunqlDriver, type DbConfig } from './db.ts';
+import { registerBqlDriver, type DbConfig } from './db.ts';
 import type {
 	DbClient,
 	DbTransaction,
@@ -27,54 +27,54 @@ import type {
 	TransactionMode,
 } from './dialect.ts';
 
-// ── the embedded driver (`@bunql/db/sqlite`) ────────────────────────────────────────────────
+// ── the embedded driver (`bql.sh/sqlite`) ────────────────────────────────────────────────
 
-/** What BunQL's driver hands back out of SQLite. */
-export type BunqlValue = number | bigint | string | Uint8Array | null;
+/** What bql.sh's driver hands back out of SQLite. */
+export type BqlValue = number | bigint | string | Uint8Array | null;
 /** What it accepts as a binding. `undefined` binds NULL there; graphx never sends one. */
-export type BunqlBindValue = BunqlValue | boolean | ArrayBuffer | ArrayBufferView | undefined;
+export type BqlBindValue = BqlValue | boolean | ArrayBuffer | ArrayBufferView | undefined;
 /** Named parameters, with or without the `:`, `@` or `$` prefix. */
-export type BunqlNamedParams = Record<string, BunqlBindValue>;
+export type BqlNamedParams = Record<string, BqlBindValue>;
 /** One argument to a statement verb: a positional value, or — alone — a named-parameter object. */
-export type BunqlBindArg = BunqlBindValue | BunqlNamedParams;
+export type BqlBindArg = BqlBindValue | BqlNamedParams;
 
-export interface BunqlRunResult {
+export interface BqlRunResult {
 	changes: number | bigint;
 	lastInsertRowid: number | bigint;
 }
 
 /**
- * Structural subset of `@bunql/db/sqlite`'s `Statement`. Statements are CACHED by the
+ * Structural subset of `bql.sh/sqlite`'s `Statement`. Statements are CACHED by the
  * `Database` that compiled them, so this driver never finalizes one — `all()` resets the
  * cursor itself, and finalizing would poison the host's cache.
  */
-export interface BunqlStatement {
+export interface BqlStatement {
 	readonly columnNames: string[];
 	readonly readonly: boolean;
-	all(...params: BunqlBindArg[]): Record<string, BunqlValue>[];
-	run(...params: BunqlBindArg[]): BunqlRunResult;
+	all(...params: BqlBindArg[]): Record<string, BqlValue>[];
+	run(...params: BqlBindArg[]): BqlRunResult;
 }
 
 /** Reads the row a preupdate hook is being told about. */
-export interface BunqlPreupdateAccessor {
+export interface BqlPreupdateAccessor {
 	count(): number;
-	old(i: number): BunqlValue;
-	new (i: number): BunqlValue;
+	old(i: number): BqlValue;
+	new (i: number): BqlValue;
 }
 
 /** Return `false` to turn the commit into a rollback. */
-export type BunqlCommitHook = () => boolean | void;
-export type BunqlUpdateHook = (op: number, dbName: string, table: string, rowid: bigint) => void;
-export type BunqlPreupdateHook = (
+export type BqlCommitHook = () => boolean | void;
+export type BqlUpdateHook = (op: number, dbName: string, table: string, rowid: bigint) => void;
+export type BqlPreupdateHook = (
 	op: number,
 	dbName: string,
 	table: string,
 	oldRowid: bigint,
 	newRowid: bigint,
-	accessor: BunqlPreupdateAccessor,
+	accessor: BqlPreupdateAccessor,
 ) => void;
 /** `0` allows the action, `1` denies it, `2` makes it a no-op. */
-export type BunqlAuthorizer = (
+export type BqlAuthorizer = (
 	action: number,
 	arg1: string | null,
 	arg2: string | null,
@@ -83,39 +83,39 @@ export type BunqlAuthorizer = (
 ) => number;
 
 /**
- * Structural subset of `@bunql/db/sqlite`'s `Database` — an exclusively owned connection.
- * `safeIntegers` must be true: with it off, BunQL reads INTEGER columns through the narrow FFI
+ * Structural subset of `bql.sh/sqlite`'s `Database` — an exclusively owned connection.
+ * `safeIntegers` must be true: with it off, bql.sh reads INTEGER columns through the narrow FFI
  * symbol, which silently rounds anything past 2^53.
  *
  * The hooks are here because they are the point of the embedded seam: a commit hook is a change
  * feed graphx does not have to poll for, and the authorizer puts a tenant's table ACL inside
- * SQLite. graphx itself installs none of them — {@link BunqlLocalClient.database} hands the
+ * SQLite. graphx itself installs none of them — {@link BqlLocalClient.database} hands the
  * connection to the host, which does.
  */
-export interface BunqlDatabase {
+export interface BqlDatabase {
 	readonly safeIntegers: boolean;
 	readonly closed: boolean;
 	readonly changes: number | bigint;
 	readonly lastInsertRowid: number | bigint;
-	prepare(sql: string): BunqlStatement;
+	prepare(sql: string): BqlStatement;
 	exec(sql: string): void;
 	/** Abort any statement running on this connection (from a signal handler or another thread). */
 	interrupt(): void;
 	/** Wall-clock ceiling for every statement, enforced by SQLite's progress handler. */
 	deadline(ms: number | null): void;
 	/** After every commit on this connection; `false` turns the commit into a rollback. */
-	onCommit(cb: BunqlCommitHook | null): void;
+	onCommit(cb: BqlCommitHook | null): void;
 	onRollback(cb: (() => void) | null): void;
 	/** After each changed row, with its rowid. */
-	onUpdate(cb: BunqlUpdateHook | null): void;
+	onUpdate(cb: BqlUpdateHook | null): void;
 	/** Before each changed row, with the old and new values still readable. */
-	onPreupdate(cb: BunqlPreupdateHook | null): void;
+	onPreupdate(cb: BqlPreupdateHook | null): void;
 	/** Consulted for every action a statement takes. */
-	authorizer(cb: BunqlAuthorizer | null): void;
+	authorizer(cb: BqlAuthorizer | null): void;
 	close(): void;
 }
 
-export interface BunqlOpenOptions {
+export interface BqlOpenOptions {
 	/** Statement-cache ceiling. Past it, every `prepare` compiles and finalizes a victim. */
 	statementCache?: number;
 	busyTimeoutMs?: number;
@@ -125,17 +125,17 @@ export interface BunqlOpenOptions {
 	create?: boolean;
 }
 
-/** Structural subset of the `@bunql/db/sqlite` module: `Database.open` is all this needs. */
-export interface BunqlModule {
+/** Structural subset of the `bql.sh/sqlite` module: `Database.open` is all this needs. */
+export interface BqlModule {
 	readonly Database: {
-		open(path: string, options?: BunqlOpenOptions): BunqlDatabase;
+		open(path: string, options?: BqlOpenOptions): BqlDatabase;
 	};
 }
 
-/** An owned embedded BunQL connection, plus the capabilities graphx has no other driver for. */
-export interface BunqlLocalClient extends ConnectionClient {
+/** An owned embedded bql.sh connection, plus the capabilities graphx has no other driver for. */
+export interface BqlLocalClient extends ConnectionClient {
 	/** The connection itself — for commit/preupdate hooks, an authorizer, changeset sessions. */
-	readonly database: BunqlDatabase;
+	readonly database: BqlDatabase;
 	/** Abort whatever is running: a runaway traversal or recursive algorithm. */
 	interrupt(): void;
 	/** Statement deadline, in ms; `null` clears it. */
@@ -145,18 +145,18 @@ export interface BunqlLocalClient extends ConnectionClient {
 /** The exact unbound statements `createConnectionClient` issues for transaction control. */
 const TX_CONTROL = new Set(['BEGIN IMMEDIATE', 'BEGIN DEFERRED', 'COMMIT', 'ROLLBACK']);
 
-function bindValue(value: unknown): BunqlBindValue {
+function bindValue(value: unknown): BqlBindValue {
 	if (value === null || typeof value === 'string') return value;
 	if (typeof value === 'boolean') return Number(value);
 	if (typeof value === 'number') {
 		if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) {
-			throw new TypeError('BunQL binding requires a finite number with safe integer precision');
+			throw new TypeError('bql.sh binding requires a finite number with safe integer precision');
 		}
 		return value;
 	}
 	if (typeof value === 'bigint') {
 		if (value < -(1n << 63n) || value >= 1n << 63n)
-			throw new RangeError('BunQL integer bindings must fit signed 64 bits');
+			throw new RangeError('bql.sh integer bindings must fit signed 64 bits');
 		return value;
 	}
 	if (value instanceof Date) return bindValue(value.getTime());
@@ -164,22 +164,22 @@ function bindValue(value: unknown): BunqlBindValue {
 	if (ArrayBuffer.isView(value)) {
 		return new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice();
 	}
-	throw new TypeError('Unsupported BunQL binding');
+	throw new TypeError('Unsupported bql.sh binding');
 }
 
-function bindArgs(input: SqlStatement): BunqlBindArg[] {
+function bindArgs(input: SqlStatement): BqlBindArg[] {
 	if (typeof input === 'string') return [];
 	const args = input.args ?? [];
 	if (Array.isArray(args)) return args.map(bindValue);
-	// BunQL accepts a named-parameter key with or without its `:`/`@`/`$` prefix, so graphx's
+	// bql.sh accepts a named-parameter key with or without its `:`/`@`/`$` prefix, so graphx's
 	// bare names pass through as they are.
 	return [
 		Object.fromEntries(Object.entries(args).map(([key, value]) => [key, bindValue(value)])),
-	] as BunqlBindArg[];
+	] as BqlBindArg[];
 }
 
 /** `safeIntegers` means every INTEGER arrives as a bigint; narrow it the way libSQL's driver does. */
-function outputValue(value: BunqlValue): unknown {
+function outputValue(value: BqlValue): unknown {
 	if (typeof value === 'bigint') {
 		if (value < BigInt(Number.MIN_SAFE_INTEGER) || value > BigInt(Number.MAX_SAFE_INTEGER)) {
 			throw new RangeError(
@@ -191,32 +191,32 @@ function outputValue(value: BunqlValue): unknown {
 	return value;
 }
 
-function row(input: Record<string, BunqlValue>): SqlRow {
+function row(input: Record<string, BqlValue>): SqlRow {
 	return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, outputValue(value)]));
 }
 
 function bigintCount(value: number | bigint, context: string): bigint {
 	if (typeof value === 'bigint') return value;
-	if (!Number.isSafeInteger(value)) throw new RangeError(`BunQL reported an unsafe ${context}`);
+	if (!Number.isSafeInteger(value)) throw new RangeError(`bql.sh reported an unsafe ${context}`);
 	return BigInt(value);
 }
 
 /**
- * Take exclusive ownership of an already opened embedded BunQL connection.
+ * Take exclusive ownership of an already opened embedded bql.sh connection.
  *
  * The caller keeps nothing: this client serializes every statement on the connection, owns
- * `BEGIN`/`COMMIT`/`ROLLBACK`, and closes the `Database` when it closes. Use {@link openBunqlDb}
+ * `BEGIN`/`COMMIT`/`ROLLBACK`, and closes the `Database` when it closes. Use {@link openBqlDb}
  * for a configured persistent file. The connection must have been opened with
  * `safeIntegers: true`, and — because graphx's schema declares foreign keys — with them ON;
- * `openBunqlDb` does both.
+ * `openBqlDb` does both.
  *
  * Statements are cached by the `Database`, so a hot graph compiles each SQL text once. Nothing
  * here finalizes one.
  */
-export function createBunqlClient(database: BunqlDatabase): BunqlLocalClient {
+export function createBqlClient(database: BqlDatabase): BqlLocalClient {
 	if (!database.safeIntegers) {
 		throw new TypeError(
-			'createBunqlClient: open the Database with { safeIntegers: true } — BunQL otherwise reads INTEGER columns through the narrow FFI symbol and rounds past 2^53',
+			'createBqlClient: open the Database with { safeIntegers: true } — bql.sh otherwise reads INTEGER columns through the narrow FFI symbol and rounds past 2^53',
 		);
 	}
 	const client = createConnectionClient(
@@ -245,19 +245,19 @@ export function createBunqlClient(database: BunqlDatabase): BunqlLocalClient {
 			close: () => database.close(),
 		},
 		'sqlite',
-	) as BunqlLocalClient;
+	) as BqlLocalClient;
 	return Object.defineProperties(client, {
 		database: { value: database, enumerable: true },
 		interrupt: { value: () => database.interrupt(), enumerable: true },
 		deadline: { value: (ms: number | null) => database.deadline(ms), enumerable: true },
-	}) as BunqlLocalClient;
+	}) as BqlLocalClient;
 }
 
 async function openConfigured(
-	database: BunqlDatabase,
+	database: BqlDatabase,
 	persistent: boolean,
-): Promise<BunqlLocalClient> {
-	const client = createBunqlClient(database);
+): Promise<BqlLocalClient> {
+	const client = createBqlClient(database);
 	try {
 		await client.execute('PRAGMA foreign_keys = ON');
 		await client.execute(`PRAGMA busy_timeout = ${client.busyTimeoutMs ?? 5000}`);
@@ -272,7 +272,7 @@ async function openConfigured(
 			const actual = (await client.execute(`PRAGMA ${pragma}`)).rows[0]?.[column];
 			if (actual !== expected)
 				throw new Error(
-					`BunQL failed to configure ${pragma} (expected ${String(expected)}, received ${String(actual)})`,
+					`bql.sh failed to configure ${pragma} (expected ${String(expected)}, received ${String(actual)})`,
 				);
 		}
 		const file = (await client.execute('PRAGMA database_list')).rows.find(
@@ -281,41 +281,41 @@ async function openConfigured(
 		if (persistent ? typeof file !== 'string' || file === '' : file !== '')
 			throw new Error(
 				persistent
-					? 'openBunqlDb did not open a persistent file'
-					: 'openBunqlMemoryDb did not open a RAM-only namespace',
+					? 'openBqlDb did not open a persistent file'
+					: 'openBqlMemoryDb did not open a RAM-only namespace',
 			);
 		return client;
 	} catch (error) {
 		try {
 			await client.close();
 		} catch (closeError) {
-			throw new AggregateError([error, closeError], 'BunQL initialization and close failed');
+			throw new AggregateError([error, closeError], 'bql.sh initialization and close failed');
 		}
 		throw error;
 	}
 }
 
 /**
- * Open one exclusively owned embedded BunQL database file, in WAL with FULL sync, foreign keys
- * ON and a 5 s busy timeout — verified, not assumed. Pass the `@bunql/db/sqlite` module; this
- * subpath never imports it, so `@bunql/db` stays an optional peer.
+ * Open one exclusively owned embedded bql.sh database file, in WAL with FULL sync, foreign keys
+ * ON and a 5 s busy timeout — verified, not assumed. Pass the `bql.sh/sqlite` module; this
+ * subpath never imports it, so `bql.sh` stays an optional peer.
  *
  * ```ts
- * import * as bunql from '@bunql/db/sqlite';
- * const db = await openBunqlDb(bunql, '/var/lib/graphx/acme__alpha.db');
+ * import * as bql from 'bql.sh/sqlite';
+ * const db = await openBqlDb(bql, '/var/lib/graphx/acme__alpha.db');
  * await init(db, embedder);
  * ```
  *
  * Call `init(client, embedder?)` afterwards, and await `close()` to observe rollback and
  * physical-close failures.
  */
-export async function openBunqlDb(
-	module: BunqlModule,
+export async function openBqlDb(
+	module: BqlModule,
 	filename: string,
-	opts: BunqlOpenOptions = {},
-): Promise<BunqlLocalClient> {
+	opts: BqlOpenOptions = {},
+): Promise<BqlLocalClient> {
 	if (!filename || filename.includes('\0') || filename === ':memory:') {
-		throw new TypeError('openBunqlDb requires a persistent filesystem path');
+		throw new TypeError('openBqlDb requires a persistent filesystem path');
 	}
 	// `wal: false` would leave the file in the journal mode it already had; this driver states it.
 	return openConfigured(
@@ -324,26 +324,26 @@ export async function openBunqlDb(
 	);
 }
 
-/** Open one private, RAM-only embedded BunQL namespace. Nothing is shared with another call. */
-export async function openBunqlMemoryDb(
-	module: BunqlModule,
-	opts: BunqlOpenOptions = {},
-): Promise<BunqlLocalClient> {
+/** Open one private, RAM-only embedded bql.sh namespace. Nothing is shared with another call. */
+export async function openBqlMemoryDb(
+	module: BqlModule,
+	opts: BqlOpenOptions = {},
+): Promise<BqlLocalClient> {
 	return openConfigured(
 		module.Database.open(':memory:', { ...opts, safeIntegers: true, wal: false }),
 		false,
 	);
 }
 
-// ── the remote driver (a BunQL server, over Hrana) ──────────────────────────────────────────
+// ── the remote driver (a bql.sh server, over Hrana) ──────────────────────────────────────────
 
-/** BunQL's own database-name rule (`src/tenant/tenant.ts`), applied before a round trip. */
-const BUNQL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+/** bql.sh's own database-name rule (`src/tenant/tenant.ts`), applied before a round trip. */
+const BQL_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
-export interface BunqlRemoteOptions {
+export interface BqlRemoteOptions {
 	/** The server's origin, e.g. `http://127.0.0.1:4321` or `https://sql.example.com`. */
 	url: string;
-	/** The BunQL database (graphx's `db_namespace`). Lower case, `[a-z0-9][a-z0-9_-]{0,63}`. */
+	/** The bql.sh database (graphx's `db_namespace`). Lower case, `[a-z0-9][a-z0-9_-]{0,63}`. */
 	database: string;
 	/** An admin key or a minted token; travels as `Authorization: Bearer`. */
 	authToken?: string;
@@ -353,7 +353,7 @@ export interface BunqlRemoteOptions {
 	 * Create the database on first use when the server does not have it. Default true, which is
 	 * what the other multi-tenant backends do — the Postgres adapter creates the tenant's schema
 	 * and DuckDB creates the file, so `getDb(ns)` + `init(db)` provisions a namespace on all of
-	 * them. BunQL has no create-on-demand of its own: `POST /v1/db` is an ADMIN route, so
+	 * them. bql.sh has no create-on-demand of its own: `POST /v1/db` is an ADMIN route, so
 	 * `authToken` (or {@link adminToken}) has to be an admin key for this to work. Set it false
 	 * when namespaces are provisioned outside graphx.
 	 */
@@ -362,33 +362,33 @@ export interface BunqlRemoteOptions {
 	adminToken?: string;
 	/**
 	 * Turn `foreignKeys` on for that database as it is created. Default true: graphx's schema
-	 * declares foreign keys and relies on them being enforced, BunQL defaults `[sqlite]
+	 * declares foreign keys and relies on them being enforced, bql.sh defaults `[sqlite]
 	 * foreignKeys` off, and a tenant statement cannot turn a pragma on.
 	 */
 	foreignKeys?: boolean;
 }
 
-/** A graphx client over a BunQL server. Tagged `sqlite`, and the server owns its pragmas. */
-export interface BunqlRemoteClient extends DbClient {
+/** A graphx client over a bql.sh server. Tagged `sqlite`, and the server owns its pragmas. */
+export interface BqlRemoteClient extends DbClient {
 	readonly dialect: 'sqlite';
 	readonly managedPragmas: true;
 }
 
 /**
- * A graphx namespace as a BunQL database name: case-folded, then validated.
+ * A graphx namespace as a bql.sh database name: case-folded, then validated.
  *
- * BunQL names are lower case (`[a-z0-9][a-z0-9_-]{0,63}`) and a graphx namespace need not be —
+ * bql.sh names are lower case (`[a-z0-9][a-z0-9_-]{0,63}`) and a graphx namespace need not be —
  * `evt_01M3E2K3W0…` pairs a lower-case prefix with a ULID, which is upper-case by construction.
- * Folding is safe rather than merely convenient: BunQL keeps a directory per database, and on a
+ * Folding is safe rather than merely convenient: bql.sh keeps a directory per database, and on a
  * case-insensitive filesystem two names differing only in case are one directory — which is why
  * the rule is lower case in the first place. So a pair of namespaces that fold together could
- * never have been two BunQL databases anyway.
+ * never have been two bql.sh databases anyway.
  */
-export function bunqlDatabaseName(namespace: string): string {
+export function bqlDatabaseName(namespace: string): string {
 	const folded = namespace.toLowerCase();
-	if (!BUNQL_NAME.test(folded)) {
+	if (!BQL_NAME.test(folded)) {
 		throw new TypeError(
-			`graphx namespace ${JSON.stringify(namespace)} is not a usable BunQL database name: expected [a-z0-9][a-z0-9_-]{0,63} after case folding`,
+			`graphx namespace ${JSON.stringify(namespace)} is not a usable bql.sh database name: expected [a-z0-9][a-z0-9_-]{0,63} after case folding`,
 		);
 	}
 	return folded;
@@ -397,43 +397,43 @@ export function bunqlDatabaseName(namespace: string): string {
 /** `origin` + database → the Hrana base URL. The trailing slash is load-bearing: `@libsql/core`
  *  resolves `v2/pipeline` RELATIVELY, so without it the last path segment is discarded and the
  *  request becomes `/v1/db/v2/pipeline` — a bare 404. */
-export function bunqlHranaUrl(origin: string, database: string): string {
-	if (database !== bunqlDatabaseName(database)) {
+export function bqlHranaUrl(origin: string, database: string): string {
+	if (database !== bqlDatabaseName(database)) {
 		throw new TypeError(
-			`BunQL database name ${JSON.stringify(database)} is invalid: expected [a-z0-9][a-z0-9_-]{0,63}`,
+			`bql.sh database name ${JSON.stringify(database)} is invalid: expected [a-z0-9][a-z0-9_-]{0,63}`,
 		);
 	}
 	const base = new URL(origin);
 	if (base.search || base.hash)
-		throw new TypeError('BunQL server URL must be an origin, without a query or fragment');
+		throw new TypeError('bql.sh server URL must be an origin, without a query or fragment');
 	const path = base.pathname.replace(/\/+$/, '');
 	if (path.includes('/v1/db/'))
-		throw new TypeError('Pass the BunQL server origin; the driver appends /v1/db/<database>/');
+		throw new TypeError('Pass the bql.sh server origin; the driver appends /v1/db/<database>/');
 	base.pathname = `${path}/v1/db/${database}/`;
 	return base.toString();
 }
 
 /**
- * A graphx client over a running BunQL server, through its libsql-compatible Hrana surface.
+ * A graphx client over a running bql.sh server, through its libsql-compatible Hrana surface.
  *
  * Two things differ from pointing `@libsql/client` at a libSQL server, and both are why this
  * wrapper exists rather than a bare `createClient`:
  *
  * 1. It is tagged `dialect: 'sqlite'`. An untagged client reads as `libsql` and graphx emits
  *    vector SQL a plain libsqlite3 has never heard of.
- * 2. It is tagged `managedPragmas`. BunQL's authorizer answers `SQLITE_DENY` to a pragma in its
+ * 2. It is tagged `managedPragmas`. bql.sh's authorizer answers `SQLITE_DENY` to a pragma in its
  *    setting form, so graphx must not issue `PRAGMA foreign_keys = ON` / `busy_timeout`. The
- *    server states both itself — and `[sqlite] foreignKeys` defaults to FALSE in BunQL, while
+ *    server states both itself — and `[sqlite] foreignKeys` defaults to FALSE in bql.sh, while
  *    graphx's schema declares foreign keys, so a node serving graphx has to turn it on.
  *
  * Writes must address the primary: a replica's Hrana surface answers `NOT_PRIMARY` rather than
  * forwarding.
  */
-export function createBunqlRemoteClient(input: BunqlRemoteOptions): BunqlRemoteClient {
+export function createBqlRemoteClient(input: BqlRemoteOptions): BqlRemoteClient {
 	// Fold once, here, so the Hrana URL and the admin routes always name the same database.
-	const opts: BunqlRemoteOptions = { ...input, database: bunqlDatabaseName(input.database) };
+	const opts: BqlRemoteOptions = { ...input, database: bqlDatabaseName(input.database) };
 	const raw = createClient({
-		url: bunqlHranaUrl(opts.url, opts.database),
+		url: bqlHranaUrl(opts.url, opts.database),
 		...(opts.authToken ? { authToken: opts.authToken } : {}),
 		intMode: opts.intMode ?? 'number',
 	});
@@ -470,7 +470,7 @@ export function createBunqlRemoteClient(input: BunqlRemoteOptions): BunqlRemoteC
 	};
 }
 
-async function admin(opts: BunqlRemoteOptions, path: string, init: RequestInit): Promise<Response> {
+async function admin(opts: BqlRemoteOptions, path: string, init: RequestInit): Promise<Response> {
 	const token = opts.adminToken ?? opts.authToken;
 	return fetch(new URL(path, opts.url), {
 		...init,
@@ -486,14 +486,14 @@ async function admin(opts: BunqlRemoteOptions, path: string, init: RequestInit):
  * previous run) already created it, which is success — so two graphx processes starting at once
  * both proceed.
  */
-async function ensureDatabase(opts: BunqlRemoteOptions): Promise<void> {
+async function ensureDatabase(opts: BqlRemoteOptions): Promise<void> {
 	const created = await admin(opts, '/v1/db', {
 		method: 'POST',
 		body: JSON.stringify({ name: opts.database }),
 	});
 	if (!created.ok && created.status !== 409) {
 		throw new Error(
-			`BunQL: could not create the database ${opts.database} (${created.status} ${await created.text()}). Creating one is an admin route — pass an admin key as authToken/adminToken, or provision namespaces yourself and pass ensureDatabase: false.`,
+			`bql.sh: could not create the database ${opts.database} (${created.status} ${await created.text()}). Creating one is an admin route — pass an admin key as authToken/adminToken, or provision namespaces yourself and pass ensureDatabase: false.`,
 		);
 	}
 	if (opts.foreignKeys === false) return;
@@ -506,31 +506,31 @@ async function ensureDatabase(opts: BunqlRemoteOptions): Promise<void> {
 	});
 	if (!configured.ok) {
 		throw new Error(
-			`BunQL: could not turn foreign keys on for ${opts.database} (${configured.status} ${await configured.text()}). graphx's schema declares them; set the node's [sqlite] foreignKeys instead, or pass foreignKeys: false to accept unenforced references.`,
+			`bql.sh: could not turn foreign keys on for ${opts.database} (${configured.status} ${await configured.text()}). graphx's schema declares them; set the node's [sqlite] foreignKeys instead, or pass foreignKeys: false to accept unenforced references.`,
 		);
 	}
 }
 
 /**
- * The `driver: 'bunql'` factory behind {@link import('./db.ts').getDb} — a server URL from
- * `bunqlUrl` (or `GRAPHX_BUNQL_URL`) and a token from `authToken` (or `GRAPHX_BUNQL_TOKEN`),
- * with the namespace as the BunQL database name.
+ * The `driver: 'bql'` factory behind {@link import('./db.ts').getDb} — a server URL from
+ * `bqlUrl` (or `GRAPHX_BQL_URL`) and a token from `authToken` (or `GRAPHX_BQL_TOKEN`),
+ * with the namespace as the bql.sh database name.
  */
-export function bunqlDriver(namespace: string, cfg: DbConfig): DbClient {
-	const url = cfg.bunqlUrl ?? process.env.GRAPHX_BUNQL_URL;
+export function bqlDriver(namespace: string, cfg: DbConfig): DbClient {
+	const url = cfg.bqlUrl ?? process.env.GRAPHX_BQL_URL;
 	if (!url) {
 		throw new Error(
-			"getDb: the bunql driver needs a server URL — pass { bunqlUrl } or set GRAPHX_BUNQL_URL (e.g. 'http://127.0.0.1:4321')",
+			"getDb: the bql driver needs a server URL — pass { bqlUrl } or set GRAPHX_BQL_URL (e.g. 'http://127.0.0.1:4321')",
 		);
 	}
-	return createBunqlRemoteClient({
+	return createBqlRemoteClient({
 		url,
 		database: namespace,
-		authToken: cfg.authToken ?? process.env.GRAPHX_BUNQL_TOKEN,
-		adminToken: process.env.GRAPHX_BUNQL_ADMIN_TOKEN,
+		authToken: cfg.authToken ?? process.env.GRAPHX_BQL_TOKEN,
+		adminToken: process.env.GRAPHX_BQL_ADMIN_TOKEN,
 	});
 }
 
 // Registered on import, exactly as `pg.ts` and `duck.ts` register theirs — so `getDb` can serve
-// `driver: 'bunql'` for a consumer who imported this subpath, and nobody else pays for it.
-registerBunqlDriver(bunqlDriver);
+// `driver: 'bql'` for a consumer who imported this subpath, and nobody else pays for it.
+registerBqlDriver(bqlDriver);

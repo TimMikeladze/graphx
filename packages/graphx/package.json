@@ -76,10 +76,10 @@
 				"default": "./dist/core/expo.js"
 			}
 		},
-		"./bunql": {
+		"./bql": {
 			"import": {
-				"types": "./dist/core/bunql.d.ts",
-				"default": "./dist/core/bunql.js"
+				"types": "./dist/core/bql.d.ts",
+				"default": "./dist/core/bql.js"
 			}
 		},
 		"./pg": {

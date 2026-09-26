@@ -341,7 +341,12 @@ registerPgDriver(
 			schema: namespace,
 			ensureSchema: true,
 			...(cfg.ssl !== undefined ? { ssl: cfg.ssl } : {}),
-			...(cfg.poolMax !== undefined ? { max: cfg.poolMax } : {}),
+			// A host serving many namespaces (one pool each) shrinks every pool with the env var.
+			...(cfg.poolMax !== undefined
+				? { max: cfg.poolMax }
+				: process.env.GRAPHX_PG_POOL_MAX
+					? { max: Number(process.env.GRAPHX_PG_POOL_MAX) }
+					: {}),
 			...(cfg.pooler !== undefined ? { pooler: cfg.pooler } : {}),
 		}),
 );

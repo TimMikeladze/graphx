@@ -232,7 +232,7 @@
 				"ftsSet": ["ada-lovelace", "analytical-engine", "charles-babbage", "punched-card"]
 			}
 		},
-		"bunql": {
+		"bql": {
 			"who designed the analytical engine": {
 				"ftsSet": [
 					"alan-turing",

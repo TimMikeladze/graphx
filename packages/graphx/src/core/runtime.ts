@@ -15,7 +15,7 @@ export async function applyConnPragmas(client: DbClient): Promise<void> {
 	// its writer is serialized in-process by the adapter's mutex instead.
 	const d = dialectOf(client);
 	if (d !== 'libsql' && d !== 'sqlite') return;
-	// A driver that owns its connection settings (BunQL: stated by the server, and a pragma in
+	// A driver that owns its connection settings (bql.sh: stated by the server, and a pragma in
 	// its setting form is DENIED by the authorizer rather than ignored). See `managedPragmas`.
 	if (client.managedPragmas) return;
 	const busyTimeoutMs = client.busyTimeoutMs ?? 5000;
