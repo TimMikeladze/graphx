@@ -25,6 +25,12 @@ containing that line. A reference that matches zero or two blocks throws and fai
 editing an example in the README breaks the build instead of leaving the page wrong. Add a section by
 adding an entry to `capabilities`.
 
+The frame around the capability sections — split demo, figures, ecosystem band, principles, tabbed
+showcase, guide cards, build-today band, mega-footer — is also modelled in `content.ts`. Figures are
+counted from the repo at build time (README tables, `###` sections, CLI lines, `dependencies`), never
+typed; there are no npm/GitHub figures because the project is pre-launch. Ecosystem marks come from
+`simple-icons`.
+
 ## Output (`public/`)
 
 `index.html`, `reference.html` (the whole README behind a contents column), `index.md`, `reference.md`,
@@ -32,7 +38,8 @@ adding an entry to `capabilities`.
 clean URLs and serves `public/`.
 
 Two inline scripts ship: the theme boot in `<head>` (key `graphx-theme`, sets `data-theme` before the
-stylesheet) and a small one for the theme toggle and copy buttons. Without them the page is dark by
+stylesheet) and a small one for the header toggle, the footer's segmented theme switch and copy buttons.
+The hero's For humans / For agents switch and the showcase tabs are radio inputs — no script. Without them the page is dark by
 default and follows the OS through a `prefers-color-scheme` media query.
 
 ## Not done yet

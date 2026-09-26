@@ -44,6 +44,23 @@ export interface Capability {
 
 export type IconName = 'github' | 'x' | 'linkedin' | 'discord' | 'text';
 
+/** Brand marks for the ecosystem band and the showcase avatar stack (simple-icons slugs, CC0). */
+export type EcoName =
+	| 'sqlite'
+	| 'postgresql'
+	| 'duckdb'
+	| 'bun'
+	| 'nodedotjs'
+	| 'webassembly'
+	| 'expo'
+	| 'react'
+	| 'reactquery'
+	| 'zod'
+	| 'hono'
+	| 'openapiinitiative'
+	| 'modelcontextprotocol'
+	| 'ollama';
+
 export interface LinkEntry {
 	label: string;
 	/** `repo` follows the repo variable rather than repeating a URL. */
@@ -88,13 +105,148 @@ export const page = {
 	year: 2026,
 	credit:
 		'graphx is built and maintained by linesofcode. It is MIT licensed, and the README in the repository is the documentation this site is generated from.',
-	nav: [
-		{ label: 'Reference', href: '/reference', external: false },
-		{ label: 'Boundaries', href: '#boundaries', external: false },
-		{ label: 'Start', href: '#start', external: false },
-		{ label: 'npm', href: npm, external: true },
+};
+
+/** The hero's audience switch. The humans command is read from the README install fence, not here. */
+export const audience = {
+	agents: `curl ${origin}/llms.txt`,
+};
+
+/** Under the hero: the input graphx reacts to (left) and the code that handles it (right). */
+export const split = {
+	input: { ref: terminal('bunx graphx new my-app'), label: 'terminal' },
+	handler: { ref: snippet("export default defineConfig({ schema, embedder: hashEmbed(), namespace: 'graphx' });", 'graphx.config.ts'), label: 'graphx.config.ts' },
+};
+
+/**
+ * Figures, each counted from the repository at build time — never typed here. graphx is pre-launch
+ * (npm still serves the 2017 package under this name), so there are no download or star figures.
+ */
+export type FigureSource =
+	/** Rows of the README table whose first header cell is `header`. */
+	| { kind: 'table'; header: string }
+	/** `###` headings under the README `##` section `section`. */
+	| { kind: 'subsections'; section: string }
+	/** Lines starting with `prefix` in the one README fence containing `line`. */
+	| { kind: 'lines'; line: string; prefix: string }
+	/** Keys of `dependencies` in packages/graphx/package.json. */
+	| { kind: 'dependencies' };
+
+export const figures: { label: string; source: FigureSource }[] = [
+	{ label: 'Entry points, one package', source: { kind: 'table', header: 'Import' } },
+	{ label: 'Server backends', source: { kind: 'subsections', section: 'Backends' } },
+	{ label: 'CLI commands', source: { kind: 'lines', line: 'graphx doctor   [-c config]', prefix: 'graphx ' } },
+	{ label: 'Runtime dependencies', source: { kind: 'dependencies' } },
+];
+
+export const ecosystem = {
+	title: 'Runs where your data already is',
+	lede:
+		'SQLite and libSQL, Postgres with pgvector, DuckDB, BunQL, SQLite WASM in a browser tab and Expo on a phone. Served through Hono and OpenAPI, typed by Zod, read by React Query and MCP clients.',
+	marks: [
+		{ name: 'sqlite', label: 'SQLite', href: 'https://sqlite.org' },
+		{ name: 'postgresql', label: 'PostgreSQL', href: 'https://www.postgresql.org' },
+		{ name: 'duckdb', label: 'DuckDB', href: 'https://duckdb.org' },
+		{ name: 'bun', label: 'Bun', href: 'https://bun.sh' },
+		{ name: 'nodedotjs', label: 'Node.js', href: 'https://nodejs.org' },
+		{ name: 'webassembly', label: 'SQLite WASM in the browser', href: 'https://sqlite.org/wasm' },
+		{ name: 'expo', label: 'Expo', href: 'https://expo.dev' },
+		{ name: 'react', label: 'React', href: 'https://react.dev' },
+		{ name: 'reactquery', label: 'TanStack Query', href: 'https://tanstack.com/query' },
+		{ name: 'zod', label: 'Zod', href: 'https://zod.dev' },
+		{ name: 'hono', label: 'Hono', href: 'https://hono.dev' },
+		{ name: 'openapiinitiative', label: 'OpenAPI', href: 'https://www.openapis.org' },
+		{ name: 'modelcontextprotocol', label: 'Model Context Protocol', href: 'https://modelcontextprotocol.io' },
+		{ name: 'ollama', label: 'Ollama', href: 'https://ollama.com' },
+	] satisfies { name: EcoName; label: string; href: string }[],
+};
+
+/** The three claims the design rests on — each one enforced by code or the test suite. */
+export const principles = [
+	{ title: 'One schema, no codegen', body: 'Writes, routes, hooks and MCP tools infer from one `Schema` type. There is no generate step to forget.' },
+	{ title: 'Nothing is erased', body: 'A delete closes a `valid_to` interval. Any read takes `asOf` and reconstructs that instant exactly.' },
+	{ title: 'One contract everywhere', body: 'Every type, route and payload is identical across backends. The README examples compile against the build.' },
+];
+
+/** The tabbed showcase: each tab is a different resolved README block. */
+export const showcase = {
+	title: 'Write it, query it, serve it',
+	body:
+		'The same `Graph` object writes, reads and walks. `match` compiles a typed pattern to one SQL statement, and `createApp` serves all of it with a generated OpenAPI contract.',
+	supports: ['sqlite', 'postgresql', 'duckdb', 'bun', 'expo'] satisfies EcoName[],
+	more: '+ browser and BunQL',
+	tabs: [
+		{ label: 'Write', ref: snippet("await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });", 'app.ts') },
+		{ label: 'Query', ref: snippet('const rows = await q.run(); // rows[0].g.data, rows[0].a.data', 'query.ts') },
+		{ label: 'Serve', ref: snippet("openapi: { title: 'iot-fleet', servers: [{ url: 'http://localhost:8899' }] },", 'server.ts') },
+		{ label: 'Production', ref: snippet('control, // the shared registry of tenants, projects and memberships', 'prod.ts') },
 	],
 };
+
+export const buildToday = {
+	title: 'Build a temporal graph today',
+	scaffold: terminal('bunx graphx new my-app'),
+};
+
+/** Guide cards: each links to its README section on the reference page and previews its code. */
+export const guides = [
+	{ title: 'Time travel', body: 'History, diffs and the change feed.', href: '/reference#time-travel', ref: snippet('await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks', 'time.ts') },
+	{ title: 'Ingest a vault', body: 'Markdown and wikilinks into typed edges.', href: '/reference#ingest', ref: snippet("import { ingestDir, watchDir } from 'graphx/ingest';", 'ingest.ts') },
+	{ title: 'Judgments with Jev', body: 'Rerank, dedupe and type links by meaning.', href: '/reference#judgments-with-jev', ref: snippet("const jev = createJev(); // model 'jev-latest'; retries 429, 529 and 5xx with backoff", 'jev.ts') },
+];
+
+/** Mega-footer columns. `href` starting with `/` is this site; `isNew` is the release date (ISO). */
+export const footerColumns: { title: string; links: { label: string; href: string; isNew?: string }[] }[] = [
+	{
+		title: 'graphx',
+		links: [
+			{ label: 'Home', href: '/' },
+			{ label: 'Reference', href: '/reference' },
+			{ label: 'npm', href: npm },
+			{ label: 'Changelog', href: `${repo}/commits/main` },
+		],
+	},
+	{
+		title: 'Backends',
+		links: [
+			{ label: 'libSQL and SQLite', href: '/reference#libsql-and-sqlite-default' },
+			{ label: 'Postgres', href: '/reference#postgres' },
+			{ label: 'DuckDB', href: '/reference#duckdb-over-an-object-store' },
+			{ label: 'BunQL', href: '/reference#bunql', isNew: '2026-09-25' },
+			{ label: 'Local-first', href: '/reference#local-first-runtimes' },
+		],
+	},
+	{
+		title: 'Serve',
+		links: [
+			{ label: 'HTTP and OpenAPI', href: '/reference#serving-over-http' },
+			{ label: 'React', href: '/reference#react' },
+			{ label: 'MCP', href: '/reference#mcp' },
+			{ label: 'Access control', href: '/reference#access-control' },
+		],
+	},
+	{
+		title: 'Learn',
+		links: [
+			{ label: 'Quickstart', href: '/reference#quickstart' },
+			{ label: 'Examples', href: '/reference#examples' },
+			{ label: 'CLI', href: '/reference#cli' },
+			{ label: 'Contributing', href: '/reference#contributing' },
+		],
+	},
+	{
+		title: 'Agents',
+		links: [
+			{ label: 'llms.txt', href: '/llms.txt' },
+			{ label: 'AGENTS.md', href: '/AGENTS.md' },
+			{ label: 'Page as Markdown', href: '/index.md' },
+		],
+	},
+	{
+		title: 'Legal',
+		links: [{ label: 'MIT License', href: `${repo}/blob/main/LICENSE` }],
+	},
+];
 
 export const capabilities: Capability[] = [
 	{

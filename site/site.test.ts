@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { boundaries, capabilities, links, page, repo, snippet, terminal, url } from './content.ts';
-import { fencedBlocks, readInstall, readReadme, readSections, readTable, readVersion, resolve, siteDir } from './readme.ts';
+import { audience, boundaries, capabilities, ecosystem, figures, footerColumns, guides, links, page, repo, showcase, snippet, split, terminal, url } from './content.ts';
+import { countFigure, fencedBlocks, readInstall, readReadme, readSections, readTable, readVersion, resolve, siteDir } from './readme.ts';
 import { buildModel, renderSite } from './render.ts';
 import { css, bootScript, uiScript } from './styles.ts';
 
@@ -147,4 +147,41 @@ test('project links: header icons github, x, linkedin in order and outside the c
 	expect(footer).toContain('https://discord.com/users/linesofcode');
 	expect(header).toContain(repo);
 	expect(boundaries.holds.length + boundaries.judgements.length + boundaries.missing.length).toBeGreaterThan(6);
+});
+
+test('hero is centred and carries both audience panels', () => {
+	const hero = /<section class="hero"[\s\S]*?<\/section>/.exec(index)?.[0] ?? '';
+	expect(css).toMatch(/\.hero \{[^}]*text-align: center/);
+	expect(hero).toContain('For humans');
+	expect(hero).toContain('For agents');
+	expect(/class="aud-panel aud-humans">[\s\S]*?<code>([^<]+)<\/code>/.exec(hero)?.[1]).toBe(readInstall(readme));
+	expect(hero).toContain(escape(audience.agents));
+	for (const [, href] of /class="aud-panel aud-agents">[\s\S]*?<\/div>/.exec(hero)![0].matchAll(/href="\/([^"]+)"/g)) {
+		expect(existsSync(pub(href as string)), href).toBe(true);
+	}
+});
+
+const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+test('figures equal their repository counts; split, showcase and guide code all resolve', async () => {
+	for (const f of figures) {
+		const n = await countFigure(readme, f.source);
+		expect(n).toBeGreaterThan(0);
+		expect(index).toContain(`<dt>${escape(f.label)}</dt><dd>${n}</dd>`);
+	}
+	for (const r of [split.input.ref, split.handler.ref, ...showcase.tabs.map((t) => t.ref), ...guides.map((g) => g.ref)]) {
+		expect(resolve(blocks, r).code.length).toBeGreaterThan(0);
+	}
+	expect(index.match(/class="demo sc-frame/g)?.length).toBe(showcase.tabs.length);
+	expect(index.match(/class="tilt"/g)?.length).toBe(guides.length);
+	expect(index.match(/<li><a href="[^"]+" rel="noopener" title=/g)?.length).toBe(ecosystem.marks.length);
+});
+
+test('every New pill is under 90 days old; every /reference anchor exists', () => {
+	for (const c of footerColumns) for (const l of c.links) if (l.isNew) expect(Date.now() - Date.parse(l.isNew)).toBeLessThan(90 * 864e5);
+	const anchors = [...footerColumns.flatMap((c) => c.links.map((l) => l.href)), ...guides.map((g) => g.href)].filter((h) => h.startsWith('/reference#'));
+	expect(anchors.length).toBeGreaterThan(5);
+	for (const h of anchors) expect(reference).toContain(`id="${h.split('#')[1]}"`);
+	for (const h of footerColumns.flatMap((c) => c.links.map((l) => l.href)).filter((h) => /^\/[\w.]+\.(txt|md)$/.test(h))) expect(existsSync(pub(h.slice(1))), h).toBe(true);
+	expect(index).toContain('data-set-theme="system"');
 });

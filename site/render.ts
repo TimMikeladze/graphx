@@ -15,21 +15,31 @@ import { createHighlighterCore } from 'shiki/core';
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma';
 import {
 	agents,
+	audience,
 	boundaries,
+	buildToday,
 	capabilities,
 	type Capability,
+	ecosystem,
+	figures,
+	footerColumns,
+	guides,
 	links,
 	npm,
 	origin,
 	page,
+	principles,
 	reference,
 	repo,
+	showcase,
+	split,
 	start,
 	url,
 } from './content.ts';
-import { brandIcon, FAVICON_SVG, glyph, productMark, type BrandName } from './icons.ts';
+import { brandIcon, ecoIcon, FAVICON_SVG, glyph, productMark, type BrandName } from './icons.ts';
 import {
 	type Block,
+	countFigure,
 	fencedBlocks,
 	readInstall,
 	readReadme,
@@ -95,12 +105,15 @@ interface Model {
 	blocks: Block[];
 	hl: Highlighter;
 	md: Marked;
+	/** Each figure's count, in `figures` order. */
+	counts: number[];
 }
 
 async function buildModel(): Promise<Model> {
 	const readme = await readReadme();
 	const hl = await makeHighlighter();
-	return { readme, version: await readVersion(), install: readInstall(readme), blocks: fencedBlocks(readme), hl, md: markdownRenderer(hl) };
+	const counts = await Promise.all(figures.map((f) => countFigure(readme, f.source)));
+	return { readme, version: await readVersion(), install: readInstall(readme), blocks: fencedBlocks(readme), hl, md: markdownRenderer(hl), counts };
 }
 
 const inline = (m: Model, text: string): string => m.md.parseInline(text) as string;
@@ -124,6 +137,7 @@ function iconLinks(where: 'header' | 'footer'): string {
 const NAV = [
 	{ label: 'Home', href: '/' },
 	{ label: 'Reference', href: '/reference' },
+	{ label: 'Guides', href: '/#guides' },
 	{ label: 'Boundaries', href: '/#boundaries' },
 	{ label: 'Start', href: '/#start' },
 	{ label: 'npm', href: npm, external: true },
@@ -146,19 +160,42 @@ function header(current: '/' | '/reference'): string {
 </header>`;
 }
 
+const isLocal = (href: string) => href.startsWith('/');
+
+/** Segmented switch driving the same localStorage key as the header toggle. */
+function themeSwitch(): string {
+	const btn = (mode: string, icon: 'monitor' | 'sun' | 'moon', name: string) =>
+		`<button type="button" data-set-theme="${mode}" aria-label="${name} theme" aria-pressed="false">${glyph(icon, 14)}</button>`;
+	return `<div class="seg" role="group" aria-label="Theme">${btn('system', 'monitor', 'System')}${btn('light', 'sun', 'Light')}${btn('dark', 'moon', 'Dark')}</div>`;
+}
+
 function footer(): string {
 	const textLinks = links.filter((l) => l.where.includes('footer') && l.icon === 'text');
+	const cols = footerColumns
+		.map(
+			(c) =>
+				`<div><h2>${escapeHtml(c.title)}</h2><ul>${c.links
+					.map(
+						(l) =>
+							`<li><a href="${escapeHtml(l.href)}"${isLocal(l.href) ? '' : ' class="ext" rel="noopener"'}>${escapeHtml(l.label)}</a>${l.isNew ? ' <span class="new">New</span>' : ''}</li>`,
+					)
+					.join('')}</ul></div>`,
+		)
+		.join('');
+	const community = `<div><h2>Community</h2><ul>${[
+		['X', links.find((l) => l.icon === 'x')?.href],
+		['GitHub', repo],
+		['LinkedIn', links.find((l) => l.icon === 'linkedin')?.href],
+		['Discord', links.find((l) => l.icon === 'discord')?.href],
+		...textLinks.map((l) => [l.label, linkHref(l.href)]),
+	]
+		.map(([label, href]) => `<li><a href="${escapeHtml(href ?? '')}" class="ext" rel="noopener">${escapeHtml(label ?? '')}</a></li>`)
+		.join('')}</ul><div class="ficons">${iconLinks('footer')}</div></div>`;
 	return `<footer class="footer">
 <div class="shell">
 <p class="credit">${page.credit}</p>
-<div class="fcols">
-<div><h2>${page.name}</h2><ul><li><a href="/">Home</a></li><li><a href="/reference">Docs</a></li>${textLinks
-		.map((l) => `<li><a href="${escapeHtml(linkHref(l.href))}">${escapeHtml(l.label)}</a></li>`)
-		.join('')}</ul></div>
-<div><h2>Community</h2><ul><li><a href="${links.find((l) => l.icon === 'x')?.href}">X</a></li><li><a href="${repo}">GitHub</a></li><li><a href="${links.find((l) => l.icon === 'linkedin')?.href}">LinkedIn</a></li><li><a href="${links.find((l) => l.icon === 'discord')?.href}">Discord</a></li></ul></div>
-</div>
-<div class="ficons">${iconLinks('footer')}</div>
-<p class="copy">© ${page.year} linesofcode</p>
+<div class="fcols">${cols}${community}</div>
+<div class="fbottom"><span class="fmark">${productMark(20)}</span><p class="copy">© ${page.year} linesofcode</p>${themeSwitch()}</div>
 </div>
 </footer>`;
 }
@@ -252,19 +289,125 @@ ${cap.aside ? `<p class="aside">${inline(m, cap.aside)}</p>` : ''}
 </section>`;
 }
 
+function copyButton(text: string, name: string): string {
+	return `<button class="copy-btn" type="button" data-copy="${escapeHtml(text)}">${glyph('copy', 15)}<span class="sr" data-say>${escapeHtml(name)}</span></button>`;
+}
+
+function pill(command: string, name: string, extra = ''): string {
+	return `<div class="pill${extra}"><span class="dollar" aria-hidden="true">$</span><code>${escapeHtml(command)}</code>${copyButton(command, name)}</div>`;
+}
+
 function hero(m: Model): string {
 	return `<section class="hero" aria-labelledby="title">
 <div class="shell">
-${productMark(44)}
+${productMark(46)}
 <h1 id="title">${escapeHtml(page.h1)}</h1>
 <p class="lede">${inline(m, page.lede)}</p>
-<div class="actions">
-<button class="control install" type="button" data-copy="${escapeHtml(m.install)}"><code>${escapeHtml(m.install)}</code>${glyph('copy')}<span class="sr" data-say>Copy install command</span></button>
-<details class="agents"><summary class="control">For agents ${glyph('chevron', 14)}</summary>
-<div class="agents-menu"><a href="/llms.txt">${glyph('file', 14)}llms.txt</a><a href="/AGENTS.md">${glyph('file', 14)}AGENTS.md</a><button type="button" data-copy-md="/index.md">${glyph('copy', 14)}<span data-say>Copy page as Markdown</span></button></div></details>
-<a class="control control--solid" href="/reference">${glyph('book')}Documentation</a>
+<div class="audience">
+<input type="radio" name="audience" id="aud-humans" class="sr" checked>
+<input type="radio" name="audience" id="aud-agents" class="sr">
+<div class="aud-tabs"><label for="aud-humans">For humans</label><span aria-hidden="true"></span><label for="aud-agents">For agents</label></div>
+<div class="aud-panel aud-humans">${pill(m.install, 'Copy install command')}</div>
+<div class="aud-panel aud-agents">${pill(audience.agents, 'Copy agent command')}
+<p class="aud-links"><a href="/llms.txt">${glyph('file', 14)}llms.txt</a><a href="/AGENTS.md">${glyph('file', 14)}AGENTS.md</a><button type="button" data-copy-md="/index.md">${glyph('copy', 14)}<span data-say>Copy page as Markdown</span></button></p></div>
 </div>
 <p class="version">Currently v${escapeHtml(m.version)}</p>
+</div>
+</section>`;
+}
+
+function splitDemo(m: Model): string {
+	const input = resolve(m.blocks, split.input.ref);
+	const handler = resolve(m.blocks, split.handler.ref);
+	return `<section class="split-wrap" aria-label="From scaffold to schema">
+<div class="split">
+<figure class="demo sframe"><figcaption class="bar">${glyph('terminal', 14)}<span>${escapeHtml(split.input.label)}</span></figcaption>
+<pre class="term"><code><span class="prompt">~ </span><span class="typed">${escapeHtml(input.title.slice(2))}</span>
+${escapeHtml(input.code)}</code></pre></figure>
+<figure class="demo sframe"><figcaption class="bar">${glyph('file', 14)}<span>${escapeHtml(split.handler.label)}</span></figcaption>${highlight(m.hl, handler.code, handler.lang)}</figure>
+</div>
+</section>`;
+}
+
+function figuresRow(m: Model): string {
+	return `<section class="figures" aria-label="Counted from the repository">
+<div class="shell"><dl>${figures
+		.map((f, i) => `<div><dt>${escapeHtml(f.label)}</dt><dd>${m.counts[i]}</dd></div>`)
+		.join('')}</dl></div>
+</section>`;
+}
+
+function ecosystemBand(m: Model): string {
+	return `<section class="section eco" id="ecosystem" aria-labelledby="ecosystem-title">
+<div class="shell">
+<h2 id="ecosystem-title">${escapeHtml(ecosystem.title)}</h2>
+<p class="eco-lede">${inline(m, ecosystem.lede)}</p>
+<ul class="eco-marks">${ecosystem.marks
+		.map((e) => `<li><a href="${e.href}" rel="noopener" title="${escapeHtml(e.label)}">${ecoIcon(e.name)}<span class="sr">${escapeHtml(e.label)}</span></a></li>`)
+		.join('')}</ul>
+</div>
+</section>`;
+}
+
+function principlesStrip(m: Model): string {
+	return `<section class="principles" aria-label="Principles">
+<div class="shell"><ul>${principles
+		.map((p) => `<li><h3>${escapeHtml(p.title)}</h3><p>${inline(m, p.body)}</p></li>`)
+		.join('')}</ul></div>
+</section>`;
+}
+
+function showcaseSection(m: Model): string {
+	const tabs = showcase.tabs.map((t, i) => ({ ...t, id: `tab-${t.label.toLowerCase()}`, r: resolve(m.blocks, t.ref), i }));
+	return `<section class="section showcase" id="showcase" aria-labelledby="showcase-title">
+<div class="shell sc-grid">
+<div class="sc-copy">
+<h2 id="showcase-title">${escapeHtml(showcase.title)}</h2>
+<p class="prose">${inline(m, showcase.body)}</p>
+<a class="control control--solid pill-btn" href="/reference">${glyph('book')}Visit Documentation</a>
+<p class="supports-cap">Supports</p>
+<div class="supports"><ul>${showcase.supports
+		.map((n) => {
+			const e = ecosystem.marks.find((x) => x.name === n);
+			return `<li title="${escapeHtml(e?.label ?? n)}">${ecoIcon(n, 20)}<span class="sr">${escapeHtml(e?.label ?? n)}</span></li>`;
+		})
+		.join('')}</ul><span>${escapeHtml(showcase.more)}</span></div>
+</div>
+<div class="sc-tabs">
+${tabs.map((t) => `<input type="radio" name="showcase" id="${t.id}" class="sr"${t.i === 0 ? ' checked' : ''}>`).join('')}
+<div class="tabrow">${tabs.map((t) => `<label for="${t.id}">${escapeHtml(t.label)}</label>`).join('')}</div>
+${tabs
+	.map(
+		(t) =>
+			`<figure class="demo sc-frame sc-${t.i}"><figcaption class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="fname">${escapeHtml(t.r.title)}</span>${copyButton(t.r.code, `Copy ${t.r.title}`)}</figcaption><div class="sc-body">${highlight(m.hl, t.r.code, t.r.lang)}</div></figure>`,
+	)
+	.join('\n')}
+<div class="pager" aria-hidden="true">${tabs.map((t) => `<label for="${t.id}"></label>`).join('')}</div>
+</div>
+</div>
+</section>`;
+}
+
+function buildTodayBand(): string {
+	const cmd = buildToday.scaffold.kind === 'terminal' ? buildToday.scaffold.command : '';
+	return `<section class="today" aria-labelledby="today-title">
+<div class="shell today-row">
+<h2 id="today-title">${escapeHtml(buildToday.title)}</h2>
+<div class="today-actions"><a class="control control--solid pill-btn" href="/reference">${glyph('book')}Documentation</a>${pill(cmd, 'Copy scaffold command', ' pill--outline')}</div>
+</div>
+</section>`;
+}
+
+function guidesSection(m: Model): string {
+	return `<section class="section" id="guides" aria-labelledby="guides-title">
+<div class="shell">
+<h2 id="guides-title">Guides</h2>
+<ul class="guides">${guides
+		.map((g) => {
+			const r = resolve(m.blocks, g.ref);
+			return `<li><a class="guide" href="${g.href}"><h3>${escapeHtml(g.title)}</h3><p>${escapeHtml(g.body)}</p><div class="tilt" aria-hidden="true">${highlight(m.hl, r.code, r.lang)}</div></a></li>`;
+		})
+		.join('')}</ul>
 </div>
 </section>`;
 }
@@ -307,7 +450,19 @@ function jsonLd(m: Model, path: string) {
 }
 
 function landing(m: Model): string {
-	const body = [hero(m), ...capabilities.map((c) => section(m, c)), boundariesSection(m), startSection(m)].join('\n');
+	const body = [
+		hero(m),
+		splitDemo(m),
+		figuresRow(m),
+		ecosystemBand(m),
+		principlesStrip(m),
+		showcaseSection(m),
+		...capabilities.map((c) => section(m, c)),
+		boundariesSection(m),
+		startSection(m),
+		guidesSection(m),
+		buildTodayBand(),
+	].join('\n');
 	return shell(m, {
 		title: `${page.name} — ${page.tagline}`,
 		description: page.description,
@@ -364,6 +519,18 @@ ${page.lede}
 
 Currently v${m.version}. Install: \`${m.install}\`
 
+${figures.map((f, i) => `- **${m.counts[i]}** ${f.label.toLowerCase()}`).join('\n')}
+
+## Principles
+
+${principles.map((p) => `- **${p.title}.** ${p.body}`).join('\n')}
+
+## ${showcase.title}
+
+${showcase.body}
+
+${showcase.tabs.map((t) => `**${t.label}**\n\n${fenceFor(m, t.ref)}`).join('\n\n')}
+
 ${capabilities.map((c) => capabilityMd(m, c)).join('\n\n')}
 
 ${boundariesMd()}
@@ -375,6 +542,10 @@ ${start.body}
 ${fenceFor(m, start.install)}
 
 ${fenceFor(m, start.gate)}
+
+## Guides
+
+${guides.map((g) => `- [${g.title}](${url(g.href.split('#')[0] ?? '/')}#${g.href.split('#')[1]}): ${g.body}`).join('\n')}
 
 ## Links
 

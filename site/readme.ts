@@ -5,7 +5,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Ref } from './content.ts';
+import type { FigureSource, Ref } from './content.ts';
 
 export const siteDir = import.meta.dirname;
 export const rootDir = path.resolve(siteDir, '..');
@@ -129,4 +129,23 @@ export function referenceBody(md: string): string {
 	const body = first === -1 ? md : md.slice(first + 1);
 	return body
 		.replace(/\]\(\.\/([^)]+)\)/g, '](https://github.com/TimMikeladze/graphx/blob/main/$1)');
+}
+
+/** A figure, counted from the repository. Throws when its source is missing, like a reference. */
+export async function countFigure(md: string, source: FigureSource): Promise<number> {
+	if (source.kind === 'table') return readTable(md, source.header).rows.length;
+	if (source.kind === 'subsections') {
+		const start = md.indexOf(`\n## ${source.section}\n`);
+		if (start === -1) throw new Error(`figure: no README section "${source.section}"`);
+		const rest = md.slice(start + 1);
+		const end = rest.indexOf('\n## ');
+		const body = end === -1 ? rest : rest.slice(0, end);
+		return [...body.matchAll(/^### /gm)].length;
+	}
+	if (source.kind === 'lines') {
+		const hit = resolve(fencedBlocks(md), { kind: 'snippet', line: source.line, label: '' });
+		return hit.code.split('\n').filter((l) => l.startsWith(source.prefix)).length;
+	}
+	const pkg = JSON.parse(await readFile(path.join(rootDir, 'packages/graphx/package.json'), 'utf8'));
+	return Object.keys(pkg.dependencies ?? {}).length;
 }

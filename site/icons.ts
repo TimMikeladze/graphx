@@ -4,6 +4,9 @@
  * (simple-icons, CC0) that fill with currentColor.
  */
 
+import * as si from 'simple-icons';
+import type { EcoName } from './content.ts';
+
 /** Real marks, solid. LinkedIn is from simple-icons v13, the last release that shipped it. */
 export const BRAND_PATHS = {
 	github: "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12",
@@ -14,6 +17,28 @@ export const BRAND_PATHS = {
 
 export type BrandName = keyof typeof BRAND_PATHS;
 
+const ECO: Record<EcoName, { path: string }> = {
+	sqlite: si.siSqlite,
+	postgresql: si.siPostgresql,
+	duckdb: si.siDuckdb,
+	bun: si.siBun,
+	nodedotjs: si.siNodedotjs,
+	webassembly: si.siWebassembly,
+	expo: si.siExpo,
+	react: si.siReact,
+	reactquery: si.siReactquery,
+	zod: si.siZod,
+	hono: si.siHono,
+	openapiinitiative: si.siOpenapiinitiative,
+	modelcontextprotocol: si.siModelcontextprotocol,
+	ollama: si.siOllama,
+};
+
+/** An ecosystem mark. Every one is single-colour in simple-icons, so all stay currentColor. */
+export function ecoIcon(name: EcoName, size = 40): string {
+	return `<svg class="icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="currentColor" aria-hidden="true" focusable="false"><path d="${ECO[name].path}"/></svg>`;
+}
+
 /** One stroked set: 24 grid, 1.7 stroke, round caps. Buttons and controls carry one. */
 export const GLYPH_PATHS = {
 	copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
@@ -23,6 +48,8 @@ export const GLYPH_PATHS = {
 	sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
 	moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>',
 	monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+	terminal: '<path d="m5 8 4 4-4 4"/><path d="M12 17h7"/>',
+	arrow: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
 	file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
 } as const;
 

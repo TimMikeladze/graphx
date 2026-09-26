@@ -1,7 +1,7 @@
 {
 	"name": "graphx-site",
 	"private": true,
-	"description": "The graphx.sh landing page and reference \u2014 generated from the root README into public/.",
+	"description": "The graphx.sh landing page and reference — generated from the root README into public/.",
 	"homepage": "https://graphx.sh",
 	"bugs": {
 		"url": "https://github.com/TimMikeladze/graphx/issues"
@@ -24,16 +24,17 @@
 		"test": "bun test"
 	},
 	"devDependencies": {
+		"@fontsource/geist-mono": "^5.3.0",
+		"@fontsource/geist-sans": "^5.3.0",
 		"@resvg/resvg-wasm": "^2.6.2",
 		"@shikijs/langs": "^3.13.0",
 		"@shikijs/themes": "^3.13.0",
+		"@types/bun": "latest",
 		"@types/node": "^22.10.2",
 		"marked": "^16.4.0",
 		"satori": "^0.29.0",
 		"shiki": "^3.13.0",
-		"typescript": "^5.9.3",
-		"@fontsource/geist-mono": "^5.3.0",
-		"@fontsource/geist-sans": "^5.3.0",
-		"@types/bun": "latest"
+		"simple-icons": "^16.31.0",
+		"typescript": "^5.9.3"
 	}
 }

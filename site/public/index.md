@@ -4,6 +4,91 @@
 
 Currently v0.1.0. Install: `bun add graphx`
 
+- **16** entry points, one package
+- **4** server backends
+- **9** cli commands
+- **10** runtime dependencies
+
+## Principles
+
+- **One schema, no codegen.** Writes, routes, hooks and MCP tools infer from one `Schema` type. There is no generate step to forget.
+- **Nothing is erased.** A delete closes a `valid_to` interval. Any read takes `asOf` and reconstructs that instant exactly.
+- **One contract everywhere.** Every type, route and payload is identical across backends. The README examples compile against the build.
+
+## Write it, query it, serve it
+
+The same `Graph` object writes, reads and walks. `match` compiles a typed pattern to one SQL statement, and `createApp` serves all of it with a generated OpenAPI contract.
+
+**Write**
+
+```ts
+import { getDb, init, Graph, hashEmbed } from 'graphx';
+import { schema } from './graphx.config.ts';
+
+const embedder = hashEmbed();
+const db = getDb('acme__alpha'); // one cached client per namespace (tenant)
+await init(db, embedder); // tables, indexes, and the vector table at the embedder's width
+const g = new Graph(db, schema, { embedder });
+
+const site = await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+const gw = await g.addNode({
+	type: 'gateway',
+	data: { name: 'gw-1', firmware: '2.1.0' },
+	body: 'free text — indexed for FTS and embedded for vector search by the graph itself',
+});
+await g.addEdge({ rel: 'deployedAt', src: gw.id, dst: site.id });
+```
+
+**Query**
+
+```ts
+// GraphRAG: vector seeds, then a time-respecting walk out from them
+await g.retrieve({ query: 'overheating sensor', k: 10, maxDepth: 2 });
+
+// Pattern match — rows typed per alias, no codegen
+const q = await match(schema, db)
+	.node('g', 'gateway')
+	.out('raised')
+	.node('a', 'alert')
+	.select('g', 'a');
+const rows = await q.run(); // rows[0].g.data, rows[0].a.data
+
+// Time travel: every version of a node, and what moved between two instants
+await history(db, id);
+await diff(db, t1, t2);
+```
+
+**Serve**
+
+```ts
+const { app, tenant, project, user } = await createApp({
+	schema,
+	embedder: hashEmbed(),
+	db: 'iot_demo',
+	cors: true,
+	openapi: { title: 'iot-fleet', servers: [{ url: 'http://localhost:8899' }] },
+	seed: async (g) => {
+		await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+	},
+});
+
+Bun.serve({ port: 8899, fetch: app.fetch });
+```
+
+**Production**
+
+```ts
+const app = createApp({
+	control, // the shared registry of tenants, projects and memberships
+	schema,
+	embedder: openai(),
+	authenticate: async (c) => verifyJwt(c.req.header('authorization')), // → { userId, tenantId }
+	limits: { maxRows: 5_000 },
+	metrics,
+	readiness, // /ready stays 503 until sync-before-serve finishes
+});
+```
+
 ## One schema, no codegen
 
 Describe nodes and edges with Zod objects in `defineGraphSchema`. Typed writes, pattern matching, HTTP routes, hooks and MCP tools are all inferred from that one `Schema` type, so there is no generate step to run.
@@ -323,6 +408,12 @@ bun run bench     # the benchmark suites
 bun run bench:benchable --latest --out bench/benchable.json  # newest result as a Benchable run
 bunx benchable submit --metrics bench/benchable.json           # send it (BENCHABLE_KEY, or benchable login)
 ```
+
+## Guides
+
+- [Time travel](https://graphx.sh/reference#time-travel): History, diffs and the change feed.
+- [Ingest a vault](https://graphx.sh/reference#ingest): Markdown and wikilinks into typed edges.
+- [Judgments with Jev](https://graphx.sh/reference#judgments-with-jev): Rerank, dedupe and type links by meaning.
 
 ## Links
 
