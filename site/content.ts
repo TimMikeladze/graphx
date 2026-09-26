@@ -96,7 +96,7 @@ export const page = {
 	/** Inline markdown. Three facts: what it is, what it is built on, who made it. */
 	lede:
 		'`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, ' +
-		'and packed with retrieval, traversal and serving. Made by [linesofcode](https://x.com/linesofcode).',
+		'and packed with retrieval, traversal and serving.',
 	/** The description meta: the lede's first sentence, extended to be useful in a result list. */
 	description:
 		'graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.',

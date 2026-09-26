@@ -2,7 +2,7 @@
 
 > graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.
 
-`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, and packed with retrieval, traversal and serving. Made by [linesofcode](https://x.com/linesofcode).
+`graphx` is an open source temporal graph for TypeScript. Built on [Zod](https://zod.dev), typed end to end, and packed with retrieval, traversal and serving.
 
 ## One schema, no codegen
 
