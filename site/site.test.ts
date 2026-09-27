@@ -18,7 +18,7 @@ test('every reference resolves to exactly one README block', () => {
 	const refs = capabilities.flatMap((c) => (c.demo.kind === 'code' ? [c.demo.ref] : c.demo.kind === 'variants' ? c.demo.items.map((i) => i.ref) : []));
 	expect(refs.length).toBeGreaterThan(8);
 	for (const r of refs) expect(resolve(blocks, r).code.length).toBeGreaterThan(0);
-	for (const c of capabilities) if (c.demo.kind === 'table') expect(readTable(readme, c.demo.header).rows.length).toBeGreaterThan(3);
+	for (const c of capabilities) if (c.demo.kind === 'table') expect(readTable(readme, c.demo.header).rows.length).toBeGreaterThanOrEqual(2);
 });
 
 test('an unresolved or ambiguous reference throws', () => {

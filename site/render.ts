@@ -280,11 +280,13 @@ function renderDemo(m: Model, cap: Capability): string {
 
 function section(m: Model, cap: Capability): string {
 	return `<section class="section" id="${cap.id}" aria-labelledby="${cap.id}-title">
-<div class="shell">
+<div class="shell${cap.demo.kind === 'code' ? ' cap-split' : ''}">
+<div class="cap-text">
 <h2 id="${cap.id}-title">${escapeHtml(cap.title)}</h2>
 <p class="prose">${inline(m, cap.body)}</p>
-${renderDemo(m, cap)}
 ${cap.aside ? `<p class="aside">${inline(m, cap.aside)}</p>` : ''}
+</div>
+${renderDemo(m, cap)}
 </div>
 </section>`;
 }

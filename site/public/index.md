@@ -117,6 +117,48 @@ const schema = defineGraphSchema({
 type Schema = typeof schema;
 ```
 
+## Typed writes, versioned
+
+Call `addNode`, `updateNode` and `addEdge` with data checked against the schema. Pass `expectedRevision` and a concurrent writer surfaces as `RevisionConflict` instead of a silent overwrite.
+
+```ts
+const gw = await g.addNode({
+	type: 'gateway',
+	data: { name: 'gw-1', firmware: '2.1.0' },
+	body: '…',
+});
+
+await g.updateNode(gw.id, { data: { firmware: '2.2.0' } }); // shallow merge, opens a new version
+await g.updateNode(gw.id, { body: 'edited' }); // the embedding input changed ⇒ re-embedded
+await g.addEdge({ rel: 'raised', src: gw.id, dst: alert.id, data: { at: Date.now() } });
+await g.deleteEdge(edgeId);
+await g.deleteNode(gw.id); // closes the version and drops its vectors; the history is kept
+```
+
+## Bulk loading in batches
+
+`bulkLoad` and `bulkEdges` insert history-shaped rows with a shared `loadTs` and batched embedding. On libSQL the ANN index and FTS trigger are rebuilt once, after the load.
+
+```ts
+import { bulkLoad, bulkEdges } from 'graphx';
+
+await bulkLoad(db, schema, rows, { embedder, chunkSize: 500 });
+await bulkEdges(db, schema, edgeRows);
+```
+
+## Group writes into one commit
+
+`Graph.write(fn)` folds a body into one DuckDB snapshot commit. On SQLite and libSQL, `Graph.atomic(fn)` runs one callback inside a single transaction.
+
+```ts
+await g.write(async (graph) => {
+	await graph.addNode({ type: 'site', data: { name: 'eu-west-1', region: 'eu' } });
+	await graph.addNode({ type: 'gateway', data: { name: 'gw-2', firmware: '2.2.0' } });
+});
+
+const note = await g.atomic((scope) => scope.addNode({ type: 'note', data: { path: 'A.md' } }));
+```
+
 ## Every write is bitemporal
 
 Versions carry `valid_from` and `valid_to`, so a delete closes an interval instead of erasing a row. Pass `asOf` to any read to see the graph as it stood at that instant.
@@ -139,6 +181,19 @@ asOf t0    [
 
 Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` from `graphx/react`.
 
+## History, diffs and a change feed
+
+`history`, `diff`, `changeFeed` and `timeline` read the append-only log. `diff(db, t1, t2)` returns the nodes and edges added, changed and removed between two instants.
+
+```ts
+import { history, diff, changeFeed, timeline } from 'graphx';
+
+await history(db, id); // every version of a node, oldest first
+await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants
+await changeFeed(db, cursor, { limit: 500 }); // CDC: keyset stream of node + edge versions
+await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks
+```
+
 ## Vector, text and graph together
 
 Call `hybridRetrieve` to fuse vector and full-text results with reciprocal rank fusion, then walk out from the seeds along edges valid at that time. Each row says which leg matched it in `via`.
@@ -155,6 +210,22 @@ await g.hybridRetrieve({
 	rerank: async (query, candidates) => …, // optional — jevRerank() below, or your own
 	mmr: { k: 10, lambda: 0.7 }, // optional diversification
 });
+```
+
+## Every read takes asOf
+
+`getNode`, `neighbors`, `listNodes` and `listEdges` all accept `asOf`, `limits` and `metrics`. Served over HTTP, `ServeConfig.limits` caps them and a client cannot raise it.
+
+```ts
+await g.getNode(id); // AnyNode<S> | null
+await g.getNodeVersion(id); // the version row: data, body, uri, revision, valid_from/valid_to
+await g.getNodeContent(id); // body + content_type + hash
+await g.neighbors(id, { rels: ['deployedAt'], direction: 'forward' }); // AnyNode[]
+await g.neighborsPage(id, { rels: ['raised'], limit: 100 }); // keyset-paginated
+await g.listNodes({ type: 'alert', q: 'overheating', limit: 50 }); // { nodes, nextCursor }
+await g.listNodeVersions({ type: 'alert', limit: 50 }); // the same page, each row with body + revision
+await g.listEdges({ rel: 'raised', source: 'jev' }); // { edges: [{ id, src, dst, weight, data, … }] }
+await g.graphSlice({ type: 'gateway' }); // canvas projection: ids, labels, links
 ```
 
 ## Typed pattern matching
@@ -174,6 +245,25 @@ const rows = await q.run(); // rows[0].d.data and rows[0].a.data are typed per a
 const page = await q.page({ limit: 100 }); // keyset pagination over the same pattern
 ```
 
+## Walks, paths and PageRank
+
+`journey` follows only edges valid at each step. `pagerank`, `community` and `centrality` run over a compressed mirror and persist their scores, so `topNodes` reads them back.
+
+```ts
+import { journey, shortestPath, pagerank, community, centrality, topNodes, buildCSR } from 'graphx';
+
+// A time-respecting walk: only edges valid at each step are followed. `from` (epoch ms) is required.
+await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
+
+await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
+await pagerank(db, { damping: 0.85 }); // Map<id, score>
+await community(db); // label propagation → Map<id, community>
+await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
+await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
+await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
+await buildCSR(db); // the compressed mirror the analytics run over, if you want it directly
+```
+
 ## The graph owns embedding
 
 Every write embeds through the graph’s `embedder`, and re-embeds only when the input hash changes. Run `graphx doctor` to see the stored model, its width and how many nodes are stale.
@@ -187,6 +277,45 @@ live nodes     3
 embedded       3  (3 vector rows)
 unembedded     0
 stale          0
+```
+
+## Any embedder, one fetch
+
+`graphx/embedders` ships `openai`, `voyage` and `ollama` as single `fetch` calls with no dependency. `hashEmbed` and `fixtureEmbed` run offline, and `defineEmbedder` wraps anything else.
+
+```ts
+import { openai, voyage, ollama } from 'graphx/embedders';
+import { hashEmbed, fixtureEmbed, defineEmbedder } from 'graphx';
+
+openai('text-embedding-3-small'); // OPENAI_API_KEY, optional `dim`, `baseUrl`, `batchSize`
+voyage('voyage-3'); // VOYAGE_API_KEY
+ollama('nomic-embed-text'); // local, no key
+hashEmbed(); // deterministic and model-free — tests, demos, offline
+fixtureEmbed({ path: './fixtures/emb.json' }); // record real vectors once, replay them offline
+defineEmbedder({ id: 'acme:v1', embed: async (texts) => … }); // anything else
+```
+
+## Durable triggers on an outbox
+
+Set `events: { outbox: true }` and each event is co-written in the mutation’s own transaction. A `TriggerRunner` delivers at least once, retries, and keeps `deadLetters`.
+
+```ts
+import { TriggerRunner, embedTrigger, webhookAction, deadLetters } from 'graphx';
+
+const runner = new TriggerRunner(g, {
+	name: 'alerts',
+	triggers: [
+		{
+			name: 'notify',
+			match: { op: 'node.create', label: 'alert' }, // an absent field matches anything
+			action: webhookAction({ url: 'https://example.com/hook', secret: process.env.HOOK }),
+			retries: 5,
+		},
+		embedTrigger(), // the other half of `embedding: 'lazy'`
+	],
+});
+await runner.runOnce(); // or .start() to poll
+await deadLetters(db, { subscription: 'alerts' }); // what exhausted its retries, and why
 ```
 
 ## Backend is configuration
@@ -338,6 +467,107 @@ await auth.expand('doc:readme', 'viewer'); // the userset tree
 await auth.listObjects('user:tim', 'viewer', 'doc', { limit: 100 }); // keyset-paginated
 ```
 
+## Ingest a markdown vault
+
+`ingestDir` turns frontmatter into node data and `[[wikilinks]]` into typed edges. Re-running is a diff: unchanged files are skipped by content hash, and `prune: true` retracts deleted ones.
+
+```ts
+import { ingestDir, watchDir } from 'graphx/ingest';
+
+await ingestDir({
+	dir: './vault',
+	graph: g,
+	source: 'notes', // namespaces the node `uri`, so two vaults never reconcile each other
+	idField: 'id', // frontmatter key giving stable identity across renames
+	edgeFields: { author: 'written_by' }, // frontmatter field → typed edge
+	assets: { type: 'asset' }, // ![[embeds]] become nodes
+	dangling: { type: 'stub' }, // links to unwritten notes become stubs
+	tags: { type: 'tag' }, // #tags become shared nodes (off by default — they make hubs)
+	prune: true, // retract nodes whose files vanished, scoped to this source
+});
+```
+
+## Large bodies in a blob store
+
+`createBlobStore` puts bytes in S3, content-addressed, and hands back a `uri` for the node. `presign` issues a short-lived URL and `gc` drops what no live node references.
+
+```ts
+import { createBlobStore } from 'graphx/blob';
+
+const blobs = createBlobStore({ client: s3, bucket: 'graphx', inlineLimit: 32_768 });
+const ref = await blobs.put(bytes, 'application/pdf');
+await g.addNode({ type: 'doc', data: { title }, uri: ref.uri, content_hash: ref.hash });
+await blobs.presign(ref.uri, 900); // a short-lived download URL
+await blobs.gc(liveHashes); // drop what no live node references
+```
+
+## Typed judgments with Jev
+
+`createJev` asks typed questions about one state in one request: `choice`, `noul` and `score`. Every answer is typed from its question and carries a confidence to gate on.
+
+```ts
+import { choice, createJev, noul, score } from 'graphx/jev';
+
+const jev = createJev(); // model 'jev-latest'; retries 429, 529 and 5xx with backoff
+const { answers } = await jev.ask(
+	{ alert: 'gw-7 probe read 96C, fan failed' },
+	{
+		team: choice('Which team owns this?', { hardware: null, firmware: null, network: null }),
+		urgent: noul('Does this need action today?'),
+		severity: score('How severe is it?', ['cosmetic', 'degraded', 'down']),
+	},
+);
+answers.team.choice; // 'hardware' | 'firmware' | 'network', plus probabilities and confidence
+answers.urgent.noul; // probability of yes
+answers.severity.score; // 0–2, landing between levels
+```
+
+## Rerank by meaning
+
+Pass `rerank: jevRerank()` to `hybridRetrieve`. It asks one relevance question per candidate in parallel, and `onError: 'keep'` falls back to the fused order.
+
+```ts
+import { jevRerank } from 'graphx/jev';
+
+// Reads TYPESAFE_API_KEY
+await g.hybridRetrieve({ query: 'overheating sensor', k: 10, rerank: jevRerank() });
+
+jevRerank({
+	minScore: 0.2, // drop candidates Jev judges unlikely to be relevant
+	concurrency: 8, // requests in flight
+	onError: 'keep', // an outage returns the fused order instead of failing the search
+	guard: { onFlagged: (c, p) => console.warn('injection', c.id, p) }, // see below
+});
+```
+
+## Rerank, measured
+
+`examples/pantheon-graph/eval-rerank.ts` hides 171 figures among 1,533 records described in different words. Adding `jevRerank` doubles top-1 over the lexical `hashEmbed` baseline.
+
+| retrieval | top-1 | top-3 | top-10 | MRR |
+| --- | --- | --- | --- | --- |
+| `hybridRetrieve` | 35% | 50% | 65% | 0.449 |
+| `hybridRetrieve` + rerank | 70% | 77% | 77% | 0.730 |
+
+## Resolve duplicate entities
+
+`resolveEntities` finds likely pairs with graph search and asks Jev whether to leave, review or link each one. There is no threshold to tune, and `rels` writes the `sameAs` edges.
+
+```ts
+import { judgePairs, resolveEntities } from 'graphx/jev';
+
+const report = await resolveEntities(g, {
+	type: 'deity',
+	fields: ['name', 'pantheon'], // what Jev sees and compares — leave `source` out
+	candidates: 5, // nearest same-type neighbours judged per node
+	rels: { same: 'sameAs', review: 'maybeSameAs' }, // omit to report without writing
+});
+report.pairs.filter((p) => p.outcome === 'review'); // the curator's queue, with per-field agreement
+
+// Or judge pairs you already have — an audit of an earlier matcher's links, say.
+await judgePairs(g, [[srcId, dstId]], { fields: ['name', 'pantheon'] });
+```
+
 ## One package, many entry points
 
 Everything is a subpath of `graphx`, and each is a separate entry point. An optional peer such as `pg` only lands on your import path if you import `graphx/pg`.
@@ -361,6 +591,22 @@ Everything is a subpath of `graphx`, and each is a separate entry point. An opti
 | `graphx/auth` | Relationship-based access control (ReBAC) on graphx |
 | `graphx/cli` | The `graphx` binary |
 
+## Nine commands, one config
+
+Every command except `new` loads `graphx.config.ts`. `serve`, `mcp` and `triggers` run the graph; `doctor`, `reembed` and `dedupe` maintain it.
+
+```
+graphx new      <dir>                     Scaffold a starter project
+graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs
+graphx ingest   <dir> [options]           Ingest a vault into the graph
+graphx triggers [-c config]               Run declarative triggers over the event outbox
+graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
+graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
+graphx doctor   [-c config]               Embedding model, width and health of the namespace
+graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
+graphx ask      "<question>" [-c config]  Plan a plain-language question as a graph call, and run it
+```
+
 ## Boundaries
 
 Three lists, counted. The first is exercised by the test suite, the second is opinion, and the third is what you should not assume.
@@ -380,7 +626,7 @@ Three lists, counted. The first is exercised by the test suite, the second is op
 
 ### What is not here yet (4)
 
-- No benchmark figures on this page. `bun run bench` exists, but the README holds no captured run to reference.
+- No storage or latency benchmarks on this page. `bun run bench` exists, but the README holds no captured run to reference.
 - DuckDB allows one writer process per namespace; two rewriting the same table raise `SnapshotConflictError`.
 - `Graph.atomic` needs a namespace with no embeddings, and browser writers can still hit `SQLITE_BUSY`.
 - The admin SPA is not published. It runs from the repository.

@@ -255,7 +255,28 @@ export const capabilities: Capability[] = [
 		body:
 			'Describe nodes and edges with Zod objects in `defineGraphSchema`. Typed writes, pattern matching, HTTP routes, hooks and MCP tools are all inferred from that one `Schema` type, so there is no generate step to run.',
 		demo: { kind: 'code', ref: snippet('type Schema = typeof schema;', 'graphx.config.ts') },
+	},	{
+		id: 'writing',
+		title: 'Typed writes, versioned',
+		body:
+			'Call `addNode`, `updateNode` and `addEdge` with data checked against the schema. Pass `expectedRevision` and a concurrent writer surfaces as `RevisionConflict` instead of a silent overwrite.',
+		demo: { kind: 'code', ref: snippet("await g.updateNode(gw.id, { data: { firmware: '2.2.0' } }); // shallow merge, opens a new version", 'app.ts') },
 	},
+	{
+		id: 'bulk-load',
+		title: 'Bulk loading in batches',
+		body:
+			'`bulkLoad` and `bulkEdges` insert history-shaped rows with a shared `loadTs` and batched embedding. On libSQL the ANN index and FTS trigger are rebuilt once, after the load.',
+		demo: { kind: 'code', ref: snippet('await bulkLoad(db, schema, rows, { embedder, chunkSize: 500 });', 'load.ts') },
+	},
+	{
+		id: 'grouped-writes',
+		title: 'Group writes into one commit',
+		body:
+			'`Graph.write(fn)` folds a body into one DuckDB snapshot commit. On SQLite and libSQL, `Graph.atomic(fn)` runs one callback inside a single transaction.',
+		demo: { kind: 'code', ref: snippet("const note = await g.atomic((scope) => scope.addNode({ type: 'note', data: { path: 'A.md' } }));", 'atomic.ts') },
+	},
+
 	{
 		id: 'bitemporal',
 		title: 'Every write is bitemporal',
@@ -263,28 +284,63 @@ export const capabilities: Capability[] = [
 			'Versions carry `valid_from` and `valid_to`, so a delete closes an interval instead of erasing a row. Pass `asOf` to any read to see the graph as it stood at that instant.',
 		demo: { kind: 'code', ref: terminal('bun run examples/basic-demo.ts') },
 		aside: 'Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` from `graphx/react`.',
+	},	{
+		id: 'history',
+		title: 'History, diffs and a change feed',
+		body:
+			'`history`, `diff`, `changeFeed` and `timeline` read the append-only log. `diff(db, t1, t2)` returns the nodes and edges added, changed and removed between two instants.',
+		demo: { kind: 'code', ref: snippet('await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants', 'time.ts') },
 	},
+
 	{
 		id: 'retrieval',
 		title: 'Vector, text and graph together',
 		body:
 			'Call `hybridRetrieve` to fuse vector and full-text results with reciprocal rank fusion, then walk out from the seeds along edges valid at that time. Each row says which leg matched it in `via`.',
 		demo: { kind: 'code', ref: snippet('rrfK: 60,', 'retrieve.ts') },
+	},	{
+		id: 'reads',
+		title: 'Every read takes asOf',
+		body:
+			'`getNode`, `neighbors`, `listNodes` and `listEdges` all accept `asOf`, `limits` and `metrics`. Served over HTTP, `ServeConfig.limits` caps them and a client cannot raise it.',
+		demo: { kind: 'code', ref: snippet("await g.neighbors(id, { rels: ['deployedAt'], direction: 'forward' }); // AnyNode[]", 'read.ts') },
 	},
+
 	{
 		id: 'pattern-matching',
 		title: 'Typed pattern matching',
 		body:
 			'Chain `match(schema, db)` with `.node()`, `.out()` and `.in()`. It compiles to one SQL statement and returns rows typed per alias, with `page()` for keyset pagination over the same pattern.',
 		demo: { kind: 'code', ref: snippet("const page = await q.page({ limit: 100 });", 'match.ts') },
+	},	{
+		id: 'algorithms',
+		title: 'Walks, paths and PageRank',
+		body:
+			'`journey` follows only edges valid at each step. `pagerank`, `community` and `centrality` run over a compressed mirror and persist their scores, so `topNodes` reads them back.',
+		demo: { kind: 'code', ref: snippet("await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics", 'algorithms.ts') },
 	},
+
 	{
 		id: 'embeddings',
 		title: 'The graph owns embedding',
 		body:
 			'Every write embeds through the graph’s `embedder`, and re-embeds only when the input hash changes. Run `graphx doctor` to see the stored model, its width and how many nodes are stale.',
 		demo: { kind: 'code', ref: terminal('graphx doctor') },
+	},	{
+		id: 'embedders',
+		title: 'Any embedder, one fetch',
+		body:
+			'`graphx/embedders` ships `openai`, `voyage` and `ollama` as single `fetch` calls with no dependency. `hashEmbed` and `fixtureEmbed` run offline, and `defineEmbedder` wraps anything else.',
+		demo: { kind: 'code', ref: snippet("ollama('nomic-embed-text'); // local, no key", 'embedders.ts') },
 	},
+	{
+		id: 'triggers',
+		title: 'Durable triggers on an outbox',
+		body:
+			'Set `events: { outbox: true }` and each event is co-written in the mutation’s own transaction. A `TriggerRunner` delivers at least once, retries, and keeps `deadLetters`.',
+		demo: { kind: 'code', ref: snippet("await deadLetters(db, { subscription: 'alerts' }); // what exhausted its retries, and why", 'triggers.ts') },
+	},
+
 	{
 		id: 'backends',
 		title: 'Backend is configuration',
@@ -341,14 +397,63 @@ export const capabilities: Capability[] = [
 		body:
 			'`graphx/auth` stores relationship tuples as edges, so `auth.check` is a temporal graph query. Pass `asOf` to ask what a user could do last week.',
 		demo: { kind: 'code', ref: snippet('const auth = new Auth(g, model);', 'auth.ts') },
+	},	{
+		id: 'ingest',
+		title: 'Ingest a markdown vault',
+		body:
+			'`ingestDir` turns frontmatter into node data and `[[wikilinks]]` into typed edges. Re-running is a diff: unchanged files are skipped by content hash, and `prune: true` retracts deleted ones.',
+		demo: { kind: 'code', ref: snippet("edgeFields: { author: 'written_by' }, // frontmatter field → typed edge", 'ingest.ts') },
 	},
+	{
+		id: 'blobs',
+		title: 'Large bodies in a blob store',
+		body:
+			'`createBlobStore` puts bytes in S3, content-addressed, and hands back a `uri` for the node. `presign` issues a short-lived URL and `gc` drops what no live node references.',
+		demo: { kind: 'code', ref: snippet("const ref = await blobs.put(bytes, 'application/pdf');", 'blob.ts') },
+	},
+	{
+		id: 'jev-ask',
+		title: 'Typed judgments with Jev',
+		body:
+			'`createJev` asks typed questions about one state in one request: `choice`, `noul` and `score`. Every answer is typed from its question and carries a confidence to gate on.',
+		demo: { kind: 'code', ref: snippet("answers.team.choice; // 'hardware' | 'firmware' | 'network', plus probabilities and confidence", 'jev.ts') },
+	},
+	{
+		id: 'rerank',
+		title: 'Rerank by meaning',
+		body:
+			"Pass `rerank: jevRerank()` to `hybridRetrieve`. It asks one relevance question per candidate in parallel, and `onError: 'keep'` falls back to the fused order.",
+		demo: { kind: 'code', ref: snippet("onError: 'keep', // an outage returns the fused order instead of failing the search", 'rerank.ts') },
+	},
+	{
+		id: 'rerank-measured',
+		title: 'Rerank, measured',
+		body:
+			'`examples/pantheon-graph/eval-rerank.ts` hides 171 figures among 1,533 records described in different words. Adding `jevRerank` doubles top-1 over the lexical `hashEmbed` baseline.',
+		demo: { kind: 'table', header: 'retrieval' },
+	},
+	{
+		id: 'dedupe',
+		title: 'Resolve duplicate entities',
+		body:
+			'`resolveEntities` finds likely pairs with graph search and asks Jev whether to leave, review or link each one. There is no threshold to tune, and `rels` writes the `sameAs` edges.',
+		demo: { kind: 'code', ref: snippet('candidates: 5, // nearest same-type neighbours judged per node', 'dedupe.ts') },
+	},
+
 	{
 		id: 'entry-points',
 		title: 'One package, many entry points',
 		body:
 			'Everything is a subpath of `graphx`, and each is a separate entry point. An optional peer such as `pg` only lands on your import path if you import `graphx/pg`.',
 		demo: { kind: 'table', header: 'Import' },
+	},	{
+		id: 'cli',
+		title: 'Nine commands, one config',
+		body:
+			'Every command except `new` loads `graphx.config.ts`. `serve`, `mcp` and `triggers` run the graph; `doctor`, `reembed` and `dedupe` maintain it.',
+		demo: { kind: 'code', ref: snippet('graphx doctor   [-c config]               Embedding model, width and health of the namespace', 'graphx --help') },
 	},
+
 ];
 
 /** Three counted columns. Authored judgement, each item backed by a sentence in the README. */
@@ -369,7 +474,7 @@ export const boundaries = {
 		'Calling it “temporal GraphRAG” is our description of retrieve-then-walk, not a benchmarked claim.',
 	],
 	missing: [
-		'No benchmark figures on this page. `bun run bench` exists, but the README holds no captured run to reference.',
+		'No storage or latency benchmarks on this page. `bun run bench` exists, but the README holds no captured run to reference.',
 		'DuckDB allows one writer process per namespace; two rewriting the same table raise `SnapshotConflictError`.',
 		'`Graph.atomic` needs a namespace with no embeddings, and browser writers can still hit `SQLITE_BUSY`.',
 		'The admin SPA is not published. It runs from the repository.',
