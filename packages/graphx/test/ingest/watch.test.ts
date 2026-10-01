@@ -46,15 +46,14 @@ test('watchDir: detects a new file and triggers ingest', async () => {
 	// `fs.watch` is not armed synchronously — on a loaded CI runner the registration can land
 	// after a single write, and that event is then lost forever. Rewriting keeps producing
 	// events until one is observed; ingest is content-hashed, so the repeats are no-ops.
+	// Wait for `onRun` too: the node row lands mid-ingest, before the run reports completion.
 	const deadline = Date.now() + 5000;
 	let found = false;
 	while (Date.now() < deadline) {
 		await writeFile(join(dir, 'b.md'), '---\ntype: note\ntitle: B\n---\nbeta');
 		const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
-		if (Number(rows.rows[0]!.c) >= 2) {
-			found = true;
-			break;
-		}
+		found = Number(rows.rows[0]!.c) >= 2;
+		if (found && runCount >= 1) break;
 		await new Promise((r) => setTimeout(r, 50));
 	}
 
