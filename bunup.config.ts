@@ -61,7 +61,7 @@ export default defineWorkspace([
 		root: 'packages/graphx',
 		config: {
 			entry: ['src/cli.ts'],
-			banner: '#!/usr/bin/env bun',
+			banner: '#!/usr/bin/env node',
 			sourceBase: './src',
 			clean: false,
 			dts: { inferTypes: true },

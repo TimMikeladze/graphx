@@ -160,9 +160,11 @@
 		"access": "public"
 	},
 	"scripts": {
+		"prepublishOnly": "bun run --cwd ../.. build",
 		"type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.core.json"
 	},
 	"dependencies": {
+		"@hono/node-server": "^2.1.1",
 		"@hono/zod-openapi": "^1.5.1",
 		"@hono/zod-validator": "^0.9.0",
 		"@libsql/client": "^0.17.3",
@@ -239,5 +241,8 @@
 		"typescript": {
 			"optional": true
 		}
+	},
+	"engines": {
+		"node": ">=22.18"
 	}
 }

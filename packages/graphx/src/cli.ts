@@ -484,13 +484,16 @@ export async function buildServeApp(configPath: string): Promise<CreateAppResult
 }
 
 async function runServe(argv: string[]): Promise<void> {
-	const bun = (globalThis as { Bun?: { serve(o: { port: number; fetch: unknown }): unknown } }).Bun;
-	if (!bun) {
-		throw new Error('graphx serve requires the Bun runtime (run with `bun`)');
-	}
 	const args = parseServeArgs(argv);
 	const { app, tenant, project, user } = await buildServeApp(args.config);
-	bun.serve({ port: args.port, fetch: app.fetch });
+	// Bun's native server when the CLI runs under Bun; Node's http module otherwise.
+	const bun = (globalThis as { Bun?: { serve(o: { port: number; fetch: unknown }): unknown } }).Bun;
+	if (bun) {
+		bun.serve({ port: args.port, fetch: app.fetch });
+	} else {
+		const { serve } = await import('@hono/node-server');
+		serve({ port: args.port, fetch: app.fetch });
+	}
 	console.log(
 		`graphx serving on http://localhost:${args.port}\n` +
 			`  GET /demo          → { tenant, project, user }\n` +

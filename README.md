@@ -1192,6 +1192,8 @@ graphx ask      "<question>" [-c config]  Plan a plain-language question as a gr
 ```
 
 Every command except `new` loads `graphx.config.ts` (`--config`, `-c`; default `./graphx.config.ts`).
+The CLI runs on Node >= 22.18 (`npx graphx`), which loads the TypeScript config natively, or on Bun
+(`bunx --bun graphx`).
 
 `ingest` options: `--source <id>`, `--id-field <name>`, `--prune`, `--watch`, `--assets-type <type>`,
 `--edge-field <field=rel>` (repeatable), `--dangling-type <type>`, `--tags-type <type>`.

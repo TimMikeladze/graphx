@@ -1164,7 +1164,9 @@ graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switche
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
 graphx fork     &lt;namespace&gt; [-c config]   Branch the namespace into an empty one (--as-of &lt;ms|ISO&gt;)
 graphx dedupe   &lt;type&gt; [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
-graphx ask      &quot;&lt;question&gt;&quot; [-c config]  Plan a plain-language question as a graph call, and run it</code></pre><p>Every command except <code>new</code> loads <code>graphx.config.ts</code> (<code>--config</code>, <code>-c</code>; default <code>./graphx.config.ts</code>).</p>
+graphx ask      &quot;&lt;question&gt;&quot; [-c config]  Plan a plain-language question as a graph call, and run it</code></pre><p>Every command except <code>new</code> loads <code>graphx.config.ts</code> (<code>--config</code>, <code>-c</code>; default <code>./graphx.config.ts</code>).
+The CLI runs on Node &gt;= 22.18 (<code>npx graphx</code>), which loads the TypeScript config natively, or on Bun
+(<code>bunx --bun graphx</code>).</p>
 <p><code>ingest</code> options: <code>--source &lt;id&gt;</code>, <code>--id-field &lt;name&gt;</code>, <code>--prune</code>, <code>--watch</code>, <code>--assets-type &lt;type&gt;</code>,
 <code>--edge-field &lt;field=rel&gt;</code> (repeatable), <code>--dangling-type &lt;type&gt;</code>, <code>--tags-type &lt;type&gt;</code>.</p>
 <h2 id="examples"><a class="anchor" href="#examples" aria-label="Link to Examples">#</a>Examples</h2><p>Every example in this repo runs against a real graph — two of them against corpora large enough that

@@ -20,6 +20,12 @@ jobs:
         with:
           bun-version: latest
 
+      # The published CLI runs on Node; test/cli/node.test.ts drives the built binary with it.
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 

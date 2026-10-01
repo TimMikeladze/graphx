@@ -7,7 +7,7 @@ Currently v0.1.0. Install: `bun add graphx`
 - **16** entry points, one package
 - **4** server backends
 - **10** cli commands
-- **10** runtime dependencies
+- **11** runtime dependencies
 
 ## Principles
 

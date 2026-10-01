@@ -24,7 +24,17 @@ const REMOVED_KEYS: Record<string, string> = {
  */
 export async function loadConfig(configPath: string): Promise<GraphxConfig> {
 	const configUrl = pathToFileURL(resolve(configPath)).href;
-	const cfg = (await import(configUrl)).default as GraphxConfig | undefined;
+	const cfg = (
+		await import(configUrl).catch((err: { code?: string }) => {
+			// Node strips TypeScript types natively from 22.18; older Node can't import the config.
+			if (err?.code === 'ERR_UNKNOWN_FILE_EXTENSION') {
+				throw new Error(
+					`graphx: can't load ${configPath} — Node ${process.versions.node} doesn't run TypeScript. Use Node >= 22.18, or run the CLI with \`bunx --bun graphx\`.`,
+				);
+			}
+			throw err;
+		})
+	).default as GraphxConfig | undefined;
 	if (!cfg || typeof cfg !== 'object' || !cfg.schema) {
 		throw new Error(`graphx: ${configPath} must default-export a config with \`schema\``);
 	}
