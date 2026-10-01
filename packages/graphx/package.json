@@ -1,6 +1,6 @@
 {
 	"name": "graphx",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "Temporal GraphRAG on libSQL/SQLite, Postgres, or DuckDB — typed schema, bitemporal graph, vector + FTS retrieval, a served HTTP API, React Query hooks, and an MCP server",
 	"keywords": [
 		"bitemporal",

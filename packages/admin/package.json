@@ -1,6 +1,6 @@
 {
 	"name": "graphx-admin",
-	"version": "0.0.1",
+	"version": "0.3.0",
 	"private": true,
 	"description": "Operator UI for graphx — a Vite + React SPA for browsing, querying, and editing a served graph. Not published.",
 	"homepage": "https://graphx.sh",

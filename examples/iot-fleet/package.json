@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-iot-fleet",
-	"version": "0.0.0",
+	"version": "0.3.0",
 	"private": true,
 	"description": "Vite + Bun + SQLite (libSQL) React example — an IoT fleet graph over graphx",
 	"homepage": "https://graphx.sh",

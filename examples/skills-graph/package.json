@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-skills-graph",
-	"version": "0.0.0",
+	"version": "0.3.0",
 	"private": true,
 	"description": "An occupations, skills and career-transition graph, built from skill-collector's SQLite database and browsed in the graphx admin SPA",
 	"homepage": "https://graphx.sh",

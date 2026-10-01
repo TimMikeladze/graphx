@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-seaport-traffic-bql",
-	"version": "0.0.0",
+	"version": "0.3.0",
 	"private": true,
 	"description": "The Seaport traffic what-if on bql.sh: graphx over an embedded bql.sh server, with universe B a point-in-time fork of the database",
 	"homepage": "https://graphx.sh",
