@@ -59,7 +59,7 @@
 		"dev:mma": "bun run --filter graphx-example-mma-graph dev",
 		"format": "oxfmt",
 		"lint": "oxlint",
-		"prepare": "bun simple-git-hooks",
+		"prepare": "bun simple-git-hooks && bun scripts/clean-db.ts",
 		"release": "bumpp -r --all --execute \"bun run sync:readme && cd site && bun build.ts\" --commit --push --tag",
 		"sync:readme": "bun scripts/sync-package-readme.ts",
 		"test": "bun test --timeout 30000",

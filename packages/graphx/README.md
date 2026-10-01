@@ -1234,7 +1234,8 @@ the as-of scrubber has something to say.
 
 ```sh
 bun install       # from the repo root
-bun test          # the full suite
+bun test          # the full suite — runs in a temp dir that is deleted afterwards
+bun run clean:db  # sweep stray scratch databases (also runs on install and pre-commit)
 GRAPHX_TEST_DRIVER=bql bun test  # the suite on bql.sh, with `bun run bql:serve`'s two variables set
 bun run type-check
 bun run build     # bunup, every entry point

@@ -1,27 +1,27 @@
 /**
  * Delete the scratch databases and DuckDB spill that test and dev runs leave behind.
  *
- * Two locations are swept. `.graphx-data/` (or `$GRAPHX_DATA_DIR`) is where everything lands
- * today — see `duckDataDir()` in `packages/graphx/src/core/duck-pool.ts`. The repo root is swept too
- * because runs from before that change resolved bare paths against the process cwd, so older
- * checkouts and worktrees still carry a strand there. Both are gitignored, which is exactly
- * why they grow to gigabytes unnoticed. `bun run clean:db` from the repo root.
+ * `bun test` already contains its own scratch (see `test-cleanup.ts`), and the pre-commit hook
+ * runs this, so the repo stays clean without anyone thinking about it. This sweep catches the
+ * rest: dev servers and scripts that open bare namespaces, runs that were killed, and strands
+ * from before the per-run test directory existed. Every workspace (root, `packages/*`,
+ * `examples/*`) is swept along with its `.graphx-data/`, plus `$GRAPHX_DATA_DIR` when set and
+ * any `<tmp>/graphx-test-<pid>` left by a dead test run. All of it is gitignored, which is
+ * exactly why it used to grow to gigabytes unnoticed. `bun run clean:db` from the repo root.
  *
  * Named dev databases (`dev_admin*`) are KEPT by default: they hold seeded admin-UI state
- * someone may still be working against. `--all` removes those too.
+ * someone may still be working against. `--all` removes those too. Example demo databases
+ * (`*_demo.db`) are never touched.
  */
 import { readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 import { duckDataDir } from '../packages/graphx/src/core/duck-pool.ts';
-import { isScratch, SCRATCH_PREFIXES } from './scratch-db.ts';
-
-/** Named dev databases — removed only with `--all`. */
-const NAMED_PREFIXES = ['dev_admin'];
+import { isScratch } from './scratch-db.ts';
 
 const all = process.argv.includes('--all');
 const dryRun = process.argv.includes('--dry-run');
-const prefixes = all ? [...SCRATCH_PREFIXES, ...NAMED_PREFIXES] : SCRATCH_PREFIXES;
 
 let files = 0;
 let bytes = 0;
@@ -79,18 +79,36 @@ function sweep(dir: string): void {
 		}
 		// DuckDB spill directories sit beside their database as `<db>.tmp` and hold the
 		// multi-gigabyte `duckdb_temp_storage_*.tmp` files a killed query leaves behind.
-		if (isScratch(name, prefixes)) remove(join(dir, name));
+		if (isScratch(name, { includeNamed: all })) remove(join(dir, name));
 	}
 }
 
-const dataDir = duckDataDir();
-sweep(dataDir);
-// The pre-`duckDataDir()` strand, and `tmp/` — spill from `:memory:` databases, which have no
-// database file to sit beside.
-sweep(process.cwd());
-// Tests run from inside the package (`cd packages/graphx && bun test`) strand files there.
-sweep(join(process.cwd(), 'packages/graphx'));
-if (!dryRun) rmSync(join(dataDir, 'tmp'), { force: true, recursive: true });
+const root = process.cwd();
+/** The repo root and every workspace beneath it — anywhere a dev server or test may have run. */
+const workspaces = [root];
+for (const group of ['packages', 'examples']) {
+	try {
+		for (const name of readdirSync(join(root, group))) {
+			const dir = join(root, group, name);
+			if (statSync(dir).isDirectory()) workspaces.push(dir);
+		}
+	} catch {
+		// No such group in this checkout.
+	}
+}
+for (const dir of workspaces) {
+	sweep(dir);
+	sweep(join(dir, '.graphx-data'));
+	// Spill from `:memory:` DuckDB databases, which have no database file to sit beside.
+	if (!dryRun) rmSync(join(dir, '.graphx-data', 'tmp'), { force: true, recursive: true });
+}
+if (process.env.GRAPHX_DATA_DIR) sweep(duckDataDir());
+
+// Per-run test directories (`test-cleanup.ts`) whose run died before removing its own.
+for (const name of readdirSync(tmpdir())) {
+	const pid = Number(name.startsWith('graphx-test-') ? name.slice('graphx-test-'.length) : NaN);
+	if (Number.isInteger(pid) && !isRunning(pid)) remove(join(tmpdir(), name));
+}
 
 const mb = (bytes / 1024 / 1024).toFixed(1);
 const verb = dryRun ? 'would remove' : 'removed';

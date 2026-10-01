@@ -1,0 +1,4 @@
+[test]
+# Same per-run scratch directory as a root run — see scripts/test-cleanup.ts. Bun reads only the
+# bunfig.toml in the cwd, so `bun test` from this directory needs its own.
+preload = ["../../scripts/test-cleanup.ts"]
