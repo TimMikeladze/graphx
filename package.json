@@ -60,7 +60,7 @@
 		"format": "oxfmt",
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",
-		"release": "bumpp -r --commit --push --tag",
+		"release": "bumpp -r --all --execute \"bun run sync:readme && cd site && bun build.ts\" --commit --push --tag",
 		"sync:readme": "bun scripts/sync-package-readme.ts",
 		"test": "bun test --timeout 30000",
 		"test:coverage": "bun test --coverage",

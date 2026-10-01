@@ -2,7 +2,7 @@
 
 Define your graph once with [Zod](https://zod.dev). Retrieve with vector search, full-text search and typed traversal. Use `asOf` to [query any point in its history](/reference#time-travel).
 
-Currently v0.1.0. Install: `bun add graphx`
+Currently v0.3.0. Install: `bun add graphx`
 
 - **16** entry points, one package
 - **4** server backends
