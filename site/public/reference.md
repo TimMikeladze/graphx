@@ -1236,7 +1236,7 @@ bun run bench     # the benchmark suites
 bun run bench:benchable --latest --out bench/benchable.json  # newest result as a Benchable run
 bunx benchable submit --metrics bench/benchable.json           # send it (BENCHABLE_KEY, or benchable login)
 bun run release                            # bump, rebuild site + package README, commit, tag, push
-bun run publish:npm --otp=<6-digit code>   # build and publish `graphx` to npm, from the repo root
+bun run publish:npm                        # build and publish `graphx` to npm (prompts for the OTP)
 ```
 
 This file is the documentation. Two things are generated from it and checked by the suite, so
