@@ -14,22 +14,10 @@ import { readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 import { duckDataDir } from '../packages/graphx/src/core/duck-pool.ts';
+import { isScratch, SCRATCH_PREFIXES } from './scratch-db.ts';
 
-/** Prefixes of databases created by tests/dev tooling — always safe to remove. */
-const SCRATCH_PREFIXES = [
-	'ns_',
-	'mcp_test_',
-	'mcp_mount_',
-	'iot_test_',
-	'test_',
-	'dev_01',
-	'evt_',
-	'openapi_',
-];
 /** Named dev databases — removed only with `--all`. */
 const NAMED_PREFIXES = ['dev_admin'];
-
-const SUFFIXES = ['.db', '.db-wal', '.db-shm', '.duckdb', '.duckdb.wal'];
 
 const all = process.argv.includes('--all');
 const dryRun = process.argv.includes('--dry-run');
@@ -91,10 +79,7 @@ function sweep(dir: string): void {
 		}
 		// DuckDB spill directories sit beside their database as `<db>.tmp` and hold the
 		// multi-gigabyte `duckdb_temp_storage_*.tmp` files a killed query leaves behind.
-		const base = name.endsWith('.tmp') ? name.slice(0, -'.tmp'.length) : name;
-		if (!SUFFIXES.some((s) => base.endsWith(s))) continue;
-		if (!prefixes.some((p) => base.startsWith(p))) continue;
-		remove(join(dir, name));
+		if (isScratch(name, prefixes)) remove(join(dir, name));
 	}
 }
 
@@ -103,6 +88,8 @@ sweep(dataDir);
 // The pre-`duckDataDir()` strand, and `tmp/` — spill from `:memory:` databases, which have no
 // database file to sit beside.
 sweep(process.cwd());
+// Tests run from inside the package (`cd packages/graphx && bun test`) strand files there.
+sweep(join(process.cwd(), 'packages/graphx'));
 if (!dryRun) rmSync(join(dataDir, 'tmp'), { force: true, recursive: true });
 
 const mb = (bytes / 1024 / 1024).toFixed(1);

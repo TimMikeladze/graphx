@@ -6,3 +6,5 @@ linker = "hoisted"
 # step after installing them. Collected from the root, its tests would import packages the root
 # install never provides.
 pathIgnorePatterns = ["site/**"]
+# Deletes the scratch databases a run leaves in the cwd once it ends.
+preload = ["./scripts/test-cleanup.ts"]
