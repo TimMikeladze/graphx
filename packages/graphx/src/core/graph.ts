@@ -55,6 +55,7 @@ import {
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
 import { createLocalBlobStore, type LocalBlobStore } from './local-blobs.ts';
 import { createAtomicSession } from './atomic-session.ts';
+import { fork, type ForkOpts } from './fork.ts';
 
 /**
  * P3 — data layer (§6). The temporal store front: ULID identity, close-and-insert
@@ -835,6 +836,22 @@ export class Graph<S extends GraphSchema> {
 			...this.options,
 			events: { ...this.eventOpts, source },
 		});
+	}
+
+	/**
+	 * Branch this graph into `target` — an empty namespace, on this backend or another — and
+	 * return a `Graph` over it with the same schema and options. From here the two diverge:
+	 * nothing written to one is visible in the other. With `asOf`, the branch is the graph as
+	 * it stood at that instant. Nodes the cut leaves without a valid vector are re-embedded
+	 * when this graph has an embedder. See {@link fork} for exactly what is copied.
+	 */
+	async fork(target: DbClient, opts: ForkOpts = {}): Promise<Graph<S>> {
+		const result = await fork(this.raw, target, opts);
+		const branch = new Graph(target, this.schema, this.options);
+		if (this.embedder && this.embeddingMode !== 'off') {
+			for (const id of result.needsEmbedding) await branch.embedNode(id);
+		}
+		return branch;
 	}
 
 	// ------------------------------------------------------------------------------------------

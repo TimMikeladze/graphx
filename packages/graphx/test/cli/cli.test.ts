@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
 	buildServeApp,
+	parseForkArgs,
 	parseIngestArgs,
 	parseNewArgs,
 	parseServeArgs,
@@ -414,4 +415,57 @@ test('parseTriggersArgs: defaults the config path and honours -c', () => {
 		config: './other.config.ts',
 	});
 	expect(parseTriggersArgs(['triggers', '--config', './x.ts'])).toEqual({ config: './x.ts' });
+});
+
+test('parseForkArgs: target namespace, ISO or epoch-ms --as-of', () => {
+	expect(parseForkArgs(['fork', 'what-if'])).toEqual({
+		config: './graphx.config.ts',
+		target: 'what-if',
+		asOf: undefined,
+	});
+	expect(parseForkArgs(['fork', 'b', '--as-of', '2026-09-30T00:00:00Z']).asOf).toBe(
+		Date.parse('2026-09-30T00:00:00Z'),
+	);
+	expect(parseForkArgs(['fork', 'b', '--as-of', '1700000000000']).asOf).toBe(1700000000000);
+	expect(() => parseForkArgs(['fork'])).toThrow('missing <namespace>');
+	expect(() => parseForkArgs(['fork', 'b', '--as-of', 'soon'])).toThrow('--as-of');
+});
+
+test('run: fork branches the configured namespace into a new one (libSQL)', async () => {
+	const ns = `cli-fork-${Date.now()}`;
+	const branch = `${ns}-b`;
+	const vaultDir = await mkdtemp(join(tmpdir(), 'gx-cli-vault-'));
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(join(vaultDir, 'note.md'), '---\ntype: note\ntitle: Hello\n---\nworld');
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
+import { defineEmbedder } from '../../src/core/embedder.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { note: z.object({ title: z.string().optional() }).passthrough() }, edges: {} });
+const embedder = defineEmbedder({ id: 'stub', dim: 4, embed: async (texts) => texts.map(() => [1, 0, 0, 0]) });
+export default { schema, embedder, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
+	try {
+		const { run } = await import('../../src/cli.ts');
+		await run(['ingest', vaultDir, '--config', configPath]);
+		await run(['fork', branch, '--config', configPath]);
+		const { createClient } = await import('@libsql/client');
+		const client = createClient({ url: `file:${branch}.db` });
+		expect(Number((await client.execute('SELECT COUNT(*) AS c FROM nodes')).rows[0]!.c)).toBe(1);
+		expect(
+			Number((await client.execute('SELECT COUNT(*) AS c FROM node_embeddings')).rows[0]!.c),
+		).toBe(1);
+		client.close();
+		// A second fork into the now-populated branch is refused.
+		await expect(run(['fork', branch, '--config', configPath])).rejects.toThrow('empty');
+	} finally {
+		const { closeAll } = await import('../../src/core/db.ts');
+		closeAll();
+		await rm(vaultDir, { recursive: true, force: true });
+		await rm(configPath, { force: true });
+		for (const db of [ns, branch])
+			for (const sfx of ['', '-wal', '-shm']) await rm(`${db}.db${sfx}`, { force: true });
+	}
 });

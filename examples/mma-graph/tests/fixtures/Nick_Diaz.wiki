@@ -1,0 +1,466 @@
+{{Infobox martial artist
+| name            = Nick Diaz
+| image           = Nick Diaz.png
+| image_size      = 250
+| caption         = Diaz in 2010
+| birth_name      =Nicholas Robert Diaz 
+| birth_date      = {{Birth date and age|1983|08|02}}
+| birth_place     = [[Stockton, California]], U.S.
+| height          = 6 ft 2 inch
+| weight          = 192 lb
+| weight_class    = [[Lightweight (MMA)|Lightweight]] (2001, 2007–2008)<br />[[Welterweight (MMA)|Welterweight]] (2002–2006, 2008–2013, 2017) <br />[[Middleweight (MMA)|Middleweight]] (2015, 2021)
+| reach_in        = 76
+| reach_footnote  = <ref name="ufc183">[https://www.ufc.com/event/UFC183/printFightCard UFC 183 Fight Card] ufc.com</ref><ref>[https://www.ufc.com/event/UFC143/printFightCard UFC 143 Fight Card]. Ufc.com. Retrieved on August 21, 2016.</ref>
+| fighting_out_of = Stockton, California, U.S.
+| stance          = Southpaw
+| team            = [[Cesar Gracie Jiu-Jitsu]]
+| trainer         = Richard Perez ([[Boxing]])<br />Cesar Gracie ([[Brazilian Jiu-Jitsu]])
+| rank            = 3rd Degree Black belt in [[Brazilian Jiu-Jitsu]] {{small|under [[Cesar Gracie]]}}
+| years_active    = 2001–2021 ([[MMA]])<br />2005 ([[Boxing]])
+| box_win         = 1
+| box_kowin       =
+| box_loss        =
+| box_koloss      =
+| box_draw        =
+| box_nc          =
+| mma_kowin       = 14
+| mma_subwin      = 8
+| mma_decwin      = 5
+| mma_dqwin       =
+| mma_otherwin    =
+| mma_koloss      = 3
+| mma_subloss     =
+| mma_decloss     = 7
+| mma_dqloss      =
+| mma_otherleoss  =
+| mma_drraw       =
+| mma_nc          = 2
+| occupation      =
+| relatives       = [[Nate Diaz]] ''(brother)''
+| website         ={{URL|nickdiaz209.com}} 
+| boxrec          = 312079
+| sherdog         = 2831
+| footnotes       =
+| updated         =
+| medaltemplates  =
+{{MedalCountry| {{USA}} }}
+{{MedalSport | [[Brazilian jiu-jitsu]]}}
+{{MedalCompetition|[[Pan American Championship (Jiu Jitsu)|Pan American Jiu-Jitsu Championships]]}}
+{{MedalGold|2005 [[California]]|-82 kg (Brown)}}
+{{MedalBronze|2005 [[California]]|Open (Brown)}}
+}}
+'''Nicholas Robert Diaz'''<ref>{{Cite web |title=Nick Diaz {{!}} MMA Fighter Page |url=https://www.tapology.com/fightcenter/fighters/nick-diaz |access-date=2025-01-11 |website=Tapology |language=en}}</ref> (born August 2, 1983) is an American [[professional boxing|professional boxer]]<ref>{{cite web | url=https://boxrec.com/en/box-pro/312079 | title=BoxRec: Login }}</ref> and [[mixed martial arts|mixed martial artist]] who competed in the [[welterweight (MMA)|Welterweight]] and [[Middleweight (MMA)|Middleweight]] divisions of the [[Ultimate Fighting Championship]] (UFC). Diaz is a former [[List of Strikeforce champions#Welterweight Championship|Strikeforce]], [[World Extreme Cagefighting#Welterweight Championship|WEC]] and IFC [[welterweight (MMA)|Welterweight]] champion and a [[UFC Welterweight Champion|UFC title]] challenger.<ref>{{Cite web|last=Hiergesell|first=Dan|date=2021-09-24|tit
+{{MMA record start}}
+|-
+|{{no2}}Loss
+|align=center| {{nowrap|26–10 (2)}}
+|[[Robbie Lawler]]
+|TKO (retirement)
+|[[UFC 266]]
+|{{dts|2021|September|25}}
+|align=center|3
+|align=center|0:44
+|[[Las Vegas, Nevada]], United States
+|-
+|{{nocontest|}} NC
+|align=center| 26–9 (2)
+|[[Anderson Silva]]
+|NC (overturned by NSAC)
+|[[UFC 183]]
+|{{dts|2015|January|31|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|Middleweight debut. Originally a unanimous decision win for Silva; overturned after he tested positive for [[drostanolone]] and [[androsterone]]. Diaz also tested positive for elevated marijuana metabolites.}} 
+|-
+| {{no2}}Loss
+| align=center| 26–9 (1)
+| [[Georges St-Pierre]]
+| Decision (unanimous)
+| [[UFC 158]]
+| {{dts|format=mdy|2013|March|16}}
+| align=center| 5
+| align=center| 5:00
+| [[Montreal]], [[Quebec]], Canada
+| {{small|For the [[List of UFC champions#Welterweight Championship|UFC Welterweight Championship]].}}
+|-
+| {{no2}}Loss
+| align=center| 26–8 (1)
+| [[Carlos Condit]]
+| Decision (unanimous)
+| [[UFC 143]]
+| {{dts|format=mdy|2012|February|4}}
+| align=center| 5
+| align=center| 5:00
+| [[Las Vegas]], [[Nevada]],  United States
+| {{small|For the interim [[List of UFC champions#Welterweight Championship|UFC Welterweight Championship]]. Diaz tested positive for [[Cannabis (drug)|marijuana]].}}
+|-
+| {{yes2}}Win
+| align=center| 26–7 (1)
+| [[B.J. Penn]]
+| Decision (unanimous)
+| [[UFC 137]]
+| {{dts|format=mdy|2011|October|29}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 25–7 (1)
+| [[Paul Daley]]
+| TKO (punches)
+| [[Strikeforce: Diaz vs. Daley]]
+| {{dts|format=mdy|2011|April|09}}
+| align=center| 1
+| align=center| 4:57
+| [[San Diego]], [[California]], United States
+| {{small|Defended the [[List of Strikeforce champions#Welterweight Championship|Strikeforce Welterweight Championship]]. Diaz vacated the title on June 9, 2011 when his contract was absorbed by the UFC.}}
+|-
+| {{yes2}} Win
+| align=center| 24–7 (1)
+| [[Evangelista Santos]]
+| Submission (armbar)
+| [[Strikeforce: Diaz vs. Cyborg]]
+| {{dts|format=mdy|2011|January|29}}
+| align=center| 2
+| align=center| 4:50
+| [[San Jose, California]], United States
+| {{small|Defended the [[List of Strikeforce champions#Welterweight Championship|Strikeforce Welterweight Championship]].}}
+|-
+|{{yes2}} Win
+|align=center| 23–7 (1)
+|[[K. J. Noons]]
+|Decision (unanimous)
+|[[Strikeforce: Diaz vs. Noons II]]
+|{{dts|2010|October|09|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+|[[San Jose, California]] United States
+|{{small|Defended the [[List of Strikeforce champions#Welterweight Championship|Strikeforce Welterweight Championship]].}}
+|-
+|{{yes2}} Win
+|align=center| 22–7 (1)
+|[[Hayato Sakurai]]
+|Submission (armbar)
+|[[Dream 14]]
+|{{dts|2010|May|29|format=mdy}}
+|align=center| 1
+|align=center| 3:54
+|[[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+|{{yes2}} Win
+|align=center| 21–7 (1)
+|[[Marius Žaromskis]]
+|TKO (punches)
+|[[Strikeforce: Miami]]
+|{{dts|2010|January|30|format=mdy}}
+|align=center| 1
+|align=center| 4:35
+|[[Sunrise, Florida]], United States
+|{{small|Won the inaugural [[List of Strikeforce champions#Welterweight Championship|Strikeforce Welterweight Championship]].}}
+|-
+|{{yes2}} Win
+|align=center| 20–7 (1)
+|[[Scott Smith (fighter)|Scott Smith]]
+|Submission (rear-naked choke)
+|[[Strikeforce: Lawler vs. Shields]]
+|{{dts|2009|June|06|format=mdy}}
+|align=center| 3
+|align=center| 1:41
+|[[St. Louis, Missouri]], United States
+|{{small|Catchweight (180 lb) bout.}}
+|-
+|{{yes2}} Win
+|align=center|  19–7 (1)
+|[[Frank Shamrock]]
+|TKO (punches)
+|[[Strikeforce: Shamrock vs. Diaz]]
+|{{dts|2009|April|11|format=mdy}}
+|align=center| 2
+|align=center| 3:57
+|[[San Jose, California]], United States
+|{{small|Catchweight (180 lb) bout.}}
+|-
+|{{yes2}} Win
+|align=center|  18–7 (1)
+|Thomas Denny
+|TKO (punches)
+|[[EliteXC: Unfinished Business]]
+|{{dts|2008|July|26|format=mdy}}
+|align=center| 2
+|align=center| 0:30
+|[[Stockton, California]], United States
+|{{small|Lightweight bout.}}
+|-
+|{{yes2}} Win
+|align=center| 17–7 (1)
+|Muhsin Corbbrey
+|TKO (punches)
+|[[EliteXC: Return of the King]]
+|{{dts|2008|June|14|format=mdy}}
+|align=center| 3
+|align=center| 3:59
+|[[Honolulu, Hawaii]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 16–7 (1)
+|Katsuya Inoue
+|TKO (corner stoppage)
+|[[Dream 3]]
+|{{dts|2008|May|11|format=mdy}}
+|align=center| 1
+|align=center| 6:45
+|[[Saitama, Saitama|Saitama]], Japan
+|{{small|Return to Welterweight.}}
+|-
+|{{no2}} Loss
+|align=center| 15–7 (1)
+|[[K. J. Noons]]
+|TKO (doctor stoppage)
+|[[EliteXC: Renegade]]
+|{{dts|2007|November|10|format=mdy}}
+|align=center| 1
+|align=center| 5:00
+|[[Corpus Christi, Texas]], United States
+|{{small|For the inaugural [[Elite Xtreme Combat#Lightweight Championship|EliteXC Lightweight Championship]].}}
+|-
+|{{yes2}} Win
+|align=center| 15–6 (1)
+|Mike Aina
+|Decision (split)
+|[[EliteXC: Uprising]]
+|{{dts|2007|September|15|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Honolulu, Hawaii]], United States
+|
+|-
+|{{nocontest|}}NC
+|align=center| 14–6 (1)
+|[[Takanori Gomi]]
+|NC (overturned by NSAC)
+|[[PRIDE 33]]
+|{{dts|2007|February|24|format=mdy}}
+|align=center| 2
+|align=center| 1:46
+|[[Las Vegas, Nevada]], United States
+|{{small|Return to Lightweight. Originally a submission (gogoplata) win for Diaz; overturned after he tested positive for [[marijuana]].}} 
+|-
+|{{yes2}} Win
+|align=center| 14–6
+|[[Gleison Tibau]]
+|TKO (punches)
+|[[UFC 65]]
+|{{dts|2006|November|18|format=mdy}}
+|align=center| 2
+|align=center| 2:27
+|[[Sacramento, California]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 13–6
+|[[Josh Neer]]
+|Submission (kimura)
+|[[UFC 62]]
+|{{dts|2006|August|26|format=mdy}}
+|align=center| 3
+|align=center| 1:42
+|[[Las Vegas, Nevada]], United States
+|{{small|Submission of the Night.}}
+|-
+|{{yes2}} Win
+|align=center| 12–6
+|Ray Steinbeiss
+|Decision (unanimous)
+|International Cage Fighting Organization 1
+|{{dts|2006|May|13|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Stockton, California]], United States
+|
+|-
+|{{no2}} Loss
+|align=center| 11–6
+|[[Sean Sherk]]
+|Decision (unanimous)
+|[[UFC 59]]
+|{{dts|2006|April|15|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Anaheim, California]], United States
+|
+|-
+|{{no2}} Loss
+|align=center| 11–5
+|[[Joe Riggs]]
+|Decision (unanimous)
+|[[UFC 57]]
+|{{dts|2006|February|04|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{no2}} Loss
+|align=center| 11–4
+|[[Diego Sanchez]]
+|Decision (unanimous)
+|[[The Ultimate Fighter 2 Finale]]
+|{{dts|2005|November|05|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 11–3
+|Koji Oishi
+|KO (punches)
+|[[UFC 53]]
+|{{dts|2005|June|04|format=mdy}}
+|align=center| 1
+|align=center| 1:24
+|[[Atlantic City, New Jersey]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 10–3
+|[[Drew Fickett]]
+|TKO (punches)
+|[[UFC 51]]
+|{{dts|2005|February|05|format=mdy}}
+|align=center| 1
+|align=center| 4:40
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{no2}} Loss
+|align=center| 9–3
+|[[Karo Parisyan]]
+|Decision (split)
+|[[UFC 49]]
+|{{dts|2004|August|21|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 9–2
+|[[Robbie Lawler]]
+|KO (punch)
+|[[UFC 47]]
+|{{dts|2004|April|02|format=mdy}}
+|align=center| 2
+|align=center| 1:31
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 8–2
+|[[Jeremy Jackson (fighter)|Jeremy Jackson]]
+|Submission (armbar)
+|[[UFC 44]]
+|{{dts|2003|September|26|format=mdy}}
+|align=center| 3
+|align=center| 2:04
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 7–2
+|[[Jeremy Jackson (fighter)|Jeremy Jackson]]
+|TKO (punches)
+|IFC Warriors Challenge 18
+|{{dts|2003|July|19|format=mdy}}
+|align=center| 1
+|align=center| 4:33
+|[[Lakeport, California]], United States
+|
+|-
+|{{yes2}} Win
+|align=center| 6–2
+|Joe Hurley
+|Submission (kimura)
+|[[WEC 6]]
+|{{dts|2003|March|27|format=mdy}}
+|align=center| 1
+|align=center| 1:55
+|[[Lemoore, California]], United States
+|{{small|Won the inaugural [[List of WEC champions#Welterweight Championship|WEC Welterweight Championship]]. Diaz vacated the title to focus on fight for the UFC.}}
+|-
+|{{no2}} Loss
+|align=center| 5–2
+|[[Kuniyoshi Hironaka]]
+|Decision (split)
+|[[2002 in Shooto#Shooto: Year End Show 2002|Shooto: Year End Show 2002]]
+|{{dts|2002|December|14|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Chiba, Chiba|Chiba]], Japan
+|
+|-
+|{{yes2}} Win
+|align=center| 5–1
+|Harris Sarmiento
+|TKO (corner stoppage)
+|Warriors Quest 8
+|{{dts|2002|October|24|format=mdy}}
+|align=center| 2
+|align=center| 1:47
+|[[Honolulu, Hawaii]], United States
+|
+|-
+|{{no2}} Loss
+|align=center| 4–1
+|[[Jeremy Jackson (fighter)|Jeremy Jackson]]
+|TKO (punches)
+|rowspan=3|Ultimate Athlete 4: King of the Mountain
+|rowspan=3|{{dts|2002|September|28|format=mdy}}
+|align=center| 1
+|align=center| 0:49
+|rowspan=3|[[Auberry, California]], United States
+|{{small|Ultimate Athlete Welterweight Tournament Final.}}
+|-
+|{{yes2}} Win
+|align=center| 4–0
+|Adam Lynn
+|Submission (armbar)
+|align=center| 1
+|align=center| 2:51
+|{{small|Ultimate Athlete Welterweight Tournament Semifinal.}}
+|-
+|{{yes2}} Win
+|align=center| 3–0
+|Blaine Tyler
+|TKO (punches)
+|align=center| 2
+|align=center| 2:01
+|{{small|Ultimate Athlete Welterweight Tournament Quarterfinal.}}
+|-
+|{{yes2}} Win
+|align=center| 2–0
+|[[Chris Lytle]]
+|Decision (unanimous)
+|IFC Warriors Challenge 17
+|{{dts|2002|July|12|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+|[[Porterville, California]], United States
+|{{small|Welterweight debut. Won the IFC United States Welterweight Championship.}}
+|-
+|{{yes2}} Win
+|align=center| 1–0
+|Mike Wick
+|Submission (triangle choke)
+|IFC Warriors Challenge 15
+|{{dts|2001|August|31|format=mdy}}
+|align=center| 1
+|align=center| 3:43
+|[[Oroville, California]], United States
+|{{small|Lightweight debut.}}
+
+{{MMA record end}}

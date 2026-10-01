@@ -1,0 +1,661 @@
+{{Infobox martial artist
+| name            = Donald Cerrone
+| image           = VCJCS hosts USO Spring Tour 160312-D-HU462-263.jpg
+| image_size      = 
+| caption         = Cerrone in 2016
+| birth_name      = Donald Anthony Cerrone
+| nickname        = Cowboy 
+| birth_date      = {{birth date and age|1983|3|29}}
+| birth_place     = [[Denver, Colorado]], U.S.
+| fighting_out_of = [[Albuquerque]], [[New Mexico]], U.S.
+| height          = 6 ft 0 in
+| weight          = 170 lb
+| weight_class    = [[Lightweight (MMA)|Lightweight]] (2006–2015, 2019)<br />[[Welterweight (MMA)|Welterweight]] (2016–2018, 2020–2022)
+| rank            = Black belt in [[Brazilian Jiu-Jitsu]] <small>under [[Eliot Marshall]]</small><ref>{{cite news|url=http://www.bloodyelbow.com/2016/8/26/12659128/ufc-mma-news-donald-cowboy-cerrone-earns-brazilian-jiu-jitsu-black-belt|title=Donald 'Cowboy' Cerrone earns Brazilian Jiu Jitsu black belt|publisher=Bloody Elbow|author=Lewis Mckeever|date=August 26, 2016}}</ref>
+| reach           = 73 in<ref>{{Cite web|url=https://www.tapology.com/fightcenter/bouts/ufc-131-mac-danzig-vs-donald-cowboy-cerrone|title=Mac Danzig vs. Donald Cerrone, UFC 131 {{pipe}} MMA Bout|website=Tapology}}</ref><ref>{{cite web|url=http://www.ufc.com/event/ufc-fight-night-boston-2015/printFightCard|title=Fight Card - UFC Fight Night McGregor vs. Siver|publisher=UFC.com|access-date=January 20, 2015}}</ref>
+| stance          = Orthodox
+| style           = [[Kickboxing]], [[Muay Thai]]
+| team            = Inyodo Martial Arts Club (2002–2006)<ref name=vaildaily>{{cite web|url=https://www.vaildaily.com/sports/cerrone-picks-up-muay-thai-title/|title=Cerrone picks up Muay Thai title|author=Ian Cropp|publisher=Vail Daily|date=August 12, 2006}}</ref><br />[[Jackson Wink MMA Academy]] (2006–2018)<ref name=ta19 /> <br />BMF Ranch (2018–2022)
+| trainer         = [[Greg Jackson (MMA trainer)|Greg Jackson]] (2006–2018) <br />[[Joe Schilling]] (2018–2022)
+| years_active    = 2003 ([[boxing]]) <br /> 2005–2022 ([[MMA]])
+| box_win         = 0
+| box_kowin       = 
+| box_loss        = 1
+| box_koloss      = 1
+| box_draw        = 
+| box_nc          = 
+| kickbox_win     = 28
+| kickbox_loss    = 0
+| kickbox_draw    = 1
+| kickbox_kowin   = 19
+| kickbox_koloss  =
+| kickbox_nc      =
+| mma_kowin       = 10
+| mma_subwin      = 17
+| mma_decwin      = 9
+| mma_koloss      = 8
+| mma_subloss     = 2
+| mma_decloss     = 7
+| mma_nc          = 2
+| occupation      =
+| spouse          =
+| relatives       =
+| students        =
+| university      =
+| boxrec          = 222971
+| sherdog         = 15105
+| footnotes       =
+| updated         =
+}}
+'''Donald Anthony Cerrone''' (born March 29, 1983), known professionally by his nickname "'''Cowboy'''", is an American former professional [[mixed martial artist]], former [[kickboxer]], and actor best known for competing in the [[Lightweight (MMA)|Lightweight]] and [[Welterweight (MMA)|Welterweight]] divisions of the [[Ultimate Fighting Championship]] (UFC), and the Lightweight division of the [[World Extreme Cagefighting]] (WEC).<ref>{{cite web|title=Ugh! 'Cowboy' Cerrone was once disemboweled by his ATV|url=https://www.foxsports.com/ufc/story/fighter-donald-cerrone-once-disemboweled-by-atv-121715Cerrone|work=[[Fox Sports]]|access-date=December 3, 2018}}</ref>
+
+He is known and respected by fans for his willingness to fight any time, having completed thirty eight fights in his eleven-year UFC tenure. Cerrone challenged for the [[List of WEC champions#Lightweight Championship|WEC Lightw
+{{MMA record start}}
+|-
+|{{no2}}Loss
+|align=center|36–17 (2)
+|[[Jim Miller (fighter)|Jim Miller]]
+|Submission (guillotine choke)
+|[[UFC 276]]
+|{{dts|2022|July|02|format=mdy}} 
+|align=center|2
+|align=center|1:32
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|36–16 (2)
+|[[Alex Morono]]
+|TKO (punches)
+|[[UFC on ESPN: Rodriguez vs. Waterson]]
+|{{dts|2021|May|8|format=mdy}}
+|align=center|1
+|align=center|4:40
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{Nocontest}}NC
+|align=center|36–15 (2)
+|[[Niko Price]] 
+|NC (overturned)
+|[[UFC Fight Night: Covington vs. Woodley]]
+|{{dts|2020|September|19|format=mdy}}
+|align=center|3
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|Price was deducted one point in round 1 due to repeated eye pokes. Originally a majority draw; overturned after Price tested positive for [[marijuana]].}}
+|-
+|{{no2}}Loss
+|align=center|36–15 (1)
+|[[Anthony Pettis]]
+|Decision (unanimous)
+|[[UFC 249]]
+|{{dts|2020|May|9|format=mdy}}
+|align=center|3
+|align=center|5:00
+|[[Jacksonville, Florida]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|36–14 (1)
+|[[Conor McGregor]]
+|TKO (head kick and punches)
+|[[UFC 246]] 
+|{{dts|2020|January|18|format=mdy}}
+|align=center|1
+|align=center|0:40
+|[[Las Vegas, Nevada]], United States
+|{{small|Return to Welterweight.}}
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|36–13 (1)
+|[[Justin Gaethje]]
+|TKO (punches)
+|[[UFC Fight Night: Cowboy vs. Gaethje]] 
+|{{dts|2019|September|14|format=mdy}}
+|align=center|1
+|align=center|4:18
+|[[Vancouver, British Columbia]], Canada
+|
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|36–12 (1)
+|[[Tony Ferguson]]
+|TKO (doctor stoppage)
+|[[UFC 238]] 
+|{{dts|2019|June|8|format=mdy}}
+|align=center|2
+|align=center|5:00
+|[[Chicago, Illinois]], United States
+|{{small|Fight of the Night.}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|36–11 (1)
+|[[Al Iaquinta]]
+|Decision (unanimous)
+|[[UFC Fight Night: Iaquinta vs. Cowboy]] 
+|{{dts|2019|May|4|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Ottawa, Ontario]], Canada
+|{{small|Fight of the Night.}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|35–11 (1)
+|[[Alexander Hernandez]]
+|TKO (head kick and punches)
+|[[UFC Fight Night: Cejudo vs. Dillashaw]] 
+|{{dts|2019|January|19|format=mdy}}
+|align=center|2
+|align=center|3:43
+|[[Brooklyn, New York]], United States
+|{{small|Return to Lightweight. Performance of the Night. Fight of the Night.}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|34–11 (1)
+|[[Mike Perry (fighter)|Mike Perry]]
+|Submission (armbar)
+|[[UFC Fight Night: The Korean Zombie vs. Rodríguez]] 
+|{{dts|2018|November|10|format=mdy}}
+|align=center|1
+|align=center|4:46
+|[[Denver, Colorado]], United States
+|{{small|Performance of the Night.}}
+|- 
+|{{no2||align=|style=|color=}}Loss
+|align=center|33–11 (1)
+|[[Leon Edwards]]
+|Decision (unanimous)
+|[[UFC Fight Night: Cowboy vs. Edwards]]
+|{{dts|2018|June|23|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Kallang]], Singapore
+|
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|33–10 (1)
+|[[Yancy Medeiros]]
+|TKO (punches)
+|[[UFC Fight Night: Cowboy vs. Medeiros]] 
+|{{dts|2018|February|18|format=mdy}}
+|align=center|1
+|align=center|4:58
+|[[Austin, Texas]], United States
+|
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|{{nowrap|32–10 (1)}}
+|[[Darren Till]]
+|TKO (punches)  
+|[[UFC Fight Night: Cowboy vs. Till]]
+|{{dts|2017|October|21|format=mdy}}
+|align=center|1
+|align=center|4:20
+|[[Gdańsk]], Poland
+|
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|32–9 (1)
+|[[Robbie Lawler]]
+|Decision (unanimous)
+|[[UFC 214]]
+|{{dts|2017|July|29|format=mdy}}
+|align=center|3
+|align=center|5:00
+|[[Anaheim, California]], United States
+|
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|32–8 (1)
+|[[Jorge Masvidal]]
+|TKO (punches)
+|[[UFC on Fox: Shevchenko vs. Peña]]
+|{{dts|2017|January|28|format=mdy}}
+|align=center|2
+|align=center|1:00
+|[[Denver, Colorado]], United States
+|
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|32–7 (1)
+|[[Matt Brown (fighter)|Matt Brown]]
+|KO (head kick)
+|[[UFC 206]]
+|{{dts|2016|December|10|format=mdy}}
+|align=center|3
+|align=center|0:44
+|[[Toronto, Ontario]], Canada
+| 
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|31–7 (1)
+|[[Rick Story]]
+|TKO (knee and punches)
+|[[UFC 202]] 
+|{{dts|2016|August|20|format=mdy}}
+|align=center|2
+|align=center|2:02
+|[[Las Vegas, Nevada]], United States
+|{{small|Performance of the Night.}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|30–7 (1)
+|[[Patrick Côté (fighter)|Patrick Côté]]
+|TKO (punches)
+|[[UFC Fight Night: MacDonald vs. Thompson]]
+|{{dts|2016|June|18|format=mdy}}
+|align=center|3
+|align=center|2:35
+|[[Ottawa, Ontario]], Canada
+|{{small|Performance of the Night.}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|29–7 (1)
+|[[Alex Oliveira]]
+|Submission (triangle choke)
+|[[UFC Fight Night: Cowboy vs. Cowboy]]
+|{{dts|2016|February|21|format=mdy}}
+|align=center|1
+|align=center|2:33
+|[[Pittsburgh, Pennsylvania]], United States
+|{{small|Welterweight debut. Performance of the Night.}}
+|-
+|{{no2||align=|style=|color=}}Loss
+|align=center|28–7 (1)
+|[[Rafael dos Anjos]]
+|TKO (punches)
+|[[UFC on Fox: dos Anjos vs. Cowboy 2]]
+|{{dts|2015|December|19|format=mdy}}
+|align=center|1
+|align=center|1:06
+|[[Orlando, Florida]], United States
+|{{small|For the [[UFC Lightweight Championship]].}}
+|-
+|{{yes2||align=|style=|color=}}Win
+|align=center|28–6 (1)
+|[[John Makdessi]]
+||TKO (head kick)
+|[[UFC 187]]
+|{{dts|2015|May|23|format=mdy}}
+|align=center|2
+|align=center|4:44
+|[[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 27–6 (1)
+| [[Benson Henderson]]
+| Decision (unanimous)
+| [[UFC Fight Night: McGregor vs. Siver]]
+| {{dts|2015|January|18|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Boston, Massachusetts]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 26–6 (1)
+| [[Myles Jury]]
+| Decision (unanimous)
+| [[UFC 182]]
+| {{dts|2015|January|3|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 25–6 (1)
+| [[Eddie Alvarez]]
+| Decision (unanimous)
+| [[UFC 178]]
+| {{dts|2014|September|27|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 24–6 (1)
+| [[Jim Miller (fighter)|Jim Miller]]
+| KO (head kick and punches)
+| [[UFC Fight Night: Cowboy vs. Miller]]
+| {{dts|2014|July|16|format=mdy}}
+| align=center| 2
+| align=center| 3:31
+| [[Atlantic City, New Jersey]], United States
+| {{small|Performance of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 23–6 (1)
+| [[Edson Barboza]]
+| Submission (rear-naked choke)
+| [[UFC on Fox: Werdum vs. Browne]]
+| {{dts|2014|April|19|format=mdy}}
+| align=center| 1
+| align=center| 3:15
+| [[Orlando, Florida]], United States
+| {{small|Performance of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 22–6 (1)
+| [[Adriano Martins]]
+| KO (head kick)
+| [[UFC on Fox: Henderson vs. Thomson]]
+| {{dts|2014|January|25|format=mdy}}
+| align=center| 1
+| align=center| 4:40
+| [[Chicago, Illinois]], United States
+| {{small|Knockout of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 21–6 (1)
+| [[Evan Dunham]]
+| Submission (triangle choke)
+| [[UFC 167]]
+| {{dts|2013|November|16|format=mdy}}
+| align=center| 2
+| align=center| 3:49
+| [[MGM Grand Garden Arena|Las Vegas]], [[Nevada]], United States
+| {{small|Submission of the Night.}}
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 20–6 (1)
+| [[Rafael dos Anjos]]
+| Decision (unanimous)
+| [[UFC Fight Night: Condit vs. Kampmann 2]]
+| {{dts|2013|August|28|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Indianapolis, Indiana]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 20–5 (1)
+| [[K.J. Noons]]
+| Decision (unanimous)
+| [[UFC 160]]
+| {{dts|2013|May|25|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 19–5 (1)
+| [[Anthony Pettis]]
+| KO (kick to the body)
+| [[UFC on Fox: Johnson vs. Dodson]]
+| {{dts|2013|January|26|format=mdy}}
+| align=center| 1
+| align=center| 2:35
+| [[Chicago, Illinois]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 19–4 (1)
+| [[Melvin Guillard]]
+| KO (head kick and punch)
+| [[UFC 150]]
+| {{dts|2012|August|11|format=mdy}}
+| align=center| 1
+| align=center| 1:16
+| [[Denver, Colorado]], United States
+| {{small|Catchweight (157.5 lb) bout; Guillard missed weight. Knockout of the Night. Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 18–4 (1)
+| [[Jeremy Stephens]]
+| Decision (unanimous)
+| [[2012 in UFC#UFC on Fuel TV: The Korean Zombie vs. Poirier|UFC on Fuel TV: The Korean Zombie vs. Poirier]]
+| {{dts|2012|May|15|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Fairfax, Virginia]], United States
+| 
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 17–4 (1)
+| [[Nate Diaz]]
+| Decision (unanimous)
+| [[UFC 141]]
+| {{dts|2011|December|30|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 17–3 (1)
+| [[Dennis Siver]]
+| Submission (rear-naked choke)
+| [[UFC 137]]
+| {{dts|2011|October|29|format=mdy}}
+| align=center| 1
+| align=center| 2:22
+| [[Las Vegas, Nevada]], United States
+| {{small|Submission of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 16–3 (1)
+| [[Charles Oliveira]]
+| TKO (punches)
+| [[UFC Live: Hardy vs. Lytle]]
+| {{dts|2011|August|14|format=mdy}}
+| align=center| 1
+| align=center| 3:01
+| [[Milwaukee, Wisconsin]], United States
+| {{small|Knockout of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 15–3 (1)
+| [[Vagner Rocha]]
+| Decision (unanimous)
+| [[UFC 131]]
+| {{dts|2011|June|11|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Vancouver, British Columbia]], Canada
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 14–3 (1)
+| [[Paul Kelly (fighter)|Paul Kelly]]
+| Submission (rear-naked choke)
+| [[UFC 126]]
+| {{dts|2011|February|5|format=mdy}}
+| align=center| 2
+| align=center| 3:48
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 13–3 (1)
+| [[Chris Horodecki]]
+| Submission (triangle choke)
+| [[WEC 53]]
+| {{dts|2010|December|16|format=mdy}}
+| align=center| 2
+| align=center| 2:43
+| [[Glendale, Arizona]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 12–3 (1)
+| [[Jamie Varner]]
+| Decision (unanimous)
+| [[WEC 51]]
+| {{dts|2010|September|30|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Broomfield, Colorado]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 11–3 (1)
+| [[Benson Henderson]]
+| Submission (guillotine choke)
+| [[WEC 48]]
+| {{dts|2010|April|24|format=mdy}}
+| align=center| 1
+| align=center| 1:57
+| [[Sacramento, California]], United States
+| {{small|For the [[WEC Lightweight Championship]].}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 11–2 (1)
+| [[Ed Ratcliff]]
+| Submission (rear-naked choke)
+| [[WEC 45]]
+| {{dts|2009|December|19|format=mdy}}
+| align=center| 3
+| align=center| 3:47
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 10–2 (1)
+| [[Benson Henderson]]
+| Decision (unanimous)
+| [[WEC 43]]
+| {{dts|2009|October|10|format=mdy}}
+| align=center| 5
+| align=center| 5:00
+| [[San Antonio, Texas]], United States
+| {{small|For the interim [[List of WEC champions#Lightweight Championship|WEC Lightweight Championship]]. Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 10–1 (1)
+| [[James Krause (fighter)|James Krause]]
+| Submission (rear-naked choke)
+| [[WEC 41]]
+| {{dts|2009|June|7|format=mdy}}
+| align=center| 1
+| align=center| 4:38
+| [[Sacramento, California]], United States
+| 
+|-
+| {{no2||align=|style=|color=}}Loss
+| align=center| 9–1 (1)
+| [[Jamie Varner]]
+| Technical Decision (split)
+| [[WEC 38]]
+| {{dts|2009|January|25|format=mdy}}
+| align=center| 5
+| align=center| 3:10
+| [[San Diego, California]], United States
+| {{small|For the [[WEC Lightweight Championship]]. Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 9–0 (1)
+| [[Rob McCullough]]
+| Decision (unanimous)
+| [[WEC 36]]
+| {{dts|2008|November|5|format=mdy}}
+| align=center| 3
+| align=center| 5:00
+| [[Hollywood, Florida]], United States
+| {{small|[[List of WEC champions#Lightweight Championship|WEC Lightweight]] title eliminator. Fight of the Night.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 8–0 (1)
+| [[Danny Castillo]]
+| Submission (armbar)
+| [[WEC 34]]
+| {{dts|2008|June|1|format=mdy}}
+| align=center| 1
+| align=center| 1:30
+| [[Sacramento, California]], United States
+| 
+|-
+| {{Nocontest||align=|style=|color=}}NC
+| align=center| 7–0 (1) 
+| Kenneth Alexander
+| NC (overturned by NSAC)
+| [[WEC 30]]
+| {{dts|2007|September|5|format=mdy}}
+| align=center| 1
+| align=center| 0:56
+| [[Las Vegas, Nevada]], United States
+| {{small|Originally a submission (triangle choke) win for Cerrone; overturned after he tested positive for banned substances.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 7–0
+| Yasunori Kanehara
+| Submission (triangle choke)
+| Greatest Common Multiple: Cage Force 3
+| {{dts|2007|June|9|format=mdy}}
+| align=center| 2
+| align=center| 2:46
+| [[Tokyo]], Japan
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 6–0
+| [[Anthony Njokuani]]
+| Submission (triangle choke)
+| Ring of Fire 29
+| {{dts|2007|April|28|format=mdy}}
+| align=center| 1
+| align=center| 4:30
+| [[Broomfield, Colorado]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 5–0
+| [[Ryan Roberts (mixed martial artist)|Ryan Roberts]]
+| Submission (armbar)
+| Ring of Fire 28
+| {{dts|2007|February|16|format=mdy}}
+| align=center| 1
+| align=center| 1:49
+| [[Broomfield, Colorado]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 4–0
+| Jesse Brock
+| Submission (triangle choke)
+| Ring of Fire 26
+| {{dts|2006|September|9|format=mdy}}
+| align=center| 1
+| align=center| 1:35
+| [[Castle Rock, Colorado]], United States
+| {{small|Won the ROF Lightweight Championship.}}
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 3–0
+| Craig Tennant
+| Submission (armbar)
+| Ring of Fire 24
+| {{dts|2006|June|17|format=mdy}}
+| align=center| 1
+| align=center| 1:26
+| [[Castle Rock, Colorado]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 2–0
+| Cruz Chacon
+| Submission (triangle choke)
+| American CF: Genesis
+| {{dts|2006|February|24|format=mdy}}
+| align=center| 2
+| align=center| 2:25
+| [[Denver, Colorado]], United States
+| 
+|-
+| {{yes2||align=|style=|color=}}Win
+| align=center| 1–0
+| [[Nate Mohr]]
+| Submission (triangle choke)
+| Ring of Fire 21
+| {{dts|2006|February|11|format=mdy}}
+| align=center| 1
+| align=center| 1:42
+| [[Castle Rock, Colorado]], United States
+| {{small|Lightweight debut.}}
+|-
+
+{{MMA record end}}

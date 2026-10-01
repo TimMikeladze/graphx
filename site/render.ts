@@ -52,10 +52,22 @@ import {
 } from './readme.ts';
 import { bootScript, css, uiScript } from './styles.ts';
 
-const LANGS: Record<string, string> = { sh: 'bash', bash: 'bash', ts: 'typescript', typescript: 'typescript', tsx: 'tsx', json: 'json', sql: 'sql' };
+const LANGS: Record<string, string> = {
+	sh: 'bash',
+	bash: 'bash',
+	ts: 'typescript',
+	typescript: 'typescript',
+	tsx: 'tsx',
+	json: 'json',
+	sql: 'sql',
+};
 
 export function escapeHtml(value: string): string {
-	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
 }
 
 async function makeHighlighter() {
@@ -73,7 +85,11 @@ type Highlighter = Awaited<ReturnType<typeof makeHighlighter>>;
 function highlight(hl: Highlighter, code: string, lang: string): string {
 	const resolved = LANGS[lang];
 	if (!resolved) return `<pre class="plain"><code>${escapeHtml(code)}</code></pre>`;
-	return hl.codeToHtml(code, { lang: resolved, themes: { light: 'vitesse-light', dark: 'vitesse-dark' }, defaultColor: false });
+	return hl.codeToHtml(code, {
+		lang: resolved,
+		themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+		defaultColor: false,
+	});
 }
 
 /** Markdown → HTML. Raw HTML in the source is escaped, never emitted; code is highlighted at build time. */
@@ -88,9 +104,14 @@ export function markdownRenderer(hl: Highlighter) {
 				return `<h${depth} id="${id}"><a class="anchor" href="#${id}" aria-label="Link to ${escapeHtml(text)}">#</a>${this.parser.parseInline(tokens)}</h${depth}>`;
 			},
 			table(token) {
-				const head = token.header.map((c) => `<th>${this.parser.parseInline(c.tokens)}</th>`).join('');
+				const head = token.header
+					.map((c) => `<th>${this.parser.parseInline(c.tokens)}</th>`)
+					.join('');
 				const rows = token.rows
-					.map((r) => `<tr>${r.map((c) => `<td>${this.parser.parseInline(c.tokens)}</td>`).join('')}</tr>`)
+					.map(
+						(r) =>
+							`<tr>${r.map((c) => `<td>${this.parser.parseInline(c.tokens)}</td>`).join('')}</tr>`,
+					)
 					.join('');
 				return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
 			},
@@ -113,7 +134,15 @@ async function buildModel(): Promise<Model> {
 	const readme = await readReadme();
 	const hl = await makeHighlighter();
 	const counts = await Promise.all(figures.map((f) => countFigure(readme, f.source)));
-	return { readme, version: await readVersion(), install: readInstall(readme), blocks: fencedBlocks(readme), hl, md: markdownRenderer(hl), counts };
+	return {
+		readme,
+		version: await readVersion(),
+		install: readInstall(readme),
+		blocks: fencedBlocks(readme),
+		hl,
+		md: markdownRenderer(hl),
+		counts,
+	};
 }
 
 const inline = (m: Model, text: string): string => m.md.parseInline(text) as string;
@@ -149,7 +178,8 @@ function header(current: '/' | '/reference'): string {
 		const ext = n.external ? ' class="ext" rel="noopener"' : '';
 		return `<a href="${n.href}"${cur}${ext}>${n.label}</a>`;
 	}).join('');
-	const themeIcons = glyph('monitor', 18, 'i-system') + glyph('moon', 18, 'i-dark') + glyph('sun', 18, 'i-light');
+	const themeIcons =
+		glyph('monitor', 18, 'i-system') + glyph('moon', 18, 'i-dark') + glyph('sun', 18, 'i-light');
 	return `<header class="header">
 <div class="shell">
 <a class="brand" href="/">${page.name}</a>
@@ -189,7 +219,10 @@ function footer(): string {
 		['Discord', links.find((l) => l.icon === 'discord')?.href],
 		...textLinks.map((l) => [l.label, linkHref(l.href)]),
 	]
-		.map(([label, href]) => `<li><a href="${escapeHtml(href ?? '')}" class="ext" rel="noopener">${escapeHtml(label ?? '')}</a></li>`)
+		.map(
+			([label, href]) =>
+				`<li><a href="${escapeHtml(href ?? '')}" class="ext" rel="noopener">${escapeHtml(label ?? '')}</a></li>`,
+		)
 		.join('')}</ul><div class="ficons">${iconLinks('footer')}</div></div>`;
 	return `<footer class="footer">
 <div class="shell">
@@ -200,7 +233,10 @@ function footer(): string {
 </footer>`;
 }
 
-function head(m: Model, opts: { title: string; description: string; path: string; jsonld?: object }): string {
+function head(
+	m: Model,
+	opts: { title: string; description: string; path: string; jsonld?: object },
+): string {
 	const canonical = url(opts.path);
 	const image = url('/og.png');
 	const alt = `${page.name} — ${page.h1.toLowerCase()}`;
@@ -235,7 +271,16 @@ ${opts.jsonld ? `<script type="application/ld+json">${JSON.stringify(opts.jsonld
 <style>${css}</style>`;
 }
 
-function shell(m: Model, opts: { title: string; description: string; path: '/' | '/reference'; body: string; jsonld?: object }): string {
+function shell(
+	m: Model,
+	opts: {
+		title: string;
+		description: string;
+		path: '/' | '/reference';
+		body: string;
+		jsonld?: object;
+	},
+): string {
 	return `<!doctype html>
 <html lang="en" data-theme="dark">
 <head>
@@ -269,7 +314,10 @@ function renderDemo(m: Model, cap: Capability): string {
 	if (d.kind === 'code') return demoFrame(m, d.ref);
 	if (d.kind === 'variants') {
 		return `<div class="variants">${d.items
-			.map((i) => `<div class="variant">${demoFrame(m, i.ref)}<p class="caption">${escapeHtml(i.caption)}</p></div>`)
+			.map(
+				(i) =>
+					`<div class="variant">${demoFrame(m, i.ref)}<p class="caption">${escapeHtml(i.caption)}</p></div>`,
+			)
 			.join('')}</div>`;
 	}
 	const t = readTable(m.readme, d.header);
@@ -345,7 +393,10 @@ function ecosystemBand(m: Model): string {
 <h2 id="ecosystem-title">${escapeHtml(ecosystem.title)}</h2>
 <p class="eco-lede">${inline(m, ecosystem.lede)}</p>
 <ul class="eco-marks">${ecosystem.marks
-		.map((e) => `<li><a href="${e.href}" rel="noopener" title="${escapeHtml(e.label)}">${ecoIcon(e.name)}<span class="sr">${escapeHtml(e.label)}</span></a></li>`)
+		.map(
+			(e) =>
+				`<li><a href="${e.href}" rel="noopener" title="${escapeHtml(e.label)}">${ecoIcon(e.name)}<span class="sr">${escapeHtml(e.label)}</span></a></li>`,
+		)
 		.join('')}</ul>
 </div>
 </section>`;
@@ -360,7 +411,12 @@ function principlesStrip(m: Model): string {
 }
 
 function showcaseSection(m: Model): string {
-	const tabs = showcase.tabs.map((t, i) => ({ ...t, id: `tab-${t.label.toLowerCase()}`, r: resolve(m.blocks, t.ref), i }));
+	const tabs = showcase.tabs.map((t, i) => ({
+		...t,
+		id: `tab-${t.label.toLowerCase()}`,
+		r: resolve(m.blocks, t.ref),
+		i,
+	}));
 	return `<section class="section showcase" id="showcase" aria-labelledby="showcase-title">
 <div class="shell sc-grid">
 <div class="sc-copy">
@@ -501,16 +557,22 @@ function capabilityMd(m: Model, cap: Capability): string {
 	const d = cap.demo;
 	let demo: string;
 	if (d.kind === 'code') demo = fenceFor(m, d.ref);
-	else if (d.kind === 'variants') demo = d.items.map((i) => `**${i.caption}**\n\n${fenceFor(m, i.ref)}`).join('\n\n');
+	else if (d.kind === 'variants')
+		demo = d.items.map((i) => `**${i.caption}**\n\n${fenceFor(m, i.ref)}`).join('\n\n');
 	else {
 		const t = readTable(m.readme, d.header);
-		demo = [`| ${t.header.join(' | ')} |`, `| ${t.header.map(() => '---').join(' | ')} |`, ...t.rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
+		demo = [
+			`| ${t.header.join(' | ')} |`,
+			`| ${t.header.map(() => '---').join(' | ')} |`,
+			...t.rows.map((r) => `| ${r.join(' | ')} |`),
+		].join('\n');
 	}
 	return `## ${cap.title}\n\n${cap.body}\n\n${demo}${cap.aside ? `\n\n${cap.aside}` : ''}`;
 }
 
 function boundariesMd(): string {
-	const list = (k: 'holds' | 'judgements' | 'missing') => `### ${boundaries.titles[k]} (${boundaries[k].length})\n\n${boundaries[k].map((i) => `- ${i}`).join('\n')}`;
+	const list = (k: 'holds' | 'judgements' | 'missing') =>
+		`### ${boundaries.titles[k]} (${boundaries[k].length})\n\n${boundaries[k].map((i) => `- ${i}`).join('\n')}`;
 	return `## ${boundaries.title}\n\n${boundaries.intro}\n\n${list('holds')}\n\n${list('judgements')}\n\n${list('missing')}`;
 }
 
@@ -593,7 +655,10 @@ ${agents.minimal.map((r) => fenceFor(m, r)).join('\n\n')}
 
 | Option | Where | Effect |
 | --- | --- | --- |
-${agents.options.map((o) => o.map((c) => c.replace(/\|/g, '\\|'))).map((o) => `| \`${o[0]}\` | ${o[1]} | ${o[2]} |`).join('\n')}
+${agents.options
+	.map((o) => o.map((c) => c.replace(/\|/g, '\\|')))
+	.map((o) => `| \`${o[0]}\` | ${o[1]} | ${o[2]} |`)
+	.join('\n')}
 
 ## Three mistakes that break it
 

@@ -1,0 +1,371 @@
+{{Infobox person
+| name               = Conor McGregor
+| image              = Conor McGregor 2025.jpeg
+| image_size         = 
+| caption            = McGregor in 2025
+| children           = 4
+| criminal_charges   = 20+, including driving offences and assault<ref name=2yrban /><ref name=ie-conor-mcgregor-avoids-jail-for-assault />
+| birth_name         = Conor Anthony McGregor
+| birth_date         = {{Birth date and age|df=yes|1988|7|14}}
+| birth_place        = [[Dublin]], Ireland
+| other_names        = Notorious
+| occupation         = {{hlist|[[Mixed martial artist]]|businessman}}
+| spouse             = {{marriage|Dee Devlin|2025}}
+| relatives          = [[Keith Buckley (footballer)|Keith Buckley]] (cousin)<br>[[Warren Davis (footballer)|Warren Davis]] (cousin)
+| website            = {{URL|conormcgregor.com}}
+| module             = {{Infobox martial artist
+| embed           = yes
+| height          = 5 ft 8 in
+| weight          = 170 lb
+| weight_class    = [[Featherweight (MMA)|Featherweight]] (2008–2015)<br/>[[Lightweight (MMA)|Lightweight]] (2008–2012, 2016–2018, 2021-present)<br/>[[Welterweight (MMA)|Welterweight]] (2016, 2020, 2026)
+| reach           = 74 in<ref name=ufcprofile>{{cite web|url=https://www.ufc.com/athlete/conor-mcgregor |title=Conor McGregor |publisher=UFC – Ultimate Fighting Championship |archive-url=https://web.archive.org/web/20160825234937/http://www.ufc.com/fighter/Conor-McGregor |archive-date=25 August 2016}}</ref><ref>{{cite web|url=http://www.fightmetric.com/fighter-details/f4c49976c75c5ab2 |title=Conor McGregor |website=FightMetric}}</ref>
+| style           = 
+| stance          = Southpaw
+| rank            = Black belt in [[Brazilian jiu-jitsu]]<ref>{{cite news|url=https://mmajunkie.usatoday.com/2023/09/ufc-news-conor-mcgregor-awarded-brazilian-jiu-jitsu-black-belt   |title=Conor McGregor Promoted To BJJ Black Belt|publisher=MMA Junkie |first=Simon|last=Samano |date=4 September 2023}}</ref> under [[John Kavanagh (martial artist)|John Kavanagh]]<ref>{{cite web |last1=Blackett |first1=Todd |title=Conor McGregor Promoted To BJJ Black Belt |url=https://jitsmagazine.com/conor-mcgregor-promoted-to-bjj-black-belt/ |website=Jitsmagazine |date=5 September 2023 |access-date=5 September 2023}}</ref>
+| team            = [[Straight Blast Gym Ireland|SBG Ireland]]
+| trainer         = {{unbulleted list|[[John Kavanagh (martial artist)|John Kavanagh]] (head coach)<ref>{{cite news|title=McGregor Plans On UFC Return This December|url=https://www.mmamania.com/2017/6/23/15861580/john-kavanagh-says-conor-mcgregor-planning-on-ufc-return-this-december|access-date=1 July 2017|work=[[SB Nation]] (MMAmania.com)}}</ref>|Owen Roddy, Raj Vrînceanu ([[Boxing]])<ref>{{cite news|title=Conor McGregor's boxing coach: 'I have no doubt in my mind' he'll beat Floyd Mayweather|url=https://www.mmafighting.com/2017/6/19/15833010/conor-mcgregors-boxing-coach-i-have-no-doubt-in-my-mind-hell-beat-floyd-mayweather|access-date=1 July 2017|work=[[SB Nation]] (MMAFighting.com)}}</ref>|Sergey Pikulskiy ([[Wrestling]])|John Connor ([[Strength and conditioning coach|S&C]])<ref>{{cite news|last1=Gibson|first1=Paul|title=How to look good while fighting, by Conor McGregor's strength coach|url=https://www.theguardian.com/sport/the-balls-of-wrath/2016/nov/10/conor-mcgregor-carl-frampton-strength-conditioning-nutrition-ufc|access-date=1 July 2017|work=[[The Guardian]]|date=10 November 2016}}</ref>|George Lockhart ([[Sports nutrition|Nutrition]])<ref>{{cite news|title=McGregor's nutritionist George Lockhart talks UFC 205 prep, Diaz fights|url=https://www.bloodyelbow.com/2016/11/1/13483962/conor-mcgregor-nutritionist-george-lockhart-ufc-205-lightweight-weight-cut|access-date=1 July 2017|work=[[SB Nation]] (BloodyElbow.com)|archive-date=2 February 2021|archive-url=https://web.archive.org/web/20210202164708/https://www.bloodyelbow.com/2016/11/1/13483962/conor-mcgregor-nutritionist-george-lockhart-ufc-205-lightweight-weight-cut|url-status=dead}}</ref>}}
+| years_active    = 2008–present
+| mma_kowin       = 19
+| mma_subwin      = 1
+| mma_decwin      = 2
+| mma_koloss      = 3
+| mma_subloss     = 4
+| mma_decloss     = 
+| mma_draw        = 
+| mma_nc          = 
+| am_win          = 1
+| am_kowin        = 1
+| am_loss         = 0 
+| sherdog         = 29688
+| box_win         = 0
+| box_kowin       = 
+| box_loss        = 1
+| box_koloss      = 1
+| box_draw        = 
+| box_nc          = 
+|height_cm=}}
+}}
+'''Conor Anthony McGregor''' (born 14 July 1988) is an Irish professional [[mixed martial arts|mixed martial artist]].<!-- only main occupations, per [[MOS:ROLEBIO]] --> He is a former [[Ultimate Fighting Championship]] (UFC) [[UFC Featherweight Championship|Featherweight]] and [[UFC Lightweight Championship|Lightweight Champion]], becoming the first fighter to hold [[List of UFC champions#Men's championship history|UFC championships]] in two weight classes simultaneously.<ref name=auto>{{cite web|url=https://bleacherreport.com/articles/2768998-conor-mcgregor-officially-stripped-of-ufc-title-following-ufc-223 |title=Conor McGregor Officially Stripped of UFC Title Following UFC 223 |first=Steven |last=Rondina |website=Bleacher Report |date=8 April 2018 |access-date=7 October 2018}}</ref> He is also a former simultaneous [[Cage Warriors|Cage Warriors Fighting Championship]] (CWFC) Featherw
+{{MMA record start}}
+|-
+|{{no2}}Loss 
+|align=center|22–7
+|[[Max Holloway]]
+|TKO (knee injury)
+|[[UFC 329]]
+|{{dts|format=dmy|2026|July|11}}
+|align=center|1
+|align=center|1:09
+|[[Las Vegas, Nevada]], United States 
+|{{small|Return to Welterweight.}}
+|-
+|{{no2}}Loss 
+|align=center|22–6
+|[[Dustin Poirier]]
+|TKO (doctor stoppage) <!--NOTE: See Talk Page Discussion-->
+|[[UFC 264]]
+|{{dts|format=dmy|2021|July|10}}
+|align=center|1
+|align=center|5:00
+|[[Las Vegas]], [[Nevada]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|22–5
+|[[Dustin Poirier]]
+|TKO (punches) <!--See Talk:Conor_McGregor#Semi-protected_edit_request_on_13_July_2021-->
+|[[UFC 257]]
+|{{dts|format=dmy|2021|January|24}}
+|align=center|2
+|align=center|2:32
+|[[Abu Dhabi]], United Arab Emirates
+|
+|-
+|{{yes2}}Win
+|align=center|22–4
+|[[Donald Cerrone]]
+|TKO (head kick and punches) <!--NOTE: Result as per Sherdog.com-->
+|[[UFC 246]]
+|{{dts|format=dmy|2020|January|18}}
+|align=center|1
+|align=center|0:40
+|[[Las Vegas]], [[Nevada]], United States
+|{{small|Welterweight bout. Performance of the Night.}}
+|-
+|{{no2}}Loss
+|align=center|21–4
+|[[Khabib Nurmagomedov]]
+|Submission (neck crank) 
+|[[UFC 229]] 
+|{{dts|format=dmy|2018|October|6}}
+|align=center|4
+|align=center|3:03
+|[[Las Vegas]], [[Nevada]], United States
+|{{small|For the [[UFC Lightweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 21–3
+| [[Eddie Alvarez]]
+| TKO (punches)
+| [[UFC 205]]
+| {{dts|format=dmy|2016|November|12}}
+| align=center| 2
+| align=center| 3:04
+| [[New York City]], [[New York (state)|New York]], United States
+| {{small|Won the [[UFC Lightweight Championship]]. Performance of the Night. Later stripped of the title due to inactivity.}}
+|-
+| {{yes2}}Win
+| align=center| 20–3
+| [[Nate Diaz]]
+| Decision (majority)
+| [[UFC 202]]
+| {{dts|format=dmy|2016|August|20}}
+| align=center| 5
+| align=center| 5:00
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2}}Loss
+| align=center| 19–3
+| [[Nate Diaz]]
+| Submission (rear-naked choke)
+| [[UFC 196]]
+| {{dts|format=dmy|2016|March|5}}
+| align=center| 2
+| align=center| 4:12
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Welterweight debut. Fight of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 19–2
+| [[José Aldo]]
+| KO (punch)
+| [[UFC 194]]
+| {{dts|format=dmy|2015|December|12}}
+| align=center| 1
+| align=center| 0:13
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Won and unified the [[UFC Featherweight Championship]]. Performance of the Night. Later stripped of the title due to inactivity.}}
+|-
+| {{yes2}}Win
+| align=center| 18–2
+| [[Chad Mendes]]
+| TKO (punches)
+| [[UFC 189]]
+| {{dts|format=dmy|2015|July|11}}
+| align=center| 2
+| align=center| 4:57
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Won the interim [[UFC Featherweight Championship]]. Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|17–2
+|[[Dennis Siver]]
+|TKO (punches)
+|[[UFC Fight Night: McGregor vs. Siver]]
+|{{dts|format=dmy|2015|January|18}}
+|align=center|2
+|align=center|1:54
+|[[Boston]], [[Massachusetts]], United States
+|{{small|Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|16–2
+|[[Dustin Poirier]]
+|TKO (punches)
+|[[UFC 178]]
+|{{dts|format=dmy|2014|September|27}}
+|align=center|1
+|align=center|1:46
+|[[Las Vegas]], [[Nevada]], United States
+|{{small|Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|15–2
+|[[Diego Brandão]]
+|TKO (punches)
+|[[UFC Fight Night: McGregor vs. Brandão]]
+|{{dts|format=dmy|2014|July|19}}
+|align=center|1
+|align=center|4:05
+|[[Dublin]], Ireland
+|{{small|Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|14–2
+|[[Max Holloway]]
+|Decision (unanimous)
+|[[UFC Fight Night: Shogun vs. Sonnen]]
+|{{dts|format=dmy|2013|August|17}}
+|align=center|3
+|align=center|5:00
+|[[Boston]], [[Massachusetts]], United States
+|
+|-
+|{{yes2}}Win
+|align=center|13–2
+|[[Marcus Brimage]]
+|TKO (punches)
+|[[UFC on Fuel TV: Mousasi vs. Latifi]]
+|{{dts|format=dmy|2013|April|6}}
+|align=center|1
+|align=center|1:07
+|[[Stockholm]], Sweden
+|{{small|Return to Featherweight. Knockout of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|12–2
+|Ivan Buchinger
+|KO (punch)
+|[[2012 in Cage Warriors#Cage Warriors: 51|Cage Warriors 51]]
+|{{dts|format=dmy|2012|December|31}}
+|align=center|1
+|align=center|3:40
+|[[Dublin]], Ireland
+|{{small|Won the vacant [[Cage Warriors#Cage Warriors Lightweight Championship|Cage Warriors Lightweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|11–2
+|Dave Hill
+|Submission (rear-naked choke)
+|[[2012 in Cage Warriors#Cage Warriors: 47|Cage Warriors 47]]
+|{{dts|format=dmy|2012|June|2}}
+|align=center|2
+|align=center|4:10
+|[[Dublin]], Ireland
+|{{small|Won the vacant [[Cage Warriors#Cage Warriors Featherweight Championship|Cage Warriors Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|10–2
+|Steve O'Keefe
+|KO (elbows)
+|[[2012 in Cage Warriors#Cage Warriors: 45|Cage Warriors 45]]
+|{{dts|format=dmy|2012|February|18}}
+|align=center|1
+|align=center|1:35
+|[[London]], England
+|{{small|Return to Featherweight.}}
+|-
+|{{yes2}}Win
+|align=center|9–2
+|Aaron Jahnsen
+|TKO (punches)
+|[[2011 in Cage Warriors#Cage Warriors: Fight Night 2|Cage Warriors: Fight Night 2]]
+|{{dts|format=dmy|2011|September|8}}
+|align=center|1
+|align=center|3:29
+|[[Amman]], Jordan
+|
+|-
+|{{yes2}}Win
+|align=center|8–2
+|[[Artur Sowiński (fighter)|Artur Sowiński]]
+|TKO (punches)
+|Celtic Gladiator 2
+|{{dts|format=dmy|2011|June|11}}
+|align=center|2
+|align=center|1:12
+|[[Portlaoise]], Ireland
+|{{small|Return to Lightweight.}}
+|-
+|{{yes2}}Win
+|align=center|7–2
+|Paddy Doherty
+|KO (punch)
+|Immortal FC 4
+|{{dts|format=dmy|2011|April|16}}
+|align=center|1
+|align=center|0:04
+|[[Letterkenny]], Ireland
+|
+|-
+|{{yes2}}Win
+|align=center|6–2
+|Mike Wood
+|KO (punches)
+|Cage Contender 8
+|{{dts|format=dmy|2011|March|12}}
+|align=center|1
+|align=center|0:16
+|[[Dublin]], Ireland
+|{{small|Return to Featherweight.}}
+|-
+|{{yes2}}Win
+|align=center|5–2
+|Hugh Brady
+|TKO (punches)
+|Chaos FC 8
+|{{dts|format=dmy|2011|February|12}}
+|align=center| 1
+|align=center|2:31
+|[[Derry]], Northern Ireland
+|
+|-
+|{{no2}}Loss
+|align=center|4–2
+|[[Joseph Duffy (fighter)|Joseph Duffy]]
+|Submission (arm-triangle choke)
+|[[2010 in Cage Warriors#Cage Warriors 39: The Uprising|Cage Warriors 39]]
+|{{dts|format=dmy|2010|November|27}}
+|align=center|1
+|align=center|0:38
+|[[Cork (city)|Cork]], Ireland
+|
+|-
+|{{yes2}}Win
+|align=center|4–1
+|Connor Dillon
+|TKO (corner stoppage)
+|Chaos FC 7
+|{{dts|format=dmy|2010|October|9}}
+|align=center|1
+|align=center|4:22
+|[[Derry]], Northern Ireland
+|{{small|Featherweight bout.}}
+|-
+|{{yes2}}Win
+|align=center|3–1
+|Stephen Bailey
+|TKO (punches)
+|K.O.: The Fight Before Christmas 1
+|{{dts|format=dmy|2008|December|12}}
+|align=center|1
+|align=center|1:22
+|[[Dublin]], Ireland
+|{{small|Lightweight debut.}}
+|-
+|{{no2}}Loss
+|align=center|2–1
+|Artemij Sitenkov
+|Submission (kneebar)
+|Cage of Truth 3
+|{{dts|format=dmy|2008|June|28}}
+|align=center|1
+|align=center|1:09<!--<ref>{{cite web|url=https://www.youtube.com/watch?v=cUNSkuZKMXk|title=UFC Fighter Conor McGregor vs Safin Sofian v – 1ST MMA LOSS – FULL FIGHT|work=YouTube|access-date=23 October 2014}}</ref>-->
+|[[Dublin]], Ireland
+|
+|-
+|{{yes2}}Win
+|align=center|2–0
+|Mo Taylor
+|TKO (punches)
+|[[2008 in Cage Rage Championships#Cage Rage Contenders - Ireland vs. Belgium|Cage Rage Contenders: Ireland vs. Belgium]]
+|{{dts|format=dmy|2008|May|3}}
+|align=center|1
+|align=center|1:06
+|[[Dublin]], Ireland
+|
+|-
+|{{yes2}}Win
+|align=center|1–0
+|Gary Morris
+|TKO (punches)
+|Cage of Truth 2
+|{{dts|format=dmy|2008|March|8}}
+|align=center|2
+|align=center|0:08
+|[[Dublin]], Ireland
+|{{small|Featherweight debut.}}
+|-
+
+{{MMA record end}}

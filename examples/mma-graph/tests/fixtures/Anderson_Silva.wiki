@@ -1,0 +1,561 @@
+{{Infobox martial artist
+| name           = Anderson Silva
+| image          = Anderson Silva.png
+| image_size     =
+| alt            =
+| caption        = Silva in 2012
+| birth_name     = Anderson da Silva<ref name="fn">{{Cite web|title=BoxRec: Anderson Silva|url=https://boxrec.com/en/box-pro/152826|access-date=2023-11-15|website=boxrec.com}}</ref>
+| nationality    = Brazilian <br /> American<ref name=uscitizen>{{cite web|url=https://mmajunkie.usatoday.com/2019/07/ufc-anderson-silva-sworn-in-as-us-citizen|title=Anderson Silva grateful to be sworn in as U.S. citizen: 'This is my country now'|date=24 July 2019|publisher=mmajunkie.com}}</ref>
+| birth_date     = {{Birth date and age|df=yes|1975|04|14}}
+| birth_place    = [[São Paulo]], Brazil<ref>{{cite web |url=https://www.rollingstone.com.br/edicoes/49/textos/aranha-negra/ |title=Aranha Negra |last=Miyazawa |first=Pablo |author-link=Pablo Miyazawa |publisher=RollingStone.com.br |access-date=16 June 2011 |language=pt |trans-title=Black Spider |quote=Anderson Silva, born in São Paulo, but prefers to say that he is from Curitiba, where he grew up, learned to fight and started a family. |archive-url=https://web.archive.org/web/20110722141753/http://www.rollingstone.com.br/edicoes/49/textos/aranha-negra/ |archive-date=22 July 2011 |url-status=dead }}</ref>
+| other_names    = The Spider
+| fighting_out_of= [[Curitiba]], Brazil
+| height         = {{height|ft=6|in=2}}
+| weight       = {{convert|185|lb|kg st|abbr=on}}
+| weight_class = [[Welterweight (MMA)|Welterweight]] <br /> [[Middleweight (MMA)|Middleweight]] <br /> [[Light heavyweight (MMA)|Light Heavyweight]]
+| reach_in     = 77+1/2<ref name="UFCstats">{{Cite web|title=Stats {{!}} UFC|url=http://ufcstats.com/fighter-details/1f454354805b6f75|access-date=2020-11-01|website=ufcstats.com}}</ref>
+| style        =
+| trainer      = Boxing: Josuel Distak and Luiz Dorea <br /> Jiu-Jitsu: [[Antônio Rodrigo Nogueira]], Sylvio Behring and Ramon Lemos <br /> Wrestling: [[Mark Muñoz]] <br /> Muay Thai: [[Rafael Cordeiro]],<ref>{{cite web |title=Anderson Silva Interview & pics |url=https://www.boutreview.com/news/data/english/998678553.html |website=www.boutreview.com}}</ref> [[Pedro Rizzo]], Israel Gomes<ref>{{cite web |title=Israel Gomes Instructor |url=https://americankillerbeesfitness.com/Instructors/Israel-Gomes |website=Killer Bees Muay Thai}}</ref> <br /> [[Panantukan]]: [[Dan Inosanto]]<ref name="Davis">{{cite web|url=https://johnalmond.gonevis.com/panantukan-filipino-boxing/|title=Panantukan: Filipino Boxing|website=Gonevis|author=Almond, John|date=11 December 2020|access-date=11 December 2020|archive-date=7 June 2023|archive-url=https://web.archive.org/web/20230607153529/https://johnalmond.gonevis.com/panantukan-filipino-boxing/|url-status=dead}} 11 December 2020</ref>
+| team         = [[Chute Boxe Academy]] (1997–2003)<br />Muay Thai Dream Team (2003–2006)<ref>{{cite web |title=Killer Bees Muay Thai (about history of Muay Thai Dream Team to now Killer Bees) |url=https://americankillerbeesfitness.com/Instructors/Rumi-Contractor |website=Killer Bees Muay Thai}}</ref><br />[[Brazilian Top Team]] (2003–2006)<br />[[Black House (MMA)|Black House]] (2007–2013)<br /> Team Nogueira<ref>{{cite web |last1=Robb |first1=Sharon |title=Nogueira, Silva team on fight academy in Miami |url=https://www.sun-sentinel.com/news/fl-xpm-2008-05-04-0805030107-story.html |website=Sun Sentinel |date=4 May 2008 |publisher=South Florida Sun Sentinel |access-date=30 October 2020}}</ref><br /> Killer Bees Muay Thai College (Founded/Current Team)<ref>{{cite web |title=Anderson Silva Muay Thai College |url=http://onthemat.com/anderson-silva-muay-thai-college-opens/ |website=OnTheMat |date=30 November 2001 |access-date=30 October 2020}}</ref>
+| stance       = Southpaw<ref name="UFCstats"/>
+| rank         =Black prajied in [[Muay Thai]]<ref name=blackprajiedmuaythai>{{cite news|url=http://exame.abril.com.br/estilo-de-vida/noticias/muay-thai-pode-ser-culpado-pela-morte-de-lider-do-rolezinho|title=Muay thai pode ser culpado pela morte de líder do rolezinho?|publisher=Exame.com|language=pt|author=Luciana Carvalho|date=10 April 2014|access-date=26 January 2015|archive-date=4 March 2016|archive-url=https://web.archive.org/web/20160304053103/http://exame.abril.com.br/estilo-de-vida/noticias/muay-thai-pode-ser-culpado-pela-morte-de-lider-do-rolezinho|url-status=dead}}</ref> <br /> 3rd degree black belt in [[Brazilian Jiu-Jitsu]] <small>under [[Antônio Rodrigo Nogueira|Antônio Rodrigo "Minotauro" Nogueira]]</small><ref name=3rddegreeblackbeltBJJ>{{cite news|url=http://www.bjjee.com/featured/anderson-silva-receives-3rd-degree-on-black-belt-from-rodrigo-minotauro|title=Anderson Silva Receives 3rd Degree on Black Belt from Rodrigo Minotauro |publisher=BJJ Eastern Europe|author=Gile Huni|date=15 December 2014}}</ref> <br /> 5th dan black belt in [[Taekwondo]]<ref name=5thdanblackbelttkd>{{cite news|url=http://www.ahebrasil.com.br/noticias/2012/05/28/taekwondo/nomeado+embaixador+anderson+silva+mostra+arrependimento+por+deixar+modalidade.html|title=Nomeado embaixador, Anderson Silva mostra arrependimento por deixar modalidade|publisher=ahe!|language=pt|author=Francisco Junior|date=4 June 2012|access-date=26 January 2015|archive-url=https://web.archive.org/web/20150202155129/http://www.ahebrasil.com.br/noticias/2012/05/28/taekwondo/nomeado+embaixador+anderson+silva+mostra+arrependimento+por+deixar+modalidade.html|archive-date=2 February 2015|url-status=dead}}</ref> <br /> Black belt in [[Judo]]<ref>{{cite web |last=Murphy |first=Sean |title=Anderson Silva: 10 Reasons Why "The Spider" Is the Pound-for-Pound King of MMA |url=https://bleacherreport.com/articles/620102-anderson-silva-10-reasons-why-the-spider-is-the-pound-for-pound-king-of-mma |website=Bleacher Report |date=February 14, 2011 |access-date=June 11, 2025}}</ref> <br /> Yellow rope in [[Capoeira]]<ref name=yellowropecapoeira>{{cite news|url=http://www.bloodyelbow.com/2010/1/15/1253962/anderson-silva-receives-his-yellow|title=Anderson Silva Receives his Yellow Rope in Capoeira|author=Nick Thomas|publisher=Bloodyelbow|date=15 January 2010|access-date=16 January 2010|archive-date=7 June 2023|archive-url=https://web.archive.org/web/20230607213629/https://bloodyelbow.com/2010/1/15/1253962/anderson-silva-receives-his-yellow|url-status=dead}}</ref>
+| years_active = 1997–2020 ([[MMA]]) <br /> 1998, 2005, 2021–present ([[Boxing]])
+| box_win      = 4
+| box_kowin    = 3
+| box_loss     = 2
+| box_koloss   = 1
+| box_draw     =
+| box_nc       =
+| kickbox_win     = 1
+| kickbox_kowin   = 1
+| mma_kowin    = 23
+| mma_subwin   = 3
+| mma_decwin   = 8
+| mma_dqwin    =
+| mma_koloss   = 4
+| mma_subloss  = 2
+| mma_decloss  = 4
+| mma_dqloss   = 1
+| mma_draw     =
+| mma_nc       = 1
+| occupation   =
+| university   =
+| spouse       = Dayane
+| children     = 5
+| relatives    =
+| students     =
+| club         =
+| school       =
+| url          = {{URL|http://www.spideranderson.com/}}
+| boxrec       = 152826
+| sherdog      = 1356
+| footnotes    =
+| updated      =
+}}
+'''Anderson da Silva'''<ref name="fn" /> ({{IPA|pt|ˈɐ̃deʁsõ ˈsiwvɐ}}; born 14 April 1975) is a Brazilian [[mixed martial arts|mixed martial artist]] and [[professional boxer]].<ref>{{cite web | url=https://boxrec.com/en/box-pro/152826 | title=BoxRec: Anderson Silva }}</ref> He is a former [[UFC Middleweight Championship|UFC Middleweight Champion]] who unified the UFC Middleweight and [[Pride Fighting Championships|Pride World Welterweight Championship]], and holds the record for the [[List of UFC champions#Longest individual reigns|longest title reign]] in UFC history at 2,457 days. This started in 2006 and ended in 2013 and included a previously held UFC record of 16 consecutive victories in that span.<ref>{{cite web|url=https://www.espn.com/extra/mma/news/story?id=5073124 |title=ESPN.go.com April 10, 2010 |publisher=ESPN  |date=10 April 2010 |access-date=11 October 2010}}</ref><ref nam
+{{MMA record start}}
+|-
+|{{no2}}Loss
+|align=center|34–11 (1)
+|[[Uriah Hall]]
+|TKO (punches)
+|[[UFC Fight Night: Hall vs. Silva]]
+|{{dts|format=dmy|2020|October|31}}
+|align=center|4
+|align=center|1:24
+|[[Las Vegas, Nevada]], United States
+|
+|- 
+|{{no2}}Loss
+|align=center|{{nowrap|34–10 (1)}}
+|[[Jared Cannonier]]
+|TKO (leg kick)
+|[[UFC 237]]
+|{{dts|format=dmy|2019|May|11}}
+|align=center|1
+|align=center|4:47
+|[[Rio de Janeiro]], Brazil
+|
+|-
+|{{no2}}Loss
+|align=center|34–9 (1)
+|[[Israel Adesanya]]
+|Decision (unanimous)
+|[[UFC 234]]
+|{{dts|format=dmy|2019|February|10}}
+|align=center|3
+|align=center|5:00
+|[[Melbourne]], Australia 
+| {{small|Fight of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|34–8 (1)
+|[[Derek Brunson]]
+|Decision (unanimous)
+|[[UFC 208]]
+|{{dts|format=dmy|2017|February|11}}
+|align=center|3
+|align=center|5:00
+|[[Brooklyn]], New York, United States
+|
+|-
+|{{no2}}Loss
+|align=center|33–8 (1)
+|[[Daniel Cormier]]
+|Decision (unanimous)
+|[[UFC 200]]
+|{{dts|format=dmy|2016|July|9}}
+|align=center|3
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|Light Heavyweight bout.}}
+|-
+|{{no2}}Loss
+| align=center|33–7 (1)
+| [[Michael Bisping]]
+| Decision (unanimous)
+| [[UFC Fight Night: Silva vs. Bisping]]
+| {{dts|format=dmy|2016|February|27}}
+| align=center|5
+| align=center|5:00
+| [[London]], England
+| {{small|Fight of the Night.}}
+|-
+| {{nocontest}}NC
+| align=center| 33–6 (1)
+| [[Nick Diaz]]
+| NC (overturned by NSAC)
+| [[UFC 183]]
+| {{dts|format=dmy|2015|January|31}}
+| align=center|5
+| align=center|5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Originally a unanimous decision win for Silva; overturned after he tested positive for [[drostanolone]] and [[androsterone]]. Diaz also tested positive for [[marijuana]].}}<ref name=mmajunkie/><ref name=yahoosports/>
+|-
+| {{no2}}Loss
+| align=center| 33–6
+| [[Chris Weidman]]
+| TKO (leg injury)
+| [[UFC 168]]
+| {{dts|format=dmy|2013|December|28}}
+| align=center| 2
+| align=center| 1:16
+| [[Las Vegas, Nevada]], United States
+| {{small|For the [[UFC Middleweight Championship]].}}
+|-
+| {{no2}}Loss
+| align=center| 33–5
+| [[Chris Weidman]]
+| KO (punches)
+| [[UFC 162]]
+| {{dts|format=dmy|2013|July|6}}
+| align=center| 2
+| align=center| 1:18
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Lost the [[List of UFC champions#Middleweight Championship|UFC Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 33–4
+| [[Stephan Bonnar]]
+| TKO (knee to the body and punches)
+| [[UFC 153]]
+| {{dts|format=dmy|2012|October|13}}
+| align=center| 1
+| align=center| 4:40
+| [[Rio de Janeiro]], Brazil
+| {{small|Light Heavyweight bout.  Bonnar tested positive for a [[boldenone]] metabolite.<ref>{{cite web |last1=Morgan |first1=John |last2=Erickson |first2=Matt |date=2 November 2012 |title=Stephan Bonnar, Dave Herman fail UFC 153 drug tests, await potential suspensions |website=[[MMAjunkie.com]] |url=http://mmajunkie.com/2012/11/stephan-bonnar-dave-herman-fail-ufc-153-drug-tests-await-potential-suspensions |access-date=26 November 2015 |url-status=bot: unknown |archive-url=https://web.archive.org/web/20151208121338/http://mmajunkie.com/2012/11/stephan-bonnar-dave-herman-fail-ufc-153-drug-tests-await-potential-suspensions |archive-date=8 December 2015 }}</ref>}}
+|-
+| {{yes2}}Win
+| align=center| 32–4
+| [[Chael Sonnen]]
+| TKO (knee to the body and punches)
+| [[UFC 148]]
+| {{dts|format=dmy|2012|July|7}}
+| align=center| 2
+| align=center| 1:55
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Defended the [[List of UFC champions#Middleweight Championship|UFC Middleweight Championship]]. Extended the record for consecutive UFC Middleweight title defenses (10). Knockout of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 31–4
+| [[Yushin Okami]]
+| TKO (punches)
+| [[UFC 134]]
+| {{dts|format=dmy|2011|August|27}}
+| align=center| 2
+| align=center| 2:04
+| [[Rio de Janeiro]], Brazil
+| {{small|Defended the [[List of UFC champions#Middleweight Championship|UFC Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 30–4
+| [[Vitor Belfort]]
+| KO (front kick and punches)
+| [[UFC 126]]
+| {{dts|format=dmy|2011|February|5}}
+| align=center| 1
+| align=center| 3:25
+| [[Las Vegas]], [[Nevada]], United States
+| {{small|Defended the [[List of UFC champions#Middleweight Championship|UFC Middleweight Championship]]. Knockout of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 29–4
+| [[Chael Sonnen]]
+| Submission (triangle choke)
+| [[UFC 117]]
+| {{dts|format=dmy|2010|August|7}}
+| align=center| 5
+| align=center| 3:10
+| [[Oakland, California]], United States
+| {{small|Defended the [[List of UFC champions#Middleweight Championship|UFC Middleweight Championship]]. Submission of the Night. Fight of the Night. Fight of the Year. Submission of the Year. Sonnen tested positive for elevated testosterone levels.<ref name=sonnentestosterone/>}}
+|-
+| {{yes2}}Win
+| align=center| 28–4
+| [[Demian Maia]]
+| Decision (unanimous)
+| [[UFC 112]]
+| {{dts|format=dmy|2010|April|10}}
+| align=center| 5
+| align=center| 5:00
+| [[Abu Dhabi]], United Arab Emirates
+| {{small|Defended the [[UFC Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 27–4
+| [[Forrest Griffin]]
+| KO (punch)
+| [[UFC 101]]
+| {{dts|format=dmy|2009|August|8}}
+| align=center| 1
+| align=center| 3:23
+| [[Philadelphia, Pennsylvania]], United States
+| {{small|Light Heavyweight bout. Knockout of the Night. Fight of the Night. Knockout of the Year. Griffin tested positive for illegal substances.<!--<ref>{{cite web|last=Conlan|first=Brendhan|title=Forrest Griffin Reveals He Took Xanax The Night Before Fight With Anderson Silva|url=http://www.fighters.com/10/02/forrest-griffin-reveals-he-took-xanax-the-night-before-fight-with-anderson-silva|publisher=Fighters.com|access-date=1 February 2013}}</ref>-->}}
+|-
+| {{yes2}}Win
+| align=center| 26–4
+| [[Thales Leites]]
+| Decision (unanimous)
+| [[UFC 97]]
+| {{dts|format=dmy|2009|April|18}}
+| align=center| 5
+| align=center| 5:00
+| [[Montreal]], [[Quebec]], Canada
+| {{small|Defended the [[UFC Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 25–4
+| [[Patrick Côté (fighter)|Patrick Côté]]
+| TKO (knee injury)
+| [[UFC 90]]
+| {{dts|format=dmy|2008|October|25}}
+| align=center| 3
+| align=center| 0:39
+| [[Rosemont, Illinois]], United States
+| {{small|Defended the [[UFC Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 24–4
+| [[James Irvin (fighter)|James Irvin]]
+| KO (punches)
+| [[UFC Fight Night: Silva vs. Irvin]]
+| {{dts|format=dmy|2008|July|19}}
+| align=center| 1
+| align=center| 1:01
+| [[Las Vegas, Nevada]], United States
+| {{small|Light Heavyweight bout. Irvin tested positive for [[methadone]] and [[oxymorphone]].}}<ref name=mmajunkiedrugs/>
+|-
+| {{yes2}}Win
+| align=center| 23–4
+| [[Dan Henderson]]
+| Submission (rear-naked choke)
+| [[UFC 82]]
+| {{dts|format=dmy|2008|March|1}}
+| align=center| 2
+| align=center| 4:52
+| [[Columbus, Ohio]], United States
+| {{small|Defended the [[UFC Middleweight Championship]]. Broke the record for the most consecutive UFC Middleweight title defenses (3). Submission of the Night. Fight of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 22–4
+| [[Rich Franklin]]
+| TKO (knees)
+| [[UFC 77]]
+| {{dts|format=dmy|2007|October|20}}
+| align=center| 2
+| align=center| 1:07
+| [[Cincinnati, Ohio]], United States
+| {{small|Defended the [[UFC Middleweight Championship]]. Knockout of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 21–4
+| [[Nate Marquardt]]
+| TKO (punches)
+| [[UFC 73]]
+| {{dts|format=dmy|2007|July|7}}
+| align=center| 1
+| align=center| 4:50
+| [[Sacramento, California]], United States
+| {{small|Defended the [[UFC Middleweight Championship]]. Knockout of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 20–4
+| [[Travis Lutter]]
+| TKO (submission to elbows)
+| [[UFC 67]]
+| {{dts|format=dmy|2007|February|3}}
+| align=center| 2
+| align=center| 2:11
+| [[Las Vegas, Nevada]], United States
+| {{small|Non-title bout; Lutter missed weight (187 lb).}}
+|-
+| {{yes2}}Win
+| align=center| 19–4
+| [[Rich Franklin]]
+| KO (knee)
+| [[UFC 64]]
+| {{dts|format=dmy|2006|October|14}}
+| align=center| 1
+| align=center| 2:59
+| [[Las Vegas, Nevada]], United States
+| {{small|Won the [[UFC Middleweight Championship]]. Knockout of the Night. Knockout of the Year.}}
+|-
+| {{yes2}}Win
+| align=center| 18–4
+| [[Chris Leben]]
+| KO (knee)
+| [[UFC Ultimate Fight Night 5|UFC Fight Night 5]]
+| {{dts|format=dmy|2006|June|28}}
+| align=center| 1
+| align=center| 0:49
+| [[Las Vegas, Nevada]], United States
+| {{small|[[UFC Middleweight Championship|UFC Middleweight]] title eliminator. Knockout of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 17–4
+| [[Tony Fryklund]]
+| KO (elbow)
+| [[2006 in Cage Rage Championships#Cage Rage 16|Cage Rage 16]]
+| {{dts|format=dmy|2006|April|22}}
+| align=center| 1
+| align=center| 2:02
+| [[London]], England
+| {{small|Defended the [[List of Cage Rage champions#World Middleweight Championship|Cage Rage Middleweight Championship]].}}
+|-
+| {{no2}}Loss
+| align=center| 16–4
+| [[Yushin Okami]]
+| DQ (illegal kick)
+| [[Rumble on the Rock#Rumble on the Rock champions|Rumble on the Rock 8]]
+| {{dts|format=dmy|2006|January|20}}
+| align=center| 1
+| align=center| 2:33
+| [[Honolulu, Hawaii]], United States
+| {{small|Welterweight tournament opening round. Silva was disqualified for delivering an up-kick to an opponent who had his knees on the ground.}}
+|-
+| {{yes2}}Win
+| align=center| 16–3
+| Curtis Stout
+| KO (punches)
+| [[2005 in Cage Rage Championships#Cage Rage 14|Cage Rage 14]]
+| {{dts|format=dmy|2005|December|3}}
+| align=center| 1
+| align=center| 4:59
+| [[London]], England
+| {{small|Defended the [[List of Cage Rage champions#World Middleweight Championship|Cage Rage Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 15–3
+| [[Jorge Rivera (fighter)|Jorge Rivera]]
+| TKO (knees and punches)
+| [[2005 in Cage Rage Championships#Cage Rage 11|Cage Rage 11]]
+| {{dts|format=dmy|2005|April|30}}
+| align=center| 2
+| align=center| 3:53
+| [[London]], England
+| {{small|Defended the [[List of Cage Rage champions#World Middleweight Championship|Cage Rage Middleweight Championship]].}}
+|-
+| {{no2}}Loss
+| align=center| 14–3
+| [[Ryo Chonan]]
+| Submission (flying scissor heel hook)
+| [[Pride Shockwave 2004]]
+| {{dts|format=dmy|2004|December|31}}
+| align=center| 3
+| align=center| 3:08
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 14–2
+| [[Lee Murray]]
+| Decision (unanimous)
+| [[2004 in Cage Rage Championships#Cage Rage 8|Cage Rage 8]]
+| {{dts|format=dmy|2004|September|11|}}
+| align=center| 3
+| align=center| 5:00
+| [[London]], England
+| {{small|Won the [[List of Cage Rage champions#World Middleweight Championship|Cage Rage Middleweight Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 13–2
+| [[Jeremy Horn]]
+| Decision (unanimous)
+| Gladiator 2
+| {{dts|format=dmy|2004|June|27}}
+| align=center| 3
+| align=center| 5:00
+| [[Seoul]], South Korea
+| 
+|-
+| {{yes2}}Win
+| align=center| 12–2
+| Waldir dos Anjos
+| TKO (corner stoppage)
+| Conquista Fight 1
+| {{dts|format=dmy|2003|December|20}}
+| align=center| 1
+| align=center| 5:00
+| [[Vitória da Conquista]], Brazil
+| 
+|-
+| {{no2}}Loss
+| align=center| 11–2
+| [[Daiju Takase]]
+| Submission (triangle choke)
+| [[Pride 26]]
+| {{dts|format=dmy|2003|June|8}}
+| align=center| 1
+| align=center| 8:33
+| [[Yokohama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 11–1
+| [[Carlos Newton]]
+| KO (flying knee and punches)
+| [[Pride 25]]
+| {{dts|format=dmy|2003|March|16}}
+| align=center| 1
+| align=center| 6:27
+| [[Yokohama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 10–1
+| [[Alexander Otsuka]]
+| Decision (unanimous)
+| [[Pride 22]]
+| {{dts|format=dmy|2002|September|29}}
+| align=center| 3
+| align=center| 5:00
+| [[Nagoya]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 9–1
+| [[Alex Stiebling]]
+| TKO (doctor stoppage)
+| [[Pride 21]]
+| {{dts|format=dmy|2002|June|23}}
+| align=center| 1
+| align=center| 1:23
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 8–1
+| [[Roan Carneiro]]
+| TKO (submission to punches)
+| Mecca 6
+| {{dts|format=dmy|2002|January|31}}
+| align=center| 1
+| align=center| 5:32
+| [[Curitiba]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 7–1
+| [[Hayato Sakurai]]
+| Decision (unanimous)
+| Shooto 7
+| {{dts|format=dmy|2001|August|26}}
+| align=center| 3
+| align=center| 5:00
+| [[Osaka]], Japan
+| {{small|Won the [[List of Shooto Champions|Shooto Middleweight (168 lb) Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 6–1
+| Israel Albuquerque
+| TKO (submission to punches)
+| Mecca 5
+| {{dts|format=dmy|2001|June|9}}
+| align=center| 1
+| align=center| 6:17
+| [[Curitiba]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 5–1
+| [[Tetsuji Kato]]
+| Decision (unanimous)
+| [[Shooto]] 2
+| {{dts|format=dmy|2001|March|2}}
+| align=center| 3
+| align=center| 5:00
+| [[Tokyo]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 4–1
+| Claudionor Fontinelle
+| TKO (punches and knees)
+| Mecca 4
+| {{dts|format=dmy|2000|December|16}}
+| align=center| 1
+| align=center| 4:35
+| [[Curitiba]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 3–1
+| Jose Barreto
+| TKO (head kick and punches)
+| Mecca 2
+| {{dts|format=dmy|2000|August|12}}
+| align=center| 1
+| align=center| 1:06
+| [[Curitiba]], Brazil
+| 
+|-
+| {{no2}}Loss
+| align=center| 2–1
+| [[Luiz Azeredo]]
+| Decision (unanimous)
+| Mecca 1
+| {{dts|format=dmy|2000|May|27}}
+| align=center| 2
+| align=center| 10:00
+| [[Curitiba]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 2–0
+| [[Fabrício Camões]]
+| TKO (retirement)
+| rowspan=2|BFC 1
+| rowspan=2|{{dts|format=dmy|1997|June|25}}
+| align=center| 1
+| align=center| 25:14
+| rowspan=2|[[Campo Grande]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 1–0
+| Raimundo Pinheiro
+| Submission (rear-naked choke)
+| align=center| 1
+| align=center| 1:53
+| 
+
+{{MMA record end}}

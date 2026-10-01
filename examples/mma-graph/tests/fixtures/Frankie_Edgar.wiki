@@ -1,0 +1,451 @@
+{{Infobox martial artist
+| name            = Frankie Edgar
+| image           = Frankie Edgar.jpg
+| alt             =
+| caption         = Edgar in 2012
+| birth_name      = 
+| birth_date      = {{Birth date and age|1981|10|16}}
+| birth_place     = [[Toms River, New Jersey|Toms River]], [[New Jersey]], U.S.
+| nickname        = The Answer
+| residence       =
+| height          = {{height|ft=5|in=6}}
+| weight_lb       = 136
+| weight_class    = [[Real American Freestyle#Weight divisions and current champions|Lightweight]] (2026–present)<br />[[Bantamweight (MMA)|Bantamweight]] (2020–2022)<br />[[Featherweight (MMA)|Featherweight]] (2013–2019)<br />[[Lightweight (MMA)|Lightweight]] (2005–2012)
+| reach           = 68 in<ref>{{cite web|url=http://www.ufc.com/event/ufc-fight-night-austin/printFightCard|title=Fight Card - UFC Fight Night Edgar vs. Swanson|publisher=[[Ultimate Fighting Championship|UFC]]|access-date=November 23, 2014|url-status=live|archive-url=https://web.archive.org/web/20141123223748/http://www.ufc.com/event/ufc-fight-night-austin/printFightCard|archive-date=November 23, 2014}}</ref>
+| stance          = Orthodox
+| style           = 
+| fighting_out_of = Toms River, New Jersey, U.S.
+| team            = Ricardo Almeida BJJ<br>KHK MMA Fight Team<ref>{{cite web |url=http://mmaboxing.ru/news/news-mma/Prints-Bahreyna-budet-v-uglu-Frenki-Edgara-vo-vremya-boya-s-Mendesom-18109.html |title=Новости ММА - Все новости в мире ММА, бокса и смешанных единоборств |access-date=December 12, 2015 |url-status=live |archive-url=https://web.archive.org/web/20151222125014/http://mmaboxing.ru/news/news-mma/Prints-Bahreyna-budet-v-uglu-Frenki-Edgara-vo-vremya-boya-s-Mendesom-18109.html |archive-date=December 22, 2015 }}</ref><ref>{{cite web |url=http://mmajunkie.com/2015/08/fighters-and-trainers-discuss-khk-chances-to-become-best-mma-camp-in-the-world |title=Fighters, trainers discuss KHK's chances to become world's best MMA camp |date=August 20, 2015 |access-date=December 12, 2015 |url-status=live |archive-url=https://web.archive.org/web/20151209070915/http://mmajunkie.com/2015/08/fighters-and-trainers-discuss-khk-chances-to-become-best-mma-camp-in-the-world |archive-date=December 9, 2015 }}</ref>
+| trainer         = [[Boxing]]: Mark Henry<br>[[Wrestling]]: Steve Rivera<br>[[Brazilian Jiu-Jitsu]]: [[Ricardo Almeida]], [[Renzo Gracie]]<br>Muay Thai:  [[Phil Nurse|Ajarn Phil Nurse]]
+| rank            = 3rd degree black belt in [[Brazilian Jiu-Jitsu]] <small>under [[Ricardo Almeida]]</small><ref>{{cite web |last1=Jones |first1=Phil |title=Frankie Edgar Promoted To Third Degree BJJ Black Belt |url=https://jitsmagazine.com/frankie-edgar-promoted-to-third-degree-bjj-black-belt/ |website=Jitsmagazine |date=May 23, 2023 |access-date=May 23, 2023}}</ref>
+| wrestling       = [[National Collegiate Athletic Association|NCAA]] [[NCAA Division I|Division I]] [[Collegiate wrestling|Wrestling]]<ref name=UFCprofile>{{cite web|url=https://www.ufc.com/athlete/frankie-edgar|title=Frankie Edgar|website=[[Ultimate Fighting Championship|UFC]]|date=September 14, 2018|access-date=November 7, 2021}}</ref>
+| years_active    = 2005–present
+| mma_kowin       = 7
+| mma_subwin      = 4
+| mma_decwin      = 13
+| mma_koloss      = 5
+| mma_subloss     = 
+| mma_decloss     = 6
+| mma_draw        = 1
+| mma_nc          =
+| am_win          = 1
+| am_kowin        = 1
+| am_subwin       =
+| am_loss         =
+| am_koloss       =
+| am_subloss      =
+| am_draw         =
+| am_nc           =
+| university      = [[Clarion University of Pennsylvania]]
+| spouse          = Renee
+| children        = 3
+| relatives       =
+| students        =
+| club            =
+| school          = [[Toms River High School East]]
+| boxrec          =
+| sherdog         = 14204
+| url            = {{URL|frankieedgar.com}}
+| footnotes       =
+| updated         =
+}}
+'''Frank Edgar''' (born October 16, 1981) is an American wrestler and former professional [[mixed martial artist]] who competed in the [[Lightweight (MMA)|Lightweight]], [[Featherweight (MMA)|Featherweight]], and [[Bantamweight (MMA)|Bantamweight]] divisions of the [[Ultimate Fighting Championship]] (UFC), concluding his career as a Bantamweight.<ref>{{cite web|url=http://www.ufc.com/rankings|title=Fighter Rankings|publisher=[[Ultimate Fighting Championship|UFC]]|url-status=live|archive-url=https://web.archive.org/web/20150526175333/http://www.ufc.com/rankings|archive-date=May 26, 2015}}</ref> He is a former [[List of UFC champions#Lightweight Championship|Lightweight Champion]], and a multiple-time challenger for the [[List of UFC champions#Featherweight Championship|UFC Featherweight Championship]].<ref>{{Cite web|date=February 3, 2021|title=Stealing the spotlight, beating the odds: In
+{{MMA record start}}
+|-
+|{{no2}}Loss
+|align=center|{{nowrap|24–11–1}}
+|[[Chris Gutiérrez]]
+|KO (knee) 
+|[[UFC 281]]
+|{{dts|2022|November|12|format=mdy}} 
+|align=center|1
+|align=center|2:01
+|[[New York City, New York]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|{{nowrap|24–10–1}}
+|[[Marlon Vera]]
+|KO (front kick)
+|[[UFC 268]]
+|{{dts|2021|November|6|format=mdy}}
+|align=center|3
+|align=center|3:50
+|[[New York City, New York]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|24–9–1
+|[[Cory Sandhagen]]
+|KO (flying knee)
+|[[UFC Fight Night: Overeem vs. Volkov]]
+|{{dts|2021|February|6|format=mdy}}
+|align=center|1
+|align=center|0:28
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}}Win
+|align=center|24–8–1
+|[[Pedro Munhoz]]
+|Decision (split)
+|[[UFC on ESPN: Munhoz vs. Edgar]]
+|{{dts|2020|August|22|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|Bantamweight debut. Fight of the Night.}}
+|-
+|{{no2}}Loss
+|align=center|23–8–1
+|[[The Korean Zombie|Jung Chan-sung]]
+|TKO (punches)
+|[[UFC Fight Night: Edgar vs. The Korean Zombie]] 
+|{{dts|2019|December|21|format=mdy}}
+|align=center|1
+|align=center|3:18
+|[[Busan]], South Korea
+|
+|-
+|{{no2}}Loss
+|align=center|23–7–1
+|[[Max Holloway]]
+|Decision (unanimous)
+|[[UFC 240]] 
+|{{dts|2019|July|27|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Edmonton, Alberta]], Canada
+|{{small|For the [[UFC Featherweight Championship]].}}
+|- 
+|{{yes2}}Win
+|align=center|23–6–1
+|[[Cub Swanson]]
+|Decision (unanimous)
+|[[UFC Fight Night: Barboza vs. Lee]]
+|{{dts|2018|April|21|format=mdy}}
+|align=center|3
+|align=center|5:00
+|[[Atlantic City, New Jersey]], United States
+|
+|- 
+|{{no2}}Loss
+|align=center|22–6–1
+|[[Brian Ortega]]
+|KO (punch)
+|[[UFC 222]] 
+|{{dts|2018|March|3|format=mdy}}
+|align=center|1
+|align=center|4:44
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}}Win
+|align=center|22–5–1
+|[[Yair Rodríguez]]
+|TKO (doctor stoppage)
+|[[UFC 211]]
+|{{dts|2017|May|13|format=mdy}}
+|align=center|2
+|align=center|5:00
+|[[Dallas, Texas]], United States
+|
+|-
+|{{yes2}}Win
+|align=center|21–5–1
+|[[Jeremy Stephens]]
+|Decision (unanimous)
+|[[UFC 205]]
+|{{dts|2016|November|12|format=mdy}}
+|align=center|3
+|align=center|5:00
+|[[New York City]], [[New York (state)|New York]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|20–5–1
+|[[José Aldo]]
+|Decision (unanimous)
+|[[UFC 200]]
+|{{dts|2016|July|9|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|For the interim [[UFC Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|20–4–1
+|[[Chad Mendes]]
+|KO (punch)
+|[[The Ultimate Fighter: Team McGregor vs. Team Faber#The Ultimate Fighter 22 Finale|The Ultimate Fighter: Team McGregor vs. Team Faber Finale]]
+|{{dts|2015|December|11|format=mdy}}
+|align=center|1
+|align=center|2:28
+|[[Las Vegas, Nevada]], United States
+| {{small|Performance of the Night.}} 
+|-
+|{{yes2}}Win
+|align=center|19–4–1
+|[[Urijah Faber]]
+|Decision (unanimous)
+|[[UFC Fight Night: Edgar vs. Faber]]
+|{{dts|2015|May|16|format=mdy}}
+|align=center|5
+|align=center|5:00
+|[[Pasay]], Philippines
+|
+|-
+|  {{yes2}}Win
+|align=center| 18–4–1
+| [[Cub Swanson]]
+| Submission (neck crank)
+| [[UFC Fight Night: Edgar vs. Swanson]]
+| {{dts|2014|November|22|format=mdy}}
+| align=center| 5
+| align=center| 4:56
+| [[Austin, Texas]], United States
+| {{small|Performance of the Night.}}
+|-
+| {{yes2}}Win
+|align=center| 17–4–1
+| [[B.J. Penn]]
+| TKO (punches)
+| [[The Ultimate Fighter: Team Edgar vs. Team Penn#The Ultimate Fighter 19 Finale|The Ultimate Fighter: Team Edgar vs. Team Penn Finale]]
+| {{dts|2014|July|6|format=mdy}}
+| align=center| 3
+| align=center| 4:16
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 16–4–1
+| [[Charles Oliveira]]
+|  Decision (unanimous)
+| [[UFC 162]]
+| {{dts|2013|July|6|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2}}Loss
+|align=center| 15–4–1
+| [[José Aldo]]
+| Decision (unanimous)
+| [[UFC 156]]
+| {{dts|2013|February|2|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Featherweight debut. For the [[UFC Featherweight Championship]]. Fight of the Night.}}
+|-
+| {{no2}}Loss
+|align=center| 15–3–1
+| [[Benson Henderson]]
+| Decision (split)
+| [[UFC 150]]
+| {{dts|2012|August|11|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Denver, Colorado]], United States
+| {{small|For the [[UFC Lightweight Championship]].}}
+|-
+| {{no2}}Loss
+|align=center| 15–2–1
+| [[Benson Henderson]]
+| Decision (unanimous)
+| [[UFC 144]]
+| {{dts|2012|February|26|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Saitama, Saitama|Saitama]], Japan
+| {{small|Lost the [[UFC Lightweight Championship]]. Fight of the Night.}} 
+|-
+| {{yes2}}Win
+|align=center| 15–1–1
+| [[Gray Maynard]]
+| KO (punches)
+| [[UFC 136]]
+| {{dts|2011|October|8|format=mdy}}
+|align=center| 4
+|align=center| 3:54
+| [[Houston, Texas]], United States
+| {{small|Defended the [[UFC Lightweight Championship]]. Knockout of the Night.}}
+|-
+| {{draw}}Draw
+|align=center| {{nowrap|14–1–1}}
+|  [[Gray Maynard]]
+| Draw (split)
+| [[UFC 125]]
+| {{dts|2011|January|1|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Retained the [[UFC Lightweight Championship]]. Fight of the Night.}}
+|-
+| {{yes2}}Win
+|align=center| 14–1
+| [[B.J. Penn]]
+| Decision (unanimous)
+| [[UFC 118]]
+| {{dts|2010|August|28|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Boston, Massachusetts]], United States
+| {{small|Defended the [[UFC Lightweight Championship]].}} 
+|-
+| {{yes2}}Win
+|align=center| 13–1
+| [[B.J. Penn]]
+| Decision (unanimous)
+| [[UFC 112]]
+| {{dts|2010|April|10|format=mdy}}
+|align=center| 5
+|align=center| 5:00
+| [[Abu Dhabi]], United Arab Emirates
+| {{small|Won the [[UFC Lightweight Championship]].}}
+|-
+| {{yes2}}Win
+|align=center| 12–1
+| [[Matt Veach]]
+| Submission (rear-naked choke)
+| [[The Ultimate Fighter: Heavyweights Finale]]
+| {{dts|2009|December|5|format=mdy}}
+|align=center| 2
+|align=center| 2:22
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{yes2}}Win
+|align=center| 11–1
+| [[Sean Sherk]]
+| Decision (unanimous)
+| [[UFC 98]]
+| {{dts|2009|May|23|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 10–1
+| [[Hermes França]]
+| Decision (unanimous)
+| [[UFC Fight Night: Silva vs. Irvin]]
+| {{dts|2008|July|19|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2}}Loss
+|align=center| 9–1
+| [[Gray Maynard]]
+| Decision (unanimous)
+| [[UFC Fight Night: Florian vs. Lauzon]]
+| {{dts|2008|April|2|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Broomfield, Colorado]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 9–0
+| [[Spencer Fisher]]
+| Decision (unanimous)
+| [[UFC 78]]
+| {{dts|2007|November|17|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Newark, New Jersey]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 8–0
+| [[Mark Bocek]]
+| TKO (punches)
+| [[UFC 73]]
+| {{dts|2007|July|7|format=mdy}}
+|align=center| 1
+|align=center| 4:55
+| [[Sacramento, California]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 7–0
+| [[Tyson Griffin]]
+| Decision (unanimous)
+| [[UFC 67]]
+| {{dts|2007|February|3|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{yes2}}Win
+|align=center| 6–0
+| [[Jim Miller (fighter)|Jim Miller]]
+| Decision (unanimous)
+| Reality Fighting 14
+| {{dts|2006|November|18|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Atlantic City, New Jersey]], United States
+|{{small|Defended the Reality Fighting Lightweight Championship.}}
+|-
+| {{yes2}}Win
+|align=center| 5–0
+| [[Deividas Taurosevičius]]
+| Decision (unanimous)
+| Reality Fighting 13: Battle at the Beach
+| {{dts|2006|August|5|format=mdy}}
+|align=center| 3
+|align=center| 5:00
+| [[Wildwood, New Jersey]], United States
+| {{small|Won the Reality Fighting Lightweight Championship.}}
+|-
+| {{yes2}}Win
+|align=center| 4–0
+| Steve McCabe
+| Submission (guillotine choke)
+| Ring of Combat 10
+| {{dts|2006|April|14|format=mdy}}
+|align=center| 1
+|align=center| 2:37
+| [[Atlantic City, New Jersey]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 3–0
+|  Jerome Isip
+| Technical Submission (rear-naked choke)
+| SportFighting 2
+| {{dts|2005|December|10|format=mdy}}
+|align=center| 1
+|align=center| 3:26
+| [[Hoboken, New Jersey]], United States
+| 
+|-
+| {{yes2}}Win
+|align=center| 2–0
+| Mark Getto
+| TKO (punches)
+| Ring of Combat 9
+| {{dts|2005|October|29|format=mdy}}
+|align=center| 1
+|align=center| 4:21
+| [[Asbury Park, New Jersey]], United States
+|
+|-
+| {{yes2}}Win
+|align=center| 1–0
+| Eric Uresk
+| TKO (punches)
+| Underground Combat League
+| {{dts|2005|July|10|format=mdy}}
+|align=center| 1
+|align=center| 3:38
+| [[The Bronx, New York]], United States
+|
+|-
+{{MMA record end}}

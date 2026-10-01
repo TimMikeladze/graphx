@@ -1,0 +1,461 @@
+{{Infobox martial artist
+| name            = Fabrício Werdum
+| other_names     = Vai Cavalo (Go Horse)<ref>{{cite web |last1=Jones |first1=Phil |title=The 20 Best BJJ Nicknames |url=https://jitsmagazine.com/the-20-best-bjj-nicknames/ |website=Jitsmagazine |date=3 July 2023 |access-date=3 July 2023}}</ref>
+| image           = Fabrício Werdum Web Summit Rio 2023.jpg
+| alt             = 
+| caption         = Werdum in 2023
+| birth_name      =
+| birth_date      = {{birth date and age|df=yes|1977|7|30}}
+| birth_place     = [[Porto Alegre]], [[Rio Grande do Sul]], Brazil
+| death_date      = 
+| death_place     =
+| death_cause     =
+| nationality     = 
+| height          = 6 ft 4 in
+| weight_lb       = 246
+| weight_class    = [[Heavyweight (MMA)|Heavyweight]]
+| reach           = 77 in<ref>{{cite web|url=http://uk.ufc.com/event/FOX11/printFightCard|title=Fight Card – UFC Fight Night Werdum vs. Browne|publisher=UFC.com|access-date=21 April 2014|archive-url=https://web.archive.org/web/20141119021001/http://uk.ufc.com/event/FOX11/printFightCard|archive-date=19 November 2014|url-status=dead}}</ref>
+| style           = [[Brazilian Jiu-Jitsu]]
+| fighting_out_of = [[Los Angeles, California]], U.S.
+| team            = [[Kings MMA]]<br/>Werdum Combat Team <br/> [[Fight Club Akhmat|Akhmat Fight Club]]<ref>{{cite web|url=http://expertmma.ru/fabritsio-verdum-podpisal-kontrakt-s-bojtsovskim-klubom-ahmat.html|title=Werdum in Akhmat Fight Club|publisher=expertmma.ru|access-date=5 October 2015}}</ref>
+| rank            =  2nd degree black belt in [[Brazilian Jiu-Jitsu]] <small>under Octávio "Ratinho" Couto</small><ref name="JJBELT1"/><br/>Black belt in [[Judo]]<ref name="JUDOBELT1"/><br/>Black [[Pra Jiad|prajied]] in [[Muay Thai]] <small>under [[Rafael Cordeiro]]</small><ref name="MTBELT1">{{cite web |url=http://www.bloodyelbow.com/2011/4/8/2099958/werdum-pessimistic-about-the-conclusion-of-strikeforce-gp |title=Werdum Pessimistic About the Conclusion of Strikeforce GP, Receives Black Belt in Muay Thai |publisher=BloodyElbow.com |access-date=9 April 2011}}</ref>
+| years_active    = 2002–present ([[MMA]])
+| mma_kowin           = 6
+| mma_subwin          = 12
+| mma_decwin          = 6
+| mma_koloss          = 3
+| mma_subloss         = 
+| mma_decloss         = 6
+| mma_draw            = 1
+| mma_nc              = 1
+| occupation      = 
+| university      =
+| spouse          =
+| relatives       =
+| Owner        = 
+| club            = 
+| school          = 
+| url             =
+| sherdog         = 8390
+| footnotes       =
+| updated         =
+| show-medals    = yes
+| medaltemplates =
+{{MedalCountry| {{BRA}} }}
+{{MedalSport  | [[Submission Wrestling]]}}
+{{MedalCompetition|[[ADCC Submission Wrestling World Championship|ADCC World Championships]]}}
+{{MedalSilver|2011 Nottingham|+99 kg}}
+{{MedalGold|2009 Barcelona|+99 kg}}
+{{MedalGold|2007 New Jersey|+99 kg}}
+{{MedalBronze|2005 Long Beach|+99 kg}}
+{{MedalBronze|2003 São Paulo|Open}}
+{{MedalSilver|2003 São Paulo|+99 kg}}
+{{MedalSport   | [[Brazilian Jiu-Jitsu]]}}
+{{MedalCompetition|[[World Jiu-Jitsu Championship]]s}}
+{{MedalGold|2004 Rio de Janeiro|+100 kg (Black)}}
+{{MedalBronze|2004 Rio de Janeiro|Open (Black)}}
+{{MedalGold|2003 Rio de Janeiro|+100 kg (Black)}}
+{{MedalBronze|2002 Rio de Janeiro|-100 kg (Brown)}}
+{{MedalSilver|2001 Rio de Janeiro|Open (Purple)}}
+{{MedalGold|2000 Rio de Janeiro|Open (Blue)}}
+{{MedalGold|2000 Rio de Janeiro|-100 kg (Blue)}}
+{{MedalCompetition|[[CBJJO World Jiu-Jitsu Cup]]}}
+{{MedalSilver|2003 [[Rio de Janeiro]]|+100 kg (Black)}}
+{{MedalCompetition|[[Pan American Championship (Jiu Jitsu)|Pan American Jiu-Jitsu Championships]]}}
+{{MedalSilver|2003|Open (Black)}}
+{{MedalBronze|2003|+100 kg (Black)}}
+{{MedalGold|2002|-100 kg (Brown)}}
+{{MedalGold|2001|Open kg (Purple)}}
+{{MedalGold|2001|-100 kg (Purple)}}
+{{MedalGold|2000|-100 kg (Blue)}}
+}}
+'''Fabrício Werdum''' ({{IPA|pt|faˈbɾisju veʁˈdũ}}; born 30 July 1977) is a Spanish-Brazilian [[mixed martial arts|mixed martial artist]] and former [[UFC Heavyweight Championship|UFC Heavyweight Champion]] who competes in the [[Heavyweight (MMA)|Heavyweight]] division.<ref name="werdumpfl">{{cite web|url=https://www.espn.com/mma/story/_/id/30330556/former-ufc-heavyweight-champ-fabricio-werdum-signs-professional-fighters-league|title=Former UFC heavyweight champ Fabricio Werdum signs with Professional Fighters League|author=Brett Okamoto|date=November 16, 2020|access-date=November 16, 2020}}</ref> He is also a 4-time [[Brazilian jiu-jitsu]] world champion, a two-time [[Abu Dhabi Combat Club]] World Heavyweight Champion and a member of the [[ADCC Hall of Fame]].<ref>{{cite web |last1=de Souza |first1=Diogo |title=Fabricio Werdum Becomes Latest Inductee To ADCC Hall Of Fame |url=https://ji
+{{MMA record start}}
+|-
+|{{nocontest}}NC
+|align=center|{{nowrap|24–9–1 (1)}}
+|[[Renan Ferreira (fighter)|Renan Ferreira]]
+|NC (overturned)
+|[[PFL 3 (2021)]]
+|{{dts|2021|May|6|format=dmy}}
+|align=center|1
+|align=center|2:32
+|[[Atlantic City, New Jersey]], United States
+|{{small|Originally a TKO (punches) win for Ferreira; overturned after it was determined Ferreira tapped out to a triangle choke applied by Werdum.}}
+|-
+|{{yes2}}Win
+|align=center|24–9–1
+|[[Alexander Gustafsson]]
+|Submission (armbar)
+|[[UFC on ESPN: Whittaker vs. Till]]
+|{{dts|2020|July|26|format=dmy}}
+|align=center|1
+|align=center|2:30
+|[[Abu Dhabi]], United Arab Emirates
+|{{small|Performance of the Night.}}
+|-
+|{{no2}}Loss
+|align=center|23–9–1
+|[[Aleksei Oleinik]]
+|Decision (split)
+|[[UFC 249]]
+|{{dts|2020|May|9|format=dmy}}
+|align=center|3
+|align=center|5:00
+|[[Jacksonville, Florida]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|23–8–1
+|[[Alexander Volkov (fighter)|Alexander Volkov]]
+|KO (punches)
+|[[UFC Fight Night: Werdum vs. Volkov]]
+|{{dts|2018|March|17|format=dmy}}
+|align=center|4
+|align=center|1:38
+|[[London]], England
+|
+|-
+|{{yes2}}Win
+|align=center|23–7–1
+|[[Marcin Tybura]]
+|Decision (unanimous) 
+|[[UFC Fight Night: Werdum vs. Tybura]]
+|{{dts|2017|November|19|format=dmy}}
+|align=center|5
+|align=center|5:00
+|[[Sydney]], Australia
+|
+|-
+|{{yes2}}Win
+|align=center|22–7–1
+|[[Walt Harris (fighter)|Walt Harris]]
+|Submission (armbar)
+|[[UFC 216]]
+|{{dts|2017|October|7|format=dmy}}
+|align=center|1
+|align=center|1:05
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|21–7–1
+|[[Alistair Overeem]]
+|Decision (majority)
+|[[UFC 213]]
+|{{dts|2017|July|8|format=dmy}}
+|align=center|3
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|
+|-
+|{{yes2}}Win
+|align=center|21–6–1
+|[[Travis Browne]]
+|Decision (unanimous)
+|[[UFC 203]]
+|{{dts|2016|September|10|format=dmy}}
+|align=center|3
+|align=center|5:00
+|[[Cleveland, Ohio]], United States
+|
+|-
+|{{no2}}Loss
+|align=center|20–6–1
+|[[Stipe Miocic]]
+|KO (punch)
+|[[UFC 198]]
+|{{dts|2016|May|14|format=dmy}}
+|align=center|1
+|align=center|2:47
+|[[Curitiba]], Brazil
+|{{small|Lost the [[UFC Heavyweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|20–5–1
+|[[Cain Velasquez]] 
+|Submission (guillotine choke)
+|[[UFC 188]]
+|{{dts|2015|June|13|format=dmy}} 
+|align=center|3
+|align=center|2:13
+|[[Mexico City]], Mexico
+|{{small|Won and unified the [[UFC Heavyweight Championship]]. Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|19–5–1
+|[[Mark Hunt]]
+|TKO (knee and punches)
+|[[UFC 180]]
+|{{dts|2014|November|15|format=dmy}}
+|align=center| 2
+|align=center| 2:27
+|[[Mexico City]], Mexico
+|{{small|Won the interim [[UFC Heavyweight Championship]]. Performance of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 18–5–1
+| [[Travis Browne]]
+| Decision (unanimous)
+| [[UFC on Fox: Werdum vs. Browne]]
+| {{dts|2014|April|19|format=dmy}}
+| align=center| 5
+| align=center| 5:00
+| [[Orlando, Florida]], United States
+|
+|-
+| {{yes2}}Win
+| align=center| 17–5–1
+| [[Antônio Rodrigo Nogueira]]
+| Submission (armbar)
+| [[UFC on Fuel TV: Nogueira vs. Werdum]]
+| {{dts|2013|June|8|format=dmy}}
+| align=center| 2
+| align=center| 2:41
+| [[Fortaleza]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 16–5–1
+| [[Mike Russow]]
+| TKO (punches)
+| [[UFC 147]]
+| {{dts|2012|June|23|format=dmy}}
+| align=center| 1
+| align=center| 2:28
+| [[Belo Horizonte]], Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 15–5–1
+| [[Roy Nelson (fighter)|Roy Nelson]]
+| Decision (unanimous)
+| [[UFC 143]]
+| {{dts|2012|February|4|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Fight of the Night.}}
+|-
+| {{no2}}Loss
+| align=center| 14–5–1
+| [[Alistair Overeem]]
+| Decision (unanimous)
+| [[Strikeforce: Overeem vs. Werdum]]
+| {{dts|2011|June|18|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Dallas, Texas]], United States
+| {{small|Strikeforce Heavyweight Grand Prix Quarterfinal.}}
+|-
+| {{yes2}}Win
+| align=center| 14–4–1
+| [[Fedor Emelianenko]]
+| Submission (triangle armbar)
+| [[Strikeforce: Fedor vs. Werdum]]
+| {{dts|2010|June|26|format=dmy}}
+| align=center| 1
+| align=center| 1:09
+| [[San Jose, California]], United States
+|
+|-
+| {{Yes2}}Win
+| align=center| 13–4–1
+| [[Antônio Silva (fighter)|Antônio Silva]]
+| Decision (unanimous)
+| [[Strikeforce: Fedor vs. Rogers]]
+| {{dts|2009|November|7|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Hoffman Estates, Illinois]], United States
+| 
+|-
+| {{Yes2}}Win
+| align=center| 12–4–1
+| [[Mike Kyle]]
+| Submission (guillotine choke)
+| [[Strikeforce: Carano vs. Cyborg]]
+| {{dts|2009|August|15|format=dmy}}
+| align=center| 1
+| align=center| 1:24
+| [[San Jose, California]], United States
+| 
+|-
+| {{no2}}Loss
+| align=center| 11–4–1
+| [[Junior dos Santos]]
+| TKO (punches)
+| [[UFC 90]]
+| {{dts|2008|October|25|format=dmy}}
+| align=center| 1
+| align=center| 1:20
+| [[Rosemont, Illinois]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 11–3–1
+| [[Brandon Vera]]
+| TKO (punches)
+| [[UFC 85]]
+| {{dts|2008|June|7|format=dmy}}
+| align=center| 1
+| align=center| 4:40
+| [[London]], England
+| 
+|-
+| {{yes2}}Win
+| align=center| {{nowrap|10–3–1}}
+| [[Gabriel Gonzaga]]
+| TKO (punches)
+| [[UFC 80]]
+| {{dts|2008|January|19|format=dmy}}
+| align=center| 2
+| align=center| 4:34
+| [[Newcastle upon Tyne|Newcastle]], England
+| 
+|-
+| {{no2}}Loss
+| align=center| 9–3–1
+| [[Andrei Arlovski]]
+| Decision (unanimous)
+| [[UFC 70]]
+| {{dts|2007|April|21|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Manchester]], England
+| 
+|-
+| {{yes2}}Win
+| align=center| 9–2–1
+| [[Alexander Emelianenko]]
+| Submission (arm-triangle choke)
+| 2 Hot 2 Handle: Pride and Honour
+| {{dts|2006|November|12|format=dmy}}
+| align=center| 1
+| align=center| 3:24
+| [[Rotterdam]], Netherlands
+| 
+|-
+| {{no2}}Loss
+| align=center| 8–2–1
+| [[Antônio Rodrigo Nogueira]]
+| Decision (unanimous)
+| [[Pride Critical Countdown Absolute]]
+| {{dts|2006|July|1|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Saitama, Saitama|Saitama]], Japan
+| {{small|2006 Pride Openweight Grand Prix Quarterfinal.}}
+|-
+| {{yes2}}Win
+| align=center| 8–1–1
+| [[Alistair Overeem]]
+| Submission (kimura)
+| [[Pride Total Elimination Absolute]]
+| {{dts|2006|May|5|format=dmy}}
+| align=center| 2
+| align=center| 3:43
+| [[Osaka, Osaka|Osaka]], Japan
+| {{small|2006 Pride Openweight Grand Prix Opening round.}}
+|-
+| {{yes2}}Win
+| align=center| 7–1–1
+| [[John-Olav Einemo]]
+| Decision (unanimous)
+| [[Pride 31]]
+| {{dts|2006|February|26|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{no2}}Loss
+| align=center| 6–1–1
+| [[Sergei Kharitonov]]
+| Decision (split)
+| [[Pride 30]]
+| {{dts|2005|October|23|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 6–0–1
+| [[Roman Zentsov]]
+| Submission (triangle armbar)
+| [[Pride Final Conflict 2005]]
+| {{dts|2005|August|28|format=dmy}}
+| align=center| 1
+| align=center| 6:01
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 5–0–1
+| [[Tom Erikson]]
+| Submission (rear-naked choke)
+| [[Pride 29]]
+| {{dts|2005|February|20|format=dmy}}
+| align=center| 1
+| align=center| 5:29
+| [[Saitama, Saitama|Saitama]], Japan
+| 
+|-
+| {{yes2}}Win
+| align=center| 4–0–1
+| [[Ebenezer Fontes Braga]]
+| KO (punch)
+| [[Jungle Fight 2]]
+| {{dts|2004|May|15|format=dmy}}
+| align=center| 2
+| align=center| 1:28
+| [[Manaus]],  Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 3–0–1
+| [[Gabriel Gonzaga]]
+| TKO (punches)
+| [[Jungle Fight 1]]
+| {{dts|2003|September|13|format=dmy}}
+| align=center| 3
+| align=center| 2:11
+| [[Manaus]],  Brazil
+| 
+|-
+| {{yes2}}Win
+| align=center| 2–0–1
+| Kristof Midoux
+| Submission (triangle armbar)
+| World Absolute Fight 2
+| {{dts|2003|March|22|format=dmy}}
+| align=center| 1
+| align=center| 4:11
+| [[Marrakesh]], Morocco
+| 
+|-
+| {{draw}}Draw
+| align=center| 1–0–1
+| James Zikic
+| Draw
+| Millennium Brawl 8
+| {{dts|2002|September|22|format=dmy}}
+| align=center| 3
+| align=center| 5:00
+| [[High Wycombe]], England
+| {{small|Werdum was deducted one point in round 1 due to an illegal knee.}}
+|-
+| {{yes2}}Win
+| align=center| 1–0
+| Tengiz Tedoradze
+| Submission (triangle choke)
+| Millennium Brawl 7
+| {{dts|2002|June|16|format=dmy}}
+| align=center| 1
+| align=center| N/A
+| [[High Wycombe]], England
+|{{small|Heavyweight debut.}}
+|-
+
+{{MMA record end}}

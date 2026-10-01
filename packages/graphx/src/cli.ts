@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { join, resolve } from 'node:path';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { CreateAppResult, GraphSchema } from './core/index.ts';
-import { createApp, Graph, init, TriggerRunner } from './core/index.ts';
+import { createApp, fork, getDb, Graph, init, TriggerRunner } from './core/index.ts';
 import { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 import { ingestDir, watchDir } from './ingest/index.ts';
 import type { IngestResult } from './ingest/index.ts';
@@ -134,6 +134,39 @@ export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
 	return {
 		config: (values.config as string | undefined) ?? './graphx.config.ts',
 		dryRun: (values['dry-run'] as boolean | undefined) ?? false,
+	};
+}
+
+export interface ParsedForkArgs {
+	config: string;
+	target: string;
+	asOf: number | undefined;
+}
+
+/** `--as-of` takes epoch ms or anything `Date.parse` reads (an ISO timestamp). */
+function parseInstant(raw: string): number {
+	const t = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+	if (!Number.isFinite(t))
+		throw new Error(`fork: --as-of expects epoch ms or an ISO date, got '${raw}'`);
+	return t;
+}
+
+export function parseForkArgs(argv: string[]): ParsedForkArgs {
+	const { values, positionals } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			'as-of': { type: 'string' },
+		},
+	});
+	const target = positionals[1];
+	if (!target) throw new Error('fork: missing <namespace> argument');
+	const asOf = values['as-of'] as string | undefined;
+	return {
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		target,
+		asOf: asOf === undefined ? undefined : parseInstant(asOf),
 	};
 }
 
@@ -279,6 +312,7 @@ Usage:
   graphx mcp [options]            Serve the graph to an MCP client over stdio
   graphx reembed [options]        Re-embed every live node with the configured embedder
   graphx doctor [options]         Report the namespace's embedding model, width, and health
+  graphx fork <namespace>         Branch the configured namespace into a new, empty one
   graphx dedupe <type> [options]  Find duplicate nodes of a type and judge them with Jev
   graphx ask "<question>"         Plan a plain-language question as a graph call with Jev, and run it
   graphx new <dir>                Scaffold a starter graphx project
@@ -307,6 +341,10 @@ reembed options:
 
 doctor options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+
+fork options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --as-of <ms|ISO date>   Branch the graph as it stood at this instant
 
 dedupe options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -359,6 +397,8 @@ export async function run(argv: string[]): Promise<void> {
 			return runReembed(argv);
 		case 'doctor':
 			return runDoctor(argv);
+		case 'fork':
+			return runFork(argv);
 		case 'dedupe':
 			return runDedupe(argv);
 		case 'ask':
@@ -517,6 +557,30 @@ async function runReembed(argv: string[]): Promise<void> {
 	process.stderr.write('\n');
 	console.log(
 		`reembedded nodes=${result.nodes} embedded=${result.embedded} skipped=${result.skipped}`,
+	);
+}
+
+/**
+ * `graphx fork <namespace>` — branch the configured namespace into another on the same backend.
+ * A DuckDB `duckPath` names one file, so the branch gets its own default path instead.
+ */
+async function runFork(argv: string[]): Promise<void> {
+	const args = parseForkArgs(argv);
+	const cfg = await loadConfig(args.config);
+	if (args.target === namespaceOf(cfg))
+		throw new Error('fork: the target is the configured namespace');
+	const source = openDb(cfg);
+	await init(source);
+	const target = getDb(args.target, { ...cfg.db, duckPath: undefined });
+	const result = await fork(source, target, { asOf: args.asOf });
+	if (cfg.embedder && result.needsEmbedding.length > 0) {
+		const branch = new Graph(target, cfg.schema, { embedder: cfg.embedder });
+		for (const id of result.needsEmbedding) await branch.embedNode(id);
+	}
+	console.log(
+		`forked ${namespaceOf(cfg)} -> ${args.target} (${result.method})${result.asOf === null ? '' : ` asOf=${new Date(result.asOf).toISOString()}`} ` +
+			`nodes=${result.nodes} edges=${result.edges} versions=${result.nodeVersions + result.edgeVersions} ` +
+			`vectors=${result.vectors} reembedded=${cfg.embedder ? result.needsEmbedding.length : 0}`,
 	);
 }
 

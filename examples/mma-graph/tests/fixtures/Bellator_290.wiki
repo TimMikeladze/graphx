@@ -1,0 +1,11 @@
+{{Infobox MMA event
+|name=Bellator 290: Bader vs. Fedor 2
+|image=Bellator290.jpg
+|image_size=
+|promotion=[[Bellator MMA]]
+|date={{Start date|2023|02|4}}
+|venue=[[Kia Forum]]
+|city=[[Inglewood, California]], United States
+|previousevent=[[Bellator MMA vs. Rizin|Bellator MMA vs. Rizin FF]]
+|followingevent=[[Bellator 291|Bellator 291: Amosov vs. Storley 2]]
+}}

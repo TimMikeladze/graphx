@@ -1,0 +1,273 @@
+{{Infobox martial artist
+| name            = Ian McCall
+| other_names     = Uncle Creepy 
+| image           =
+| image_size      = 200px
+| alt             =
+| caption         = Ian McCall at the UFC 183 Weigh-ins 
+| birth_name      = Ian Gregory McCall
+| birth_date      = {{Birth date and age|1984|07|05}}
+| birth_place     = [[Costa Mesa, California]], U.S.
+| residence       =
+| nationality     =  
+| height          = {{height|ft=5|in=5}}
+| weight_lb       = 136
+| weight_class    = [[Flyweight (MMA)|Flyweight]] <br/> [[Bantamweight (MMA)|Bantamweight]]
+| reach           =
+| stance          =
+| style = [[Wrestling]], [[Kung Fu]]
+| fighting_out_of = [[Dana Point, California]], United States
+| team            = Team Oyama
+| rank            = Black belt in [[Kung Fu]]<ref>[https://www.ufc.com/athlete/ian-mccall Ufc.com]</ref><br/>black belt in [[Brazilian Jiu-Jitsu]]
+| years_active    = 2002–2018
+| mma_kowin       = 4
+| mma_subwin      = 3
+| mma_decwin      = 6
+| mma_koloss      = 2
+| mma_subloss     = 1
+| mma_decloss     = 4
+| mma_draw        = 1
+| mma_nc          = 
+| url             =
+| sherdog         = 5001
+| footnotes       =
+| updated         =
+}}
+'''Ian Gregory McCall''' (born July 5, 1984) is a retired American [[mixed martial arts|mixed martial artist]] who competed in the [[Flyweight (MMA)|Flyweight]] and [[Bantamweight (MMA)|Bantamweight]] divisions of several prominent MMA promotions, including [[Ultimate Fighting Championship]], [[Rizin Fighting Federation]] and [[World Extreme Cagefighting]]. He is also a former [[Tachi Palace Fights#Current champions|TPF Flyweight Champion]]. In between his fights in January 2015 and December 2017, he had been booked for six consecutive cancelled fights, four of which were cancelled during the week of.
+
+==Background==
+McCall was born in [[Costa Mesa, California]] and has an older brother, Bradley McCall. McCall got into many "fights" growing up and in his youth, he practiced [[kung fu]]. He competed in [[wrestling]] for [[Dana Hills High School]] where he was a standout and then continued
+{{MMA record start}}
+|-
+|{{no2}}Loss
+|align=center| 13–7–1
+|[[Kyoji Horiguchi]]
+|KO (punch)
+|[[2018 in Rizin Fighting Federation#Rizin 10 - Fukuoka|Rizin 10]]
+|{{dts|2018|May|6}}
+|align=center|1
+|align=center|0:09
+|[[Fukuoka]], Japan 
+| 
+|-
+| {{no2}}Loss
+| align=center| 13–6–1
+| [[Manel Kape]]
+| TKO (doctor stoppage)
+|[[2017 in Rizin Fighting Federation#Rizin World Grand Prix 2017: 2nd Round|Rizin World Grand Prix 2017: 2nd Round]]
+|{{dts|2017|December|29}}
+| align=center| 1
+| align=center| 1:48
+|[[Saitama, Japan]]
+|{{small|[[2017 in Rizin Fighting Federation#Rizin Bantamweight Grand Prix 2017 bracket|2017 Rizin Bantamweight Grand Prix]] Quarterfinal.}}
+|-
+| {{no2}}Loss
+| align=center| 13–5–1
+| [[John Lineker]]
+| Decision (unanimous)
+| [[UFC 183]]
+| {{dts|2015|January|31}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| {{small|Catchweight (130 lbs) bout; Lineker missed weight.}}
+|-
+| {{yes2}}Win
+| align=center| 13–4–1
+| [[Brad Pickett]]
+| Decision (unanimous)
+| [[UFC Fight Night: McGregor vs. Brandao]]
+| {{dts|2014|July|19}}
+| align=center| 3
+| align=center| 5:00
+| [[Dublin]], Ireland
+| 
+|-
+| {{yes2}}Win
+| align=center| 12–4–1
+| [[Iliarde Santos]]
+| Decision (unanimous)
+| [[UFC 163]]
+| {{dts|2013|August|3}}
+| align=center| 3
+| align=center| 5:00
+| [[Rio de Janeiro]], Brazil
+| {{small|Fight of the Night.}}
+|-
+| {{no2}}Loss
+| align=center| 11–4–1
+| [[Joseph Benavidez]]
+| Decision (unanimous)
+| [[UFC 156]]
+| {{dts|2013|February|2}}
+| align=center| 3
+| align=center| 5:00
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{no2}}Loss
+| align=center| 11–3–1
+| [[Demetrious Johnson (fighter)|Demetrious Johnson]]
+| Decision (unanimous)
+| [[UFC on FX: Johnson vs. McCall]]
+| {{dts|2012|June|8}}
+| align=center| 3
+| align=center| 5:00
+| [[Sunrise, Florida]], United States
+| {{small|UFC Flyweight Tournament semifinal.}}
+|-
+| {{draw}}Draw
+| align=center| {{nowrap|11–2–1}}
+| [[Demetrious Johnson (fighter)|Demetrious Johnson]]
+| Draw (majority)
+| [[UFC on FX: Alves vs. Kampmann]]
+| {{dts|2012|March|3}}
+| align=center| 3
+| align=center| 5:00
+| [[Sydney]], Australia
+| {{small|[[List of UFC Champions#Tournament winners|UFC Flyweight Tournament]] Semifinal; Fight of the Night.}}
+|-
+| {{yes2}}Win
+| align=center| 11–2
+| [[Darrell Montague]]
+| Submission (rear-naked choke)
+| [[Tachi Palace Fights 10|TPF 10: Let The Chips Fall]]
+| {{dts|2011|August|5}}
+| align=center| 3
+| align=center| 2:15
+| [[Lemoore, California]], United States
+| {{small|Won Tachi Palace Fights Flyweight Championship.}}
+|-
+| {{yes2}}Win
+| align=center| 10–2
+| [[Dustin Ortiz]]
+| Decision (unanimous)
+| [[Tachi Palace Fights 9|TPF 9: The Contenders]]
+| {{dts|2011|May|6}}
+| align=center| 3
+| align=center| 5:00
+| [[Lemoore, California]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 9–2
+| [[Jussier Formiga]]
+| Decision (unanimous)
+| [[Tachi Palace Fights 8|TPF 8: All or Nothing]]
+| {{dts|2011|February|18}}
+| align=center| 3
+| align=center| 5:00
+| [[Lemoore, California]], United States
+| {{small|Flyweight debut.}}
+|-
+| {{yes2}}Win
+| align=center| 8–2
+| Jeff Willingham
+| Submission (triangle choke)
+| MEZ Sports: Pandemonium 3
+| {{dts|2010|November|19}}
+| align=center| 1
+| align=center| 2:17
+| [[Los Angeles, California]], United States
+| 
+|-
+| {{no2}}Loss
+| align=center| 7–2
+| [[Dominick Cruz]]
+| Decision (unanimous)
+| [[WEC 38]]
+| {{dts|2009|January|25}}
+| align=center| 3
+| align=center| 5:00
+| [[San Diego, California]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 7–1
+| Kevin Dunsmoor
+| Decision (unanimous)
+| Total Combat 32
+| {{dts|2008|October|2}}
+| align=center| 3
+| align=center| 5:00
+| [[El Cajon, California]], United States
+| 
+|-
+| {{no2}}Loss
+| align=center| 6–1
+| [[Charlie Valencia]]
+| Submission (guillotine choke)
+| [[WEC 31]]
+| {{dts|2007|December|12}}
+| align=center| 1
+| align=center| 3:19
+| [[Las Vegas Valley|Las Vegas]], [[Nevada]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 6–0
+| [[Coty Wheeler]]
+| TKO (punches)
+| [[WEC 30]]
+| {{dts|2007|September|5}}
+| align=center| 3
+| align=center| 4:34
+| [[Las Vegas, Nevada]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 5–0
+| Rick McCorkell
+| KO (punch)
+| Battle in the Ballroom: Summer Fist 2007
+| {{dts|2007|June|28}}
+| align=center| 1
+| align=center| 0:13
+| [[Costa Mesa, California]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 4–0
+| Chris David
+| Decision (unanimous)
+| Total Combat 15
+| {{dts|2006|July|15}}
+| align=center| 3
+| align=center| N/A
+| [[San Diego, California]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 3–0
+| Musa Toliver
+| TKO (corner stoppage)
+| WFC: Rumble at the Ramada
+| {{dts|2005|December|8}}
+| align=center| 2
+| align=center| N/A
+| [[Norwalk, California]], United States
+| 
+|-
+| {{yes2}}Win
+| align=center| 2–0
+| Chris Acevedo
+| TKO (corner stoppage)
+| Crown Fighting Championship 1
+| {{dts|2004|September|4}}
+| align=center| 1
+| align=center| N/A
+| [[Rosarito Beach]], Mexico
+| 
+|-
+| {{yes2}}Win
+| align=center| 1–0
+| Jerry Samson
+| Submission (rear-naked choke)
+| Warriors Quest 6: Best of the Best
+| {{dts|2002|August|3}}
+| align=center| 2
+| align=center| 2:32
+| [[Honolulu, Hawaii]], United States
+| 
+
+{{MMA record end}}

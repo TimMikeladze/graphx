@@ -26,6 +26,7 @@ import type {
 	SqlStatement,
 	TransactionMode,
 } from './dialect.ts';
+import { ForkError, type NativeBranch, type NativeFork } from './fork.ts';
 
 // ── the embedded driver (`bql.sh/sqlite`) ────────────────────────────────────────────────
 
@@ -253,10 +254,7 @@ export function createBqlClient(database: BqlDatabase): BqlLocalClient {
 	}) as BqlLocalClient;
 }
 
-async function openConfigured(
-	database: BqlDatabase,
-	persistent: boolean,
-): Promise<BqlLocalClient> {
+async function openConfigured(database: BqlDatabase, persistent: boolean): Promise<BqlLocalClient> {
 	const client = createBqlClient(database);
 	try {
 		await client.execute('PRAGMA foreign_keys = ON');
@@ -369,10 +367,18 @@ export interface BqlRemoteOptions {
 }
 
 /** A graphx client over a bql.sh server. Tagged `sqlite`, and the server owns its pragmas. */
-export interface BqlRemoteClient extends DbClient {
+export interface BqlRemoteClient extends DbClient, NativeFork {
 	readonly dialect: 'sqlite';
 	readonly managedPragmas: true;
 }
+
+/** Each remote client's options, so one client can recognise another's server, and a switch for
+ *  whether its database still needs provisioning — off once a native fork created it, on again
+ *  when that branch is discarded. */
+const remotes = new WeakMap<
+	DbClient,
+	{ opts: BqlRemoteOptions; provisioned(done: boolean): void }
+>();
 
 /**
  * A graphx namespace as a bql.sh database name: case-folded, then validated.
@@ -447,9 +453,13 @@ export function createBqlRemoteClient(input: BqlRemoteOptions): BqlRemoteClient 
 	};
 	// Delegated method by method, never spread: `@libsql/client`'s clients are class
 	// instances, so `{ ...raw }` would copy the fields and drop every method.
-	return {
+	const client: BqlRemoteClient = {
 		dialect: 'sqlite',
 		managedPragmas: true,
+		nativeFork: async (target: DbClient) => {
+			await ensure();
+			return forkOnServer(opts, target);
+		},
 		execute: async (stmt: SqlStatement) => {
 			await ensure();
 			return raw.execute(stmt);
@@ -468,6 +478,95 @@ export function createBqlRemoteClient(input: BqlRemoteOptions): BqlRemoteClient 
 		},
 		close: () => raw.close(),
 	};
+	remotes.set(client, {
+		opts,
+		provisioned: (done) => {
+			provisioned = done ? Promise.resolve() : undefined;
+		},
+	});
+	return client;
+}
+
+/** `http://Host:80/` and `http://host` are one server. */
+function sameOrigin(a: string, b: string): boolean {
+	return new URL(a).origin === new URL(b).origin;
+}
+
+/**
+ * Fork `source`'s database into `target`'s with bql.sh's own fork — `POST /v1/db` with `from` —
+ * when both are databases on one server and the target does not exist yet. Returns null, having
+ * changed nothing, whenever that does not apply, so `fork()` copies instead: another backend or
+ * server, a target that exists (even empty: deleting it is not this call's to do), or a token that
+ * may not create databases.
+ */
+async function forkOnServer(
+	source: BqlRemoteOptions,
+	target: DbClient,
+): Promise<NativeBranch | null> {
+	const remote = remotes.get(target);
+	if (!remote) return null;
+	const into = remote.opts;
+	if (!sameOrigin(source.url, into.url)) return null;
+	if (into.database === source.database) {
+		throw new ForkError(`fork: source and target are the same bql.sh database (${into.database})`);
+	}
+	const probe = await admin(source, `/v1/db/${into.database}`, { method: 'GET' });
+	if (probe.ok || probe.status === 401 || probe.status === 403) {
+		await probe.body?.cancel();
+		return null;
+	}
+	if (probe.status !== 404) {
+		throw new Error(
+			`bql.sh: could not check whether ${into.database} exists (${probe.status} ${await probe.text()})`,
+		);
+	}
+	const forked = await admin(source, '/v1/db', {
+		method: 'POST',
+		body: JSON.stringify({ name: into.database, from: { db: source.database } }),
+	});
+	// 409: created between the probe and here, by someone else. Theirs, so copy rather than claim it.
+	if (forked.status === 401 || forked.status === 403 || forked.status === 409) {
+		await forked.body?.cancel();
+		return null;
+	}
+	if (!forked.ok) {
+		throw new Error(
+			`bql.sh: could not fork ${source.database} into ${into.database} (${forked.status} ${await forked.text()})`,
+		);
+	}
+	// `POST /v1/db` answers with the new database's stats, settings included.
+	const inherited = ((await forked.json()) as { foreignKeys?: boolean | null }).foreignKeys;
+	const branch: NativeBranch = {
+		discard: async () => {
+			const dropped = await admin(source, `/v1/db/${into.database}`, { method: 'DELETE' });
+			if (!dropped.ok && dropped.status !== 404) {
+				throw new Error(
+					`bql.sh: could not delete the branch ${into.database} (${dropped.status} ${await dropped.text()})`,
+				);
+			}
+			await dropped.body?.cancel();
+			remote.provisioned(false);
+		},
+	};
+	// A branch inherits its parent's foreign-key setting. The target client's own setting decides,
+	// as for a database `ensureDatabase` creates, so state it only when the two differ — the PATCH
+	// closes and reopens the database. A branch that cannot be configured is discarded.
+	if (into.foreignKeys !== false && inherited !== true) {
+		const configured = await admin(source, `/v1/db/${into.database}`, {
+			method: 'PATCH',
+			body: JSON.stringify({ foreignKeys: true }),
+		});
+		if (!configured.ok) {
+			const reason = `${configured.status} ${await configured.text()}`;
+			await branch.discard();
+			throw new Error(
+				`bql.sh: forked ${into.database} but could not turn foreign keys on (${reason})`,
+			);
+		}
+		await configured.body?.cancel();
+	}
+	remote.provisioned(true);
+	return branch;
 }
 
 async function admin(opts: BqlRemoteOptions, path: string, init: RequestInit): Promise<Response> {

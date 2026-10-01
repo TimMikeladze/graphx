@@ -1,0 +1,14 @@
+{{Infobox MMA event
+|name=UFC 100
+|image=UFC100lesnarmir.jpg
+|promotion=[[Ultimate Fighting Championship]]
+|date=July 11, 2009
+|venue=[[Mandalay Bay Events Center]]
+|city=[[Las Vegas, Nevada|Las Vegas]], Nevada
+|attendance=10,871 (9,764 paid)<ref name="Top MMA Gates">{{cite web |date=July 21, 2009 |url=http://boxing.nv.gov/results/Top_MMA_Gates/|title=Top MMA Gates |publisher=Nevada State Athletic Commission}}</ref>
+|purse=$1,790,000
+|gate=$5,101,740<ref name="Top MMA Gates" />
+|buyrate=1,600,000<ref name="businessinsider-ufc">{{cite news |title=The 51 best-selling pay-per-view fight nights in history |url=http://businessinsider.com/the-50-best-selling-pay-per-view-events-boxing-ufc-wrestling-tv-history-2017-8 |work=[[Business Insider]] |date=October 26, 2017}}</ref>
+|previousevent=[[The Ultimate Fighter: United States vs. United Kingdom Finale]]
+|followingevent=[[UFC 101|UFC 101: Declaration]]
+}}

@@ -15,7 +15,9 @@ export async function readReadme(): Promise<string> {
 }
 
 export async function readVersion(): Promise<string> {
-	const pkg = JSON.parse(await readFile(path.join(rootDir, 'packages/graphx/package.json'), 'utf8'));
+	const pkg = JSON.parse(
+		await readFile(path.join(rootDir, 'packages/graphx/package.json'), 'utf8'),
+	);
 	return pkg.version as string;
 }
 
@@ -48,7 +50,9 @@ export function resolve(blocks: Block[], ref: Ref): Resolved {
 			return first === prefix;
 		});
 		if (hits.length !== 1) {
-			throw new Error(`terminal("${ref.command}") matched ${hits.length} README blocks, expected exactly 1`);
+			throw new Error(
+				`terminal("${ref.command}") matched ${hits.length} README blocks, expected exactly 1`,
+			);
 		}
 		const [hit] = hits as [Block];
 		return {
@@ -62,7 +66,9 @@ export function resolve(blocks: Block[], ref: Ref): Resolved {
 	}
 	const hits = blocks.filter((b) => b.code.split('\n').some((l) => l.includes(ref.line)));
 	if (hits.length !== 1) {
-		throw new Error(`snippet(${JSON.stringify(ref.line)}) matched ${hits.length} README blocks, expected exactly 1`);
+		throw new Error(
+			`snippet(${JSON.stringify(ref.line)}) matched ${hits.length} README blocks, expected exactly 1`,
+		);
 	}
 	const [hit] = hits as [Block];
 	return { ...hit, title: ref.label, terminal: false };
@@ -91,7 +97,8 @@ export function readTable(md: string, header: string): Table {
 		found.push({ header: cells(head), rows });
 	}
 	const hits = found.filter((t) => t.header[0] === header);
-	if (hits.length !== 1) throw new Error(`table("${header}") matched ${hits.length} README tables, expected exactly 1`);
+	if (hits.length !== 1)
+		throw new Error(`table("${header}") matched ${hits.length} README tables, expected exactly 1`);
 	return hits[0] as Table;
 }
 
@@ -127,8 +134,10 @@ export function readSections(md: string): { text: string; slug: string }[] {
 export function referenceBody(md: string): string {
 	const first = md.indexOf('\n## ');
 	const body = first === -1 ? md : md.slice(first + 1);
-	return body
-		.replace(/\]\(\.\/([^)]+)\)/g, '](https://github.com/TimMikeladze/graphx/blob/main/$1)');
+	return body.replace(
+		/\]\(\.\/([^)]+)\)/g,
+		'](https://github.com/TimMikeladze/graphx/blob/main/$1)',
+	);
 }
 
 /** A figure, counted from the repository. Throws when its source is missing, like a reference. */
@@ -146,6 +155,8 @@ export async function countFigure(md: string, source: FigureSource): Promise<num
 		const hit = resolve(fencedBlocks(md), { kind: 'snippet', line: source.line, label: '' });
 		return hit.code.split('\n').filter((l) => l.startsWith(source.prefix)).length;
 	}
-	const pkg = JSON.parse(await readFile(path.join(rootDir, 'packages/graphx/package.json'), 'utf8'));
+	const pkg = JSON.parse(
+		await readFile(path.join(rootDir, 'packages/graphx/package.json'), 'utf8'),
+	);
 	return Object.keys(pkg.dependencies ?? {}).length;
 }

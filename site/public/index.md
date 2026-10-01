@@ -6,7 +6,7 @@ Currently v0.1.0. Install: `bun add graphx`
 
 - **16** entry points, one package
 - **4** server backends
-- **9** cli commands
+- **10** cli commands
 - **10** runtime dependencies
 
 ## Principles
@@ -603,6 +603,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
+graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
 graphx ask      "<question>" [-c config]  Plan a plain-language question as a graph call, and run it
 ```
@@ -647,6 +648,7 @@ Scaffolded graphx project in my-app/
 ```sh
 bun install       # from the repo root
 bun test          # the full suite
+GRAPHX_TEST_DRIVER=bql bun test  # the suite on bql.sh, with `bun run bql:serve`'s two variables set
 bun run type-check
 bun run build     # bunup, every entry point
 bun run dev:admin # the operator SPA against a dev server

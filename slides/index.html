@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Graphs Through Time</title>
+		<meta
+			name="description"
+			content="What if we cross a graph data structure with a time-series database? A 13-slide talk ending in graphx."
+		/>
+		<style>
+			:root {
+				--bg: #fafaf7;
+				--fg: #16161a;
+				--muted: #6b6b73;
+				--line: #d9d9d2;
+				--code-bg: #efefe8;
+				--accent: #2f5bd3;
+				--red: #d23f31;
+				--amber: #d99a0b;
+				--green: #1f9d55;
+				--mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+				--sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root:not([data-theme='light']) {
+					--bg: #111114;
+					--fg: #ededea;
+					--muted: #9a9aa2;
+					--line: #2c2c33;
+					--code-bg: #1b1b20;
+					--accent: #7e9cff;
+					--red: #ff6b5c;
+					--amber: #f3b737;
+					--green: #46c37b;
+				}
+			}
+			:root[data-theme='dark'] {
+				--bg: #111114;
+				--fg: #ededea;
+				--muted: #9a9aa2;
+				--line: #2c2c33;
+				--code-bg: #1b1b20;
+				--accent: #7e9cff;
+				--red: #ff6b5c;
+				--amber: #f3b737;
+				--green: #46c37b;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+			}
+			body {
+				background: var(--bg);
+				color: var(--fg);
+				font-family: var(--sans);
+				font-size: clamp(15px, 1.9vmin + 6px, 26px);
+				line-height: 1.45;
+				overflow: hidden;
+			}
+
+			section {
+				display: none;
+				position: absolute;
+				inset: 0;
+				padding: 6vh max(16px, 7vw);
+				flex-direction: column;
+				justify-content: center;
+				overflow-y: auto;
+			}
+			section.active {
+				display: flex;
+			}
+			section > * {
+				max-width: 1100px;
+				width: 100%;
+				margin-left: auto;
+				margin-right: auto;
+			}
+
+			h1 {
+				font-size: 2.6em;
+				line-height: 1.05;
+				letter-spacing: -0.03em;
+				margin: 0 0 0.4em;
+				font-weight: 700;
+			}
+			h2 {
+				font-size: 1.7em;
+				line-height: 1.1;
+				letter-spacing: -0.02em;
+				margin: 0 0 0.6em;
+				font-weight: 700;
+			}
+			p {
+				margin: 0 0 0.7em;
+			}
+			ul {
+				margin: 0 0 0.7em;
+				padding-left: 1.1em;
+			}
+			li {
+				margin: 0.2em 0;
+			}
+			li::marker {
+				color: var(--muted);
+			}
+			strong {
+				font-weight: 650;
+			}
+			em {
+				color: var(--accent);
+				font-style: normal;
+			}
+			.lede {
+				font-size: 1.2em;
+				color: var(--muted);
+			}
+			.kicker {
+				font-family: var(--mono);
+				font-size: 0.7em;
+				color: var(--muted);
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				margin-bottom: 1.2em;
+			}
+			.small {
+				font-size: 0.8em;
+				color: var(--muted);
+			}
+			.cols {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 1em 3em;
+			}
+			@media (max-width: 760px) {
+				.cols {
+					grid-template-columns: 1fr;
+				}
+				h1 {
+					font-size: 2em;
+				}
+				h2 {
+					font-size: 1.4em;
+				}
+			}
+
+			code,
+			pre {
+				font-family: var(--mono);
+			}
+			code {
+				font-size: 0.88em;
+				background: var(--code-bg);
+				padding: 0.05em 0.3em;
+				border-radius: 4px;
+			}
+			pre {
+				background: var(--code-bg);
+				border-radius: 8px;
+				padding: 0.9em 1.1em;
+				font-size: 0.62em;
+				line-height: 1.5;
+				overflow-x: auto;
+				margin: 0 0 0.8em;
+				tab-size: 2;
+			}
+			pre code {
+				background: none;
+				padding: 0;
+				font-size: 1em;
+			}
+			.c {
+				color: var(--muted);
+			}
+
+			svg {
+				display: block;
+				width: 100%;
+				height: auto;
+				max-height: 46vh;
+				margin: 0.4em auto 1em;
+				overflow: visible;
+			}
+			svg text {
+				font-family: var(--sans);
+				fill: var(--fg);
+				font-size: 15px;
+			}
+			svg .label {
+				fill: var(--muted);
+				font-size: 13px;
+				font-style: italic;
+			}
+			svg .node {
+				fill: var(--bg);
+				stroke: var(--fg);
+				stroke-width: 2;
+			}
+			svg .edge {
+				stroke: var(--muted);
+				stroke-width: 2;
+				fill: none;
+			}
+			svg .hot {
+				stroke: var(--accent);
+			}
+
+			table {
+				width: auto;
+				border-collapse: collapse;
+				margin: 0 0 0.9em;
+				font-variant-numeric: tabular-nums;
+			}
+			td,
+			th {
+				padding: 0.3em 1.2em 0.3em 0;
+				border-bottom: 1px solid var(--line);
+				text-align: left;
+			}
+			th {
+				font-weight: 600;
+				color: var(--muted);
+				font-size: 0.8em;
+			}
+			td.num {
+				font-family: var(--mono);
+			}
+			.big {
+				font-size: 2.2em;
+				font-weight: 700;
+				letter-spacing: -0.03em;
+				line-height: 1;
+			}
+			.stats {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1.2em 3em;
+				margin: 0.4em 0 1em;
+			}
+			.stats .small {
+				margin-top: 0.3em;
+			}
+
+			aside.notes {
+				display: none;
+			}
+			body.show-notes aside.notes {
+				display: block;
+				position: fixed;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				max-width: none;
+				background: var(--code-bg);
+				border-top: 1px solid var(--line);
+				padding: 0.8em max(16px, 7vw) 2.6em;
+				font-size: 0.7em;
+				color: var(--muted);
+			}
+
+			nav {
+				position: fixed;
+				right: 16px;
+				bottom: 12px;
+				font-family: var(--mono);
+				font-size: 12px;
+				color: var(--muted);
+				display: flex;
+				gap: 10px;
+				align-items: center;
+				z-index: 2;
+			}
+			nav button {
+				font: inherit;
+				color: inherit;
+				background: none;
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				padding: 2px 8px;
+				cursor: pointer;
+			}
+			#progress {
+				position: fixed;
+				left: 0;
+				top: 0;
+				height: 3px;
+				background: var(--accent);
+				transition: width 0.2s;
+			}
+
+			@media print {
+				body {
+					overflow: visible;
+				}
+				section {
+					display: flex !important;
+					position: relative;
+					height: 100vh;
+					page-break-after: always;
+				}
+				nav,
+				#progress {
+					display: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div id="progress"></div>
+
+		<!-- 1 -->
+		<section>
+			<div class="kicker">A thought experiment</div>
+			<h1>What if we cross a graph<br />with a time-series database?</h1>
+			<p class="lede">Two old ideas. One question.</p>
+			<aside class="notes">
+				No product names for the first eight slides. Everything until slide 9 is theory.
+			</aside>
+		</section>
+
+		<!-- 2 -->
+		<section>
+			<h2>What is a graph?</h2>
+			<p><strong>Nodes</strong> are things. <strong>Edges</strong> are how things relate.</p>
+			<svg
+				viewBox="0 0 760 170"
+				role="img"
+				aria-label="A small graph: You knows Ana, Ana works at Amplified Industries, which is located on Drydock Ave"
+			>
+				<defs>
+					<marker
+						id="a2"
+						viewBox="0 0 10 10"
+						refX="9"
+						refY="5"
+						markerWidth="7"
+						markerHeight="7"
+						orient="auto"
+					>
+						<path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" />
+					</marker>
+				</defs>
+				<line class="edge" x1="95" y1="115" x2="215" y2="62" marker-end="url(#a2)" />
+				<line class="edge" x1="290" y1="60" x2="418" y2="100" marker-end="url(#a2)" />
+				<line class="edge" x1="535" y1="112" x2="625" y2="62" marker-end="url(#a2)" />
+				<text class="label" x="140" y="74" text-anchor="middle">knows</text>
+				<text class="label" x="370" y="74" text-anchor="middle">worksAt</text>
+				<text class="label" x="600" y="104" text-anchor="middle">locatedOn</text>
+				<circle class="node" cx="70" cy="125" r="28" />
+				<text x="70" y="130" text-anchor="middle">You</text>
+				<circle class="node" cx="255" cy="50" r="28" />
+				<text x="255" y="55" text-anchor="middle">Ana</text>
+				<rect class="node" x="400" y="105" width="160" height="44" rx="8" />
+				<text x="480" y="132" text-anchor="middle">Amplified Industries</text>
+				<rect class="node" x="610" y="22" width="130" height="44" rx="22" />
+				<text x="675" y="49" text-anchor="middle">Drydock Ave</text>
+			</svg>
+			<p>Questions a graph answers naturally:</p>
+			<ul>
+				<li>Who is connected to whom?</li>
+				<li>How far apart are two things?</li>
+				<li>What sits in between?</li>
+			</ul>
+			<aside class="notes">
+				Subway map, family tree, org chart, the internet — all graphs. The interesting part is the
+				edges, not the dots.
+			</aside>
+		</section>
+
+		<!-- 3 -->
+		<section>
+			<h2>Graph databases</h2>
+			<div class="cols">
+				<div>
+					<p>
+						<strong>Examples</strong><br /><span class="small"
+							>Neo4j · Amazon Neptune · Memgraph · TigerGraph · ArangoDB</span
+						>
+					</p>
+					<p>
+						<strong>Used for</strong><br /><span class="small"
+							>social networks · fraud rings · recommendations · supply chains · knowledge graphs ·
+							IT/network topology · routing</span
+						>
+					</p>
+					<p>
+						<strong>What they solve</strong><br />Questions about connections of
+						<em>unknown depth</em> — “is this account linked to a known fraudster, by any path?”
+					</p>
+				</div>
+				<div>
+					<p><strong>Why not SQL?</strong></p>
+					<ul>
+						<li>
+							Every hop is a <code>JOIN</code>. Friends-of-friends-of-friends = three self-joins.
+						</li>
+						<li>Unknown depth needs recursive CTEs; they get slow and hard to read.</li>
+						<li>Relationships hide in foreign keys instead of being first-class.</li>
+						<li>A graph engine makes the walk the native operation.</li>
+					</ul>
+				</div>
+			</div>
+			<aside class="notes">
+				SQL can do it. The point is ergonomics, and the cost growing with depth.
+			</aside>
+		</section>
+
+		<!-- 4 -->
+		<section>
+			<h2>Time-series databases</h2>
+			<div class="cols">
+				<div>
+					<p>
+						<strong>Examples</strong><br /><span class="small"
+							>InfluxDB · TimescaleDB · Prometheus · QuestDB · kdb+</span
+						>
+					</p>
+					<p>
+						<strong>The data</strong><br /><code>(timestamp, series, value)</code> — append-only,
+						write-heavy, mostly recent.
+					</p>
+					<p>
+						<strong>What they solve</strong><br />“What was the value at <em>t</em>?” “How did it
+						change?” Trends, rollups, alerts.
+					</p>
+				</div>
+				<div>
+					<p><strong>How they index</strong></p>
+					<ul>
+						<li>Partition by time into chunks; the newest stays hot.</li>
+						<li>Rows sorted by time — a range query is one contiguous scan.</li>
+						<li>Compress hard: delta-of-delta timestamps, XOR’d floats (Gorilla).</li>
+						<li>Downsample old data; expire it with retention policies.</li>
+					</ul>
+				</div>
+			</div>
+			<aside class="notes">Never update in place. History is the product.</aside>
+		</section>
+
+		<!-- 5 -->
+		<section>
+			<h2>What if we combine them?</h2>
+			<p class="lede">A graph where <strong>every node and every edge has a history.</strong></p>
+			<p>New questions become one query:</p>
+			<ul>
+				<li>What did the network look like <strong>last Tuesday at 5pm</strong>?</li>
+				<li>What <strong>changed</strong> between then and now?</li>
+				<li>
+					Which paths <strong>existed at the time</strong>?
+					<span class="small">(you can’t catch a train that already left)</span>
+				</li>
+				<li>
+					When did this relationship <strong>start</strong>, and when did it <strong>end</strong>?
+				</li>
+				<li>Who knew what, <strong>and when</strong>?</li>
+			</ul>
+			<aside class="notes">
+				A graph DB answers “how is this connected”. A TSDB answers “how did this change”. Together:
+				“how did the connections change”.
+			</aside>
+		</section>
+
+		<!-- 6 -->
+		<section>
+			<h2>Let’s talk time travel</h2>
+			<p>
+				Nothing is overwritten. An update <strong>closes</strong> the old version and
+				<strong>opens</strong> a new one.
+			</p>
+			<svg
+				viewBox="0 0 760 190"
+				role="img"
+				aria-label="Timeline of one traffic light: green 30 seconds from 08:00 to 17:00, then green 50 seconds from 17:00 onward; an as-of read at 12:00 returns 30 seconds"
+			>
+				<line class="edge" x1="40" y1="160" x2="730" y2="160" />
+				<g class="label">
+					<text class="label" x="80" y="182" text-anchor="middle">08:00</text>
+					<text class="label" x="270" y="182" text-anchor="middle">12:00</text>
+					<text class="label" x="480" y="182" text-anchor="middle">17:00</text>
+					<text class="label" x="720" y="182" text-anchor="middle">now</text>
+				</g>
+				<rect
+					x="80"
+					y="40"
+					width="400"
+					height="38"
+					rx="6"
+					fill="var(--code-bg)"
+					stroke="var(--muted)"
+				/>
+				<text x="96" y="65">v1 · Drydock green 30 s</text>
+				<rect
+					x="480"
+					y="96"
+					width="250"
+					height="38"
+					rx="6"
+					fill="var(--code-bg)"
+					stroke="var(--accent)"
+					stroke-width="2"
+				/>
+				<text x="496" y="121">v2 · Drydock green 50 s →</text>
+				<line
+					x1="270"
+					y1="22"
+					x2="270"
+					y2="160"
+					stroke="var(--accent)"
+					stroke-width="2"
+					stroke-dasharray="5 5"
+				/>
+				<text x="278" y="18" fill="var(--accent)" style="fill: var(--accent)">
+					as of 12:00 → 30 s
+				</text>
+			</svg>
+			<div class="cols">
+				<ul>
+					<li><strong>As-of read</strong> — rebuild the whole graph at any instant.</li>
+					<li><strong>History</strong> — every version of one thing.</li>
+				</ul>
+				<ul>
+					<li><strong>Diff</strong> — added, changed, removed between two instants.</li>
+					<li><strong>Change feed</strong> — stream every version as it lands.</li>
+				</ul>
+			</div>
+			<aside class="notes">
+				Each version carries valid_from / valid_to. A delete is just closing the interval.
+			</aside>
+		</section>
+
+		<!-- 7 -->
+		<section>
+			<h2>What if we could create branching universes?</h2>
+			<p>Fork the world at a moment. Change one thing. Run both forward. Compare.</p>
+			<svg
+				viewBox="0 0 760 180"
+				role="img"
+				aria-label="A timeline forks at one moment into universe A, left alone, and universe B, with one traffic light retimed"
+			>
+				<path class="edge" d="M40 90 H300" style="stroke: var(--fg)" />
+				<path class="edge" d="M300 90 C380 90 400 40 480 40 H700" />
+				<path class="edge hot" d="M300 90 C380 90 400 140 480 140 H700" />
+				<circle cx="300" cy="90" r="8" fill="var(--fg)" />
+				<text class="label" x="300" y="122" text-anchor="middle">fork</text>
+				<text x="40" y="76">today</text>
+				<text x="480" y="28">A · leave it alone</text>
+				<text x="480" y="170" style="fill: var(--accent)">B · retime one traffic light</text>
+			</svg>
+			<ul>
+				<li>City planning: what if we close this street?</li>
+				<li>Supply chains: what if this port shuts for a week?</li>
+				<li>Incidents: replay the outage with the fix applied.</li>
+			</ul>
+			<aside class="notes">
+				Git for the state of the world. Branch, what-if, keep it or throw it away.
+			</aside>
+		</section>
+
+		<!-- 8 -->
+		<section>
+			<h2>That’s all great.<br />How do I use this today?</h2>
+			<p>The usual answer is glue:</p>
+			<ul>
+				<li>a graph DB <strong>+</strong> a time-series DB <strong>+</strong> an event log</li>
+				<li>two query languages, a sync job between them</li>
+				<li>the “as-of join across both” is yours to write</li>
+				<li>or SQL temporal tables: history, but no graph walks</li>
+			</ul>
+			<p class="lede">
+				What we want:
+				<strong>one schema, one versioned graph, running where the data already lives.</strong>
+			</p>
+		</section>
+
+		<!-- 9 -->
+		<section>
+			<div class="kicker">Everything so far was theory</div>
+			<h2>Introducing graphx</h2>
+			<ul>
+				<li>
+					<strong>Graph</strong> — define nodes and edges once with Zod; typed writes, pattern
+					matching, no codegen.
+				</li>
+				<li>
+					<strong>Time</strong> — every write is versioned; <code>asOf</code> on reads,
+					<code>history</code>, <code>diff</code>, <code>changeFeed</code>, <code>timeline</code>.
+				</li>
+				<li>
+					<strong>Walks</strong> — time-respecting <code>journey</code>, weighted
+					<code>shortestPath</code>, <code>pagerank</code>, communities.
+				</li>
+				<li><strong>Search</strong> — vector + full-text retrieval over the same graph.</li>
+				<li>
+					<strong>Anywhere</strong> — SQLite/libSQL, Postgres, DuckDB, the browser, Expo. HTTP +
+					OpenAPI, React hooks, MCP.
+				</li>
+				<li>
+					<strong>Universes</strong> — <code>fork</code> a namespace at any instant, diverge,
+					compare.
+				</li>
+			</ul>
+			<aside class="notes">
+				Branching is one call: g.fork(db, { asOf }) copies a namespace, history and all, into an
+				empty one; from there the two diverge.
+			</aside>
+		</section>
+
+		<!-- 10 -->
+		<section>
+			<h2>Under the hood: bql.sh</h2>
+			<p class="lede">
+				graphx keeps time <strong>per row</strong>. bql.sh keeps time <strong>per database</strong>.
+			</p>
+			<ul>
+				<li>
+					<strong>WAL shipping</strong> — every committed WAL frame streams to replicas over a
+					socket.
+				</li>
+				<li>
+					<strong>Continuous backup</strong> — to any S3-compatible bucket; restore to any txid or
+					instant.
+				</li>
+				<li>
+					<strong>Forks with lineage</strong> — a reflink where the filesystem allows; a branch per
+					pull request, or per what-if.
+				</li>
+				<li>
+					<strong>Realtime</strong> — live queries driven by SQLite’s own hooks, not triggers.
+				</li>
+			</ul>
+			<pre><code>import 'graphx/bql';
+const bql = { driver: 'bql', bqlUrl: 'http://127.0.0.1:4321' } as const;
+
+await fork(getDb('today', bql), getDb('retimed', bql), { asOf: eightAm }); <span class="c">// method: 'native'</span></code></pre>
+			<aside class="notes">
+				Two clocks. graphx’s valid_from / valid_to say when a fact was true; bql.sh’s txid log says
+				when the database committed it. fork copies a graph between any two backends; between two
+				databases on one bql.sh server it lets bql.sh branch the file, then trims it to the cut.
+			</aside>
+		</section>
+
+		<!-- 11 -->
+		<section>
+			<h2>Modeling the real world</h2>
+			<p>
+				A city block in Boston’s Seaport: <strong>Drydock Ave</strong>. A company on it:
+				<strong>Amplified Industries</strong>.
+			</p>
+			<pre><code>const schema = defineGraphSchema({
+	nodes: {
+		intersection: z.object({
+			name: z.string(),
+			lat: z.number(),
+			lng: z.number(),
+			cycleSec: z.number(),
+			green: z.record(z.string(), z.number()), <span class="c">// street → seconds of green</span>
+		}),
+		place: z.object({ name: z.string() }),
+	},
+	edges: {
+		road: { from: 'intersection', to: 'intersection' }, <span class="c">// weight = seconds</span>
+		locatedAt: { from: 'place', to: 'intersection', single: true },
+	},
+});</code></pre>
+			<aside class="notes">Geometry is approximate and illustrative, not survey data.</aside>
+		</section>
+
+		<!-- 12 -->
+		<section>
+			<h2>A geospatial graph</h2>
+			<svg
+				viewBox="-10 0 800 340"
+				role="img"
+				aria-label="Map of five intersections around Drydock Ave, placed by latitude and longitude, joined by one-way road segments; the light at Drydock Ave and Tide St is marked"
+			>
+				<defs>
+					<marker
+						id="a11"
+						viewBox="0 0 10 10"
+						refX="10"
+						refY="5"
+						markerWidth="7"
+						markerHeight="7"
+						orient="auto"
+					>
+						<path d="M0,0 L10,5 L0,10 z" fill="var(--muted)" />
+					</marker>
+				</defs>
+				<line class="edge" x1="534" y1="239" x2="322" y2="224" marker-end="url(#a11)" />
+				<line class="edge" x1="290" y1="232" x2="66" y2="282" marker-end="url(#a11)" />
+				<line class="edge" x1="548" y1="224" x2="516" y2="80" marker-end="url(#a11)" />
+				<line class="edge" x1="497" y1="60" x2="292" y2="42" marker-end="url(#a11)" />
+				<line class="edge" x1="277" y1="56" x2="301" y2="205" marker-end="url(#a11)" />
+				<text class="label" x="430" y="223" text-anchor="middle">Drydock Ave</text>
+				<text class="label" x="170" y="245" text-anchor="middle">Drydock Ave</text>
+				<text class="label" x="545" y="150">Harbor St</text>
+				<text class="label" x="395" y="40" text-anchor="middle">Northern Ave</text>
+				<text class="label" x="280" y="135" text-anchor="end">Tide St</text>
+				<circle class="node" cx="550" cy="240" r="9" />
+				<circle class="node" cx="304" cy="223" r="9" />
+				<circle class="node" cx="513" cy="62" r="9" />
+				<circle class="node" cx="274" cy="40" r="9" />
+				<circle class="node" cx="50" cy="290" r="9" />
+				<g transform="translate(316 238)">
+					<rect width="16" height="38" rx="4" fill="#222" />
+					<circle cx="8" cy="8" r="4.5" fill="var(--red)" />
+					<circle cx="8" cy="19" r="4.5" fill="var(--amber)" opacity=".35" />
+					<circle cx="8" cy="30" r="4.5" fill="var(--green)" opacity=".35" />
+				</g>
+				<text x="274" y="22" text-anchor="middle">Northern Ave &amp; Tide St</text>
+				<text x="560" y="62">Northern Ave &amp; Harbor St</text>
+				<text x="304" y="296" text-anchor="middle">Drydock Ave &amp; Tide St</text>
+				<text x="550" y="272" text-anchor="middle">Drydock &amp; Design Center</text>
+				<rect x="572" y="230" width="20" height="20" fill="var(--accent)" rx="3" />
+				<text x="600" y="246" style="fill: var(--accent)">Amplified Industries</text>
+				<text x="40" y="320">Summer St &amp; Drydock Ave → I-90</text>
+			</svg>
+			<ul>
+				<li><strong>Intersection</strong> = a node with a lat/lng and its light’s timing.</li>
+				<li>
+					<strong>Road segment</strong> = an edge weighted in <em>seconds</em>: drive time + average
+					wait at the next red.
+				</li>
+				<li>Average wait at a fixed-time light ≈ (cycle − green)² ÷ (2 × cycle).</li>
+			</ul>
+			<aside class="notes">
+				Longer red, longer wait — and it grows with the square. That’s the whole model. Positions
+				are plotted from the nodes’ lat/lng.
+			</aside>
+		</section>
+
+		<!-- 13 -->
+		<section>
+			<h2>The problem</h2>
+			<p>
+				<strong>5pm.</strong> Amplified Industries’ shift lets out. 400 cars head for I-90.<br />
+				The Drydock &amp; Tide light gives Drydock Ave <strong>30 of every 90 seconds</strong>.
+				<strong>What if Drydock got 50?</strong>
+			</p>
+			<table>
+				<tr>
+					<th></th>
+					<th>trip to Summer St</th>
+				</tr>
+				<tr>
+					<td>8am, today</td>
+					<td class="num">1 min 48 s</td>
+				</tr>
+				<tr>
+					<td>5pm, today</td>
+					<td class="num">5 min 26 s</td>
+				</tr>
+				<tr>
+					<td>5pm, light retimed</td>
+					<td class="num" style="color: var(--accent)">4 min 52 s</td>
+				</tr>
+			</table>
+			<div class="stats">
+				<div>
+					<div class="big" style="color: var(--green)">3.8 h</div>
+					<div class="small">back every evening (34 s × 400 cars)</div>
+				</div>
+				<div>
+					<div class="big" style="color: var(--red)">+14 s</div>
+					<div class="small">longer wait for Tide St drivers</div>
+				</div>
+			</div>
+			<p class="small">
+				Rush hour is a <strong>new version</strong> of the roads (8am is still readable) · the
+				retimed light lives in a <strong>branch forked at 8am</strong> ·
+				<code>shortestPath</code> answers both · <code>examples/seaport-traffic.ts</code> forks with
+				<code>g.fork</code>; <code>examples/seaport-traffic-bql</code> makes the same fork natively
+				on bql.sh
+			</p>
+			<aside class="notes">
+				Every number here is real output of examples/seaport-traffic.ts, and
+				examples/seaport-traffic-bql prints the same ones. Is 3.8 hours worth 14 seconds on Tide St?
+				That’s the engineer’s call — the graph makes the trade visible.
+			</aside>
+		</section>
+
+		<!-- 14 -->
+		<section>
+			<h2>Getting started with graphx</h2>
+			<pre><code>bunx graphx new my-app
+cd my-app &amp;&amp; bun install
+bun run serve          <span class="c"># http://localhost:8899  ·  /docs</span></code></pre>
+			<pre><code>import { getDb, init, Graph, diff } from 'graphx';
+
+const db = getDb('city');
+await init(db);
+const g = new Graph(db, schema);
+
+await g.updateNode(light, { data: { green: { 'Drydock Ave': 50, 'Tide St': 40 } } });
+await g.getNode(light, { asOf: yesterday }); <span class="c">// the light as it was</span>
+await diff(db, yesterday, Date.now()); <span class="c">// what moved since</span></code></pre>
+			<p class="small">
+				On bql.sh: <code>import 'graphx/bql'</code> and
+				<code>getDb(name, { driver: 'bql', bqlUrl })</code> — one namespace is one bql.sh database.
+			</p>
+			<p>
+				<strong>graphx.sh</strong> · <strong>github.com/TimMikeladze/graphx</strong> ·
+				<code>bun add graphx</code>
+			</p>
+		</section>
+
+		<nav>
+			<button id="prev" aria-label="Previous slide">←</button>
+			<span id="count"></span>
+			<button id="next" aria-label="Next slide">→</button>
+			<button id="notes" aria-label="Toggle speaker notes">notes</button>
+			<button id="theme" aria-label="Toggle theme">theme</button>
+		</nav>
+
+		<script>
+			const slides = [...document.querySelectorAll('section')];
+			let i = 0;
+			function show(n) {
+				i = Math.max(0, Math.min(slides.length - 1, n));
+				slides.forEach((s, k) => s.classList.toggle('active', k === i));
+				document.getElementById('count').textContent = `${i + 1} / ${slides.length}`;
+				document.getElementById('progress').style.width = `${((i + 1) / slides.length) * 100}%`;
+				history.replaceState(null, '', `#${i + 1}`);
+			}
+			function toggleTheme() {
+				const root = document.documentElement;
+				const dark = root.dataset.theme
+					? root.dataset.theme === 'dark'
+					: matchMedia('(prefers-color-scheme: dark)').matches;
+				root.dataset.theme = dark ? 'light' : 'dark';
+			}
+			document.addEventListener('keydown', (e) => {
+				if (e.metaKey || e.ctrlKey || e.altKey) return;
+				if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) {
+					e.preventDefault();
+					show(i + 1);
+				} else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) {
+					e.preventDefault();
+					show(i - 1);
+				} else if (e.key === 'Home') show(0);
+				else if (e.key === 'End') show(slides.length - 1);
+				else if (e.key === 'n') document.body.classList.toggle('show-notes');
+				else if (e.key === 't') toggleTheme();
+			});
+			document.getElementById('prev').onclick = () => show(i - 1);
+			document.getElementById('next').onclick = () => show(i + 1);
+			document.getElementById('notes').onclick = () => document.body.classList.toggle('show-notes');
+			document.getElementById('theme').onclick = toggleTheme;
+			let x0 = null;
+			addEventListener(
+				'touchstart',
+				(e) => {
+					x0 = e.touches[0].clientX;
+				},
+				{ passive: true },
+			);
+			addEventListener('touchend', (e) => {
+				if (x0 === null) return;
+				const dx = e.changedTouches[0].clientX - x0;
+				if (Math.abs(dx) > 50) show(i + (dx < 0 ? 1 : -1));
+				x0 = null;
+			});
+			show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+		</script>
+	</body>
+</html>

@@ -198,6 +198,16 @@ export {
 	sanitizeMatch,
 } from './hybrid.ts';
 
+// Fork — branch a namespace
+export {
+	fork,
+	ForkError,
+	type ForkOpts,
+	type ForkResult,
+	type NativeBranch,
+	type NativeFork,
+} from './fork.ts';
+
 // P13 — bulk ingestion
 export {
 	type BulkEdgeOpts,

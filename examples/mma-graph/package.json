@@ -1,0 +1,44 @@
+{
+	"name": "graphx-example-mma-graph",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Every fighter, every fight and every event across MMA history — scraped from Wikipedia into a markdown vault, ingested with graphx/ingest, served by a Next.js app as a temporal API + dashboard",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/mma-graph"
+	},
+	"type": "module",
+	"scripts": {
+		"scrape": "bun scrape.ts",
+		"dev": "next dev --port 8793",
+		"build": "next build",
+		"start": "next start --port 8793",
+		"test": "bun test",
+		"type-check": "next typegen && tsc --noEmit"
+	},
+	"dependencies": {
+		"@libsql/client": "^0.17.3",
+		"graphx": "workspace:*",
+		"next": "^16.3.5",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"typescript": "^6.0.3"
+	}
+}

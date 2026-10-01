@@ -244,11 +244,23 @@ export async function ensureEmbeddings(
 		);
 	}
 	if (existing) await dropEmbeddings(client);
+	return createEmbeddings(client, { model: embedder.id, dim });
+}
+
+/**
+ * Create `node_embeddings` at `meta.dim` and record `meta` — the half of {@link ensureEmbeddings}
+ * that needs no embedder, for a caller that already knows the model (a fork copying a
+ * namespace's vectors verbatim).
+ */
+export async function createEmbeddings(
+	client: DbClient,
+	meta: EmbeddingMeta,
+): Promise<EmbeddingMeta> {
 	const d = dialectOf(client);
-	if (d !== 'duckdb') await client.executeMultiple(embeddingsTableDDL(d, dim));
-	await client.execute({ sql: META_UPSERT_SQL, args: [META_MODEL, embedder.id] });
-	await client.execute({ sql: META_UPSERT_SQL, args: [META_DIM, String(dim)] });
-	return { model: embedder.id, dim };
+	if (d !== 'duckdb') await client.executeMultiple(embeddingsTableDDL(d, meta.dim));
+	await client.execute({ sql: META_UPSERT_SQL, args: [META_MODEL, meta.model] });
+	await client.execute({ sql: META_UPSERT_SQL, args: [META_DIM, String(meta.dim)] });
+	return meta;
 }
 
 /** Remove every stored vector and the model record. DuckDB keeps its width-free table. */

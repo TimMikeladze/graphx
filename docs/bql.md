@@ -22,13 +22,13 @@ sites for a backend that needs no new SQL at all.
 the embedded driver is typed structurally (`BqlModule` / `BqlDatabase`, the trick `expo.ts` uses
 for Expo's SQLite module) and the remote one is `@libsql/client`, which graphx already had.
 
-| Export                                                    | What it is                                                      |
-| --------------------------------------------------------- | --------------------------------------------------------------- |
-| `createBqlClient(database)`                             | Takes ownership of an embedded `bql.sh/sqlite` connection    |
-| `openBqlDb(module, path)` / `openBqlMemoryDb(module)` | Opens one and verifies WAL, FULL sync and foreign keys          |
-| `createBqlRemoteClient(opts)`                           | A client over a bql.sh server's Hrana surface                    |
-| `bqlDatabaseName(ns)` / `bqlHranaUrl(origin, db)`     | The namespace → database-name and URL rules                     |
-| `bqlDriver`                                             | Registered on import, so `getDb(ns, { driver: 'bql' })` works |
+| Export                                                | What it is                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------- |
+| `createBqlClient(database)`                           | Takes ownership of an embedded `bql.sh/sqlite` connection     |
+| `openBqlDb(module, path)` / `openBqlMemoryDb(module)` | Opens one and verifies WAL, FULL sync and foreign keys        |
+| `createBqlRemoteClient(opts)`                         | A client over a bql.sh server's Hrana surface                 |
+| `bqlDatabaseName(ns)` / `bqlHranaUrl(origin, db)`     | The namespace → database-name and URL rules                   |
+| `bqlDriver`                                           | Registered on import, so `getDb(ns, { driver: 'bql' })` works |
 
 Three small changes outside it: `managedPragmas` on `DbClient` (honoured by `applyConnPragmas`), the
 `Driver` split and `registerBqlDriver` in `db.ts`, and one line in `cli-config.ts` so a config
@@ -72,16 +72,29 @@ not — `evt_01M3E2K3W0…` pairs a lower-case prefix with a ULID. Folding is sa
 convenient: bql.sh keeps a directory per database, so on a case-insensitive filesystem two names
 differing only in case were never two databases anyway.
 
+## Native forks
+
+`createBqlRemoteClient` gives its client a `nativeFork(target)` capability, which `fork()` tries
+first (`method: 'auto'`). When the target is another database on the same server and does not exist
+yet, it is `POST /v1/db { name, from: { db } }` — bql.sh's own fork, a reflink of the database file
+where the filesystem has one, with the lineage recorded and the parent's settings inherited — then
+`PATCH { foreignKeys: true }` only if the target client wants foreign keys and the branch did not
+inherit them. `fork.ts` then trims the branch in place to what a row copy would have produced.
+Anything else (another backend or server, an existing target, a non-admin token) returns null and
+`fork()` copies. A branch whose configuration or trim fails is deleted again. The design, and why bql.sh's commit-time `at` is not used for graphx's valid-time
+`asOf`, is in [fork.md](./fork.md).
+
 ## Verified
 
-- **The whole core suite against a live bql.sh server**: `764 pass, 27 skip, 0 fail` over Hrana,
-  including FTS5 retrieval, bitemporal reads, interactive transactions, constraints, the outbox and
-  the served HTTP API. Run it with a server up:
+- **The whole repo suite against a live bql.sh server**: `1410 pass, 33 skip` over Hrana (core
+  alone: `773 pass, 29 skip, 0 fail`), including FTS5 retrieval, bitemporal reads, interactive
+  transactions, constraints, the outbox, the served HTTP API and forks — which, between two databases
+  on one server, take the native path. CI runs it as the `Test (bql.sh)` job. Locally:
 
   ```sh
-  cd ../bql && bun run db sqlite:build && BQL_SERVER_PORT=4399 bun run db start
-  GRAPHX_TEST_DRIVER=bql GRAPHX_BQL_URL=http://127.0.0.1:4399 \
-    GRAPHX_BQL_TOKEN=<admin key> bun test packages/graphx/test/core
+  bun run bql:build                       # once per machine
+  bun run bql:serve                       # prints GRAPHX_BQL_URL and GRAPHX_BQL_TOKEN
+  GRAPHX_TEST_DRIVER=bql GRAPHX_BQL_URL=… GRAPHX_BQL_TOKEN=… bun run test
   ```
 
   The harness creates one bql.sh database per test and deletes it on teardown; `localConnectionOnly`
@@ -98,9 +111,6 @@ differing only in case were never two databases anyway.
 
 ## Not done
 
-- **No CI leg.** `bql.sh` is not published, so a GitHub runner cannot install it. The conformance
-  run above is manual until bql.sh ships to npm; then it is a job like the `postgres` and `duckdb`
-  ones, with `sqlite:build` as a step.
 - **No ANN.** `sqliteVectorSeedRows` reads every embedding row and ranks in JS: a table scan when
   embedded, and every vector in the namespace crossing the socket when remote, where it meets
   bql.sh's `maxRows` cap first. The fix is `sqlite-vec` in bql.sh's pinned build plus a vector arm in

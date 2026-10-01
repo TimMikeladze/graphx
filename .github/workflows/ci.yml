@@ -23,6 +23,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # bql.sh's pinned libsqlite3, so the native-fork tests (test/core/fork-bql.test.ts) run
+      # instead of skipping. Downloads the SQLite amalgamation, checks its hash, and compiles it.
+      - name: Build bql.sh's libsqlite3
+        run: bun run bql:build
+
       - name: Build
         run: bun run build
 
@@ -126,4 +131,45 @@ jobs:
         run: bun run build
 
       - name: Run tests (DuckDB)
+        run: bun run test
+
+  # bql.sh backend — the same suite under GRAPHX_TEST_DRIVER=bql against an embedded bql.sh
+  # server this job starts itself. Forks between two databases on it take the native path.
+  test-bql:
+    name: Test (bql.sh)
+    runs-on: ubuntu-latest
+
+    env:
+      GRAPHX_TEST_DRIVER: bql
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build bql.sh's libsqlite3
+        run: bun run bql:build
+
+      # Required, not optional: the `graphx mcp` bin test spawns `dist/cli.js`, and the
+      # examples import `graphx` by name — which resolves through the `exports` map into
+      # `./dist`. Both fail without a build.
+      - name: Build
+        run: bun run build
+
+      # Writes GRAPHX_BQL_URL and GRAPHX_BQL_TOKEN to $GITHUB_ENV, then keeps serving.
+      - name: Start bql.sh
+        run: |
+          nohup bun scripts/bql-server.ts --env-file "$GITHUB_ENV" > bql-server.log 2>&1 &
+          for i in $(seq 1 60); do grep -q GRAPHX_BQL_URL "$GITHUB_ENV" && exit 0; sleep 1; done
+          cat bql-server.log
+          exit 1
+
+      - name: Run tests (bql.sh)
         run: bun run test

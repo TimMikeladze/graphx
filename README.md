@@ -405,6 +405,39 @@ asOf t0    [
 `changeFeed` is what `graphx/react`'s `useChangeFeedSync` tails to invalidate exactly the query keys
 that moved; `timeline` is what drives the admin UI's as-of scrubber.
 
+### Branching
+
+`fork` branches a namespace into another, empty one — the same nodes, edges, history and vectors
+under the same ids — and from then on the two diverge: a write to either is invisible to the other.
+With `asOf` the branch is the graph as it stood at that instant: later versions stay behind and the
+versions live then are live again, so a what-if can replay from any point in the past.
+
+```ts
+import { fork } from 'graphx';
+
+const whatIf = await g.fork(getDb('acme__what-if')); // a Graph over the branch, same schema + options
+await whatIf.updateNode(id, { data: { firmware: '3.0.0' } }); // g never sees this
+
+const replay = await g.fork(getDb('acme__replay'), { asOf: lastWeek }); // the graph as of last week
+
+// The raw form takes two clients — on any backend, so a fork can also move a graph between them.
+const { nodes, edges, needsEmbedding } = await fork(db, getDb('acme__copy'), { asOf: t1 });
+```
+
+Node and edge ids are preserved. Vectors, local blobs, declared constraints and (on a full fork) the
+analytics tables travel too. On an `asOf` fork, a node whose stored vector belongs to a later version
+is listed in `needsEmbedding`, and `Graph.fork` re-embeds it when the graph has an embedder. The
+outbox and trigger cursors do not travel: a branch starts a fresh event log. A fork that fails
+leaves nothing behind: a copy deletes what it wrote, and a native branch is deleted.
+
+By default (`method: 'auto'`) a fork lets the backend branch the database itself when it can, and
+copies rows otherwise; `ForkResult.method` says which ran (`'native'` or `'copy'`). The backend that
+can today is bql.sh, for two databases on one server — see [bql.sh](#bqlsh). A copy costs time linear
+in the history copied, works between any two backends, and re-mints each version's `revision`;
+`method: 'copy'` forces one. `asOf` gives a consistent cut even while the source keeps writing; a full
+copy of a namespace under live writes can see one write half-copied, so pass `asOf: Date.now()` for a
+live namespace. `graphx fork <namespace> [--as-of <ms|ISO>]` does the same from the CLI.
+
 ## Traversal and algorithms
 
 Traversal respects time; the analytics run over a compressed mirror of the graph and persist their
@@ -1057,6 +1090,30 @@ foreignKeys` on the node or configure that database. A tenant statement cannot s
 Writes must address the primary: a replica's Hrana surface answers `NOT_PRIMARY` rather than
 forwarding.
 
+**Forks are native.** When [`fork`](#branching)'s source and target are two databases on the same
+bql.sh server and the target does not exist yet, graphx asks bql.sh to branch the database
+(`POST /v1/db` with `from`) instead of copying rows. bql.sh copies the database file — a reflink,
+sharing every block until one side writes, where the filesystem has them — and records the branch's
+parent. graphx then trims the branch in place to exactly what a copy would have produced: the event
+log is cleared and, with `asOf`, versions that began after the cut are dropped and those open at it
+reopened. bql.sh's own point-in-time fork is not used for `asOf`: it cuts by commit time, graphx cuts
+by valid time, and history loaded with `bulkLoad` carries valid times from before the database
+existed. A target that already exists, another server or a token that cannot create databases falls
+back to the copy.
+
+```ts
+import 'graphx/bql';
+import { fork, getDb } from 'graphx';
+
+const bql = {
+	driver: 'bql',
+	bqlUrl: 'http://127.0.0.1:4321',
+	authToken: process.env.BQL_TOKEN,
+} as const;
+const branch = await fork(getDb('city', bql), getDb('city__what_if', bql), { asOf: lastWeek });
+branch.method; // 'native': bql.sh branched the file, graphx trimmed it to lastWeek
+```
+
 **Embedded**, bql.sh's `bun:ffi` driver replaces the `libsql` package inside your own process and adds
 what no other graphx driver has — commit and preupdate hooks, an authorizer, session changesets, a
 statement deadline and `interrupt()`. Pass the module; `graphx/bql` never imports it.
@@ -1073,8 +1130,11 @@ client.database.onCommit(() => {
 });
 ```
 
-It needs a C compiler once, to build the libsqlite3 bql.sh pins (`bun run db sqlite:build`), which is
-why it is opt-in rather than the default.
+bql.sh, as a server or embedded, needs the libsqlite3 it pins, built once per machine with a C
+compiler — `bun run node_modules/bql.sh/packages/db/scripts/sqlite.ts` after `bun add bql.sh` — which
+is why bql.sh is opt-in rather than the default. In this repo, `bun run bql:build` builds it and
+`bun run bql:serve` starts a local bql.sh server and prints the `GRAPHX_BQL_URL` /
+`GRAPHX_BQL_TOKEN` it serves on.
 
 ## Local-first runtimes
 
@@ -1126,6 +1186,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
+graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
 graphx ask      "<question>" [-c config]  Plan a plain-language question as a graph call, and run it
 ```
@@ -1142,10 +1203,23 @@ the as-of scrubber has something to say.
 
 - [`examples/basic-demo.ts`](./examples/basic-demo.ts) — the whole API in one file: schema, init,
   write, read, query, retrieve, time travel. `bun run examples/basic-demo.ts`.
+- [`examples/seaport-traffic.ts`](./examples/seaport-traffic.ts) — a traffic-engineering what-if on
+  a geospatial graph: intersections with lat/lng and signal timing, road segments weighted in
+  seconds, rush hour as a new version of the roads, and a retimed light in a branch forked at 8am.
+  `bun run examples/seaport-traffic.ts`.
+- [`examples/seaport-traffic-bql`](./examples/seaport-traffic-bql) — the same what-if on an
+  embedded bql.sh server, where the 8am branch is a native fork: bql.sh branches the database file
+  and graphx trims it to 8am. `bun run sqlite:build` once, then `bun run start`.
 - [`examples/iot-fleet`](./examples/iot-fleet) — end-to-end Vite + Bun + SQLite + React app. Run
   `bun run server.ts` and `bun run dev` in two shells, or `bun test` for an in-process run with no
   server and no port.
 - [`examples/vault-ingest`](./examples/vault-ingest) — ingest a markdown vault.
+- [`examples/mma-graph`](./examples/mma-graph) — a real vault at real scale, scraped to order:
+  every fighter, fight and event across MMA history pulled from Wikipedia into markdown, ingested
+  with `graphx/ingest`, and served by a Next.js app — server-component dashboard, temporal API
+  (records as of any date, championship reigns rebuilt from title fights) and graphx's generated
+  routes side by side — plus `scrape.ts tail` to keep it minutes-fresh or watch a card land
+  live as bitemporal history. `bun run dev:mma` after `bun scrape.ts full` in the example dir.
 - [`examples/file-upload-ingest.ts`](./examples/file-upload-ingest.ts) — blob-backed ingestion.
 - [`examples/pantheon-graph`](./examples/pantheon-graph) — a real graph from a real corpus: ~10k
   deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`
@@ -1159,6 +1233,7 @@ the as-of scrubber has something to say.
 ```sh
 bun install       # from the repo root
 bun test          # the full suite
+GRAPHX_TEST_DRIVER=bql bun test  # the suite on bql.sh, with `bun run bql:serve`'s two variables set
 bun run type-check
 bun run build     # bunup, every entry point
 bun run dev:admin # the operator SPA against a dev server
@@ -1173,9 +1248,7 @@ neither can drift: `packages/graphx/README.md`, the copy npm shows on the packag
 from it (`site/`, output committed in `site/public/`). Every TypeScript block here is compiled against the built package
 by `test/readme-examples.test.ts`.
 
-The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo.
-graphx Cloud (`cloud/`), the hosted multi-tenant offering, is a Next.js workspace that mounts
-graphx's own `createApp` per project environment; see [cloud/README.md](./cloud/README.md). To
+The admin SPA (`packages/admin`) is not published — it is the operator UI, run from this repo. To
 hack on graphx from another project, add that project's path to the root `package.json` `workspaces`
 array so the `workspace:` dependency resolves.
 

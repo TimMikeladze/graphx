@@ -99,7 +99,11 @@ function main(argv: string[]): void {
 		startedAt: file.meta.startedAt || undefined,
 		// A retried CI step returns the original run instead of recording a duplicate.
 		idempotencyKey: `${commitSha}-${file.meta.startedAt}`,
-		metadata: { driver: file.meta.driver, scales: file.meta.scales.join(','), bun: process.versions.bun },
+		metadata: {
+			driver: file.meta.driver,
+			scales: file.meta.scales.join(','),
+			bun: process.versions.bun,
+		},
 		metrics: toMetrics(file),
 	};
 	const json = JSON.stringify(body, null, 2);

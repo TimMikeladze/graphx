@@ -1,8 +1,34 @@
 import { expect, test } from 'bun:test';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { audience, boundaries, capabilities, ecosystem, figures, footerColumns, guides, links, page, repo, showcase, snippet, split, terminal, url } from './content.ts';
-import { countFigure, fencedBlocks, readInstall, readReadme, readSections, readTable, readVersion, resolve, siteDir } from './readme.ts';
+import {
+	audience,
+	boundaries,
+	capabilities,
+	ecosystem,
+	figures,
+	footerColumns,
+	guides,
+	links,
+	page,
+	repo,
+	showcase,
+	snippet,
+	split,
+	terminal,
+	url,
+} from './content.ts';
+import {
+	countFigure,
+	fencedBlocks,
+	readInstall,
+	readReadme,
+	readSections,
+	readTable,
+	readVersion,
+	resolve,
+	siteDir,
+} from './readme.ts';
 import { buildModel, renderSite } from './render.ts';
 import { css, bootScript, uiScript } from './styles.ts';
 
@@ -15,10 +41,18 @@ const readme = await readReadme();
 const blocks = fencedBlocks(readme);
 
 test('every reference resolves to exactly one README block', () => {
-	const refs = capabilities.flatMap((c) => (c.demo.kind === 'code' ? [c.demo.ref] : c.demo.kind === 'variants' ? c.demo.items.map((i) => i.ref) : []));
+	const refs = capabilities.flatMap((c) =>
+		c.demo.kind === 'code'
+			? [c.demo.ref]
+			: c.demo.kind === 'variants'
+				? c.demo.items.map((i) => i.ref)
+				: [],
+	);
 	expect(refs.length).toBeGreaterThan(8);
 	for (const r of refs) expect(resolve(blocks, r).code.length).toBeGreaterThan(0);
-	for (const c of capabilities) if (c.demo.kind === 'table') expect(readTable(readme, c.demo.header).rows.length).toBeGreaterThanOrEqual(2);
+	for (const c of capabilities)
+		if (c.demo.kind === 'table')
+			expect(readTable(readme, c.demo.header).rows.length).toBeGreaterThanOrEqual(2);
 });
 
 test('an unresolved or ambiguous reference throws', () => {
@@ -33,7 +67,9 @@ test('figures match their source: version and install command', async () => {
 
 test('both pages are self-contained with both token sets and a 3-state toggle', () => {
 	for (const html of [index, reference]) {
-		expect(html).not.toMatch(/<link[^>]+rel="(stylesheet|preload|icon|modulepreload)"[^>]+href="https?:/);
+		expect(html).not.toMatch(
+			/<link[^>]+rel="(stylesheet|preload|icon|modulepreload)"[^>]+href="https?:/,
+		);
 		expect(html).not.toMatch(/\bsrc="https?:/);
 		const scripts = [...html.matchAll(/<script(?![^>]*ld\+json)[^>]*>([\s\S]*?)<\/script>/g)];
 		expect(scripts.length).toBe(2);
@@ -53,10 +89,19 @@ test('both pages are self-contained with both token sets and a 3-state toggle', 
 // oklch → relative luminance
 function lum(spec: string): number {
 	const m = /oklch\(([\d.]+)% ([\d.]+) ?([\d.]*)\)/.exec(spec) as RegExpExecArray;
-	const L = Number(m[1]) / 100, C = Number(m[2]), h = ((Number(m[3]) || 0) * Math.PI) / 180;
-	const a = C * Math.cos(h), b = C * Math.sin(h);
-	const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-	const lin = [4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s].map((v) => Math.min(1, Math.max(0, v)));
+	const L = Number(m[1]) / 100,
+		C = Number(m[2]),
+		h = ((Number(m[3]) || 0) * Math.PI) / 180;
+	const a = C * Math.cos(h),
+		b = C * Math.sin(h);
+	const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3,
+		mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+		s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+	const lin = [
+		4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+		-1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+		-0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s,
+	].map((v) => Math.min(1, Math.max(0, v)));
 	return 0.2126 * (lin[0] as number) + 0.7152 * (lin[1] as number) + 0.0722 * (lin[2] as number);
 }
 const ratio = (a: string, b: string) => {
@@ -64,9 +109,15 @@ const ratio = (a: string, b: string) => {
 	return (x + 0.05) / (y + 0.05);
 };
 test('body and --soft pass 4.5:1 against --paper in both schemes', () => {
-	const tok = (block: RegExp, name: string) => (new RegExp(`--${name}: (oklch\\([^)]*\\))`).exec((block.exec(css) as RegExpExecArray)[0]) as RegExpExecArray)[1] as string;
+	const tok = (block: RegExp, name: string) =>
+		(
+			new RegExp(`--${name}: (oklch\\([^)]*\\))`).exec(
+				(block.exec(css) as RegExpExecArray)[0],
+			) as RegExpExecArray
+		)[1] as string;
 	for (const block of [/:root \{[\s\S]*?\n\}/, /:root\[data-theme="light"\] \{[\s\S]*?\n\}/]) {
-		for (const n of ['body', 'soft', 'ink']) expect(ratio(tok(block, n), tok(block, 'paper'))).toBeGreaterThan(4.5);
+		for (const n of ['body', 'soft', 'ink'])
+			expect(ratio(tok(block, n), tok(block, 'paper'))).toBeGreaterThan(4.5);
 	}
 });
 
@@ -78,12 +129,14 @@ test('markup in the source is escaped, never executed', async () => {
 });
 
 test('committed output equals a fresh render', () => {
-	for (const [name, text] of Object.entries(fresh)) expect(read(name), `${name} is stale — run bun run build in site/`).toBe(text);
+	for (const [name, text] of Object.entries(fresh))
+		expect(read(name), `${name} is stale — run bun run build in site/`).toBe(text);
 });
 
 test('every README section reaches the reference page; every cross-page anchor exists', () => {
 	for (const s of readSections(readme)) expect(reference).toContain(`id="${s.slug}"`);
-	for (const [, hash] of index.matchAll(/href="\/#([\w-]+)"/g)) expect(index).toContain(`id="${hash}"`);
+	for (const [, hash] of index.matchAll(/href="\/#([\w-]+)"/g))
+		expect(index).toContain(`id="${hash}"`);
 });
 
 test('head metadata is complete and consistent with the model', () => {
@@ -93,10 +146,23 @@ test('head metadata is complete and consistent with the model', () => {
 	expect(index).toContain(`<link rel="canonical" href="${url('/')}">`);
 	expect(url('/')).toBe('https://graphx.sh/');
 	expect(index).not.toContain('index.html');
-	for (const t of ['og:title', 'og:description', 'og:url', 'og:type', 'og:site_name', 'og:image:width', 'og:image:height', 'og:image:type', 'og:image:alt']) expect(index).toContain(`property="${t}"`);
+	for (const t of [
+		'og:title',
+		'og:description',
+		'og:url',
+		'og:type',
+		'og:site_name',
+		'og:image:width',
+		'og:image:height',
+		'og:image:type',
+		'og:image:alt',
+	])
+		expect(index).toContain(`property="${t}"`);
 	expect(index).toContain(`content="${url('/og.png')}"`);
 	expect(index).toContain('name="twitter:card" content="summary_large_image"');
-	const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(index)?.[1] ?? '');
+	const ld = JSON.parse(
+		/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(index)?.[1] ?? '',
+	);
 	return readVersion().then((v) => {
 		expect(ld.name).toBe(page.name);
 		expect(ld.softwareVersion).toBe(v);
@@ -107,7 +173,9 @@ test('every capability has an id, an h2, 1–3 sentences and inline code', () =>
 	expect(capabilities.length).toBeGreaterThanOrEqual(4);
 	expect(index.match(/<h1/g)?.length).toBe(1);
 	for (const c of capabilities) {
-		expect(index).toContain(`<section class="section" id="${c.id}" aria-labelledby="${c.id}-title">`);
+		expect(index).toContain(
+			`<section class="section" id="${c.id}" aria-labelledby="${c.id}-title">`,
+		);
 		expect(c.title.split(/\s+/).length).toBeLessThanOrEqual(6);
 		expect(c.title.endsWith('.')).toBe(false);
 		expect(c.body.split(/(?<=\.)\s+/).length).toBeLessThanOrEqual(3);
@@ -117,7 +185,16 @@ test('every capability has an id, an h2, 1–3 sentences and inline code', () =>
 });
 
 test('agent files exist and the sitemap names only built files', () => {
-	for (const f of ['llms.txt', 'AGENTS.md', 'sitemap.xml', 'robots.txt', 'index.md', 'og.png', 'favicon.svg']) expect(existsSync(pub(f)), f).toBe(true);
+	for (const f of [
+		'llms.txt',
+		'AGENTS.md',
+		'sitemap.xml',
+		'robots.txt',
+		'index.md',
+		'og.png',
+		'favicon.svg',
+	])
+		expect(existsSync(pub(f)), f).toBe(true);
 	expect(read('robots.txt')).toContain('Sitemap: https://graphx.sh/sitemap.xml');
 	for (const [, loc] of read('sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)) {
 		const p = new URL(loc as string).pathname;
@@ -136,7 +213,12 @@ test('og.png header says 1200x630 and stays small', () => {
 test('project links: header icons github, x, linkedin in order and outside the collapsing nav; footer adds discord', () => {
 	const header = /<header[\s\S]*?<\/header>/.exec(index)?.[0] ?? '';
 	const footer = /<footer[\s\S]*?<\/footer>/.exec(index)?.[0] ?? '';
-	const icons = (html: string) => [...html.matchAll(/<a href="([^"]+)" rel="me noopener"><svg[\s\S]*?<span class="sr">([^<]+)<\/span>/g)].map((m) => m[2]);
+	const icons = (html: string) =>
+		[
+			...html.matchAll(
+				/<a href="([^"]+)" rel="me noopener"><svg[\s\S]*?<span class="sr">([^<]+)<\/span>/g,
+			),
+		].map((m) => m[2]);
 	const headerIcons = links.filter((l) => l.where.includes('header')).map((l) => l.label);
 	expect(icons(header)).toEqual(headerIcons);
 	expect(headerIcons.map((l) => l.split(' ').pop())).toEqual(['GitHub', 'X', 'LinkedIn']);
@@ -146,7 +228,9 @@ test('project links: header icons github, x, linkedin in order and outside the c
 	expect(footer).toContain('https://x.com/linesofcode');
 	expect(footer).toContain('https://discord.com/users/linesofcode');
 	expect(header).toContain(repo);
-	expect(boundaries.holds.length + boundaries.judgements.length + boundaries.missing.length).toBeGreaterThan(6);
+	expect(
+		boundaries.holds.length + boundaries.judgements.length + boundaries.missing.length,
+	).toBeGreaterThan(6);
 });
 
 test('hero is centred and carries both audience panels', () => {
@@ -154,14 +238,19 @@ test('hero is centred and carries both audience panels', () => {
 	expect(css).toMatch(/\.hero \{[^}]*text-align: center/);
 	expect(hero).toContain('For humans');
 	expect(hero).toContain('For agents');
-	expect(/class="aud-panel aud-humans">[\s\S]*?<code>([^<]+)<\/code>/.exec(hero)?.[1]).toBe(readInstall(readme));
+	expect(/class="aud-panel aud-humans">[\s\S]*?<code>([^<]+)<\/code>/.exec(hero)?.[1]).toBe(
+		readInstall(readme),
+	);
 	expect(hero).toContain(escape(audience.agents));
-	for (const [, href] of /class="aud-panel aud-agents">[\s\S]*?<\/div>/.exec(hero)![0].matchAll(/href="\/([^"]+)"/g)) {
+	for (const [, href] of /class="aud-panel aud-agents">[\s\S]*?<\/div>/
+		.exec(hero)![0]
+		.matchAll(/href="\/([^"]+)"/g)) {
 		expect(existsSync(pub(href as string)), href).toBe(true);
 	}
 });
 
-const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escape = (s: string) =>
+	s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 test('figures equal their repository counts; split, showcase and guide code all resolve', async () => {
 	for (const f of figures) {
@@ -169,19 +258,34 @@ test('figures equal their repository counts; split, showcase and guide code all 
 		expect(n).toBeGreaterThan(0);
 		expect(index).toContain(`<dt>${escape(f.label)}</dt><dd>${n}</dd>`);
 	}
-	for (const r of [split.input.ref, split.handler.ref, ...showcase.tabs.map((t) => t.ref), ...guides.map((g) => g.ref)]) {
+	for (const r of [
+		split.input.ref,
+		split.handler.ref,
+		...showcase.tabs.map((t) => t.ref),
+		...guides.map((g) => g.ref),
+	]) {
 		expect(resolve(blocks, r).code.length).toBeGreaterThan(0);
 	}
 	expect(index.match(/class="demo sc-frame/g)?.length).toBe(showcase.tabs.length);
 	expect(index.match(/class="tilt"/g)?.length).toBe(guides.length);
-	expect(index.match(/<li><a href="[^"]+" rel="noopener" title=/g)?.length).toBe(ecosystem.marks.length);
+	expect(index.match(/<li><a href="[^"]+" rel="noopener" title=/g)?.length).toBe(
+		ecosystem.marks.length,
+	);
 });
 
 test('every New pill is under 90 days old; every /reference anchor exists', () => {
-	for (const c of footerColumns) for (const l of c.links) if (l.isNew) expect(Date.now() - Date.parse(l.isNew)).toBeLessThan(90 * 864e5);
-	const anchors = [...footerColumns.flatMap((c) => c.links.map((l) => l.href)), ...guides.map((g) => g.href)].filter((h) => h.startsWith('/reference#'));
+	for (const c of footerColumns)
+		for (const l of c.links)
+			if (l.isNew) expect(Date.now() - Date.parse(l.isNew)).toBeLessThan(90 * 864e5);
+	const anchors = [
+		...footerColumns.flatMap((c) => c.links.map((l) => l.href)),
+		...guides.map((g) => g.href),
+	].filter((h) => h.startsWith('/reference#'));
 	expect(anchors.length).toBeGreaterThan(5);
 	for (const h of anchors) expect(reference).toContain(`id="${h.split('#')[1]}"`);
-	for (const h of footerColumns.flatMap((c) => c.links.map((l) => l.href)).filter((h) => /^\/[\w.]+\.(txt|md)$/.test(h))) expect(existsSync(pub(h.slice(1))), h).toBe(true);
+	for (const h of footerColumns
+		.flatMap((c) => c.links.map((l) => l.href))
+		.filter((h) => /^\/[\w.]+\.(txt|md)$/.test(h)))
+		expect(existsSync(pub(h.slice(1))), h).toBe(true);
 	expect(index).toContain('data-set-theme="system"');
 });

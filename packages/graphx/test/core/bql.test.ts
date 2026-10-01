@@ -275,9 +275,7 @@ test('getDb serves the bql driver, and says what is missing without a URL', () =
 
 test('a namespace is folded to a bql.sh database name, or refused', () => {
 	// graphx mints `<prefix>_<ULID>`, and a ULID is upper case by construction.
-	expect(bqlDatabaseName('evt_01M3E2K3W0D4T0QNR1QJAR33E7')).toBe(
-		'evt_01m3e2k3w0d4t0qnr1qjar33e7',
-	);
+	expect(bqlDatabaseName('evt_01M3E2K3W0D4T0QNR1QJAR33E7')).toBe('evt_01m3e2k3w0d4t0qnr1qjar33e7');
 	expect(bqlDatabaseName('acme__alpha')).toBe('acme__alpha');
 	expect(() => bqlDatabaseName('acme.alpha')).toThrow(/case folding/);
 	expect(() => bqlDatabaseName('_leading')).toThrow(/case folding/);

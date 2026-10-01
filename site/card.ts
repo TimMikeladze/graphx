@@ -24,7 +24,10 @@ const ACCENT = '#5e9eff';
 type Node = { type: string; props: Record<string, unknown> };
 const el = (type: string, style: Record<string, unknown>, ...children: unknown[]): Node => ({
 	type,
-	props: { style, ...(children.length ? { children: children.length === 1 ? children[0] : children } : {}) },
+	props: {
+		style,
+		...(children.length ? { children: children.length === 1 ? children[0] : children } : {}),
+	},
 });
 
 const markUri = () => {
@@ -33,7 +36,8 @@ const markUri = () => {
 	return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 };
 
-const font = (pkg: string, file: string) => readFile(path.join(siteDir, 'node_modules/@fontsource', pkg, 'files', file));
+const font = (pkg: string, file: string) =>
+	readFile(path.join(siteDir, 'node_modules/@fontsource', pkg, 'files', file));
 
 let wasmReady: Promise<unknown> | undefined;
 
@@ -44,22 +48,74 @@ export async function renderCard(): Promise<Buffer> {
 
 	const root = el(
 		'div',
-		{ width: CARD_WIDTH, height: CARD_HEIGHT, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: PAPER, padding: 72, fontFamily: 'Geist', color: INK },
+		{
+			width: CARD_WIDTH,
+			height: CARD_HEIGHT,
+			display: 'flex',
+			flexDirection: 'column',
+			justifyContent: 'space-between',
+			background: PAPER,
+			padding: 72,
+			fontFamily: 'Geist',
+			color: INK,
+		},
 		el(
 			'div',
 			{ display: 'flex', flexDirection: 'column' },
 			el(
 				'div',
-				{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 60, height: 60, borderRadius: 14, background: RAISE, border: `1px solid ${LINE}` },
+				{
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'center',
+					width: 60,
+					height: 60,
+					borderRadius: 14,
+					background: RAISE,
+					border: `1px solid ${LINE}`,
+				},
 				{ type: 'img', props: { src: markUri(), width: 32, height: 32 } },
 			),
-			el('div', { display: 'flex', marginTop: 44, width: 860, fontSize: 78, fontWeight: 700, lineHeight: 1.04, letterSpacing: '-0.04em' }, page.h1),
-			el('div', { display: 'flex', marginTop: 28, width: 760, fontSize: 26, lineHeight: 1.4, color: BODY }, lede),
+			el(
+				'div',
+				{
+					display: 'flex',
+					marginTop: 44,
+					width: 860,
+					fontSize: 78,
+					fontWeight: 700,
+					lineHeight: 1.04,
+					letterSpacing: '-0.04em',
+				},
+				page.h1,
+			),
+			el(
+				'div',
+				{ display: 'flex', marginTop: 28, width: 760, fontSize: 26, lineHeight: 1.4, color: BODY },
+				lede,
+			),
 		),
 		el(
 			'div',
-			{ display: 'flex', alignItems: 'center', fontFamily: 'Geist Mono', fontSize: 22, color: BODY },
-			el('div', { display: 'flex', padding: '10px 18px', background: RAISE, border: `1px solid ${LINE}`, borderRadius: 10, color: INK }, install),
+			{
+				display: 'flex',
+				alignItems: 'center',
+				fontFamily: 'Geist Mono',
+				fontSize: 22,
+				color: BODY,
+			},
+			el(
+				'div',
+				{
+					display: 'flex',
+					padding: '10px 18px',
+					background: RAISE,
+					border: `1px solid ${LINE}`,
+					borderRadius: 10,
+					color: INK,
+				},
+				install,
+			),
 			dot,
 			el('span', {}, page.tagline),
 			dot,
@@ -81,7 +137,13 @@ export async function renderCard(): Promise<Buffer> {
 			{ name: 'Geist Mono', data: mono400, weight: 400, style: 'normal' },
 		],
 	});
-	wasmReady ??= initWasm(readFile(path.join(siteDir, 'node_modules/@resvg/resvg-wasm/index_bg.wasm')));
+	wasmReady ??= initWasm(
+		readFile(path.join(siteDir, 'node_modules/@resvg/resvg-wasm/index_bg.wasm')),
+	);
 	await wasmReady;
-	return Buffer.from(new Resvg(svg, { fitTo: { mode: 'width', value: CARD_WIDTH }, background: PAPER }).render().asPng());
+	return Buffer.from(
+		new Resvg(svg, { fitTo: { mode: 'width', value: CARD_WIDTH }, background: PAPER })
+			.render()
+			.asPng(),
+	);
 }

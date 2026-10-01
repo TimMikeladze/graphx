@@ -177,10 +177,14 @@ details.agents > summary::-webkit-details-marker { display: none; }
 .sc-body pre { tab-size: 2; overflow: hidden !important; white-space: pre; }
 .pager { display: flex; justify-content: center; gap: .5rem; margin-top: 1rem; }
 .pager label { width: 6px; height: 6px; border-radius: 50%; background: var(--line); cursor: pointer; }
-${[0, 1, 2, 3].map((i) => `.sc-tabs input:nth-of-type(${i + 1}):checked ~ .sc-${i} { display: block; }
+${[0, 1, 2, 3]
+	.map(
+		(i) => `.sc-tabs input:nth-of-type(${i + 1}):checked ~ .sc-${i} { display: block; }
 .sc-tabs input:nth-of-type(${i + 1}):checked ~ .tabrow label:nth-child(${i + 1}) { background: var(--raise); color: var(--ink); }
 .sc-tabs input:nth-of-type(${i + 1}):focus-visible ~ .tabrow label:nth-child(${i + 1}) { outline: 2px solid var(--accent); outline-offset: 2px; }
-.sc-tabs input:nth-of-type(${i + 1}):checked ~ .pager label:nth-child(${i + 1}) { background: var(--ink); }`).join('\n')}
+.sc-tabs input:nth-of-type(${i + 1}):checked ~ .pager label:nth-child(${i + 1}) { background: var(--ink); }`,
+	)
+	.join('\n')}
 
 /* guides */
 .guides { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.1rem; }

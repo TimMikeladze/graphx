@@ -447,7 +447,7 @@ Scaffolded graphx project in my-app/
 </div>
 </section>
 <section class="figures" aria-label="Counted from the repository">
-<div class="shell"><dl><div><dt>Entry points, one package</dt><dd>16</dd></div><div><dt>Server backends</dt><dd>4</dd></div><div><dt>CLI commands</dt><dd>9</dd></div><div><dt>Runtime dependencies</dt><dd>10</dd></div></dl></div>
+<div class="shell"><dl><div><dt>Entry points, one package</dt><dd>16</dd></div><div><dt>Server backends</dt><dd>4</dd></div><div><dt>CLI commands</dt><dd>10</dd></div><div><dt>Runtime dependencies</dt><dd>10</dd></div></dl></div>
 </section>
 <section class="section eco" id="ecosystem" aria-labelledby="ecosystem-title">
 <div class="shell">
@@ -1089,6 +1089,7 @@ graphx triggers [-c config]               Run declarative triggers over the even
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
+graphx fork     &lt;namespace&gt; [-c config]   Branch the namespace into an empty one (--as-of &lt;ms|ISO&gt;)
 graphx dedupe   &lt;type&gt; [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
 graphx ask      &quot;&lt;question&gt;&quot; [-c config]  Plan a plain-language question as a graph call, and run it</code></pre></figure>
 </div>
@@ -1110,6 +1111,7 @@ graphx ask      &quot;&lt;question&gt;&quot; [-c config]  Plan a plain-language 
   bun install        # pulls graphx from npm
   bun run serve      # http://localhost:8899</code></pre></figure><figure class="demo"><figcaption class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span>contributing</span></figcaption><pre class="shiki shiki-themes vitesse-light vitesse-dark" style="--shiki-light:#393a34;--shiki-dark:#dbd7caee;--shiki-light-bg:#ffffff;--shiki-dark-bg:#121212" tabindex="0"><code><span class="line"><span style="--shiki-light:#59873A;--shiki-dark:#80A665">bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> install</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD">       # from the repo root</span></span>
 <span class="line"><span style="--shiki-light:#59873A;--shiki-dark:#80A665">bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> test</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD">          # the full suite</span></span>
+<span class="line"><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">GRAPHX_TEST_DRIVER</span><span style="--shiki-light:#999999;--shiki-dark:#666666">=</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D">bql</span><span style="--shiki-light:#59873A;--shiki-dark:#80A665"> bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> test</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD">  # the suite on bql.sh, with `bun run bql:serve`'s two variables set</span></span>
 <span class="line"><span style="--shiki-light:#59873A;--shiki-dark:#80A665">bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> run</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> type-check</span></span>
 <span class="line"><span style="--shiki-light:#59873A;--shiki-dark:#80A665">bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> run</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> build</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD">     # bunup, every entry point</span></span>
 <span class="line"><span style="--shiki-light:#59873A;--shiki-dark:#80A665">bun</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> run</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D"> dev:admin</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD"> # the operator SPA against a dev server</span></span>

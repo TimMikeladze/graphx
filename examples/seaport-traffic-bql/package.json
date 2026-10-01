@@ -1,0 +1,31 @@
+{
+	"name": "graphx-example-seaport-traffic-bql",
+	"version": "0.0.0",
+	"private": true,
+	"description": "The Seaport traffic what-if on bql.sh: graphx over an embedded bql.sh server, with universe B a point-in-time fork of the database",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/seaport-traffic-bql"
+	},
+	"type": "module",
+	"scripts": {
+		"start": "bun run index.ts",
+		"sqlite:build": "bun run ../../node_modules/bql.sh/packages/db/scripts/sqlite.ts"
+	},
+	"dependencies": {
+		"bql.sh": "^0.4.0",
+		"graphx": "workspace:*",
+		"zod": "^4.4.3"
+	}
+}

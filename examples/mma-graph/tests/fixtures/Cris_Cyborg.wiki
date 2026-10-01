@@ -1,0 +1,425 @@
+{{Infobox martial artist
+| name            = Cris Cyborg
+| other_names     = 
+| image           = Cris Cyborg - SDCC 2023.jpg
+| image_size      = 
+| alt             = 
+| caption         = Cyborg in 2023
+| birth_name      = Cristiane Justino Venâncio
+| birth_date      = {{Birth date and age|1985|7|9}}
+| birth_place     = [[Curitiba]], Paraná, Brazil
+| residence       = 
+| nationality     = {{hlist|Brazilian|American}}
+| height          = {{height|ft=5|in=8}}
+| weight          = 155 lb
+| weight_class    = [[Featherweight (MMA)|Featherweight]] (MMA)<br>(2005-present)<br>[[Bantamweight (MMA)|Bantamweight]] (MMA)<br>(2016)<br>[[Light middleweight]] (Boxing)
+| reach           = 68 in (173 cm)<ref>{{cite web|url=https://www.ufc.com/athlete/cris-cyborg |title=Cris Cyborg – Official UFC Fighter Profile |publisher=[[Ultimate Fighting Championship|UFC]] |access-date=2017-03-26}}</ref>
+| style           = 
+| stance          = Orthodox
+| fighting_out_of = [[San Diego, California]], U.S.<ref name=sherdog3>{{cite web|url=http://www.sherdog.com/news/pictures/12-Questions-for-Cris-Cyborg-Santos-22251 |title=12 Questions for Cris 'Cyborg' Santos |access-date=2010-05-10 |publisher=Sherdog.com |date=2010-01-28 |url-status=dead |archive-url=https://web.archive.org/web/20110607035210/http://www.sherdog.com/news/pictures/12-Questions-for-Cris-Cyborg-Santos-22251 |archive-date=June 7, 2011 }}</ref>
+| team            = [[Chute Boxe Academy]]<br/>The Arena MMA<br/>[[Atos Jiu-Jitsu]]<br>[[RVCA|RVCA Training Center]]<br>[[Kings MMA]]
+| trainer         = Rudimar Fedrigo
+| rank            = Black Belt in [[Muay Thai]]<ref>{{cite web|url=http://www.criscyborg.com/bio/|website=criscyborg.com|title=Fight profile|access-date=February 26, 2016}}</ref><ref name=UFCprofile>{{cite web|url=https://www.ufc.com/athlete/cris-cyborg|title=Cris Cyborg – Official UFC Fighter Profile|publisher=[[Ultimate Fighting Championship|UFC]]|access-date=May 15, 2016|archive-url=https://web.archive.org/web/20160604165600/http://www.ufc.com/fighter/Cris-Cyborg|archive-date=June 4, 2016|url-status=live}}</ref> <small>under [[Rafael Cordeiro]]</small> <br> Black belt in [[Brazilian Jiu-Jitsu]] <small>under [[Rubens 'Cobrinha' Charles]]</small><ref>{{Cite web|url=https://jitsmagazine.com/cris-cyborg-justino-earns-bjj-black-belt/|title=Cris "Cyborg" Justino Earns BJJ Black Belt|date=25 October 2020}}</ref>
+| years_active    = 2005–present
+| mma_kowin       = 21
+| mma_subwin      = 2
+| mma_decwin      = 7
+| mma_koloss      = 1
+| mma_subloss     = 1
+| mma_decloss     = 
+| mma_draw        = 
+| mma_nc          = 1
+| box_win      = 7
+| box_kowin    = 5
+| box_decwin   = 
+| box_loss     = 
+| box_koloss   = 
+| box_draw     =
+| box_nc       =
+| kickbox_win     = 2
+| kickbox_kowin   = 2
+| kickbox_loss    = 1
+| kickbox_koloss  = 
+| kickbox_draw    = 
+| kickbox_nc      = 
+| website         = {{URL|CrisCyborg.com}}
+| sherdog         = 14477
+| footnotes       = 
+| updated         = March 27, 2014
+| medaltemplates  = 
+{{MedalCountry|{{BRA}}}}
+{{MedalSport | Women's [[Submission grappling]]}}
+{{MedalCompetition|[[ADCC Submission Wrestling World Championship|ADCC World Championship]]}}
+{{MedalBronze|2009 [[Barcelona]]|+60kg}}
+{{MedalSport | Women's [[Brazilian jiu-jitsu]]}}
+{{MedalCompetition|[[World Jiu-Jitsu Championship]]}}
+{{MedalGold|2012 [[Long Beach]]|+74kg (Purple)}}
+{{MedalGold|2011 [[Long Beach]]|+74kg (Purple)}}
+}}
+'''Cristiane Justino Venâncio'''<ref>{{Cite web |title=Cris Cyborg {{!}} MMA Fighter Page |url=https://www.tapology.com/fightcenter/fighters/cristiane-santos-cyborg |access-date=2024-09-21 |website=Tapology |language=en}}</ref> (born July 9, 1985), known professionally as '''Cris Cyborg''' and formerly by her married name '''Cristiane Santos''', is a Brazilian and American professional [[mixed martial artist]] and [[Professional boxing|professional boxer]] who currently competes in the Women’s [[Featherweight (MMA)|Featherweight]] division of the [[Professional Fighters League]] (PFL), where she is the current and inaugural [[List of Professional Fighters League champions#Women's Featherweight World Championship|PFL Women's Featherweight World Champion]]. As a boxer, she is  the current [[Women's International Boxing Association#Current champions|WIBA Light Middleweight World Champion]].
+{{MMA record start}}
+|-
+| {{yes2}}Win
+|align=center| {{nowrap|30–2 (1)}}
+|[[Ketlen Vieira]]
+|Decision (unanimous)
+|[[PFL Tampa: Cyborg vs. Vieira]]
+|{{dts|2026|August|22}}
+|align=center|5
+|align=center|5:00
+|[[Tampa, Florida]], United States
+|{{small|Non-title bout; Vieira missed weight (152.2 lb).}}
+|-
+| {{yes2}}Win
+|align=center| 29–2 (1)
+|[[Sara Collins (fighter)|Sara Collins]]
+|Submission (face crank)
+|[[PFL Lyon: Nemkov vs. Ferreira]]
+|{{dts|2025|December|13}}
+|align=center|3
+|align=center|2:55
+|[[Décines-Charpieu]], France
+|{{small|Won the inaugural [[List of Professional Fighters League champions#Women's Featherweight Championship|PFL Women's Featherweight Championship]].}}
+|-
+| {{yes2}}Win
+|align=center| 28–2 (1)
+|[[Larissa Pacheco]]
+|Decision (unanimous)
+|[[PFL Super Fights: Battle of the Giants]]
+|{{dts|2024|October|19}}
+|align=center|5
+|align=center|5:00
+|[[Riyadh]], Saudi Arabia
+|{{small|Won the symbolic [[List of Professional Fighters League champions#Super Fights Women's Featherweight Championship|PFL Super Fights Women's Featherweight Championship]].}}
+|-
+| {{yes2}}Win
+|align=center| 27–2 (1)
+|[[Cat Zingano]]
+|TKO (punches)
+|[[Bellator 300]]
+|{{dts|2023|October|7}}
+|align=center|1
+|align=center|4:01
+|[[San Diego, California]], United States
+|{{small|Defended the [[Bellator Women's Featherweight World Championship]].}}
+|-
+| {{yes2}}Win
+| align=center| 26–2 (1) 
+| [[Arlene Blencowe]]
+| Decision (unanimous)
+| [[Bellator 279]]
+| {{dts|2022|April|23}}
+| align=center|5
+| align=center|5:00
+| [[Honolulu, Hawaii]], United States
+|{{small|Defended the [[List of Bellator MMA champions#Women's Featherweight World Championship|Bellator Women's Featherweight World Championship]]. Cyborg was deducted one point in round 1 due to an illegal knee.}}
+|-
+| {{yes2}}Win
+| align=center| 25–2 (1)
+| [[Sinead Kavanagh]]
+| KO (punches)
+| [[Bellator 271]]
+| {{dts|2021|November|12}}
+| align=center|1 
+| align=center|1:32
+| [[Hollywood, Florida]], United States
+|{{small|Defended the [[List of Bellator MMA champions#Women's Featherweight World Championship|Bellator Women's Featherweight World Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|24–2 (1)
+|[[Leslie Smith (fighter)|Leslie Smith]]
+| TKO (punches)
+|[[Bellator 259]] 
+|{{dts|2021|May|21}}
+|align=center|5
+|align=center|4:51
+|[[Uncasville, Connecticut]], United States
+|{{small|Defended the [[List of Bellator MMA champions#Women's Featherweight World Championship|Bellator Women's Featherweight World Championship]].}}
+|-
+|{{yes2}}Win
+| align=center|23–2 (1)
+| [[Arlene Blencowe]]
+| Submission (rear-naked choke)
+| [[Bellator MMA in 2020#Bellator 249|Bellator 249]]
+| {{dts|2020|October|15}}
+| align=center| 2
+| align=center| 2:36
+| [[Uncasville, Connecticut]], United States
+| {{small|Defended the [[List of Bellator MMA champions#Women's Featherweight World Championship|Bellator Women's Featherweight World Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|22–2 (1)
+|[[Julia Budd]]
+|TKO (punches)
+|[[Bellator MMA in 2020#Bellator 238|Bellator 238]]
+|{{dts|2020|January|25}}
+|align=center|4
+|align=center|1:14
+|[[Inglewood, California]], United States
+|{{small|Won the [[List of Bellator MMA champions#Women's Featherweight World Championship|Bellator Women's Featherweight World Championship]].}}
+|-
+|{{Yes2}}Win
+|align=center|21–2 (1)
+|[[Felicia Spencer]]
+|Decision (unanimous)
+|[[UFC 240]] 
+|{{dts|2019|July|27}}
+|align=center|3
+|align=center|5:00
+|[[Edmonton, Alberta]], Canada
+|
+|-
+|{{no2}}Loss
+|align=center|20–2 (1)
+|[[Amanda Nunes]]
+|KO (punch)
+|[[UFC 232]] 
+|{{dts|2018|December|29}}
+|align=center|1
+|align=center|0:51
+|[[Inglewood, California]], United States
+|{{small|Lost the [[UFC Women's Featherweight Championship|UFC Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|20–1 (1)
+|[[Yana Santos|Yana Kunitskaya]]
+|TKO (punches)
+|[[UFC 222]]
+|{{dts|2018|March|3}}
+|align=center|1
+|align=center|3:25
+|[[Las Vegas, Nevada]], United States
+|{{small|Defended the [[UFC Women's Featherweight Championship|UFC Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|19–1 (1)
+|[[Holly Holm]]
+|Decision (unanimous)
+|[[UFC 219]]
+|{{dts|2017|December|30}}
+|align=center|5
+|align=center|5:00
+|[[Las Vegas, Nevada]], United States
+|{{small|Defended the [[UFC Women's Featherweight Championship|UFC Women's Featherweight Championship]]. Fight of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|18–1 (1)
+|[[Tonya Evinger]]
+|TKO (knees)
+|[[UFC 214]]
+|{{dts|2017|July|29}}
+|align=center|3
+|align=center|1:56
+|[[Anaheim, California]], United States
+|{{small|Won the vacant [[UFC Women's Featherweight Championship|UFC Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center|17–1 (1)
+|[[Lina Länsberg]]
+|TKO (punches)
+|[[UFC Fight Night: Cyborg vs. Länsberg]]
+|{{dts|2016|September|24}}
+|align=center|2
+|align=center|2:29
+|[[Brasília]], Brazil
+|{{small|Catchweight (140 lb) bout.}}
+|-
+|{{yes2}}Win
+|align=center|16–1 (1)
+|[[Leslie Smith (fighter)|Leslie Smith]]
+|TKO (punches)
+|[[UFC 198]]
+|{{dts|2016|May|14}}
+|align=center|1
+|align=center|1:21
+|[[Curitiba]], Brazil
+|{{small|Catchweight (140 lb) bout.}}
+|-
+|{{yes2}}Win
+|align=center|15–1 (1)
+|[[Daria Ibragimova]]
+|KO (punches)
+|[[Invicta FC events#Invicta FC 15: Cyborg vs. Ibragimova|Invicta FC 15]]
+|{{dts|2016|January|16}}
+|align=center|1
+|align=center|4:58
+| [[Costa Mesa, California]], United States
+|{{small|Defended the [[Invicta Fighting Championships#Featherweight Championship|Invicta FC Featherweight Championship]]. Cyborg vacated the title on March 24, 2017.}}
+|-
+|{{yes2}}Win
+|align=center|14–1 (1)
+|[[Faith Van Duin|Faith van Duin]]
+|TKO (knee to the body and punches)
+|[[Invicta FC events#Invicta FC 13: Cyborg vs. Van Duin|Invicta FC 13]]
+|{{dts|2015|July|09}}
+|align=center|1
+|align=center|0:45
+| [[Las Vegas, Nevada]], United States
+|{{small|Defended the [[Invicta Fighting Championships#Featherweight Championship|Invicta FC Featherweight Championship]]. Performance of the Night.}}
+|-
+|{{yes2}}Win
+|align=center|13–1 (1)
+| [[Charmaine Tweet]]
+| TKO (punches)
+| [[Invicta FC events#Invicta FC 11: Cyborg vs. Tweet|Invicta FC 11]]
+|{{dts|format=mdy|2015|February|27}}
+|align=center|1
+|align=center|0:46
+|[[Los Angeles, California]], United States
+| {{small|Defended the [[Invicta Fighting Championships#Featherweight Championship|Invicta FC Featherweight Championship]]. Performance of the Night.}}
+|-
+|{{yes2}}Win
+| style="text-align:center;"| 12–1 (1)
+| [[Marloes Coenen]]
+| TKO (punches and elbows)
+| [[Invicta FC: Coenen vs. Cyborg|Invicta FC 6]]
+| {{dts|2013-07-13}}
+| style="text-align:center;"| 4
+| style="text-align:center;"| 4:10
+| [[Kansas City, Missouri]], United States
+| {{small|Won the inaugural [[Invicta Fighting Championships#Featherweight Championship|Invicta FC Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+| style="text-align:center;"| 11–1 (1)
+| Fiona Muxlow
+| TKO (knees and punches)
+| [[Invicta FC: Penne vs. Waterson|Invicta FC 5]]
+| {{dts|2013-04-05}}
+| style="text-align:center;"| 1
+| style="text-align:center;"| 3:46
+| [[Kansas City, Missouri]], United States
+| {{small|[[Invicta Fighting Championships#Featherweight Championship|Invicta FC Featherweight]] title eliminator.}}
+|-
+|{{Nocontest}}NC
+|align=center| {{nowrap|10–1 (1)}}
+| [[Hiroko Yamanaka]]
+| NC (overturned)
+| [[Strikeforce: Melendez vs. Masvidal]]
+| {{dts|2011-12-17}}
+|align=center| 1
+|align=center| 0:16
+| [[San Diego, California]], United States
+|{{small|For the [[List of Strikeforce champions#Women's Featherweight Championship|Strikeforce Women's Featherweight Championship]]. Originally a TKO (punches) win for Cyborg; overturned and stripped of the title on January 6, 2012 after she tested positive for [[stanozolol]].}}
+|-
+|{{yes2}}Win
+|align=center| 10–1
+| [[Jan Finney]]
+| KO (knee to the body)
+| [[Strikeforce: Fedor vs. Werdum]]
+| {{dts|2010-06-26}}
+|align=center| 2
+|align=center| 2:56
+| [[San Jose, California]], United States
+| {{small|Defended the [[List of Strikeforce champions#Women's Featherweight Championship|Strikeforce Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center| 9–1
+| [[Marloes Coenen]]
+| TKO (punches)
+| [[Strikeforce: Miami]]
+| {{dts|2010-01-30}}
+|align=center| 3
+|align=center| 3:40
+| [[Sunrise, Florida]], United States
+| {{small|Defended the [[List of Strikeforce champions#Women's Featherweight Championship|Strikeforce Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center| 8–1
+| [[Gina Carano]]
+| TKO (punches)
+| [[Strikeforce: Carano vs. Cyborg]]
+| {{dts|2009-08-15}}
+|align=center| 1
+|align=center| 4:59
+| [[San Jose, California]], United States
+| {{small|Won the inaugural [[List of Strikeforce champions#Women's Featherweight Championship|Strikeforce Women's Featherweight Championship]].}}
+|-
+|{{yes2}}Win
+|align=center| 7–1
+| [[Hitomi Akano]]
+| TKO (punches)
+| [[Strikeforce: Shamrock vs. Diaz]]
+| {{dts|2009-04-11}}
+|align=center| 3
+|align=center| 0:35
+| [[San Jose, California]], United States
+| {{small|Catchweight (150 lb) bout; Cyborg missed weight.}}
+|-
+|{{yes2}}Win
+|align=center| 6–1
+| [[Yoko Takahashi (fighter)|Yoko Takahashi]]
+| Decision (unanimous)
+| [[EliteXC: Heat]]
+| {{dts|2008-10-04}}
+|align=center| 3
+|align=center| 3:00
+| [[Sunrise, Florida]], United States
+| {{small|Catchweight (150 lb) bout.}}
+|-
+|{{yes2}}Win
+|align=center| 5–1
+| [[Shayna Baszler]]
+| TKO (punches)
+| [[EliteXC: Unfinished Business]]
+| {{dts|2008-07-26}}
+|align=center| 2
+|align=center| 2:48
+| [[Stockton, California]], United States
+|{{small|Catchweight (140 lb) bout.}}
+|-
+|{{yes2}}Win
+|align=center| 4–1
+| Marise Vitoria
+| TKO (stomps)
+| Storm Samurai 12
+| {{dts|2006-11-25}}
+|align=center| 1
+|align=center| 1:27
+| [[Curitiba]], Brazil
+| 
+|-
+|{{yes2}}Win
+|align=center| 3–1
+| Elaine Santiago de Lima
+| TKO (corner stoppage)
+| Storm Samurai 11
+| {{dts|2006-05-21}}
+|align=center| 1
+|align=center| 2:46
+| [[Curitiba]], Brazil
+| 
+|-
+|{{yes2}}Win
+|align=center| 2–1
+| Chris Schroeder
+| TKO (punches)
+| Storm Samurai 10
+| {{dts|2006-01-28}}
+|align=center| 1
+|align=center| N/A
+| [[Curitiba]], Brazil
+| 
+|-
+|{{yes2}}Win
+|align=center| 1–1
+| [[Vanessa Porto]]
+| Decision (unanimous)
+| Storm Samurai 9
+| {{dts|2005-11-20}}
+|align=center| 3
+|align=center| 5:00
+| [[Curitiba]], Brazil
+| 
+|-
+|{{no2}}Loss
+|align=center| 0–1
+| Erica Paes
+| Submission (kneebar)
+| Show Fight 2
+| {{dts|2005-05-17}}
+|align=center| 1
+|align=center| 1:46
+| [[São Paulo]], Brazil
+| {{small|Featherweight debut.}}
+
+{{MMA record end}}
