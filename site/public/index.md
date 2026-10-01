@@ -657,7 +657,7 @@ bun run bench     # the benchmark suites
 bun run bench:benchable --latest --out bench/benchable.json  # newest result as a Benchable run
 bunx benchable submit --metrics bench/benchable.json           # send it (BENCHABLE_KEY, or benchable login)
 bun run release                            # bump, rebuild site + package README, commit, tag, push
-bun run publish:npm                        # build and publish `graphx` to npm (prompts for the OTP)
+npm publish                                # build and publish `graphx` (root .npmrc targets it; prompts for OTP)
 ```
 
 ## Guides

@@ -67,8 +67,7 @@
 		"test:watch": "bun test --watch",
 		"bql:serve": "bun scripts/bql-server.ts",
 		"bql:build": "bun run node_modules/bql.sh/packages/db/scripts/sqlite.ts",
-		"type-check": "bun run --filter '*' type-check",
-		"publish:npm": "npm publish -w graphx"
+		"type-check": "bun run --filter '*' type-check"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",
