@@ -43,7 +43,7 @@
 		"directory": "packages/graphx"
 	},
 	"bin": {
-		"graphx": "./dist/cli.js"
+		"graphx": "dist/cli.js"
 	},
 	"files": [
 		"dist"
