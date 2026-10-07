@@ -447,7 +447,7 @@ Scaffolded graphx project in my-app/
 </div>
 </section>
 <section class="figures" aria-label="Counted from the repository">
-<div class="shell"><dl><div><dt>Entry points, one package</dt><dd>16</dd></div><div><dt>Server backends</dt><dd>4</dd></div><div><dt>CLI commands</dt><dd>10</dd></div><div><dt>Runtime dependencies</dt><dd>11</dd></div></dl></div>
+<div class="shell"><dl><div><dt>Entry points, one package</dt><dd>16</dd></div><div><dt>Server backends</dt><dd>4</dd></div><div><dt>CLI commands</dt><dd>11</dd></div><div><dt>Runtime dependencies</dt><dd>11</dd></div></dl></div>
 </section>
 <section class="section eco" id="ecosystem" aria-labelledby="ecosystem-title">
 <div class="shell">
@@ -1088,6 +1088,7 @@ graphx ingest   &lt;dir&gt; [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
+graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
 graphx fork     &lt;namespace&gt; [-c config]   Branch the namespace into an empty one (--as-of &lt;ms|ISO&gt;)
 graphx dedupe   &lt;type&gt; [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
