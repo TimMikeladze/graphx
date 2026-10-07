@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Anime Graph</title>
+		<meta
+			name="description"
+			content="Search 41k anime from manami-project's anime-offline-database, with franchise links and similar titles — a graphx example."
+		/>
+		<style>
+			:root {
+				--bg: #fbfaf8;
+				--fg: #1d1b19;
+				--muted: #6f6a64;
+				--line: #e6e2dc;
+				--card: #fff;
+				--accent: #c2410c;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--bg: #141312;
+					--fg: #ece8e3;
+					--muted: #9b958e;
+					--line: #2c2a27;
+					--card: #1c1a18;
+					--accent: #fb923c;
+				}
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--fg);
+				font:
+					15px/1.45 ui-sans-serif,
+					system-ui,
+					sans-serif;
+			}
+			main {
+				max-width: 960px;
+				margin: 0 auto;
+				padding: 24px 16px 64px;
+			}
+			header {
+				display: flex;
+				align-items: baseline;
+				gap: 12px;
+				flex-wrap: wrap;
+			}
+			h1 {
+				font-size: 20px;
+				margin: 0;
+				letter-spacing: -0.01em;
+			}
+			h1 a {
+				color: inherit;
+				text-decoration: none;
+			}
+			.sub {
+				color: var(--muted);
+				font-size: 13px;
+			}
+			form {
+				margin: 16px 0 8px;
+				display: flex;
+				gap: 8px;
+			}
+			input {
+				flex: 1;
+				min-width: 0;
+				font: inherit;
+				padding: 10px 12px;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				background: var(--card);
+				color: var(--fg);
+			}
+			input:focus {
+				outline: 2px solid var(--accent);
+				outline-offset: -1px;
+			}
+			button {
+				font: inherit;
+				padding: 10px 14px;
+				border-radius: 8px;
+				border: 0;
+				background: var(--fg);
+				color: var(--bg);
+				cursor: pointer;
+			}
+			.hints {
+				color: var(--muted);
+				font-size: 13px;
+			}
+			.hints a {
+				color: var(--accent);
+				cursor: pointer;
+				text-decoration: none;
+				margin-right: 10px;
+			}
+			.grid {
+				display: grid;
+				grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+				gap: 14px;
+				margin-top: 16px;
+			}
+			.card {
+				background: var(--card);
+				border: 1px solid var(--line);
+				border-radius: 10px;
+				overflow: hidden;
+				text-decoration: none;
+				color: inherit;
+				display: flex;
+				flex-direction: column;
+			}
+			.card:hover {
+				border-color: var(--accent);
+			}
+			.card img {
+				width: 100%;
+				aspect-ratio: 2/3;
+				object-fit: cover;
+				background: var(--line);
+				display: block;
+			}
+			.card .b {
+				padding: 8px 10px 10px;
+			}
+			.card .t {
+				font-weight: 600;
+				font-size: 13px;
+				line-height: 1.3;
+				display: -webkit-box;
+				-webkit-line-clamp: 2;
+				-webkit-box-orient: vertical;
+				overflow: hidden;
+			}
+			.card .m {
+				color: var(--muted);
+				font-size: 12px;
+				margin-top: 2px;
+			}
+			.pill {
+				display: inline-block;
+				font-size: 11px;
+				padding: 1px 6px;
+				border-radius: 99px;
+				background: color-mix(in srgb, var(--accent) 15%, transparent);
+				color: var(--accent);
+				margin-top: 4px;
+			}
+			.detail {
+				display: grid;
+				grid-template-columns: 200px 1fr;
+				gap: 20px;
+				margin-top: 20px;
+			}
+			.detail img {
+				width: 100%;
+				border-radius: 10px;
+			}
+			.tags span {
+				display: inline-block;
+				font-size: 12px;
+				border: 1px solid var(--line);
+				border-radius: 99px;
+				padding: 1px 8px;
+				margin: 0 4px 4px 0;
+				color: var(--muted);
+			}
+			h2 {
+				font-size: 15px;
+				margin: 28px 0 0;
+			}
+			h2 small {
+				color: var(--muted);
+				font-weight: 400;
+			}
+			.status {
+				color: var(--muted);
+				margin-top: 16px;
+			}
+			footer {
+				margin-top: 48px;
+				color: var(--muted);
+				font-size: 12px;
+				border-top: 1px solid var(--line);
+				padding-top: 12px;
+			}
+			footer a {
+				color: inherit;
+			}
+			@media (max-width: 560px) {
+				.detail {
+					grid-template-columns: 1fr;
+				}
+				.detail img {
+					max-width: 200px;
+				}
+				.grid {
+					grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<header>
+				<h1><a href="#/">Anime Graph</a></h1>
+				<span class="sub"
+					>41k titles · search, franchises, "more like this" · built on
+					<a href="https://graphx.sh" style="color: inherit">graphx</a> ·
+					<a href="/graph.html" style="color: var(--accent)">Graph explorer →</a></span
+				>
+			</header>
+			<form id="f">
+				<input
+					id="q"
+					placeholder="Describe what you want to watch…"
+					autocomplete="off"
+					aria-label="Search anime"
+				/><button>Search</button>
+			</form>
+			<div class="hints">
+				Try: <a>dark psychological mecha</a><a>cozy slice of life with cats</a
+				><a>giant robots and space war</a><a>time travel thriller</a>
+			</div>
+			<div id="view"></div>
+			<footer id="foot">
+				Data:
+				<a href="https://github.com/manami-project/anime-offline-database"
+					>anime-offline-database</a
+				>
+				by manami-project — ODbL v1.0 + DbCL v1.0.
+			</footer>
+		</main>
+		<script>
+			const $ = (s) => document.querySelector(s);
+			const esc = (s) =>
+				String(s ?? '').replace(
+					/[&<>"']/g,
+					(c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+				);
+			const meta = (a) =>
+				[a.type, a.year, a.score ? '★ ' + a.score.toFixed(2) : null].filter(Boolean).join(' · ');
+			const card = (a, matchLabel) => `<a class="card" href="#/anime/${a.id}">
+	<img loading="lazy" src="${esc(a.thumbnail)}" alt="" onerror="this.style.visibility='hidden'">
+	<div class="b"><div class="t">${esc(a.title)}</div><div class="m">${esc(meta(a))}</div>
+	${a.match != null && matchLabel ? `<span class="pill">${matchLabel} ${Math.round(a.match * 100)}%</span>` : ''}</div></a>`;
+
+			async function get(path) {
+				const r = await fetch(path);
+				if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+				return r.json();
+			}
+
+			async function search(q) {
+				$('#q').value = q;
+				$('#view').innerHTML = '<div class="status">Searching…</div>';
+				try {
+					const r = await get('/api/search?q=' + encodeURIComponent(q));
+					$('#view').innerHTML = r.results.length
+						? `<div class="status">${r.reranked ? 'Ranked by Jev for relevance to your description.' : 'Fused keyword + vector search.'}</div><div class="grid">${r.results.map((a) => card(a, r.reranked ? 'match' : '')).join('')}</div>`
+						: '<div class="status">No results.</div>';
+				} catch (e) {
+					$('#view').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+				}
+			}
+
+			async function show(id) {
+				$('#view').innerHTML = '<div class="status">Loading…</div>';
+				try {
+					const r = await get('/api/anime/' + id);
+					const a = r.anime;
+					document.title = a.title + ' · Anime Graph';
+					$('#view').innerHTML = `<div class="detail"><img src="${esc(a.picture)}" alt="">
+			<div><h1>${esc(a.title)}</h1><div class="sub">${esc(meta(a))}</div>
+			${a.synonyms.length ? `<p class="sub">Also: ${a.synonyms.map(esc).join(' · ')}</p>` : ''}
+			<div class="tags">${a.tags.map((t) => `<span>${esc(t)}</span>`).join('')}</div>
+			<p><a href="/graph.html#${a.id}" style="color:var(--accent)">Explore in the graph →</a></p>
+			<p class="sub">${a.sources.map((s) => `<a href="${esc(s)}" target="_blank" rel="noopener" style="color:inherit;margin-right:8px">${esc(new URL(s).hostname)}</a>`).join('')}</p></div></div>
+			<h2>More like this <small>${r.similar.judged ? '— judged by Jev: would a fan enjoy it for the same reasons?' : '— by shared tags'} · ${r.similar.franchiseSize - 1} franchise titles excluded</small></h2>
+			<div class="grid">${r.similar.results.map((s) => card(s, r.similar.judged ? 'fan match' : '')).join('')}</div>
+			${r.related.length ? `<h2>Franchise <small>— relatedTo edges</small></h2><div class="grid">${r.related.map((s) => card(s)).join('')}</div>` : ''}`;
+					window.scrollTo(0, 0);
+				} catch (e) {
+					$('#view').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+				}
+			}
+
+			function route() {
+				const h = location.hash;
+				const m = /^#\/anime\/([0-9A-Z]{26})$/.exec(h);
+				if (m) return show(m[1]);
+				const s = /^#\/search\/(.+)$/.exec(h);
+				if (s) return search(decodeURIComponent(s[1]));
+				document.title = 'Anime Graph';
+				$('#view').innerHTML = '';
+			}
+			$('#f').onsubmit = (e) => {
+				e.preventDefault();
+				const q = $('#q').value.trim();
+				if (q) location.hash = '#/search/' + encodeURIComponent(q);
+			};
+			document
+				.querySelectorAll('.hints a')
+				.forEach(
+					(a) =>
+						(a.onclick = () => (location.hash = '#/search/' + encodeURIComponent(a.textContent))),
+				);
+			window.onhashchange = route;
+			route();
+			get('/api/meta')
+				.then(
+					(m) =>
+						m &&
+						($('#foot').innerHTML +=
+							` Release ${esc(m.lastUpdate)} · <a href="${esc(m.licenseUrl)}">license</a>.`),
+				)
+				.catch(() => {});
+		</script>
+	</body>
+</html>

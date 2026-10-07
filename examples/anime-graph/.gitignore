@@ -1,0 +1,6 @@
+# The downloaded release (~62 MB) — `bun run download.ts` fetches it.
+data/
+
+# The bundled Vercel project `web/build.ts` writes.
+web/.deploy/
+.vercel

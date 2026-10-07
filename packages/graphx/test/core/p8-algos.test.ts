@@ -581,3 +581,19 @@ test('P8: shortestPath is cycle-safe — a back-edge does not hang or mislead (b
 	}
 	client.close();
 });
+
+test('P8: pagerank and community honor the rels filter', async () => {
+	const client = await fresh();
+	const [a, b, c] = [await node(client, 'a'), await node(client, 'b'), await node(client, 'c')];
+	await edge(client, a, b, { rel: 'keep' });
+	await edge(client, b, c, { rel: 'skip' });
+
+	const pr = await pagerank(client, { rels: ['keep'] });
+	expect(pr.size).toBe(3); // every live node is scored, edges or not
+	expect(pr.get(b)!).toBeGreaterThan(pr.get(c)!); // the 'skip' edge feeds c nothing
+
+	const com = await community(client, { rels: ['keep'] });
+	expect(com.get(a)).toBe(com.get(b)!);
+	expect(com.get(c)).not.toBe(com.get(b)!);
+	client.close();
+});

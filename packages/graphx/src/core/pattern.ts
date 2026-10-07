@@ -210,6 +210,12 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, No
 	private condsFor(alias: string, args: unknown[]): string {
 		const d = this.dialect();
 		let sql = '';
+		// The declared type constrains the row, not only the inferred TS shape.
+		const step = this.steps.find((s): s is NodeStep => s.kind === 'node' && s.alias === alias);
+		if (step) {
+			sql += ` AND ${alias}.type = ?`;
+			args.push(step.type);
+		}
 		for (const c of this.conds) {
 			if (c.alias !== alias) continue;
 			sql += ` AND ${jsonEqExpr(d, `${alias}.data`, c.key)}`;

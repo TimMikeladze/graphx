@@ -56,10 +56,10 @@ test('P5: 3-node fixed pattern compiles to a valid JOIN chain', () => {
 	expect(sql).toContain('JOIN edges e2 ON e2.src = b.id AND e2.rel = ?');
 	expect(sql).toContain('JOIN nodes c ON c.id = e2.dst');
 
-	// Two rel placeholders, two rel args, in order.
-	expect(placeholderCount(sql)).toBe(2);
-	expect(args.length).toBe(2);
-	expect(args).toEqual(['owns', 'tagged']);
+	// Rel and node-type placeholders in textual order; a0's type renders last (the WHERE).
+	expect(sql).toContain('b.type = ?');
+	expect(placeholderCount(sql)).toBe(args.length);
+	expect(args).toEqual(['owns', 'device', 'tagged', 'tag', 'person']);
 });
 
 test('P5: placeholder count === args.length (with where filters)', () => {
@@ -72,9 +72,9 @@ test('P5: placeholder count === args.length (with where filters)', () => {
 		.toSQL();
 
 	expect(placeholderCount(sql)).toBe(args.length);
-	// Textual order: rel(owns) in the JOIN, b-where(type) in the JOIN, then a0's
+	// Textual order: rel(owns) and b's type + where(type) in the JOIN, then a0's type and
 	// where(name) in the trailing WHERE clause (rendered last).
-	expect(args).toEqual(['owns', 'router', 'ada']);
+	expect(args).toEqual(['owns', 'device', 'router', 'person', 'ada']);
 	expect(sql).toContain("json_extract(a.data, '$.name') = ?");
 	expect(sql).toContain("json_extract(b.data, '$.type') = ?");
 });
@@ -100,10 +100,12 @@ test('P5: PARAM ORDER — .where + .asOf line up positionally with placeholders 
 	//   e1.rel = ?                          -> 'owns'
 	//   e1.valid_from <= ?, ? < e1.valid_to -> T, T
 	//   b.valid_from <= ?, ? < b.valid_to   -> T, T
+	//   b.type = ?                          -> 'device'
 	//   json_extract(b.data,'$.type') = ?  -> 'router'
 	//   a.valid_from <= ?, ? < a.valid_to   -> T, T   (WHERE)
+	//   a.type = ?                          -> 'person' (WHERE)
 	//   json_extract(a.data,'$.name') = ?  -> 'ada'  (WHERE)
-	expect(args).toEqual(['owns', T, T, T, T, 'router', T, T, 'ada']);
+	expect(args).toEqual(['owns', T, T, T, T, 'device', 'router', T, T, 'person', 'ada']);
 	expect(placeholderCount(sql)).toBe(args.length);
 
 	// Cross-check textual placeholder order matches the arg order above.
@@ -158,7 +160,7 @@ test('P5: variable-length segment emits a recursive CTE with a depth guard', () 
 	expect(sql).toContain('NOT LIKE'); // cycle-safe path guard
 	expect(sql).toContain('ev.rel = ?'); // rel filter in adjacency
 	expect(placeholderCount(sql)).toBe(args.length);
-	expect(args).toEqual(['knows']);
+	expect(args).toEqual(['knows', 'person', 'person']);
 });
 
 test('P5: only one variable-length segment is allowed (§17)', () => {
@@ -187,8 +189,17 @@ test('P5: variable-length with asOf threads temporal params in order', () => {
 	expect(sql).toContain('node_versions');
 	expect(sql).toContain('edge_versions');
 	// adjacency rel + temporal first, then anchor temporal + anchor where, then target temporal.
-	expect(args).toEqual(['knows', T, T, T, T, 'root', T, T]);
+	expect(args).toEqual(['knows', T, T, T, T, 'person', 'root', T, T, 'person']);
 	expect(placeholderCount(sql)).toBe(args.length);
+});
+
+test('P5: a single-node pattern returns only nodes of the declared type', async () => {
+	const { client, g } = await freshGraph();
+	await g.addNode({ type: 'person', data: { name: 'ada' } });
+	await g.addNode({ type: 'device', data: { type: 'router' } });
+	const rows = await (await match(SCHEMA, client).node('d', 'device').select('d')).run();
+	expect(rows.map((r) => r.d.type)).toEqual(['device']);
+	client.close();
 });
 
 test('P5: .run() returns rows typed/shaped per alias against a real graph', async () => {

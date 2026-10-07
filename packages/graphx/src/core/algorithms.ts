@@ -77,11 +77,15 @@ export interface PageRankOpts {
 	damping?: number;
 	tol?: number;
 	maxIter?: number;
+	/** Run over only these rels' edges (default: every rel). Every live node still gets a score. */
+	rels?: string[];
 }
 
 /** Options for {@link community}. */
 export interface CommunityOpts {
 	maxIter?: number;
+	/** Group over only these rels' edges (default: every rel). */
+	rels?: string[];
 }
 
 /** Centrality flavor. All persist to the `node_analytics.degree` column. */
@@ -508,7 +512,7 @@ export async function pagerank(
 	const damping = opts.damping ?? 0.85;
 	const tol = opts.tol ?? 1e-9;
 	const maxIter = opts.maxIter ?? 100;
-	const csr = await buildCSR(raw);
+	const csr = await buildCSR(raw, { rels: opts.rels });
 	const { n, offsets, targets, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -563,7 +567,7 @@ export async function community(
 	opts: CommunityOpts = {},
 ): Promise<Map<string, number>> {
 	const maxIter = opts.maxIter ?? 20;
-	const csr = await buildCSR(raw);
+	const csr = await buildCSR(raw, { rels: opts.rels });
 	const { n, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;

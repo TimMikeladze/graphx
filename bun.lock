@@ -14,9 +14,22 @@
         "typescript": "^6.0.3",
       },
     },
+    "examples/anime-graph": {
+      "name": "graphx-example-anime-graph",
+      "version": "0.3.0",
+      "dependencies": {
+        "graphx": "workspace:*",
+        "pg": "^8.13.1",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "typescript": "^6.0.3",
+      },
+    },
     "examples/iot-fleet": {
       "name": "graphx-example-iot-fleet",
-      "version": "0.0.0",
+      "version": "0.3.0",
       "dependencies": {
         "@tanstack/react-query": "^5.101.0",
         "graphx": "workspace:*",
@@ -38,7 +51,7 @@
     },
     "examples/mma-graph": {
       "name": "graphx-example-mma-graph",
-      "version": "0.0.0",
+      "version": "0.3.0",
       "dependencies": {
         "@libsql/client": "^0.17.3",
         "graphx": "workspace:*",
@@ -56,7 +69,7 @@
     },
     "examples/pantheon-graph": {
       "name": "graphx-example-pantheon-graph",
-      "version": "0.0.0",
+      "version": "0.3.0",
       "dependencies": {
         "@libsql/client": "^0.17.3",
         "graphx": "workspace:*",
@@ -70,7 +83,7 @@
     },
     "examples/seaport-traffic-bql": {
       "name": "graphx-example-seaport-traffic-bql",
-      "version": "0.0.0",
+      "version": "0.3.0",
       "dependencies": {
         "bql.sh": "^0.4.0",
         "graphx": "workspace:*",
@@ -79,7 +92,7 @@
     },
     "examples/skills-graph": {
       "name": "graphx-example-skills-graph",
-      "version": "0.0.0",
+      "version": "0.3.0",
       "dependencies": {
         "@libsql/client": "^0.17.3",
         "graphx": "workspace:*",
@@ -93,7 +106,7 @@
     },
     "packages/admin": {
       "name": "graphx-admin",
-      "version": "0.0.1",
+      "version": "0.3.0",
       "dependencies": {
         "@cosmograph/react": "^2.3.2",
         "@dagrejs/dagre": "^3.0.0",
@@ -144,9 +157,9 @@
     },
     "packages/graphx": {
       "name": "graphx",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "bin": {
-        "graphx": "./dist/cli.js",
+        "graphx": "dist/cli.js",
       },
       "dependencies": {
         "@hono/node-server": "^2.1.1",
@@ -1537,6 +1550,8 @@
     "graphx": ["graphx@workspace:packages/graphx"],
 
     "graphx-admin": ["graphx-admin@workspace:packages/admin"],
+
+    "graphx-example-anime-graph": ["graphx-example-anime-graph@workspace:examples/anime-graph"],
 
     "graphx-example-iot-fleet": ["graphx-example-iot-fleet@workspace:examples/iot-fleet"],
 

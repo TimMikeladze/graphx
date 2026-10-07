@@ -450,8 +450,8 @@ import { journey, shortestPath, pagerank, community, centrality, topNodes, build
 await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
 
 await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
-await pagerank(db, { damping: 0.85 }); // Map<id, score>
-await community(db); // label propagation → Map<id, community>
+await pagerank(db, { damping: 0.85 }); // Map<id, score>; `rels` limits it to some edges
+await community(db, { rels: ['relatedTo'] }); // label propagation → Map<id, community>
 await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
 await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
 await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
@@ -1226,6 +1226,10 @@ the as-of scrubber has something to say.
 - [`examples/pantheon-graph`](./examples/pantheon-graph) — a real graph from a real corpus: ~10k
   deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`
   builds it and opens it in the admin UI.
+- [`examples/anime-graph`](./examples/anime-graph) — all ~41.5k titles in manami-project's
+  anime-offline-database (ODbL) with studios, producers, tags and franchise relations, reloaded
+  idempotently every release so `diff` shows what each week changed. `bun run download.ts && bun
+run load.ts` in the example dir.
 - [`examples/skills-graph`](./examples/skills-graph) — occupations, skills and 2.7M observed job
   moves dated from 1955 to 2024, so the as-of scrubber shows seventy years of a labour market.
   `bun run dev:skills`.
