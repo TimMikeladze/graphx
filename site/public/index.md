@@ -6,7 +6,7 @@ Currently v0.3.0. Install: `bun add graphx`
 
 - **16** entry points, one package
 - **4** server backends
-- **11** cli commands
+- **10** cli commands
 - **11** runtime dependencies
 
 ## Principles
@@ -602,7 +602,6 @@ graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
-graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
 graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
