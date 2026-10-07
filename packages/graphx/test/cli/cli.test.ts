@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import {
 	buildServeApp,
 	parseForkArgs,
@@ -9,8 +9,12 @@ import {
 	parseNewArgs,
 	parseServeArgs,
 	parseTriggersArgs,
+	parseUpcastArgs,
+	run,
 	skipBreakdown,
 } from '../../src/cli.ts';
+import { loadConfig, openDb } from '../../src/cli-config.ts';
+import { init } from '../../src/core/schema.ts';
 
 // A non-libSQL test leg (postgres/duckdb) sets GRAPHX_DB_DRIVER process-wide, which the dev
 // `createApp` (via getDb with no DbConfig) would inherit — so the libSQL-file serve test is
@@ -467,5 +471,75 @@ export default { schema, embedder, db: { driver: 'libsql' }, namespace: '${ns}' 
 		await rm(configPath, { force: true });
 		for (const db of [ns, branch])
 			for (const sfx of ['', '-wal', '-shm']) await rm(`${db}.db${sfx}`, { force: true });
+	}
+});
+
+test('parseUpcastArgs: defaults, --type and --dry-run', () => {
+	expect(parseUpcastArgs(['upcast'])).toEqual({
+		config: './graphx.config.ts',
+		type: undefined,
+		dryRun: false,
+	});
+	expect(parseUpcastArgs(['upcast', '--type', 'device', '--dry-run', '-c', 'x.ts'])).toEqual({
+		config: 'x.ts',
+		type: 'device',
+		dryRun: true,
+	});
+});
+
+test.skipIf(NOT_LIBSQL)('run: doctor reports lagging data and `upcast` rewrites it', async () => {
+	const ns = `cli-upcast-${Date.now()}`;
+	const configPath = join(import.meta.dir, `${ns}.config.ts`);
+	await writeFile(
+		configPath,
+		`import { defineGraphSchema, defineUpcasters } from '../../src/core/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({
+	nodes: { device: z.object({ name: z.string(), criticality: z.number() }) },
+	edges: {},
+});
+const upcasters = defineUpcasters({
+	device: { current: 2, steps: [(d) => ({ name: d.name, criticality: d.crit })] },
+});
+export default { schema, upcasters, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+	);
+	const log = spyOn(console, 'log').mockImplementation(() => {});
+	const out = () => log.mock.calls.map((c) => String(c[0])).join('\n');
+	try {
+		const client = openDb(await loadConfig(configPath));
+		await init(client);
+		await client.execute("INSERT INTO node_identity (id) VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAA')");
+		await client.execute({
+			sql: 'INSERT INTO node_versions (id, type, data, valid_from) VALUES (?,?,?,?)',
+			args: ['01ARZ3NDEKTSV4RRFFQ69G5FAA', 'device', '{"name":"gw","crit":3}', 1],
+		});
+
+		await run(['doctor', '--config', configPath]);
+		expect(out()).toContain('upcast device  1 of 1 live behind v2');
+		expect(out()).toContain('run `graphx upcast`');
+
+		log.mockClear();
+		await run(['upcast', '--config', configPath, '--dry-run']);
+		expect(out()).toContain('scanned=1 would upcast=1 (dry run)');
+
+		log.mockClear();
+		await run(['upcast', '--config', configPath]);
+		expect(out()).toContain('scanned=1 upcast=1');
+		const r = await client.execute({
+			sql: 'SELECT data FROM nodes WHERE id = ?',
+			args: ['01ARZ3NDEKTSV4RRFFQ69G5FAA'],
+		});
+		expect(JSON.parse(String(r.rows[0]?.data))).toEqual({ name: 'gw', criticality: 3, _v: 2 });
+
+		log.mockClear();
+		await run(['doctor', '--config', configPath]);
+		expect(out()).toContain('upcast device  0 of 1 live behind v2');
+		expect(out()).not.toContain('run `graphx upcast`');
+		client.close();
+	} finally {
+		log.mockRestore();
+		await rm(configPath, { force: true });
+		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
 	}
 });

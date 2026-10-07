@@ -532,3 +532,65 @@ test('P12 (asOf DECISION): a CLOSED v1 version read via .asOf() upcasts to lates
 	expect(JSON.parse(String(closed.rows[0]!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
 	client.close();
 });
+
+// ---------- upcastAll / upcastReport: rewriting stored data forward ----------
+
+async function devicesWhere(client: DbClient, criticality: number): Promise<string[]> {
+	const q = await match(SCHEMA_V2, client, UPCAST_V2)
+		.node('d', 'device')
+		.where('d', 'criticality', criticality)
+		.select('d');
+	return (await q.run()).map((r) => r.d.id);
+}
+
+test('P12: a `where` on a renamed field misses v1 rows until upcastAll rewrites them', async () => {
+	const client = await freshClient();
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2, embedder: hashEmbed(DIM) });
+	const old = await rawNode(client, { name: 'r1', crit: 5, _v: 1 });
+	const fresh = await g.addNode({ type: 'device', data: { name: 'r2', criticality: 5 } });
+	await g.addNode({ type: 'person', data: { name: 'ada' } }); // unregistered: never touched
+
+	// SQL filters match stored JSON: the v1 row stores `crit`, so it is missed.
+	expect(await devicesWhere(client, 5)).toEqual([fresh.id]);
+	expect(await g.upcastReport()).toEqual({ device: { current: 2, live: 2, behind: 1 } });
+
+	expect(await g.upcastAll({ dryRun: true })).toEqual({ scanned: 2, upcast: 1 });
+	expect(JSON.parse(await rawProps(client, old))).toEqual({ name: 'r1', crit: 5, _v: 1 });
+
+	expect(await g.upcastAll()).toEqual({ scanned: 2, upcast: 1 });
+	expect((await devicesWhere(client, 5)).sort()).toEqual([old, fresh.id].sort());
+	expect(JSON.parse(await rawProps(client, old))).toEqual({
+		name: 'r1',
+		criticality: 5,
+		status: 'online',
+		_v: 2,
+	});
+	// The v1 bytes survive as a closed version; a second pass has nothing to do.
+	const versions = await client.execute({
+		sql: 'SELECT data FROM node_versions WHERE id = ? ORDER BY valid_from',
+		args: [old],
+	});
+	expect(JSON.parse(String(versions.rows[0]!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
+	expect(versions.rows).toHaveLength(2);
+	expect(await g.upcastAll()).toEqual({ scanned: 2, upcast: 0 });
+	expect(await g.upcastReport()).toEqual({ device: { current: 2, live: 2, behind: 0 } });
+	client.close();
+});
+
+test('P12: upcastAll pages through more nodes than one page holds', async () => {
+	const client = await freshClient();
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
+	for (let i = 0; i < 5; i++) await rawNode(client, { name: `r${i}`, crit: i, _v: 1 });
+	const pages: number[] = [];
+	const r = await g.upcastAll({ pageSize: 2, onProgress: (p) => pages.push(p.scanned) });
+	expect(r).toEqual({ scanned: 5, upcast: 5 });
+	expect(pages).toEqual([2, 4, 5]);
+	client.close();
+});
+
+test('P12: upcastAll refuses a type with no upcaster', async () => {
+	const client = await freshClient();
+	const g = new Graph(client, SCHEMA_V2, { upcasters: UPCAST_V2 });
+	await expect(g.upcastAll({ type: 'person' })).rejects.toThrow("type 'person' has no upcaster");
+	client.close();
+});

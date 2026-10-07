@@ -177,6 +177,17 @@ export interface EmbeddingReport {
 	vectors: number;
 }
 
+/** Per registered type: live nodes, and those still stored below the upcaster's `current`. */
+export type UpcastReport = Record<string, { current: number; live: number; behind: number }>;
+
+/** What {@link Graph.upcastAll} did. */
+export interface UpcastAllResult {
+	/** Live nodes of the selected types that were read. */
+	scanned: number;
+	/** Nodes rewritten (or, on a dry run, that would be) as a new version at `current`. */
+	upcast: number;
+}
+
 /**
  * Thrown from inside the conditional-close body when the successor needs a vector the caller
  * has not computed yet. The transaction rolls back, {@link Graph.updateNode} embeds OUTSIDE the
@@ -1156,6 +1167,85 @@ export class Graph<S extends GraphSchema> {
 			if (page.rows.length < 500) break;
 		}
 		return report;
+	}
+
+	/**
+	 * Page the live nodes of `types` (registered with an upcaster) in id order, yielding each
+	 * page's rows with their stored data — not upcast.
+	 */
+	private async *liveNodePages(
+		types: string[],
+		pageSize: number,
+	): AsyncGenerator<Array<{ id: string; type: string; data: Record<string, unknown> }>> {
+		if (types.length === 0) return;
+		const marks = types.map(() => '?').join(', ');
+		let after = '';
+		for (;;) {
+			const page = await this.raw.execute({
+				sql: `SELECT id, type, data FROM nodes WHERE type IN (${marks}) AND id > ? ORDER BY id LIMIT ?`,
+				args: [...types, after, pageSize],
+			});
+			if (page.rows.length === 0) return;
+			yield page.rows.map((r) => ({
+				id: String(r.id),
+				type: String(r.type),
+				data: parseData(r.data),
+			}));
+			after = String(page.rows[page.rows.length - 1]?.id);
+			if (page.rows.length < pageSize) return;
+		}
+	}
+
+	/**
+	 * How far stored data lag the upcasters: per registered type, live nodes and those still
+	 * stored below `current`. Reads see the latest shape either way, but SQL filters
+	 * (`where`, unique props) match the stored JSON, so a lagging node can be missed by them.
+	 */
+	async upcastReport(): Promise<UpcastReport> {
+		const report: UpcastReport = {};
+		for (const type of this.upcaster.types()) {
+			report[type] = { current: this.upcaster.stampVersion(type) as number, live: 0, behind: 0 };
+		}
+		for await (const page of this.liveNodePages(this.upcaster.types(), 500)) {
+			for (const n of page) {
+				const r = report[n.type] as UpcastReport[string];
+				r.live++;
+				if (this.upcaster.isBehind(n.type, n.data)) r.behind++;
+			}
+		}
+		return report;
+	}
+
+	/**
+	 * Rewrite every live node stored below its upcaster's `current` as a new version in the
+	 * latest shape, so SQL filters see the same data reads do. Each rewrite is an ordinary
+	 * {@link updateNode}: history keeps the old version, an outbox event is written, and the
+	 * node is re-embedded only if its embedding input changed. Idempotent; resumable.
+	 */
+	async upcastAll(
+		opts: {
+			type?: string;
+			pageSize?: number;
+			dryRun?: boolean;
+			onProgress?: (done: UpcastAllResult) => void;
+		} = {},
+	): Promise<UpcastAllResult> {
+		if (opts.type !== undefined && this.upcaster.stampVersion(opts.type) === undefined) {
+			throw new Error(`upcastAll: type '${opts.type}' has no upcaster`);
+		}
+		const types = opts.type === undefined ? this.upcaster.types() : [opts.type];
+		const result: UpcastAllResult = { scanned: 0, upcast: 0 };
+		for await (const page of this.liveNodePages(types, Math.max(1, opts.pageSize ?? 200))) {
+			for (const n of page) {
+				result.scanned++;
+				if (!this.upcaster.isBehind(n.type, n.data)) continue;
+				// An empty patch: updateNode upcasts the live data and stamps `current`.
+				if (!opts.dryRun) await this.updateNode(n.id, { data: {} });
+				result.upcast++;
+			}
+			opts.onProgress?.({ ...result });
+		}
+		return result;
 	}
 
 	/** GraphRAG retrieve through this graph's embedder and upcasters. See {@link retrieve}. */

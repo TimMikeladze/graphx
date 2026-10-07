@@ -3,6 +3,7 @@ import type { Embedder } from './embedder.ts';
 import type { EmbeddingMode, GraphSchema } from './graph.ts';
 import type { RerankFn } from './hybrid.ts';
 import type { Trigger, TriggerRunnerOptions } from './triggers.ts';
+import type { UpcasterRegistry } from './upcast.ts';
 
 /**
  * The shape of `graphx.config.ts`'s default export — the whole contract every `graphx`
@@ -18,6 +19,11 @@ export interface GraphxConfig<S extends GraphSchema = GraphSchema> {
 	embedder?: Embedder;
 	/** `'sync'` (default) embeds inside each write; `'lazy'` leaves it to `embedTrigger`. */
 	embedding?: EmbeddingMode;
+	/**
+	 * Read-time upcasters for node data ({@link defineUpcasters}). Every command reads through
+	 * them; `graphx upcast` rewrites stored data to their `current`.
+	 */
+	upcasters?: UpcasterRegistry;
 	/**
 	 * Reranks `hybrid_search` results for `graphx serve` and `graphx mcp` — e.g. `jevRerank()`
 	 * from `graphx/jev`. Omit ⇒ fused order.

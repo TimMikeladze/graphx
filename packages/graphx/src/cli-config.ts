@@ -87,6 +87,7 @@ export async function openGraph(
 	return new Graph(client, cfg.schema, {
 		embedder: cfg.embedder,
 		embedding: cfg.embedding,
+		upcasters: cfg.upcasters,
 		events,
 	});
 }

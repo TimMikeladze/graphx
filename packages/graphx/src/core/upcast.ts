@@ -104,6 +104,17 @@ export class Upcaster {
 		return this.registry[type]?.current;
 	}
 
+	/** The node types with an upcaster chain. */
+	types(): string[] {
+		return Object.keys(this.registry);
+	}
+
+	/** True when `type` is registered and these stored data sit below its `current`. */
+	isBehind(type: string, data: Record<string, unknown>): boolean {
+		const u = this.registry[type];
+		return u !== undefined && storedVersion(data) < u.current;
+	}
+
 	/**
 	 * Stamp the type's current `_v` into already-parsed stored data (WRITE path). An
 	 * UNREGISTERED type is a no-op passthrough (no `_v` → byte-identical to pre-P12). A

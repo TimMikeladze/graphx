@@ -192,6 +192,8 @@ export async function readEmbeddingMeta(client: DbClient): Promise<EmbeddingMeta
  */
 export async function init(client: DbClient, embedder?: Embedder): Promise<void> {
 	const dialect = dialectOf(client);
+	// Read before the DDL: afterwards a fresh namespace and a pre-stamp one look alike.
+	const prior = await readSchemaVersion(client);
 	switch (dialect) {
 		case 'postgres':
 			// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
@@ -219,7 +221,82 @@ export async function init(client: DbClient, embedder?: Embedder): Promise<void>
 		default:
 			assertNever(dialect, 'init');
 	}
+	await upgradeSchema(client, prior);
 	if (embedder) await ensureEmbeddings(client, embedder);
+}
+
+/**
+ * A structural change `CREATE ... IF NOT EXISTS` and {@link ensureColumn} cannot express (a
+ * rename, a drop, a type change). `STRUCTURE_STEPS[i]` lifts a namespace from v(i+1) to
+ * v(i+2), mirroring upcaster steps. Steps run after the DDL, once, in order; one process
+ * should run `init` first after an upgrade.
+ */
+export type StructureStep = (client: DbClient) => Promise<void>;
+
+const STRUCTURE_STEPS: StructureStep[] = [];
+
+/** The table layout this build of graphx creates and expects. */
+export const SCHEMA_VERSION: number = STRUCTURE_STEPS.length + 1;
+
+const META_SCHEMA_VERSION = 'schema_version';
+
+/**
+ * The namespace's recorded layout version: `null` when it has no `graph_meta` yet (fresh), and
+ * 1 when it predates the stamp — v1 is the layout every unstamped namespace has.
+ */
+export async function readSchemaVersion(client: DbClient): Promise<number | null> {
+	let rows: Array<Record<string, unknown>>;
+	try {
+		rows = (
+			await client.execute({
+				sql: 'SELECT value FROM graph_meta WHERE key = ?',
+				args: [META_SCHEMA_VERSION],
+			})
+		).rows;
+	} catch {
+		return null;
+	}
+	if (rows.length === 0) return 1;
+	const v = Number(rows[0]?.value);
+	if (!Number.isInteger(v) || v < 1) {
+		throw new Error(`graphx: graph_meta.schema_version is '${String(rows[0]?.value)}'`);
+	}
+	return v;
+}
+
+/**
+ * Bring a namespace at `prior` (from {@link readSchemaVersion}) up to the current layout, and
+ * stamp it. A fresh namespace already has the latest DDL, so it is only stamped. A namespace
+ * written by a NEWER graphx is refused: this build would misread a layout it doesn't know.
+ */
+export async function upgradeSchema(
+	client: DbClient,
+	prior: number | null,
+	steps: StructureStep[] = STRUCTURE_STEPS,
+): Promise<void> {
+	const current = steps.length + 1;
+	const stamp = (v: number) =>
+		client.execute({ sql: META_UPSERT_SQL, args: [META_SCHEMA_VERSION, String(v)] });
+	if (prior === null) {
+		await stamp(current);
+		return;
+	}
+	if (prior > current) {
+		throw new Error(
+			`graphx: this namespace has schema v${prior}, written by a newer graphx; this one knows v${current}. Upgrade graphx.`,
+		);
+	}
+	for (let v = prior; v < current; v++) {
+		await (steps[v - 1] as StructureStep)(client);
+		await stamp(v + 1);
+	}
+	// A pre-stamp namespace already at the current layout gets its stamp; a stamped one is untouched.
+	if (prior === current) {
+		await client.execute({
+			sql: 'INSERT INTO graph_meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING',
+			args: [META_SCHEMA_VERSION, String(current)],
+		});
+	}
 }
 
 /**

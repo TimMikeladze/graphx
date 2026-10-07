@@ -137,6 +137,29 @@ export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
 	};
 }
 
+export interface ParsedUpcastArgs {
+	config: string;
+	type: string | undefined;
+	dryRun: boolean;
+}
+
+export function parseUpcastArgs(argv: string[]): ParsedUpcastArgs {
+	const { values } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			type: { type: 'string' },
+			'dry-run': { type: 'boolean', default: false },
+		},
+	});
+	return {
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		type: values.type as string | undefined,
+		dryRun: (values['dry-run'] as boolean | undefined) ?? false,
+	};
+}
+
 export interface ParsedForkArgs {
 	config: string;
 	target: string;
@@ -311,6 +334,7 @@ Usage:
   graphx triggers [options]       Run declarative triggers over the event outbox
   graphx mcp [options]            Serve the graph to an MCP client over stdio
   graphx reembed [options]        Re-embed every live node with the configured embedder
+  graphx upcast [options]         Rewrite stored node data to the config's upcaster versions
   graphx doctor [options]         Report the namespace's embedding model, width, and health
   graphx fork <namespace>         Branch the configured namespace into a new, empty one
   graphx dedupe <type> [options]  Find duplicate nodes of a type and judge them with Jev
@@ -338,6 +362,11 @@ triggers options:
 reembed options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
   --dry-run               Report what would change without writing
+
+upcast options:
+  --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --type <type>           Only this node type (default: every type with an upcaster)
+  --dry-run               Count the nodes that would be rewritten; write nothing
 
 doctor options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -395,6 +424,8 @@ export async function run(argv: string[]): Promise<void> {
 			return runTriggers(argv);
 		case 'reembed':
 			return runReembed(argv);
+		case 'upcast':
+			return runUpcast(argv);
 		case 'doctor':
 			return runDoctor(argv);
 		case 'fork':
@@ -477,6 +508,7 @@ export async function buildServeApp(configPath: string): Promise<CreateAppResult
 		schema: cfg.schema,
 		embedder: cfg.embedder,
 		embedding: cfg.embedding,
+		upcasters: cfg.upcasters,
 		rerank: cfg.rerank,
 		guard: cfg.guard,
 		db: namespaceOf(cfg),
@@ -544,7 +576,11 @@ async function runReembed(argv: string[]): Promise<void> {
 	// Do NOT `init(client, embedder)` here: on a model change it would refuse. Open the graph
 	// without initialising the embeddings and let `reembed` replace them.
 	await init(client);
-	const graph = new Graph(client, cfg.schema, { embedder: cfg.embedder, embedding: 'off' });
+	const graph = new Graph(client, cfg.schema, {
+		embedder: cfg.embedder,
+		embedding: 'off',
+		upcasters: cfg.upcasters,
+	});
 	const before = await graph.embeddingReport();
 	console.log(
 		`namespace=${namespaceOf(cfg)} stored=${before.stored ? `${before.stored.model} (${before.stored.dim})` : 'none'} ` +
@@ -564,6 +600,29 @@ async function runReembed(argv: string[]): Promise<void> {
 }
 
 /**
+ * `graphx upcast` — rewrite every live node stored below its upcaster's `current` as a new
+ * version in the latest shape, so SQL filters see what reads see. History keeps the old bytes.
+ */
+async function runUpcast(argv: string[]): Promise<void> {
+	const args = parseUpcastArgs(argv);
+	const cfg = await loadConfig(args.config);
+	if (!cfg.upcasters || Object.keys(cfg.upcasters).length === 0) {
+		throw new Error('upcast: the config has no `upcasters`');
+	}
+	const graph = await openGraph(cfg);
+	const result = await graph.upcastAll({
+		type: args.type,
+		dryRun: args.dryRun,
+		onProgress: (r) => process.stderr.write(`  scanned ${r.scanned} upcast ${r.upcast}\r`),
+	});
+	process.stderr.write('\n');
+	console.log(
+		`namespace=${namespaceOf(cfg)} scanned=${result.scanned} ` +
+			(args.dryRun ? `would upcast=${result.upcast} (dry run)` : `upcast=${result.upcast}`),
+	);
+}
+
+/**
  * `graphx fork <namespace>` — branch the configured namespace into another on the same backend.
  * A DuckDB `duckPath` names one file, so the branch gets its own default path instead.
  */
@@ -577,7 +636,10 @@ async function runFork(argv: string[]): Promise<void> {
 	const target = getDb(args.target, { ...cfg.db, duckPath: undefined });
 	const result = await fork(source, target, { asOf: args.asOf });
 	if (cfg.embedder && result.needsEmbedding.length > 0) {
-		const branch = new Graph(target, cfg.schema, { embedder: cfg.embedder });
+		const branch = new Graph(target, cfg.schema, {
+			embedder: cfg.embedder,
+			upcasters: cfg.upcasters,
+		});
 		for (const id of result.needsEmbedding) await branch.embedNode(id);
 	}
 	console.log(
@@ -685,7 +747,11 @@ async function runDoctor(argv: string[]): Promise<void> {
 	const cfg = await loadConfig(args.config);
 	const client = openDb(cfg);
 	await init(client);
-	const graph = new Graph(client, cfg.schema, { embedder: cfg.embedder, embedding: 'off' });
+	const graph = new Graph(client, cfg.schema, {
+		embedder: cfg.embedder,
+		embedding: 'off',
+		upcasters: cfg.upcasters,
+	});
 	const r = await graph.embeddingReport();
 	const lines = [
 		`namespace      ${namespaceOf(cfg)} (${cfg.db?.driver ?? 'libsql'})`,
@@ -702,6 +768,16 @@ async function runDoctor(argv: string[]): Promise<void> {
 		);
 	} else if (r.stale > 0 || r.unembedded > 0) {
 		lines.push(`\n! ${r.stale + r.unembedded} node(s) need embedding — run \`graphx reembed\``);
+	}
+	const up = await graph.upcastReport();
+	const behind = Object.values(up).reduce((n, t) => n + t.behind, 0);
+	for (const [type, t] of Object.entries(up)) {
+		lines.push(`${`upcast ${type}`.padEnd(15)}${t.behind} of ${t.live} live behind v${t.current}`);
+	}
+	if (behind > 0) {
+		lines.push(
+			`\n! ${behind} node(s) stored below their upcaster version; \`where\` filters miss them — run \`graphx upcast\``,
+		);
 	}
 	console.log(lines.join('\n'));
 }

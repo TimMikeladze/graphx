@@ -100,6 +100,7 @@ export async function runMcp(args: McpBinArgs): Promise<void> {
 			db: namespaceOf(cfg),
 			embedder: cfg.embedder,
 			embedding: cfg.embedding,
+			upcasters: cfg.upcasters,
 			rerank: cfg.rerank,
 			guard: cfg.guard,
 		});

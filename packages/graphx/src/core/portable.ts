@@ -44,7 +44,10 @@ export {
 	init,
 	NODES_FTS_TRIGGER_DDL,
 	readEmbeddingMeta,
+	readSchemaVersion,
 	schema,
+	SCHEMA_VERSION,
+	type StructureStep,
 } from './schema.ts';
 
 // Embedders — the one object a graph needs to know about a model
@@ -144,6 +147,8 @@ export {
 	RevisionConflict,
 	type DataInput,
 	type ReembedResult,
+	type UpcastAllResult,
+	type UpcastReport,
 	type UpdateNodePatch,
 } from './graph.ts';
 
