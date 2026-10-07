@@ -180,20 +180,6 @@ type Schema = typeof schema;
 Useful inferred types: `NodeType<S>`, `Rel<S>`, `DataOf<S, K>`, `NodeOf<S, K>` and `AnyNode<S>` (a
 discriminated union on `type`).
 
-Schemas evolve without a migration step. Register upcasters and stored data is lifted to the latest
-shape at read time, on every surface including HTTP:
-
-```ts
-import { defineUpcasters } from 'graphx';
-
-const upcasters = defineUpcasters({
-	// `current` is the type's schema version, stamped into data on write; `steps[i]` lifts
-	// v(i+1) to v(i+2), so `steps.length` is always `current - 1`.
-	gateway: { current: 2, steps: [(d) => ({ name: d.name, firmware: String(d.version ?? '0') })] },
-});
-const g = new Graph(db, schema, { upcasters });
-```
-
 Two constraints are enforceable in the database rather than only in code:
 
 ```ts
@@ -203,6 +189,39 @@ await declareSingleValuedRel(db, 'deployedAt');
 await declareUniqueNodeProp(db, { type: 'site', prop: 'name' });
 await materializeConstraints(db, schema); // every `single` rel in the schema, in one call
 ```
+
+### Evolving data
+
+Adding a field with a Zod default, or dropping one, needs nothing: data are JSON and the latest
+schema parses them on read. For a rename or reshape, register upcasters. Stored data are lifted to
+the latest shape at read time, on every surface including HTTP:
+
+```ts
+import { defineUpcasters } from 'graphx';
+
+const upcasters = defineUpcasters({
+	// `current` is the type's schema version, stamped into data on write; `steps[i]` lifts
+	// v(i+1) to v(i+2), so `steps.length` is always `current - 1`.
+	gateway: { current: 2, steps: [(d) => ({ name: d.name, firmware: String(d.version ?? '0') })] },
+});
+const g = new Graph(db, schema, { upcasters }); // or `upcasters` in graphx.config.ts
+```
+
+Reads upcast, but SQL filters (`where`, unique props) match the stored JSON: until a node is
+rewritten, `where('g', 'firmware', '2')` misses a gateway still stored with `version`. Rewrite them:
+
+```ts
+await g.upcastReport(); // { gateway: { current: 2, live: 1200, behind: 340 } }
+await g.upcastAll(); // { scanned: 1200, upcast: 340 } — `type`, `dryRun`, `pageSize`, `onProgress`
+```
+
+`upcastAll` writes each lagging node as a new version through `updateNode`: the old bytes stay in
+history, an outbox event is written, and the node is re-embedded only if its embedding input
+changed. Running it again is a no-op. `graphx doctor` reports lagging nodes and `graphx upcast` runs
+the rewrite.
+
+The table layout is versioned separately: `init` stamps `schema_version` into `graph_meta`, brings
+an older namespace forward, and refuses one written by a newer graphx rather than misreading it.
 
 ## Writing
 
@@ -443,8 +462,8 @@ import { journey, shortestPath, pagerank, community, centrality, topNodes, build
 await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
 
 await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
-await pagerank(db, { damping: 0.85 }); // Map<id, score>
-await community(db); // label propagation → Map<id, community>
+await pagerank(db, { damping: 0.85 }); // Map<id, score>; `rels` limits it to some edges
+await community(db, { rels: ['relatedTo'] }); // label propagation → Map<id, community>
 await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
 await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
 await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
@@ -1178,6 +1197,7 @@ graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
+graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
 graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
@@ -1219,6 +1239,10 @@ the as-of scrubber has something to say.
 - [`examples/pantheon-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/pantheon-graph) — a real graph from a real corpus: ~10k
   deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`
   builds it and opens it in the admin UI.
+- [`examples/anime-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/anime-graph) — all ~41.5k titles in manami-project's
+  anime-offline-database (ODbL) with studios, producers, tags and franchise relations, reloaded
+  idempotently every release so `diff` shows what each week changed. `bun run download.ts && bun
+run load.ts` in the example dir.
 - [`examples/skills-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/skills-graph) — occupations, skills and 2.7M observed job
   moves dated from 1955 to 2024, so the as-of scrubber shows seventy years of a labour market.
   `bun run dev:skills`.

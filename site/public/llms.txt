@@ -171,8 +171,8 @@ import { journey, shortestPath, pagerank, community, centrality, topNodes, build
 await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
 
 await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
-await pagerank(db, { damping: 0.85 }); // Map<id, score>
-await community(db); // label propagation → Map<id, community>
+await pagerank(db, { damping: 0.85 }); // Map<id, score>; `rels` limits it to some edges
+await community(db, { rels: ['relatedTo'] }); // label propagation → Map<id, community>
 await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
 await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
 await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
@@ -517,6 +517,7 @@ graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
+graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
 graphx doctor   [-c config]               Embedding model, width and health of the namespace
 graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
