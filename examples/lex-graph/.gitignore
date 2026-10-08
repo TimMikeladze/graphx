@@ -1,0 +1,5 @@
+# The scrape — `bun run scrape.ts` fetches it.
+data/
+
+# The built Atlas — `bun run build`.
+web/dist/

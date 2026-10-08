@@ -1,0 +1,6 @@
+/* The admin's design system — tokens, fonts, the canvas atmosphere and HUD classes — as-is. */
+@import '../../../../packages/admin/src/index.css';
+
+/* Tailwind only scans what it can see from here: the admin components this app renders too. */
+@source '../../../../packages/admin/src';
+@source './';

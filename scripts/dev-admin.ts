@@ -20,7 +20,31 @@ import process from 'node:process';
 
 const root = process.cwd();
 const apiScript = resolve(root, process.argv[2] ?? 'scripts/admin-api.ts');
-const apiPort = process.argv[3] ?? '8787';
+/**
+ * The first free port from `start` up. A taken port means another app is running there, and that
+ * app is left alone: this stack moves over instead. (Vite does the same for the UI on its own.)
+ */
+function freePort(start: number): number {
+	// Vite listens on `localhost`, which is often only `::1`: a port is free when every address is.
+	const free = (port: number) =>
+		['0.0.0.0', '127.0.0.1', '::1'].every((hostname) => {
+			try {
+				Bun.serve({ port, hostname, fetch: () => new Response() }).stop(true);
+				return true;
+			} catch {
+				return false;
+			}
+		});
+	for (let port = start; port < start + 100; port++) if (free(port)) return port;
+	throw new Error(`no free port in ${start}–${start + 99}`);
+}
+
+const wanted = Number(process.argv[3] ?? '8787');
+const apiPort = String(freePort(wanted));
+if (Number(apiPort) !== wanted)
+	console.log(`[dev-admin] port ${wanted} is taken; API on ${apiPort}`);
+// Every API script reads PORT.
+process.env.PORT = apiPort;
 const procs: Bun.Subprocess[] = [];
 
 function run(cmd: string[], cwd: string): Bun.Subprocess {

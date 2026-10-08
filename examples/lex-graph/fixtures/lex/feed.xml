@@ -1,0 +1,1021 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+xmlns:podcast="https://podcastindex.org/namespace/1.0"
+xmlns:rawvoice="https://blubrry.com/developer/rawvoice-rss/"
+>
+<channel>
+	<title>Lex Fridman Podcast</title>
+	<atom:link href="https://lexfridman.com/feed/podcast/" rel="self" type="application/rss+xml" />
+	<link>https://lexfridman.com/</link>
+	<description>Conversations that explore technology, history, philosophy, physics, mathematics, biology, chemistry, engineering, AI, robotics, programming, music, film, art, sports, psychology, neuroscience, geopolitics, business, economics, religion, astronomy, and the human condition with people from all walks of life.</description>
+	<lastBuildDate>Thu, 17 Sep 2026 00:40:49 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>Blubrry PowerPress/11.17.11</generator>
+		<atom:link rel="hub" href="https://pubsubhubbub.appspot.com/" />
+	<itunes:new-feed-url>https://lexfridman.com/feed/podcast/</itunes:new-feed-url>
+	<itunes:author>Lex Fridman</itunes:author>
+	<itunes:explicit>false</itunes:explicit>
+	<itunes:image href="https://lexfridman.com/wordpress/wp-content/uploads/powerpress/artwork_3000-230.png" />
+	<itunes:owner>
+		<itunes:name>Lex Fridman</itunes:name>
+		<itunes:email>lexfridman@gmail.com</itunes:email>
+	</itunes:owner>
+	<podcast:medium>podcast</podcast:medium>
+	<image>
+		<title>Lex Fridman Podcast</title>
+		<url>https://lexfridman.com/wordpress/wp-content/uploads/powerpress/artwork_3000-230.png</url>
+		<link>https://lexfridman.com/podcast</link>
+	</image>
+	<itunes:category text="Technology" />
+	<itunes:category text="Science" />
+	<itunes:category text="Society &amp; Culture">
+		<itunes:category text="Philosophy" />
+	</itunes:category>
+	<podcast:podping usesPodping="true" />
+	<podcast:guid>7eeae9d1-141e-5133-9e8f-6c1da695e40c</podcast:guid>
+	<rawvoice:subscribe feed="https://lexfridman.com/feed/podcast/" itunes="https://podcasts.apple.com/us/podcast/lex-fridman-podcast/id1434243584" tunein="https://tunein.com/podcasts/Technology-Podcasts/Artificial-Intelligence-p1153019/" spotify="https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL"></rawvoice:subscribe>
+	<item>
+		<title>#500 – Khabib Nurmagomedov: Dagestan, MMA, UFC, Islam, Conor, Fedor &#038; Football</title>
+		<link>https://lexfridman.com/khabib-nurmagomedov/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=khabib-nurmagomedov</link>
+		<pubDate>Wed, 12 Aug 2026 13:11:45 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=6494</guid>
+		<comments>https://lexfridman.com/khabib-nurmagomedov/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/khabib-nurmagomedov/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Khabib Nurmagomedov is one of the greatest fighters of all time, who retired from the UFC undefeated with a perfect 29-0 record. We did this conversation entirely in Russian. It&#8217;s translated and dubbed into English. Both language audio tracks (and subtitles) are available on YouTube. Here, only the English audio is available. We worked hard to make it enjoyable to listen to, by carefully dubbing the translation using voice-cloning, as we&#8217;ve done for previous foreign-language podcasts.</p>
+<p>Thank you for listening ❤ Check out our sponsors: <a href="https://lexfridman.com/sponsors/ep500-sc">https://lexfridman.com/sponsors/ep500-sc</a><br />
+See below for timestamps, transcript, and to give feedback, submit questions, contact Lex, etc.</p>
+<p><b>Transcript:</b><br />
+<a href="https://lexfridman.com/khabib-nurmagomedov-transcript">https://lexfridman.com/khabib-nurmagomedov-transcript</a></p>
+<p><b>CONTACT LEX:</b><br />
+<b>Feedback</b> &#8211; give feedback to Lex: <a href="https://lexfridman.com/survey">https://lexfridman.com/survey</a><br />
+<b>AMA</b> &#8211; submit questions, videos or call-in: <a href="https://lexfridman.com/ama">https://lexfridman.com/ama</a><br />
+<b>Hiring</b> &#8211; join our team: <a href="https://lexfridman.com/hiring">https://lexfridman.com/hiring</a><br />
+<b>Other</b> &#8211; other ways to get in touch: <a href="https://lexfridman.com/contact">https://lexfridman.com/contact</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Khabib&#8217;s Instagram: <a href="https://instagram.com/khabib_nurmagomedov/">https://instagram.com/khabib_nurmagomedov/</a><br />
+Khabib&#8217;s YouTube: <a href="https://youtube.com/@KhabibTheEagle">https://youtube.com/@KhabibTheEagle</a><br />
+Khabib&#8217;s Facebook: <a href="https://facebook.com/KhabibTheEagle/">https://facebook.com/KhabibTheEagle/</a><br />
+Khabib&#8217;s X: <a href="https://x.com/TeamKhabib">https://x.com/TeamKhabib</a><br />
+Khabib&#8217;s Telegram: <a href="https://t.me/khabib_nurmagomedov">https://t.me/khabib_nurmagomedov</a><br />
+Khabib&#8217;s Website: <a href="https://khabib.com">https://khabib.com</a></p>
+<p><b>SPONSORS:</b><br />
+To support this podcast, check out our sponsors &#38; get discounts:<br />
+<b>Wispr Flow:</b> AI-powered voice dictation app.<br />
+Go to <a href="https://lexfridman.com/s/wispr_flow-ep500-sc">https://wisprflow.ai/lex</a><br />
+<b>LMNT:</b> Zero-sugar electrolyte drink mix.<br />
+Go to <a href="https://lexfridman.com/s/lmnt-ep500-sc">https://drinkLMNT.com/lex</a><br />
+<b>Shopify:</b> Sell stuff online.<br />
+Go to <a href="https://lexfridman.com/s/shopify-ep500-sc">https://shopify.com/lex</a><br />
+<b>BetterHelp:</b> Online therapy and counseling.<br />
+Go to <a href="https://lexfridman.com/s/betterhelp-ep500-sc">https://betterhelp.com/lex</a><br />
+<b>Perplexity:</b> AI-powered answer engine.<br />
+Go to <a href="https://lexfridman.com/s/perplexity-ep500-sc">https://perplexity.ai/</a></p>
+<p><b>OUTLINE:</b><br />
+(00:00) &#8211; Introduction<br />
+(01:29) &#8211; Sponsors, Comments, and Reflections<br />
+(08:24) &#8211; Why Dagestan produces so many great fighters<br />
+(18:31) &#8211; History of Dagestan warrior culture<br />
+(27:51) &#8211; Hard training in the mountains of Dagestan<br />
+(31:42) &#8211; The trap of fame, money, and power<br />
+(42:23) &#8211; The key to Khabib&#8217;s dominance<br />
+(53:36) &#8211; Discipline and hard work<br />
+(1:06:04) &#8211; Street fights in Dagestan<br />
+(1:19:45) &#8211; Khabib&#8217;s top pressure<br />
+(1:25:29) &#8211; Khabib vs Conor McGregor<br />
+(1:38:14) &#8211; Khabib&#8217;s toughest fight<br />
+(1:46:02) &#8211; Greatest MMA fighters of all time<br />
+(2:03:46) &#8211; Coaching<br />
+(2:09:19) &#8211; Daniel Cormier<br />
+(2:13:38) &#8211; Islam Makhachev<br />
+(2:23:35) &#8211; Dana White<br />
+(2:27:05) &#8211; Joe Rogan<br />
+(2:29:20) &#8211; Ali Abdelaziz<br />
+(2:31:57) &#8211; Football<br />
+(2:39:12) &#8211; Messi vs Ronaldo<br />
+(2:57:12) &#8211; Dubai<br />
+(3:01:03) &#8211; God<br />
+(3:08:46) &#8211; Advice for young people</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_khabib_nurmagomedov.mp3" length="5242880" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<rawvoice:pid>154507075</rawvoice:pid>
+	</item>
+<item>
+		<title>#488 – Infinity, Paradoxes that Broke Mathematics, Gödel Incompleteness &#038; the Multiverse &#8211; Joel David Hamkins</title>
+		<link>https://lexfridman.com/joel-david-hamkins/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=joel-david-hamkins</link>
+		<pubDate>Wed, 31 Dec 2025 21:24:33 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=6378</guid>
+		<comments>https://lexfridman.com/joel-david-hamkins/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/joel-david-hamkins/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Joel David Hamkins is a mathematician and philosopher specializing in set theory, the foundations of mathematics, and the nature of infinity, and he&#8217;s the #1 highest-rated user on MathOverflow. He is also the author of several books, including Proof and the Art of Mathematics and Lectures on the Philosophy of Mathematics. And he has a great blog called Infinitely More.<br />
+Thank you for listening ❤ Check out our sponsors: <a href="https://lexfridman.com/sponsors/ep488-sc">https://lexfridman.com/sponsors/ep488-sc</a><br />
+See below for timestamps, transcript, and to give feedback, submit questions, contact Lex, etc.</p>
+<p><b>Transcript:</b><br />
+<a href="https://lexfridman.com/joel-david-hamkins-transcript">https://lexfridman.com/joel-david-hamkins-transcript</a></p>
+<p><b>CONTACT LEX:</b><br />
+<b>Feedback</b> &#8211; give feedback to Lex: <a href="https://lexfridman.com/survey">https://lexfridman.com/survey</a><br />
+<b>AMA</b> &#8211; submit questions, videos or call-in: <a href="https://lexfridman.com/ama">https://lexfridman.com/ama</a><br />
+<b>Hiring</b> &#8211; join our team: <a href="https://lexfridman.com/hiring">https://lexfridman.com/hiring</a><br />
+<b>Other</b> &#8211; other ways to get in touch: <a href="https://lexfridman.com/contact">https://lexfridman.com/contact</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Joel&#8217;s X: <a href="https://x.com/JDHamkins">https://x.com/JDHamkins</a><br />
+Joel&#8217;s Website: <a href="https://jdh.hamkins.org">https://jdh.hamkins.org</a><br />
+Joel&#8217;s Substack: <a href="https://www.infinitelymore.xyz">https://www.infinitelymore.xyz</a><br />
+Joel&#8217;s MathOverflow: <a href="https://mathoverflow.net/users/1946/joel-david-hamkins">https://mathoverflow.net/users/1946/joel-david-hamkins</a><br />
+Joel&#8217;s Papers: <a href="https://jdh.hamkins.org/publications">https://jdh.hamkins.org/publications</a><br />
+Joel&#8217;s Books:<br />
+Lectures on the Philosophy of Mathematics: <a href="https://amzn.to/3MThaAt">https://amzn.to/3MThaAt</a><br />
+Proof and the Art of Mathematics: <a href="https://amzn.to/3YACc9A">https://amzn.to/3YACc9A</a></p>
+<p><b>SPONSORS:</b><br />
+To support this podcast, check out our sponsors &#38; get discounts:<br />
+<b>Perplexity:</b> AI-powered answer engine.<br />
+Go to <a href="https://lexfridman.com/s/perplexity-ep488-sc">https://www.perplexity.ai/</a><br />
+<b>Fin:</b> AI agent for customer service.<br />
+Go to <a href="https://lexfridman.com/s/fin-ep488-sc">https://fin.ai/lex</a><br />
+<b>Miro:</b> Online collaborative whiteboard platform.<br />
+Go to <a href="https://lexfridman.com/s/miro-ep488-sc">https://miro.com/</a><br />
+<b>CodeRabbit:</b> AI-powered code reviews.<br />
+Go to <a href="https://lexfridman.com/s/coderabbit-ep488-sc">https://coderabbit.ai/lex</a><br />
+<b>Chevron:</b> Reliable energy for data centers.<br />
+Go to <a href="https://lexfridman.com/s/chevron-ep488-sc">https://chevron.com/power</a><br />
+<b>Shopify:</b> Sell stuff online.<br />
+Go to <a href="https://lexfridman.com/s/shopify-ep488-sc">https://shopify.com/lex</a><br />
+<b>LMNT:</b> Zero-sugar electrolyte drink mix.<br />
+Go to <a href="https://lexfridman.com/s/lmnt-ep488-sc">https://drinkLMNT.com/lex</a><br />
+<b>MasterClass:</b> Online classes from world-class experts.<br />
+Go to <a href="https://lexfridman.com/s/masterclass-ep488-sc">https://masterclass.com/lexpod</a></p>
+<p><b>OUTLINE:</b><br />
+(00:00) &#8211; Introduction<br />
+(01:58) &#8211; Sponsors, Comments, and Reflections<br />
+(15:40) &#8211; Infinity &#38; paradoxes<br />
+(1:02:50) &#8211; Russell&#8217;s paradox<br />
+(1:15:57) &#8211; Gödel&#8217;s incompleteness theorems<br />
+(1:33:28) &#8211; Truth vs proof<br />
+(1:44:52) &#8211; The Halting Problem<br />
+(2:00:45) &#8211; Does infinity exist?<br />
+(2:18:19) &#8211; MathOverflow<br />
+(2:22:12) &#8211; The Continuum Hypothesis<br />
+(2:31:58) &#8211; Hardest problems in mathematics<br />
+(2:41:25) &#8211; Mathematical multiverse<br />
+(3:00:18) &#8211; Surreal numbers<br />
+(3:10:55) &#8211; Conway&#8217;s Game of Life<br />
+(3:13:11) &#8211; Computability theory<br />
+(3:23:04) &#8211; P vs NP<br />
+(3:26:21) &#8211; Greatest mathematicians in history<br />
+(3:40:05) &#8211; Infinite chess<br />
+(3:58:24) &#8211; Most beautiful idea in mathematics</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/ins.blubrry.com/takeituneasy/lex_ai_joel_david_hamkins.mp3" length="5242880" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<rawvoice:pid>149970343</rawvoice:pid>
+	</item>
+<item>
+		<title>#459 – DeepSeek, China, OpenAI, NVIDIA, xAI, TSMC, Stargate, and AI Megaclusters</title>
+		<link>https://lexfridman.com/deepseek-dylan-patel-nathan-lambert/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=deepseek-dylan-patel-nathan-lambert</link>
+		<pubDate>Mon, 03 Feb 2025 03:37:42 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=6155</guid>
+		<comments>https://lexfridman.com/deepseek-dylan-patel-nathan-lambert/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/deepseek-dylan-patel-nathan-lambert/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Dylan Patel is the founder of SemiAnalysis, a research &#38; analysis company specializing in semiconductors, GPUs, CPUs, and AI hardware. Nathan Lambert is a research scientist at the Allen Institute for AI (Ai2) and the author of a blog on AI called Interconnects.<br />
+Thank you for listening ❤ Check out our sponsors: <a href="https://lexfridman.com/sponsors/ep459-sc">https://lexfridman.com/sponsors/ep459-sc</a><br />
+See below for timestamps, transcript, and to give feedback, submit questions, contact Lex, etc.</p>
+<p><b>Transcript:</b><br />
+<a href="https://lexfridman.com/deepseek-dylan-patel-nathan-lambert-transcript">https://lexfridman.com/deepseek-dylan-patel-nathan-lambert-transcript</a></p>
+<p><b>CONTACT LEX:</b><br />
+<b>Feedback</b> &#8211; give feedback to Lex: <a href="https://lexfridman.com/survey">https://lexfridman.com/survey</a><br />
+<b>AMA</b> &#8211; submit questions, videos or call-in: <a href="https://lexfridman.com/ama">https://lexfridman.com/ama</a><br />
+<b>Hiring</b> &#8211; join our team: <a href="https://lexfridman.com/hiring">https://lexfridman.com/hiring</a><br />
+<b>Other</b> &#8211; other ways to get in touch: <a href="https://lexfridman.com/contact">https://lexfridman.com/contact</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Dylan&#8217;s X: <a href="https://x.com/dylan522p">https://x.com/dylan522p</a><br />
+SemiAnalysis: <a href="https://semianalysis.com/">https://semianalysis.com/</a><br />
+Nathan&#8217;s X: <a href="https://x.com/natolambert">https://x.com/natolambert</a><br />
+Nathan&#8217;s Blog: <a href="https://www.interconnects.ai/">https://www.interconnects.ai/</a><br />
+Nathan&#8217;s Podcast: <a href="https://www.interconnects.ai/podcast">https://www.interconnects.ai/podcast</a><br />
+Nathan&#8217;s Website: <a href="https://www.natolambert.com/">https://www.natolambert.com/</a><br />
+Nathan&#8217;s YouTube: <a href="https://youtube.com/@natolambert">https://youtube.com/@natolambert</a><br />
+Nathan&#8217;s Book: <a href="https://rlhfbook.com/">https://rlhfbook.com/</a></p>
+<p><b>SPONSORS:</b><br />
+To support this podcast, check out our sponsors &#38; get discounts:<br />
+<b>Invideo AI:</b> AI video generator.<br />
+Go to <a href="https://lexfridman.com/s/invideoai-ep459-sc">https://invideo.io/i/lexpod</a><br />
+<b>GitHub:</b> Developer platform and AI code editor.<br />
+Go to <a href="https://lexfridman.com/s/github-ep459-sc">https://gh.io/copilot</a><br />
+<b>Shopify:</b> Sell stuff online.<br />
+Go to <a href="https://lexfridman.com/s/shopify-ep459-sc">https://shopify.com/lex</a><br />
+<b>NetSuite:</b> Business management software.<br />
+Go to <a href="https://lexfridman.com/s/netsuite-ep459-sc">http://netsuite.com/lex</a><br />
+<b>AG1:</b> All-in-one daily nutrition drinks.<br />
+Go to <a href="https://lexfridman.com/s/ag1-ep459-sc">https://drinkag1.com/lex</a></p>
+<p><b>OUTLINE:</b><br />
+(00:00) &#8211; Introduction<br />
+(13:28) &#8211; DeepSeek-R1 and DeepSeek-V3<br />
+(35:02) &#8211; Low cost of training<br />
+(1:01:19) &#8211; DeepSeek compute cluster<br />
+(1:08:52) &#8211; Export controls on GPUs to China<br />
+(1:19:10) &#8211; AGI timeline<br />
+(1:28:35) &#8211; China&#8217;s manufacturing capacity<br />
+(1:36:30) &#8211; Cold war with China<br />
+(1:41:00) &#8211; TSMC and Taiwan<br />
+(2:04:38) &#8211; Best GPUs for AI<br />
+(2:19:30) &#8211; Why DeepSeek is so cheap<br />
+(2:32:49) &#8211; Espionage<br />
+(2:41:52) &#8211; Censorship<br />
+(2:54:46) &#8211; Andrej Karpathy and magic of RL<br />
+(3:05:17) &#8211; OpenAI o3-mini vs DeepSeek r1<br />
+(3:24:25) &#8211; NVIDIA<br />
+(3:28:53) &#8211; GPU smuggling<br />
+(3:35:30) &#8211; DeepSeek training on OpenAI data<br />
+(3:45:59) &#8211; AI megaclusters<br />
+(4:21:21) &#8211; Who wins the race to AGI?<br />
+(4:31:34) &#8211; AI agents<br />
+(4:40:16) &#8211; Programming and AI<br />
+(4:47:43) &#8211; Open source<br />
+(4:56:55) &#8211; Stargate<br />
+(5:04:24) &#8211; Future of AI</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_deepseek_dylan_patel_nathan_lambert.mp3" length="227766150" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>5:16:20</itunes:duration>
+		<rawvoice:pid>141710712</rawvoice:pid>
+	</item>
+<item>
+		<title>#447 – Cursor Team: Future of Programming with AI</title>
+		<link>https://lexfridman.com/cursor-team/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=cursor-team</link>
+		<pubDate>Sun, 06 Oct 2024 18:47:46 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=6042</guid>
+		<comments>https://lexfridman.com/cursor-team/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/cursor-team/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Aman Sanger, Arvid Lunnemark, Michael Truell, and Sualeh Asif are creators of Cursor, a popular code editor that specializes in AI-assisted programming.<br />
+Thank you for listening ❤ Check out our sponsors: <a href="https://lexfridman.com/sponsors/ep447-sc">https://lexfridman.com/sponsors/ep447-sc</a><br />
+See below for timestamps, transcript, and to give feedback, submit questions, contact Lex, etc.</p>
+<p><b>Transcript:</b><br />
+<a href="https://lexfridman.com/cursor-team-transcript">https://lexfridman.com/cursor-team-transcript</a></p>
+<p><b>CONTACT LEX:</b><br />
+<b>Feedback</b> &#8211; give feedback to Lex: <a href="https://lexfridman.com/survey">https://lexfridman.com/survey</a><br />
+<b>AMA</b> &#8211; submit questions, videos or call-in: <a href="https://lexfridman.com/ama">https://lexfridman.com/ama</a><br />
+<b>Hiring</b> &#8211; join our team: <a href="https://lexfridman.com/hiring">https://lexfridman.com/hiring</a><br />
+<b>Other</b> &#8211; other ways to get in touch: <a href="https://lexfridman.com/contact">https://lexfridman.com/contact</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Cursor Website: <a href="https://cursor.com">https://cursor.com</a><br />
+Cursor on X: <a href="https://x.com/cursor_ai">https://x.com/cursor_ai</a><br />
+Anysphere Website: <a href="https://anysphere.inc/">https://anysphere.inc/</a><br />
+Aman&#8217;s X: <a href="https://x.com/amanrsanger">https://x.com/amanrsanger</a><br />
+Aman&#8217;s Website: <a href="https://amansanger.com/">https://amansanger.com/</a><br />
+Arvid&#8217;s X: <a href="https://x.com/ArVID220u">https://x.com/ArVID220u</a><br />
+Arvid&#8217;s Website: <a href="https://arvid.xyz/">https://arvid.xyz/</a><br />
+Michael&#8217;s Website: <a href="https://mntruell.com/">https://mntruell.com/</a><br />
+Michael&#8217;s LinkedIn: <a href="https://bit.ly/3zIDkPN">https://bit.ly/3zIDkPN</a><br />
+Sualeh&#8217;s X: <a href="https://x.com/sualehasif996">https://x.com/sualehasif996</a><br />
+Sualeh&#8217;s Website: <a href="https://sualehasif.me/">https://sualehasif.me/</a></p>
+<p><b>SPONSORS:</b><br />
+To support this podcast, check out our sponsors &#38; get discounts:<br />
+<b>Encord:</b> AI tooling for annotation &#38; data management.<br />
+Go to <a href="https://lexfridman.com/s/encord-ep447-sc">https://encord.com/lex</a><br />
+<b>MasterClass:</b> Online classes from world-class experts.<br />
+Go to <a href="https://lexfridman.com/s/masterclass-ep447-sc">https://masterclass.com/lexpod</a><br />
+<b>Shopify:</b> Sell stuff online.<br />
+Go to <a href="https://lexfridman.com/s/shopify-ep447-sc">https://shopify.com/lex</a><br />
+<b>NetSuite:</b> Business management software.<br />
+Go to <a href="https://lexfridman.com/s/netsuite-ep447-sc">http://netsuite.com/lex</a><br />
+<b>AG1:</b> All-in-one daily nutrition drinks.<br />
+Go to <a href="https://lexfridman.com/s/ag1-ep447-sc">https://drinkag1.com/lex</a></p>
+<p><b>OUTLINE:</b><br />
+(00:00) &#8211; Introduction<br />
+(09:25) &#8211; Code editor basics<br />
+(11:35) &#8211; GitHub Copilot<br />
+(18:53) &#8211; Cursor<br />
+(25:20) &#8211; Cursor Tab<br />
+(31:35) &#8211; Code diff<br />
+(39:46) &#8211; ML details<br />
+(45:20) &#8211; GPT vs Claude<br />
+(51:54) &#8211; Prompt engineering<br />
+(59:20) &#8211; AI agents<br />
+(1:13:18) &#8211; Running code in background<br />
+(1:17:57) &#8211; Debugging<br />
+(1:23:25) &#8211; Dangerous code<br />
+(1:34:35) &#8211; Branching file systems<br />
+(1:37:47) &#8211; Scaling challenges<br />
+(1:51:58) &#8211; Context<br />
+(1:57:05) &#8211; OpenAI o1<br />
+(2:08:27) &#8211; Synthetic data<br />
+(2:12:14) &#8211; RLHF vs RLAIF<br />
+(2:14:01) &#8211; Fields Medal for AI<br />
+(2:16:43) &#8211; Scaling laws<br />
+(2:25:32) &#8211; The future of programming</p>
+<p><b>PODCAST LINKS:</b><br />
+&#8211; Podcast Website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+&#8211; Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+&#8211; Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+&#8211; RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+&#8211; Podcast Playlist: <a href="https://www.youtube.com/playlist?list=PLrAXtmErZgOdP_8GztsuKi9nrraNbKKp4">https://www.youtube.com/playlist?list=PLrAXtmErZgOdP_8GztsuKi9nrraNbKKp4</a><br />
+&#8211; Clips Channel: <a href="https://www.youtube.com/lexclips">https://www.youtube.com/lexclips</a></p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_cursor_team.mp3" length="117500658" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>2:37:38</itunes:duration>
+		<rawvoice:pid>137138047</rawvoice:pid>
+	</item>
+<item>
+		<title>#438 – Elon Musk: Neuralink and the Future of Humanity</title>
+		<link>https://lexfridman.com/elon-musk-and-neuralink-team/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=elon-musk-and-neuralink-team</link>
+		<pubDate>Fri, 02 Aug 2024 19:19:20 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=5968</guid>
+		<comments>https://lexfridman.com/elon-musk-and-neuralink-team/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/elon-musk-and-neuralink-team/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Elon Musk is CEO of Neuralink, SpaceX, Tesla, xAI, and CTO of X. DJ Seo is COO &#38; President of Neuralink. Matthew MacDougall is Head Neurosurgeon at Neuralink. Bliss Chapman is Brain Interface Software Lead at Neuralink. Noland Arbaugh is the first human to have a Neuralink device implanted in his brain.</p>
+<p><strong>Transcript</strong>: <a href="https://lexfridman.com/elon-musk-and-neuralink-team-transcript">https://lexfridman.com/elon-musk-and-neuralink-team-transcript</a></p>
+<p><strong>Please support this podcast </strong>by checking out our sponsors<strong>:</strong><br />
+<a href="https://lexfridman.com/sponsors/ep438-sc">https://lexfridman.com/sponsors/ep438-sc</a></p>
+<p><strong>SPONSOR DETAILS:</strong><br />
+&#8211; <b>Cloaked</b>: <a href="https://cloaked.com/lex">https://cloaked.com/lex</a> and use code LexPod to get 25% off<br />
+&#8211; <b>MasterClass</b>: <a href="https://masterclass.com/lexpod">https://masterclass.com/lexpod</a> to get 15% off<br />
+&#8211; <b>Notion</b>: <a href="https://notion.com/lex">https://notion.com/lex</a><br />
+&#8211; <b>LMNT</b>: <a href="https://drinkLMNT.com/lex">https://drinkLMNT.com/lex</a> to get free sample pack<br />
+&#8211; <b>Motific</b>: <a href="https://motific.ai">https://motific.ai</a><br />
+&#8211; <b>BetterHelp</b>: <a href="https://betterhelp.com/lex">https://betterhelp.com/lex</a> to get 10% off</p>
+<p><span class="yt-core-attributed-string--link-inherit-color" dir="auto"><strong>CONTACT LEX</strong>:<br />
+</span> <strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto">Feedback</span></strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto"> &#8211; give feedback to Lex: </span><span class="yt-core-attributed-string--link-inherit-color" dir="auto"><a class="yt-core-attributed-string__link yt-core-attributed-string__link--call-to-action-color" tabindex="0" href="https://www.youtube.com/redirect?event=video_description&#38;redir_token=QUFFLUhqbmlKeXdPcnJMQkZVT1d4VGtMT2VSM081OUtwZ3xBQ3Jtc0trNVNPb2N4WW9vMXNIQ0hHeGx1cHExaWF2MjMwQmpqSG5xZDdOM0JlTUJiZEF5S2hva3d1M1ZsX29EQjgydXJ0blJuSDVRRHFNR0tsSnVaYTdVZnJRQ08tOXY1YlNwQ3QzUGNyT3JwRkh2cF9BaXp5UQ&#38;q=https%3A%2F%2Flexfridman.com%2Fsurvey&#38;v=Kbk9BiPhm7o" target="_blank" rel="nofollow noopener">https://lexfridman.com/survey</a></span><br />
+<strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto">AMA</span></strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto"> &#8211; submit questions, videos or call-in: </span><span class="yt-core-attributed-string--link-inherit-color" dir="auto"><a class="yt-core-attributed-string__link yt-core-attributed-string__link--call-to-action-color" tabindex="0" href="https://www.youtube.com/redirect?event=video_description&#38;redir_token=QUFFLUhqbUYzZmRoMTJtNjZFSnBGRHh3cGpDSDRQYWZmUXxBQ3Jtc0ttVm9Ba0ZYajN2cmwtU244ZGowNTNtVzIwMk5fSnRnOVEzMFk1V3dKUDdtTnB1SnhGUU9pUWpUU3VCZVBGM2l2WU9ORVBPNTRVdmRUV2U2SURrTTdoWWYyNURaZFNuSGl6Yk1uVUxvTGFxeGhFQUJRSQ&#38;q=https%3A%2F%2Flexfridman.com%2Fama&#38;v=Kbk9BiPhm7o" target="_blank" rel="nofollow noopener">https://lexfridman.com/ama</a></span><br />
+<strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto">Hiring</span></strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto"> &#8211; join our team: </span><span class="yt-core-attributed-string--link-inherit-color" dir="auto"><a class="yt-core-attributed-string__link yt-core-attributed-string__link--call-to-action-color" tabindex="0" href="https://www.youtube.com/redirect?event=video_description&#38;redir_token=QUFFLUhqa25aeHp3bVMzY2lKUzFHX0hZdXNJeDV0ZDJDUXxBQ3Jtc0ttOFJXa3o0YXBudWVRMWhFdnl0MEk4dnVpRk54ZU1iY2c5djFTbGdhbS1sX28tQkhvRHoxWlJzRWU2SU8wcWR6d292TmVWanh5ckRPOU9fU2JXTE9hUzBOWGtSenRlcG91YzdpLWliem5xTEhacE5KVQ&#38;q=https%3A%2F%2Flexfridman.com%2Fhiring&#38;v=Kbk9BiPhm7o" target="_blank" rel="nofollow noopener">https://lexfridman.com/hiring</a></span><br />
+<strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto">Other</span></strong><span class="yt-core-attributed-string--link-inherit-color" dir="auto"> &#8211; other ways to get in touch: </span><span class="yt-core-attributed-string--link-inherit-color" dir="auto"><a class="yt-core-attributed-string__link yt-core-attributed-string__link--call-to-action-color" tabindex="0" href="https://www.youtube.com/redirect?event=video_description&#38;redir_token=QUFFLUhqa3BjRHVHNHY0cXNNWVFydFFTZzdrZ2dmUlV2d3xBQ3Jtc0ttNjZwTEs1Z2F4RTQ2T0VnN1VOQzlILXQ5a05OZFo3WWd6NGw5aGlpV2FXR0cyZHRueHUtVFJydjhRVExOQmhxUldpU3RkelVKcUZ3Nk5qV1pCbk9PU1dMdWZyNm9yMVF0WUh4b3NFSlVka3dwUUZHbw&#38;q=https%3A%2F%2Flexfridman.com%2Fcontact&#38;v=Kbk9BiPhm7o" target="_blank" rel="nofollow noopener">https://lexfridman.com/contact</a></span></p>
+<p><b>EPISODE LINKS:</b><br />
+Neuralink&#8217;s X: <a href="https://x.com/neuralink">https://x.com/neuralink</a><br />
+Neuralink&#8217;s Website: <a href="https://neuralink.com/">https://neuralink.com/</a><br />
+Elon&#8217;s X: <a href="https://x.com/elonmusk">https://x.com/elonmusk</a><br />
+DJ&#8217;s X: <a href="https://x.com/djseo_">https://x.com/djseo_</a><br />
+Matthew&#8217;s X: <a href="https://x.com/matthewmacdoug4">https://x.com/matthewmacdoug4</a><br />
+Bliss&#8217;s X: <a href="https://x.com/chapman_bliss">https://x.com/chapman_bliss</a><br />
+Noland&#8217;s X: <a href="https://x.com/ModdedQuad">https://x.com/ModdedQuad</a><br />
+xAI: <a href="https://x.com/xai">https://x.com/xai</a><br />
+Tesla: <a href="https://x.com/tesla">https://x.com/tesla</a><br />
+Tesla Optimus: <a href="https://x.com/tesla_optimus">https://x.com/tesla_optimus</a><br />
+Tesla AI: <a href="https://x.com/Tesla_AI">https://x.com/Tesla_AI</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(09:26) &#8211; Elon Musk<br />
+(12:42) &#8211; Telepathy<br />
+(19:22) &#8211; Power of human mind<br />
+(23:49) &#8211; Future of Neuralink<br />
+(29:04) &#8211; Ayahuasca<br />
+(38:33) &#8211; Merging with AI<br />
+(43:21) &#8211; xAI<br />
+(45:34) &#8211; Optimus<br />
+(52:24) &#8211; Elon&#8217;s approach to problem-solving<br />
+(1:09:59) &#8211; History and geopolitics<br />
+(1:14:30) &#8211; Lessons of history<br />
+(1:18:49) &#8211; Collapse of empires<br />
+(1:26:32) &#8211; Time<br />
+(1:29:14) &#8211; Aliens and curiosity<br />
+(1:36:48) &#8211; DJ Seo<br />
+(1:44:57) &#8211; Neural dust<br />
+(1:51:40) &#8211; History of brain–computer interface<br />
+(1:59:44) &#8211; Biophysics of neural interfaces<br />
+(2:10:12) &#8211; How Neuralink works<br />
+(2:16:03) &#8211; Lex with Neuralink implant<br />
+(2:36:01) &#8211; Digital telepathy<br />
+(2:47:03) &#8211; Retracted threads<br />
+(2:52:38) &#8211; Vertical integration<br />
+(2:59:32) &#8211; Safety<br />
+(3:09:27) &#8211; Upgrades<br />
+(3:18:30) &#8211; Future capabilities<br />
+(3:47:46) &#8211; Matthew MacDougall<br />
+(3:53:35) &#8211; Neuroscience<br />
+(4:00:44) &#8211; Neurosurgery<br />
+(4:11:48) &#8211; Neuralink surgery<br />
+(4:30:57) &#8211; Brain surgery details<br />
+(4:46:40) &#8211; Implanting Neuralink on self<br />
+(5:02:34) &#8211; Life and death<br />
+(5:11:54) &#8211; Consciousness<br />
+(5:14:48) &#8211; Bliss Chapman<br />
+(5:28:04) &#8211; Neural signal<br />
+(5:34:56) &#8211; Latency<br />
+(5:39:36) &#8211; Neuralink app<br />
+(5:44:17) &#8211; Intention vs action<br />
+(5:55:31) &#8211; Calibration<br />
+(6:05:03) &#8211; Webgrid<br />
+(6:28:05) &#8211; Neural decoder<br />
+(6:48:40) &#8211; Future improvements<br />
+(6:57:36) &#8211; Noland Arbaugh<br />
+(6:57:45) &#8211; Becoming paralyzed<br />
+(7:11:20) &#8211; First Neuralink human participant<br />
+(7:15:21) &#8211; Day of surgery<br />
+(7:33:08) &#8211; Moving mouse with brain<br />
+(7:58:27) &#8211; Webgrid<br />
+(8:06:28) &#8211; Retracted threads<br />
+(8:14:53) &#8211; App improvements<br />
+(8:21:38) &#8211; Gaming<br />
+(8:32:36) &#8211; Future Neuralink capabilities<br />
+(8:35:31) &#8211; Controlling Optimus robot<br />
+(8:39:53) &#8211; God<br />
+(8:41:58) &#8211; Hope</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_elon_musk_and_neuralink_team.mp3" length="5242880" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<rawvoice:pid>133400129</rawvoice:pid>
+	</item>
+<item>
+		<title>#419 – Sam Altman: OpenAI, GPT-5, Sora, Board Saga, Elon Musk, Ilya, Power &#038; AGI</title>
+		<link>https://lexfridman.com/sam-altman-2/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=sam-altman-2</link>
+		<pubDate>Mon, 18 Mar 2024 15:04:35 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=5834</guid>
+		<comments>https://lexfridman.com/sam-altman-2/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/sam-altman-2/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Sam Altman is the CEO of OpenAI, the company behind GPT-4, ChatGPT, Sora, and many other state-of-the-art AI technologies. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Cloaked</b>: <a href="https://cloaked.com/lex">https://cloaked.com/lex</a> and use code LexPod to get 25% off<br />
+&#8211; <b>Shopify</b>: <a href="https://shopify.com/lex">https://shopify.com/lex</a> to get $1 per month trial<br />
+&#8211; <b>BetterHelp</b>: <a href="https://betterhelp.com/lex">https://betterhelp.com/lex</a> to get 10% off<br />
+&#8211; <b>ExpressVPN</b>: <a href="https://expressvpn.com/lexpod">https://expressvpn.com/lexpod</a> to get 3 months free</p>
+<p>Transcript: <a href="https://lexfridman.com/sam-altman-2-transcript">https://lexfridman.com/sam-altman-2-transcript</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Sam&#8217;s X: <a href="https://x.com/sama">https://x.com/sama</a><br />
+Sam&#8217;s Blog: <a href="https://blog.samaltman.com/">https://blog.samaltman.com/</a><br />
+OpenAI&#8217;s X: <a href="https://x.com/OpenAI">https://x.com/OpenAI</a><br />
+OpenAI&#8217;s Website: <a href="https://openai.com">https://openai.com</a><br />
+ChatGPT Website: <a href="https://chat.openai.com/">https://chat.openai.com/</a><br />
+Sora Website: <a href="https://openai.com/sora">https://openai.com/sora</a><br />
+GPT-4 Website: <a href="https://openai.com/research/gpt-4">https://openai.com/research/gpt-4</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(07:51) &#8211; OpenAI board saga<br />
+(25:17) &#8211; Ilya Sutskever<br />
+(31:26) &#8211; Elon Musk lawsuit<br />
+(41:18) &#8211; Sora<br />
+(51:09) &#8211; GPT-4<br />
+(1:02:18) &#8211; Memory &#38; privacy<br />
+(1:09:22) &#8211; Q*<br />
+(1:12:58) &#8211; GPT-5<br />
+(1:16:13) &#8211; $7 trillion of compute<br />
+(1:24:22) &#8211; Google and Gemini<br />
+(1:35:26) &#8211; Leap to GPT-5<br />
+(1:39:10) &#8211; AGI<br />
+(1:57:44) &#8211; Aliens</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_sam_altman_2.mp3" length="87884352" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>2:02:04</itunes:duration>
+		<rawvoice:pid>131583526</rawvoice:pid>
+	</item>
+<item>
+		<title>#410 – Ben Shapiro vs Destiny Debate: Politics, Jan 6, Israel, Ukraine &#038; Wokeism</title>
+		<link>https://lexfridman.com/ben-shapiro-destiny-debate/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=ben-shapiro-destiny-debate</link>
+		<pubDate>Tue, 23 Jan 2024 17:06:47 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=5756</guid>
+		<comments>https://lexfridman.com/ben-shapiro-destiny-debate/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/ben-shapiro-destiny-debate/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Ben Shapiro is a conservative political commentator, host of The Ben Shapiro Show, co-founder of The Daily Wire, and author of The Authoritarian Moment and other books. Steven Bonnell, aka Destiny, is a liberal political commentator and a live streamer on YouTube. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>AG1</b>: <a href="https://drinkag1.com/lex">https://drinkag1.com/lex</a> to get 1 month supply of fish oil<br />
+&#8211; <b>Policygenius</b>: <a href="https://policygenius.com/lex">https://policygenius.com/lex</a><br />
+&#8211; <b>ExpressVPN</b>: <a href="https://expressvpn.com/lexpod">https://expressvpn.com/lexpod</a> to get 3 months free<br />
+&#8211; <b>InsideTracker</b>: <a href="https://insidetracker.com/lex">https://insidetracker.com/lex</a> to get 20% off</p>
+<p>Transcript: <a href="https://lexfridman.com/ben-shapiro-destiny-debate-transcript">https://lexfridman.com/ben-shapiro-destiny-debate-transcript</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Ben&#8217;s X: <a href="https://twitter.com/benshapiro">https://twitter.com/benshapiro</a><br />
+Ben&#8217;s Instagram: <a href="https://instagram.com/officialbenshapiro">https://instagram.com/officialbenshapiro</a><br />
+Ben&#8217;s YouTube: <a href="https://youtube.com/@BenShapiro">https://youtube.com/@BenShapiro</a><br />
+Daily Wire: <a href="https://dailywire.com">https://dailywire.com</a><br />
+Destiny&#8217;s YouTube: <a href="https://youtube.com/destiny">https://youtube.com/destiny</a><br />
+Destiny&#8217;s X: <a href="https://twitter.com/TheOmniLiberal">https://twitter.com/TheOmniLiberal</a><br />
+Destiny&#8217;s Subreddit: <a href="https://reddit.com/r/Destiny">https://reddit.com/r/Destiny</a><br />
+Destiny&#8217;s Website: <a href="https://destiny.gg">https://destiny.gg</a><br />
+Destiny&#8217;s Instragram: <a href="https://instagram.com/destiny">https://instagram.com/destiny</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(07:21) &#8211; Liberalism vs Conservatism<br />
+(12:34) &#8211; Education<br />
+(28:51) &#8211; Trump vs Biden<br />
+(49:16) &#8211; Foreign policy<br />
+(1:02:13) &#8211; Israel-Palestine<br />
+(1:17:10) &#8211; Russia-Ukraine<br />
+(1:28:50) &#8211; January 6<br />
+(1:44:48) &#8211; Abuse of power<br />
+(1:54:46) &#8211; Wokeism<br />
+(2:01:27) &#8211; Institutional capture<br />
+(2:15:21) &#8211; Monogamy vs open relationships<br />
+(2:20:14) &#8211; Rapid fire questions</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_ben_shapiro_destiny_debate.mp3" length="106620070" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>2:25:57</itunes:duration>
+		<rawvoice:pid>128586600</rawvoice:pid>
+	</item>
+<item>
+		<title>#402 – Michael Malice: Thanksgiving Pirate Special</title>
+		<link>https://lexfridman.com/michael-malice-7/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=michael-malice-7</link>
+		<pubDate>Sat, 25 Nov 2023 21:11:31 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=5691</guid>
+		<comments>https://lexfridman.com/michael-malice-7/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/michael-malice-7/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Michael Malice is a political thinker, podcaster, author, and anarchist. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Policygenius</b>: <a href="https://www.policygenius.com/">https://www.policygenius.com/</a><br />
+&#8211; <b>MasterClass</b>: <a href="https://masterclass.com/lexpod">https://masterclass.com/lexpod</a> to get 15% off<br />
+&#8211; <b>Shopify</b>: <a href="https://shopify.com/lex">https://shopify.com/lex</a> to get $1 per month trial<br />
+&#8211; <b>BetterHelp</b>: <a href="https://betterhelp.com/lex">https://betterhelp.com/lex</a> to get 10% off<br />
+&#8211; <b>Eight Sleep</b>: <a href="https://www.eightsleep.com/lex">https://www.eightsleep.com/lex</a> to get special savings</p>
+<p>Transcript: <a href="https://lexfridman.com/michael-malice-7-transcript">https://lexfridman.com/michael-malice-7-transcript</a></p>
+<p><b>EPISODE LINKS:</b><br />
+Michael&#8217;s Twitter: <a href="https://twitter.com/michaelmalice">https://twitter.com/michaelmalice</a><br />
+Michael&#8217;s Community: <a href="https://malice.locals.com">https://malice.locals.com</a><br />
+Michael&#8217;s YouTube: <a href="https://www.youtube.com/MichaelMaliceofficial">https://www.youtube.com/MichaelMaliceofficial</a><br />
+Michael&#8217;s Website: <a href="http://michaelmalice.com/about">http://michaelmalice.com/about</a><br />
+Your Welcome podcast: <a href="https://bit.ly/30q8oz1">https://bit.ly/30q8oz1</a><br />
+Jake Michael Singer (sculptor): <a href="https://instagram.com/jakemichaelsinger">https://instagram.com/jakemichaelsinger</a><br />
+Books:<br />
+The White Pill: <a href="http://whitepillbook.com">http://whitepillbook.com</a><br />
+The Anarchist Handbook: <a href="https://amzn.to/3yUb2f0">https://amzn.to/3yUb2f0</a><br />
+The New Right: <a href="https://amzn.to/34gxLo3">https://amzn.to/34gxLo3</a><br />
+Dear Reader: <a href="https://amzn.to/2HPPlHS">https://amzn.to/2HPPlHS</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(10:15) &#8211; Beauty and mantis shrimp<br />
+(14:43) &#8211; Parrots, Pirates, and Monty Python<br />
+(20:55) &#8211; Humor and absurdity<br />
+(28:16) &#8211; Thanksgiving<br />
+(56:56) &#8211; Unboxing the mystery box<br />
+(1:12:54) &#8211; Karl Marx and religion<br />
+(1:21:11) &#8211; Art<br />
+(1:25:25) &#8211; Books<br />
+(1:38:02) &#8211; How to be happy<br />
+(1:40:12) &#8211; Depression<br />
+(1:41:15) &#8211; Fear<br />
+(1:42:42) &#8211; Betrayal</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_michael_malice_7.mp3" length="77647968" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:47:51</itunes:duration>
+		<rawvoice:pid>124226256</rawvoice:pid>
+	</item>
+<item>
+		<title>#300 – Joe Rogan: Comedy, Controversy, Aliens, UFOs, Putin, CIA, and Freedom</title>
+		<link>https://lexfridman.com/joe-rogan-2/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=joe-rogan-2</link>
+		<pubDate>Mon, 04 Jul 2022 13:14:02 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=5063</guid>
+		<comments>https://lexfridman.com/joe-rogan-2/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/joe-rogan-2/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Joe Rogan is a comedian, UFC commentator, and host of the Joe Rogan Experience. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Theragun</b>: <a href="https://therabody.com/lex">https://therabody.com/lex</a><br />
+&#8211; <b>Athletic Greens</b>: <a href="https://athleticgreens.com/lex">https://athleticgreens.com/lex</a> and use code LEX to get 1 month of fish oil<br />
+&#8211; <b>InsideTracker</b>: <a href="https://insidetracker.com/lex">https://insidetracker.com/lex</a> to get 20% off<br />
+&#8211; <b>Eight Sleep</b>: <a href="https://www.eightsleep.com/lex">https://www.eightsleep.com/lex</a> and use code LEX to get special savings<br />
+&#8211; <b>ExpressVPN</b>: <a href="https://expressvpn.com/lexpod">https://expressvpn.com/lexpod</a> and use code LexPod to get 3 months free</p>
+<p><b>EPISODE LINKS:</b><br />
+Joe&#8217;s Instagram: <a href="https://instagram.com/joerogan">https://instagram.com/joerogan</a><br />
+Joe&#8217;s Twitter: <a href="https://twitter.com/joerogan">https://twitter.com/joerogan</a><br />
+JRE (Spotify): <a href="https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk">https://open.spotify.com/show/4rOoJ6Egrf8K2IrywzwOMk</a><br />
+JRE (YouTube): <a href="https://youtube.com/c/joerogan">https://youtube.com/c/joerogan</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(09:03) &#8211; Discipline<br />
+(13:06) &#8211; Controversy<br />
+(33:22) &#8211; UFOs and aliens<br />
+(43:34) &#8211; Intelligence agencies<br />
+(48:58) &#8211; Trust<br />
+(54:21) &#8211; Greatest comedians<br />
+(1:12:16) &#8211; Childhood<br />
+(1:19:46) &#8211; Advice for young people<br />
+(1:30:22) &#8211; Relationships<br />
+(1:35:00) &#8211; Putin, Ukraine, and Russia</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_joe_rogan_2.mp3" length="80295999" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:49:30</itunes:duration>
+	</item>
+<item>
+		<title>#260 &#8211; Georges St-Pierre, John Danaher &#038; Gordon Ryan: The Greatest of All Time</title>
+		<link>https://lexfridman.com/georges-st-pierre-john-danaher-gordon-ryan/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=georges-st-pierre-john-danaher-gordon-ryan</link>
+		<pubDate>Sun, 30 Jan 2022 20:47:31 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4907</guid>
+		<comments>https://lexfridman.com/georges-st-pierre-john-danaher-gordon-ryan/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/georges-st-pierre-john-danaher-gordon-ryan/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Georges St-Pierre is an MMA fighter. John Danaher is a martial arts coach. Gordon Ryan is a submission grappler. Each are considered by many to be the greatest of all time in each of their respective disciplines. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Calm</b>: <a href="https://www.calm.com/lex">https://www.calm.com/lex</a> to get 40% off<br />
+&#8211; <b>InsideTracker</b>: <a href="https://insidetracker.com/lex">https://insidetracker.com/lex</a> and use code Lex25 to get 25% off<br />
+&#8211; <b>Blinkist</b>: <a href="https://blinkist.com/lex">https://blinkist.com/lex</a> and use code LEX to get 25% off premium<br />
+&#8211; <b>Eight Sleep</b>: <a href="https://www.eightsleep.com/lex">https://www.eightsleep.com/lex</a> and use code LEX to get special savings<br />
+&#8211; <b>ExpressVPN</b>: <a href="https://expressvpn.com/lexpod">https://expressvpn.com/lexpod</a> and use code LexPod to get 3 months free</p>
+<p><b>EPISODE LINKS:</b><br />
+Georges&#8217;s Instagram: <a href="https://www.instagram.com/georgesstpierre/">https://www.instagram.com/georgesstpierre/</a><br />
+John&#8217;s Instagram: <a href="https://www.instagram.com/danaherjohn/">https://www.instagram.com/danaherjohn/</a><br />
+Gordon&#8217;s Instagram: <a href="https://www.instagram.com/gordonlovesjiujitsu/">https://www.instagram.com/gordonlovesjiujitsu/</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(07:35) &#8211; Success<br />
+(22:35) &#8211; Trash talk<br />
+(25:42) &#8211; Doubt<br />
+(34:06) &#8211; Emotions<br />
+(46:01) &#8211; Gordon&#8217;s beef with André Galvão<br />
+(50:11) &#8211; Diet<br />
+(1:00:12) &#8211; Training<br />
+(1:28:21) &#8211; Human nature and combat sports<br />
+(1:39:34) &#8211; MMA vs Grappling<br />
+(1:48:53) &#8211; Gordon Ryan vs Felipe Pena<br />
+(1:52:40) &#8211; GSP and shoot boxing<br />
+(2:03:56) &#8211; GSP vs Khabib<br />
+(2:11:56) &#8211; Pankration<br />
+(2:15:08) &#8211; Effective grappling and takedowns<br />
+(2:30:40) &#8211; Aliens and Mars<br />
+(2:47:20) &#8211; Robots<br />
+(2:51:15) &#8211; Advice for young people</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_gsp_danaher_gordon.mp3" length="137308628" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+	</item>
+<item>
+		<title>#252 &#8211; Elon Musk: SpaceX, Mars, Tesla Autopilot, Self-Driving, Robotics, and AI</title>
+		<link>https://lexfridman.com/elon-musk-3/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=elon-musk-3</link>
+		<pubDate>Tue, 28 Dec 2021 19:02:28 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4880</guid>
+		<comments>https://lexfridman.com/elon-musk-3/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/elon-musk-3/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Elon Musk is CEO of SpaceX, Tesla, Neuralink, and Boring Company. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Athletic Greens</b>: <a href="https://athleticgreens.com/lex">https://athleticgreens.com/lex</a> and use code LEX to get 1 month of fish oil<br />
+&#8211; <b>ButcherBox</b>: <a href="https://butcherbox.com/lex">https://butcherbox.com/lex</a> to get offers &#38; discounts<br />
+&#8211; <b>InsideTracker</b>: <a href="https://insidetracker.com/lex">https://insidetracker.com/lex</a> and use code Lex25 to get 25% off<br />
+&#8211; <b>ROKA</b>: <a href="https://roka.com/">https://roka.com/</a> and use code LEX to get 20% off your first order<br />
+&#8211; <b>Eight Sleep</b>: <a href="https://www.eightsleep.com/lex">https://www.eightsleep.com/lex</a> and use code LEX to get special savings</p>
+<p><b>EPISODE LINKS:</b><br />
+Elon&#8217;s Twitter: <a href="https://twitter.com/elonmusk">https://twitter.com/elonmusk</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(07:38) &#8211; Elon singing<br />
+(08:26) &#8211; SpaceX human spaceflight<br />
+(15:12) &#8211; Starship<br />
+(23:48) &#8211; Quitting is not in my nature<br />
+(25:23) &#8211; Thinking process<br />
+(34:56) &#8211; Humans on Mars<br />
+(40:27) &#8211; Colonizing Mars<br />
+(44:13) &#8211; Wormholes<br />
+(48:50) &#8211; Forms of government on Mars<br />
+(55:54) &#8211; Smart contracts<br />
+(57:24) &#8211; Dogecoin<br />
+(58:55) &#8211; Cryptocurrency and Money<br />
+(1:05:04) &#8211; Bitcoin vs Dogecoin<br />
+(1:07:47) &#8211; Satoshi Nakamoto<br />
+(1:10:10) &#8211; Tesla Autopilot<br />
+(1:13:16) &#8211; Tesla Self-Driving<br />
+(1:25:19) &#8211; Neural networks<br />
+(1:34:16) &#8211; When will Tesla solve self-driving?<br />
+(1:36:19) &#8211; Tesla FSD v11<br />
+(1:43:53) &#8211; Tesla Bot<br />
+(1:54:33) &#8211; History<br />
+(2:02:24) &#8211; Putin<br />
+(2:08:04) &#8211; Meme Review<br />
+(2:22:29) &#8211; Stand-up comedy<br />
+(2:24:03) &#8211; Rick and Morty<br />
+(2:25:42) &#8211; Advice for young people<br />
+(2:33:39) &#8211; Love<br />
+(2:36:33) &#8211; Meaning of life</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_elon_musk_3.mp3" length="117023635" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>2:39:30</itunes:duration>
+	</item>
+<item>
+		<title>#209 &#8211; Luís and João Batalha: Fermat&#8217;s Library and the Art of Studying Papers</title>
+		<link>https://lexfridman.com/luis-and-joao-batalha/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=luis-and-joao-batalha</link>
+		<pubDate>Mon, 09 Aug 2021 03:15:55 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4714</guid>
+		<comments>https://lexfridman.com/luis-and-joao-batalha/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/luis-and-joao-batalha/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Luis and Joao Batalha are co-founders of Fermat&#8217;s Library. Please support this podcast by checking out our sponsors:<br />
+&#8211; <b>Skiff</b>: <a href="https://skiff.org/lex">https://skiff.org/lex</a> to get early access<br />
+&#8211; <b>SimpliSafe</b>: <a href="https://simplisafe.com/lex">https://simplisafe.com/lex</a> and use code LEX to get a free security camera<br />
+&#8211; <b>Indeed</b>: <a href="https://indeed.com/lex">https://indeed.com/lex</a> to get $75 credit<br />
+&#8211; <b>NetSuite</b>: <a href="http://netsuite.com/lex">http://netsuite.com/lex</a> to get free product tour<br />
+&#8211; <b>Four Sigmatic</b>: <a href="https://foursigmatic.com/lex">https://foursigmatic.com/lex</a> and use code LexPod to get up to 60% off</p>
+<p><b>EPISODE LINKS:</b><br />
+Fermat&#8217;s Library Twitter: <a href="https://twitter.com/fermatslibrary">https://twitter.com/fermatslibrary</a><br />
+Luis&#8217;s Twitter: <a href="https://twitter.com/luismbat">https://twitter.com/luismbat</a><br />
+Joao&#8217;s Twitter: <a href="https://twitter.com/joao_batalha">https://twitter.com/joao_batalha</a><br />
+Fermat&#8217;s Library Website: <a href="https://fermatslibrary.com">https://fermatslibrary.com</a></p>
+<p><b>PODCAST INFO:</b><br />
+Podcast website: <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a><br />
+Apple Podcasts: <a href="https://apple.co/2lwqZIr">https://apple.co/2lwqZIr</a><br />
+Spotify: <a href="https://spoti.fi/2nEwCF8">https://spoti.fi/2nEwCF8</a><br />
+RSS: <a href="https://lexfridman.com/feed/podcast/">https://lexfridman.com/feed/podcast/</a><br />
+YouTube Full Episodes: <a href="https://youtube.com/lexfridman">https://youtube.com/lexfridman</a><br />
+YouTube Clips: <a href="https://youtube.com/lexclips">https://youtube.com/lexclips</a></p>
+<p><b>SUPPORT &#38; CONNECT:</b><br />
+&#8211; Check out the sponsors above, it&#8217;s the best way to support this podcast<br />
+&#8211; Support on Patreon: <a href="https://www.patreon.com/lexfridman">https://www.patreon.com/lexfridman</a><br />
+&#8211; Twitter: <a href="https://twitter.com/lexfridman">https://twitter.com/lexfridman</a><br />
+&#8211; Instagram: <a href="https://www.instagram.com/lexfridman">https://www.instagram.com/lexfridman</a><br />
+&#8211; LinkedIn: <a href="https://www.linkedin.com/in/lexfridman">https://www.linkedin.com/in/lexfridman</a><br />
+&#8211; Facebook: <a href="https://www.facebook.com/lexfridman">https://www.facebook.com/lexfridman</a><br />
+&#8211; Medium: <a href="https://medium.com/@lexfridman">https://medium.com/@lexfridman</a></p>
+<p><b>OUTLINE:</b><br />
+Here&#8217;s the timestamps for the episode. On some podcast players you should be able to click the timestamp to jump to that time.<br />
+(00:00) &#8211; Introduction<br />
+(10:18) &#8211; Backstories to research papers<br />
+(25:09) &#8211; Fermat&#8217;s Library<br />
+(45:10) &#8211; Scientific publishing<br />
+(1:08:50) &#8211; How to read a paper<br />
+(1:14:44) &#8211; Taking good notes<br />
+(1:23:23) &#8211; Favorite papers on Fermat&#8217;s Library<br />
+(2:04:14) &#8211; Fermat&#8217;s Library on Twitter<br />
+(2:13:46) &#8211; What it takes to build a successful startup<br />
+(2:22:43) &#8211; Game of Thrones<br />
+(2:25:30) &#8211; Realism in science fiction movies<br />
+(2:31:29) &#8211; Greatest soccer player of all time<br />
+(2:54:18) &#8211; Advice for young people</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_luis_and_joao_batalha.mp3" length="134499239" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>3:02:43</itunes:duration>
+	</item>
+<item>
+		<title>Lex Solo #2 &#8211; The Future of Neuralink</title>
+		<link>https://lexfridman.com/lex-solo-neuralink/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=lex-solo-neuralink</link>
+		<pubDate>Tue, 01 Sep 2020 19:45:29 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4368</guid>
+		<comments>https://lexfridman.com/lex-solo-neuralink/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/lex-solo-neuralink/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>My thoughts on 8 possible long-term futures of Neuralink after attending the August 2020 progress update. This is a solo episode #2 of the podcast. Hopefully it&#8217;s interesting to some folks. The aim is for these episodes to be focused on a particular topic, at times challenging, at times personal, at times exciting to me on a technical and philosophical level like the episode today.</p>
+<p>If you would like to get more information about this podcast go to <a href="https://lexfridman.com/podcast">https://lexfridman.com/podcast</a>&#160;or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, <a href="https://medium.com/@lexfridman">Medium</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations. If you enjoy the podcast, please rate it 5 stars on <a href="https://podcasts.apple.com/us/podcast/id1434243584">Apple Podcasts</a>, follow on <a href="https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL">Spotify</a>, or support it on <a href="https://www.patreon.com/lexfridman">Patreon</a>.</p>
+<p>Here&#8217;s the outline of the episode. On some podcast players you should be able to click the timestamp to jump to that time.</p>
+<p>OUTLINE:<br />
+00:00 &#8211; Introduction<br />
+04:42 &#8211; 1. Alleviating Suffering<br />
+07:25 &#8211; 2. Consciousness and Intelligence<br />
+11:39 &#8211; 3. Augmented Body, Mind, and Reality<br />
+13:42 &#8211; 4. Gaming &#38; Virtual Reality<br />
+16:25 &#8211; 5. Merging Tech &#38; Biology<br />
+19:40 &#8211; 6. Telepathy<br />
+22:58 &#8211; 7. Memories &#38; Immortality<br />
+28:04 &#8211; 8. Merging with AI</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_solo_neuralink.mp3" length="24617674" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>33:53</itunes:duration>
+	</item>
+<item>
+		<title>#83 &#8211; Nick Bostrom: Simulation and Superintelligence</title>
+		<link>https://lexfridman.com/nick-bostrom/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=nick-bostrom</link>
+		<pubDate>Thu, 26 Mar 2020 00:19:25 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4190</guid>
+		<comments>https://lexfridman.com/nick-bostrom/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/nick-bostrom/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Nick Bostrom is a philosopher at University of Oxford and the director of the Future of Humanity Institute. He has worked on fascinating and important ideas in existential risks, simulation hypothesis, human enhancement ethics, and the risks of superintelligent AI systems, including in his book Superintelligence. I can see talking to Nick multiple times on this podcast, many hours each time, but we have to start somewhere.</p>
+<p>Support this podcast by signing up with these sponsors:<br />
+&#8211; Cash App &#8211; use code &#8220;LexPodcast&#8221; and download:<br />
+&#8211; Cash App (App Store): <a href="https://apple.co/2sPrUHe">https://apple.co/2sPrUHe</a><br />
+&#8211; Cash App (Google Play): <a href="https://bit.ly/2MlvP5w">https://bit.ly/2MlvP5w</a></p>
+<p>EPISODE LINKS:<br />
+Nick&#8217;s website: <a href="https://nickbostrom.com/">https://nickbostrom.com/</a><br />
+Future of Humanity Institute:<br />
+&#8211; <a href="https://twitter.com/fhioxford">https://twitter.com/fhioxford</a><br />
+&#8211; <a href="https://www.fhi.ox.ac.uk/">https://www.fhi.ox.ac.uk/</a><br />
+Books:<br />
+&#8211; Superintelligence: <a href="https://amzn.to/2JckX83">https://amzn.to/2JckX83</a><br />
+Wikipedia:<br />
+&#8211; <a href="https://en.wikipedia.org/wiki/Simulation_hypothesis">https://en.wikipedia.org/wiki/Simulation_hypothesis</a><br />
+&#8211; <a href="https://en.wikipedia.org/wiki/Principle_of_indifference">https://en.wikipedia.org/wiki/Principle_of_indifference</a><br />
+&#8211; <a href="https://en.wikipedia.org/wiki/Doomsday_argument">https://en.wikipedia.org/wiki/Doomsday_argument</a><br />
+&#8211; <a href="https://en.wikipedia.org/wiki/Global_catastrophic_risk">https://en.wikipedia.org/wiki/Global_catastrophic_risk</a></p>
+<p><span style="font-weight: 400;">This conversation is part of the Artificial Intelligence podcast.</span>&#160;If you would like to get more information about this podcast go to <a href="https://lexfridman.com/ai">https://lexfridman.com/ai</a> or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, <a href="https://medium.com/@lexfridman">Medium</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations. If you enjoy the podcast, please rate it 5 stars on <a href="https://podcasts.apple.com/us/podcast/artificial-intelligence/id1434243584">Apple Podcasts</a>, follow on <a href="https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL">Spotify</a>, or support it on <a href="https://www.patreon.com/lexfridman">Patreon</a>.</p>
+<p>Here&#8217;s the outline of the episode. On some podcast players you should be able to click the timestamp to jump to that time.</p>
+<p>OUTLINE:<br />
+00:00 &#8211; Introduction<br />
+02:48 &#8211; Simulation hypothesis and simulation argument<br />
+12:17 &#8211; Technologically mature civilizations<br />
+15:30 &#8211; Case 1: if something kills all possible civilizations<br />
+19:08 &#8211; Case 2: if we lose interest in creating simulations<br />
+22:03 &#8211; Consciousness<br />
+26:27 &#8211; Immersive worlds<br />
+28:50 &#8211; Experience machine<br />
+41:10 &#8211; Intelligence and consciousness<br />
+48:58 &#8211; Weighing probabilities of the simulation argument<br />
+1:01:43 &#8211; Elaborating on Joe Rogan conversation<br />
+1:05:53 &#8211; Doomsday argument and anthropic reasoning<br />
+1:23:02 &#8211; Elon Musk<br />
+1:25:26 &#8211; What&#8217;s outside the simulation?<br />
+1:29:52 &#8211; Superintelligence<br />
+1:47:27 &#8211; AGI utopia<br />
+1:52:41 &#8211; Meaning of life</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_nick_bostrom.mp3" length="86822002" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:57:06</itunes:duration>
+	</item>
+<item>
+		<title>#80 &#8211; Vitalik Buterin: Ethereum, Cryptocurrency, and the Future of Money</title>
+		<link>https://lexfridman.com/vitalik-buterin/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=vitalik-buterin</link>
+		<pubDate>Mon, 16 Mar 2020 17:48:32 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=4170</guid>
+		<comments>https://lexfridman.com/vitalik-buterin/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/vitalik-buterin/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>Vitalik Buterin is co-creator of Ethereum and ether, which is a cryptocurrency that is currently the second-largest digital currency after bitcoin. Ethereum has a lot of interesting technical ideas that are defining the future of blockchain technology, and Vitalik is one of the most brilliant people innovating this space today.</p>
+<p>Support this podcast by supporting the sponsors with a special code:<br />
+&#8211; Get ExpressVPN at <a href="https://www.expressvpn.com/lexpod">https://www.expressvpn.com/lexpod</a><br />
+&#8211; Sign up to MasterClass at <a href="https://masterclass.com/lex">https://masterclass.com/lex</a></p>
+<p>EPISODE LINKS:<br />
+Vitalik blog: <a href="https://vitalik.ca">https://vitalik.ca</a><br />
+Ethereum whitepaper: <a href="http://bit.ly/3cVDTpj">http://bit.ly/3cVDTpj</a><br />
+Casper FFG (paper): <a href="http://bit.ly/2U6j7dJ">http://bit.ly/2U6j7dJ</a><br />
+Quadratic funding (paper): <a href="http://bit.ly/3aUZ8Wd">http://bit.ly/3aUZ8Wd</a><br />
+Bitcoin whitepaper: <a href="https://bitcoin.org/bitcoin.pdf">https://bitcoin.org/bitcoin.pdf</a><br />
+Mastering Ethereum (book): <a href="https://amzn.to/2xEjWmE">https://amzn.to/2xEjWmE</a></p>
+<p><span style="font-weight: 400;">This conversation is part of the Artificial Intelligence podcast.</span>&#160;If you would like to get more information about this podcast go to <a href="https://lexfridman.com/ai">https://lexfridman.com/ai</a> or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, <a href="https://medium.com/@lexfridman">Medium</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations. If you enjoy the podcast, please rate it 5 stars on <a href="https://podcasts.apple.com/us/podcast/artificial-intelligence/id1434243584">Apple Podcasts</a>, follow on <a href="https://open.spotify.com/show/2MAi0BvDc6GTFvKFPXnkCL">Spotify</a>, or support it on <a href="https://www.patreon.com/lexfridman">Patreon</a>.</p>
+<p>Here&#8217;s the outline of the episode. On some podcast players you should be able to click the timestamp to jump to that time.</p>
+<p>OUTLINE:<br />
+00:00 &#8211; Introduction<br />
+04:43 &#8211; Satoshi Nakamoto<br />
+08:40 &#8211; Anonymity<br />
+11:31 &#8211; Open source project leadership<br />
+13:04 &#8211; What is money?<br />
+30:02 &#8211; Blockchain and cryptocurrency basics<br />
+46:51 &#8211; Ethereum<br />
+59:23 &#8211; Proof of work<br />
+1:02:12 &#8211; Ethereum 2.0<br />
+1:13:09 &#8211; Beautiful ideas in Ethereum<br />
+1:16:59 &#8211; Future of cryptocurrency<br />
+1:22:06 &#8211; Cryptocurrency resources and people to follow<br />
+1:24:28 &#8211; Role of governments<br />
+1:27:27 &#8211; Meeting Putin<br />
+1:29:41 &#8211; Large number of cryptocurrencies<br />
+1:32:49 &#8211; Mortality</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/lex_ai_vitalik_buterin.mp3" length="71200058" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:35:31</itunes:duration>
+	</item>
+<item>
+		<title>Elon Musk: Tesla Autopilot</title>
+		<link>https://lexfridman.com/elon-musk/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=elon-musk</link>
+		<pubDate>Fri, 12 Apr 2019 15:15:06 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=3846</guid>
+		<comments>https://lexfridman.com/elon-musk/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/elon-musk/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p><span style="font-weight: 400;">Elon Musk is the CEO of Tesla, SpaceX, Neuralink, and a co-founder of several other companies. </span>Video version is available on YouTube. If you would like to get more information about this podcast go to <a href="https://lexfridman.com/ai">https://lexfridman.com/ai</a> or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, <a href="https://medium.com/@lexfridman">Medium</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations.</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/mit_ai_elon_musk.mp3" length="25148991" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>32:58</itunes:duration>
+	</item>
+<item>
+		<title>Eric Weinstein: Revolutionary Ideas in Science, Math, and Society</title>
+		<link>https://lexfridman.com/eric-weinstein/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=eric-weinstein</link>
+		<pubDate>Wed, 20 Mar 2019 16:12:26 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=3831</guid>
+		<comments>https://lexfridman.com/eric-weinstein/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/eric-weinstein/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p><span style="font-weight: 400;">Eric Weinstein is a mathematician, economist, physicist, and managing director of Thiel Capital. He formed the &#8220;intellectual dark web&#8221; which is a loosely assembled group of public intellectuals including Sam Harris, Jordan Peterson, Steven Pinker, Joe Rogan, Michael Shermer, and a few others</span>. <a href="https://www.youtube.com/watch?v=2wq9x2QcZN0">Video version is available on YouTube</a>. If you would like to get more information about this podcast go to <a href="https://lexfridman.com/ai">https://lexfridman.com/ai</a> or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, <a href="https://medium.com/@lexfridman">Medium</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations.</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/mit_ai_eric_weinstein.mp3" length="60944742" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:21:45</itunes:duration>
+	</item>
+<item>
+		<title>Max Tegmark: Life 3.0</title>
+		<link>https://lexfridman.com/max-tegmark/?utm_source=rss&#038;utm_medium=rss&#038;utm_campaign=max-tegmark</link>
+		<pubDate>Sun, 26 Aug 2018 22:37:16 +0000</pubDate>
+		<guid isPermaLink="false">https://lexfridman.com/?p=3661</guid>
+		<comments>https://lexfridman.com/max-tegmark/#respond</comments>
+		<wfw:commentRss>https://lexfridman.com/max-tegmark/feed/</wfw:commentRss>
+		<slash:comments>0</slash:comments>
+		<category><![CDATA[ai]]></category>
+		<description><![CDATA[<p>A conversation with Max Tegmark as part of MIT course on Artificial General Intelligence. <a href="https://www.youtube.com/watch?v=Gi8LUnhP5yU&#38;list=PLrAXtmErZgOdP_8GztsuKi9nrraNbKKp4">Video version is available on YouTube.</a> He is a Physics Professor at MIT, co-founder of the Future of Life Institute, and author of &#8220;Life 3.0: Being Human in the Age of Artificial Intelligence.&#8221; If you would like to get more information about this podcast go to <a href="https://lexfridman.com/ai">https://lexfridman.com/ai</a> or connect with @lexfridman on <a href="https://twitter.com/lexfridman">Twitter</a>, <a href="https://www.linkedin.com/in/lexfridman/">LinkedIn</a>, <a href="https://www.facebook.com/lexfridman">Facebook</a>, or <a href="https://www.youtube.com/lexfridman">YouTube</a> where you can watch the video versions of these conversations.</p>]]></description>
+		<enclosure url="https://media.blubrry.com/takeituneasy/content.blubrry.com/takeituneasy/mit_ai_max_tegmark.mp3" length="59509293" type="audio/mpeg" />
+		<itunes:episodeType>full</itunes:episodeType>
+		<itunes:duration>1:22:38</itunes:duration>
+	</item>
+</channel>
+</rss>

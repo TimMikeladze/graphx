@@ -1,0 +1,645 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rss version="2.0"
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:cc="http://web.resource.org/cc/"
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:podcast="https://podcastindex.org/namespace/1.0"
+  xmlns:googleplay="http://www.google.com/schemas/play-podcasts/1.0"
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:libsyn="https://rss.libsyn.com/ns.xml">
+
+  <channel>
+    <atom:link href="https://rss.libsyn.com/shows/604590/destinations/5264190.xml" rel="self" type="application/rss+xml"/>
+    <title>Sean Carroll&apos;s Mindscape: Science, Society, Philosophy, Culture, Arts, and Ideas</title>
+    <pubDate>Mon, 05 Oct 2026 17:49:07 +0000</pubDate>
+    <lastBuildDate>Mon, 05 Oct 2026 17:49:07 +0000</lastBuildDate>
+    <generator>Libsyn RSSgen 1.0</generator>
+    <libsyn:show-id>604590</libsyn:show-id>
+    
+    <libsyn:last-updated>2026-07-31T22:45:13Z</libsyn:last-updated>
+    
+    <link>https://www.preposterousuniverse.com/podcast/</link>
+    <language>en</language>
+    <copyright><![CDATA[© Sean Carroll 2026]]></copyright>
+    <docs>https://www.preposterousuniverse.com/podcast/</docs>
+    <itunes:summary><![CDATA[Ever wanted to know how music affects your brain, what quantum mechanics really is, or how black holes work? Do you wonder why you get emotional each time you see a certain movie, or how on earth video games are designed? Then you've come to the right place. Each week, Sean Carroll will host conversations with some of the most interesting thinkers in the world. From neuroscientists and engineers to authors and television producers, Sean and his guests talk about the biggest ideas in science, philosophy, culture and much more.]]></itunes:summary>
+    <image>
+      <url>https://static.libsyn.com/p/assets/b/0/6/d/b06d098337897af116c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg</url>
+      <title>Sean Carroll&apos;s Mindscape: Science, Society, Philosophy, Culture, Arts, and Ideas</title>
+      <link><![CDATA[https://www.preposterousuniverse.com/podcast/]]></link>
+    </image>
+    <itunes:author>Sean Carroll</itunes:author>
+		<itunes:category text="Science" />
+<itunes:category text="Science">
+  <itunes:category text="Physics" />
+</itunes:category>
+    <itunes:image href="https://static.libsyn.com/p/assets/b/0/6/d/b06d098337897af116c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:owner>
+      <itunes:name>Sean Carroll</itunes:name>
+      <itunes:email>podcast@preposterousuniverse.com</itunes:email>
+    </itunes:owner>
+    <description><![CDATA[Ever wanted to know how music affects your brain, what quantum mechanics really is, or how black holes work? Do you wonder why you get emotional each time you see a certain movie, or how on earth video games are designed? Then you've come to the right place. Each week, Sean Carroll will host conversations with some of the most interesting thinkers in the world. From neuroscientists and engineers to authors and television producers, Sean and his guests talk about the biggest ideas in science, philosophy, culture and much more.]]></description>
+    
+    <itunes:type>episodic</itunes:type>
+    
+
+    <itunes:keywords />
+
+    
+
+    
+    <podcast:locked owner="podcast@preposterousuniverse.com">no</podcast:locked>
+    
+    
+    
+    
+    
+        <item>
+      <title>Mindscape Ask Me Anything, Sean Carroll | September 2026</title>
+      <itunes:title>Mindscape Ask Me Anything, Sean Carroll | September 2026</itunes:title>
+      <pubDate>Mon, 14 Sep 2026 10:58:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[2247d1c8-dcfa-473e-9bfe-7b3cd7bbaaa3]]></guid>
+      <link><![CDATA[https://preposterousuniverse.com/podcast/2026/09/14/ama-september-2026/]]></link>
+      <description><![CDATA[<div class="fl-col-group fl-node-c3d9zjxrp45k fl-col-group-nested" data-node="c3d9zjxrp45k"> <div class="fl-col fl-node-etus6c2g4ynx fl-col-bg-color" data-node= "etus6c2g4ynx"> <div class="fl-col-content fl-node-content"> <div class="fl-module fl-module-rich-text fl-node-s1073hriewqb" data-node="s1073hriewqb" aria-label="Text Editor"> <div class="fl-module-content fl-node-content"> <div class="fl-rich-text"> <p>Welcome to the September 2026 Ask Me Anything episode of Mindscape! These monthly excursions are funded by <a href= "https://www.patreon.com/seanmcarroll">Patreon supporters</a> (who are also the ones asking the questions). We take questions asked by Patreons, whittle them down to a more manageable number -- based primarily on whether I have anything interesting to say about them, not whether the questions themselves are good -- and sometimes group them together if they are about a similar topic. Enjoy!</p> <p>Blog post with show notes and transcript: <a href= "https://preposterousuniverse.com/podcast/2026/09/14/ama-september-2026/"> https://preposterousuniverse.com/podcast/2026/09/14/ama-september-2026/</a></p> <p>Stop piecing your software together. Go to <a href= "https://odoo.com/mindscape">https://odoo.com/mindscape</a> to learn more. #ad</p> <p class="p1">The one app to rule them all. Statskey. Download your free trial today at the App Store and Google Play. #ad</p> </div> </div> </div> </div> </div> </div> <div class="fl-module fl-module-rich-text fl-node-zhnt94dbkvrl" data-node="zhnt94dbkvrl" aria-label="Text Editor"> <div class="fl-module-content fl-node-content"> <div class="fl-rich-text"> <p><em>Support Mindscape on <a href= "https://www.patreon.com/seanmcarroll" target="_blank" rel= "noopener">Patreon</a>.</em></p> </div> </div> </div>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to the September 2026 Ask Me Anything episode of Mindscape! These monthly excursions are funded by <a href= "https://www.patreon.com/seanmcarroll">Patreon supporters</a> (who are also the ones asking the questions). We take questions asked by Patreons, whittle them down to a more manageable number -- based primarily on whether I have anything interesting to say about them, not whether the questions themselves are good -- and sometimes group them together if they are about a similar topic. Enjoy!</p> <p>Blog post with show notes and transcript: <a href= "https://preposterousuniverse.com/podcast/2026/09/14/ama-september-2026/"> https://preposterousuniverse.com/podcast/2026/09/14/ama-september-2026/</a></p> <p>Stop piecing your software together. Go to <a href= "https://odoo.com/mindscape">https://odoo.com/mindscape</a> to learn more. #ad</p> <p class="p1">The one app to rule them all. Statskey. Download your free trial today at the App Store and Google Play. #ad</p> <p><em>Support Mindscape on <a href= "https://www.patreon.com/seanmcarroll" target="_blank" rel= "noopener">Patreon</a>.</em></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/ama_sept_2026.mp3?dest-id=5264190" length="205794000" type="audio/mpeg" />
+      <itunes:duration>03:52:06</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>42747400</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-10-01T00:00:12Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>AMA | June 2025</title>
+      <itunes:title>AMA | June 2025</itunes:title>
+      <pubDate>Mon, 02 Jun 2025 11:32:20 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/lcytCDKtnZSgozYSlPa9CkHKOOTic72A-5zpx6QNVEc]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/ama-june-2025]]></link>
+      <description><![CDATA[<p>Welcome to the June 2025 Ask Me Anything episode of Mindscape! These monthly excursions are funded by <a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank">Patreon supporters</a> (who are also the ones asking the questions). We take questions asked by Patreons, whittle them down to a more manageable number -- based primarily on whether I have anything interesting to say about them, not whether the questions themselves are good -- and sometimes group them together if they are about a similar topic. Enjoy!</p> <p>Blog post with AMA questions and transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/06/02/ama-june-2025/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/06/02/ama-june-2025/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to the June 2025 Ask Me Anything episode of Mindscape! These monthly excursions are funded by <a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank">Patreon supporters</a> (who are also the ones asking the questions). We take questions asked by Patreons, whittle them down to a more manageable number -- based primarily on whether I have anything interesting to say about them, not whether the questions themselves are good -- and sometimes group them together if they are about a similar topic. Enjoy!</p> <p>Blog post with AMA questions and transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/06/02/ama-june-2025/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/06/02/ama-june-2025/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/ama20june202025.mp3?dest-id=5264190" length="195286025" type="audio/mpeg" />
+      <itunes:duration>03:23:08</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/1/f/0/7/1f075f75093c7b76d959afa2a1bf1c87/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>bonus</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39645625</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:18Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>316 | Niayesh Afshordi and Phil Halper</title>
+      <itunes:title>Niayesh Afshordi and Phil Halper</itunes:title>
+      <pubDate>Mon, 26 May 2025 11:59:59 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/5ikhso4we6lWNXffDjn91g7xJVujba-r_bkLG8NuAFA]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/316-niayesh-afshordi-and-phil-halper]]></link>
+      <description><![CDATA[<p>Einstein's general theory of relativity, plus some reasonable assumptions about the universe and what it's made of, has a remarkable implication: that as we trace cosmic evolution into the far past, we ultimately hit a singularity of infinite density and curvature, the Big Bang. Did that really happen? Einstein's theory is classical, after all, and the world is quantum. And whose to say what assumptions are reasonable? Niayesh Afshordi and Phil Halper have written a new book, <a href= "https://nafshordi.com/2024/10/19/battle-of-the-big-bang-new-tales-of-our-cosmic-origins/" rel="noopener noreferrer" target="_blank"><em>Battle of the Big Bang: The New Tales of Our Cosmic Origins</em></a>, that surveys all of the mind-bending possibilities.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/05/26/316-niayesh-afshordi-and-phil-halper-on-the-big-bang-and-before/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/05/26/316-niayesh-afshordi-and-phil-halper-on-the-big-bang-and-before/</a></p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Niayesh Afshordi received a Ph.D. in astrophysics from Princeton University. He is currently a professor of physics and astronomy at the University of Waterloo, and associate faculty in the cosmology and gravitation group at the Perimeter Institute for Theoretical Physics.</p> <ul> <li><a href="https://nafshordi.com/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href="https://perimeterinstitute.ca/people/niayesh-afshordi" rel="noopener noreferrer" target="_blank">Perimeter web page</a></li> <li><a href= "https://uwaterloo.ca/physics-astronomy/profile/nafshord" rel= "noopener noreferrer" target="_blank">Waterloo web page</a></li> <li><a href= "https://scholar.google.com/citations?user=xWZGFlEAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google scholar publications</a></li> </ul> <p><br /></p> <p>Phil Halper is a science communicator and a fellow of the Royal Astronomical Society. His astronomy images have been featured in major media outlets including <em>The Washington Post</em>, the BBC, and <em>The Guardian</em>, and he has published several papers in peer-reviewed journals.</p> <ul> <li><a href="https://www.youtube.com/@PhilHalper1" rel= "noopener noreferrer" target="_blank">YouTube channel (Skydivephil)</a></li> </ul>]]></description>
+      
+      <content:encoded><![CDATA[<p>Einstein's general theory of relativity, plus some reasonable assumptions about the universe and what it's made of, has a remarkable implication: that as we trace cosmic evolution into the far past, we ultimately hit a singularity of infinite density and curvature, the Big Bang. Did that really happen? Einstein's theory is classical, after all, and the world is quantum. And whose to say what assumptions are reasonable? Niayesh Afshordi and Phil Halper have written a new book, <a href= "https://nafshordi.com/2024/10/19/battle-of-the-big-bang-new-tales-of-our-cosmic-origins/" rel="noopener noreferrer" target="_blank"><em>Battle of the Big Bang: The New Tales of Our Cosmic Origins</em></a>, that surveys all of the mind-bending possibilities.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/05/26/316-niayesh-afshordi-and-phil-halper-on-the-big-bang-and-before/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/05/26/316-niayesh-afshordi-and-phil-halper-on-the-big-bang-and-before/</a></p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Niayesh Afshordi received a Ph.D. in astrophysics from Princeton University. He is currently a professor of physics and astronomy at the University of Waterloo, and associate faculty in the cosmology and gravitation group at the Perimeter Institute for Theoretical Physics.</p> <ul> <li><a href="https://nafshordi.com/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href="https://perimeterinstitute.ca/people/niayesh-afshordi" rel="noopener noreferrer" target="_blank">Perimeter web page</a></li> <li><a href= "https://uwaterloo.ca/physics-astronomy/profile/nafshord" rel= "noopener noreferrer" target="_blank">Waterloo web page</a></li> <li><a href= "https://scholar.google.com/citations?user=xWZGFlEAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google scholar publications</a></li> </ul> <p></p> <p>Phil Halper is a science communicator and a fellow of the Royal Astronomical Society. His astronomy images have been featured in major media outlets including <em>The Washington Post</em>, the BBC, and <em>The Guardian</em>, and he has published several papers in peer-reviewed journals.</p> <ul> <li><a href="https://www.youtube.com/@PhilHalper1" rel= "noopener noreferrer" target="_blank">YouTube channel (Skydivephil)</a></li> </ul>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/afshordi-halper.mp3?dest-id=5264190" length="85583467" type="audio/mpeg" />
+      <itunes:duration>01:28:52</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>316</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/9/1/f/5/91f50a4403f758f5d959afa2a1bf1c87/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39645630</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:19Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>Bonus | Cuts to Science Funding and Why They Matter</title>
+      <itunes:title>Bonus | Cuts to Science Funding and Why They Matter</itunes:title>
+      <pubDate>Wed, 12 Feb 2025 20:35:36 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/R-x1dfPMCC1T9ohE5fsJanSgvtkXfS50X7uRXZHpQpI]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/bonus-cuts-to-science-funding-and-why-they-matter]]></link>
+      <description><![CDATA[<p>The Trump administration, led by Elon Musk and his Department of Government Efficiency, has proposed <a href= "https://www.npr.org/2025/02/10/nx-s1-5292161/trump-administration-makes-deep-cuts-to-science-funding" rel="noopener noreferrer" target="_blank">sweeping cuts</a> to spending on science research here in the US, in particular at the National Institutes of Health and the National Science Foundation. I explain a little about what is being cut and why these funds are important to scientific progress. I try, for what it's worth, to provide these explanations in a way that would be informative to those who generally favor cutting government waste in dramatic fashion.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/02/12/bonus-cuts-to-science-funding-and-why-they-matter/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/02/12/bonus-cuts-to-science-funding-and-why-they-matter/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <ul> <li><a href= "https://nanoscale.blogspot.com/2025/02/indirect-costs-potential-unintended.html" rel="noopener noreferrer" target="_blank">Indirect costs primer</a></li> <li><a href= "https://www.science.org/content/article/nih-slashes-overhead-payments-research-sparking-outrage" rel="noopener noreferrer" target="_blank">Cuts to NIH indirect costs</a></li> <li><a href= "https://buttondown.com/sbagen/archive/indirect-costs-and-trumps-attack-on-independent/" rel="noopener noreferrer" target="_blank">Appropriated funds are mandated by statute</a></li> <li><a href= "https://www.science.org/content/article/my-boss-was-crying-nsf-confronts-potentially-massive-layoffs-and-budget-cuts" rel="noopener noreferrer" target="_blank">Proposed NSF cuts</a></li> <li><a href="https://x.com/elonmusk/status/1888022189984858476" rel="noopener noreferrer" target="_blank">Elon Musk doesn't understand indirect costs</a></li> <li><a href="https://x.com/pitdesi/status/1886642596296229365" rel= "noopener noreferrer" target="_blank">Shrimp treadmill story</a></li> <li><a href= "https://www.reuters.com/world/us/trump-loosen-enforcement-us-law-banning-bribery-foreign-officials-2025-02-10/" rel="noopener noreferrer" target="_blank">Bribing foreign officials</a></li> <li><a href="https://popular.info/p/the-nsas-big-delete" rel= "noopener noreferrer" target="_blank">Deleting NSA web pages</a></li> <li><a href= "https://www.verifythis.com/article/news/verify/donald-trump/executive-orders-are-not-same-laws-passed-by-congress/536-bd4e950e-713b-42e9-b83b-e1ef7f99d19f" rel="noopener noreferrer" target="_blank">Executive Orders are not laws</a></li> <li><a href= "https://www.pbs.org/newshour/politics/what-you-need-to-know-about-impoundment-and-how-trump-vows-to-use-it" rel="noopener noreferrer" target="_blank">History of impoundments</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>The Trump administration, led by Elon Musk and his Department of Government Efficiency, has proposed <a href= "https://www.npr.org/2025/02/10/nx-s1-5292161/trump-administration-makes-deep-cuts-to-science-funding" rel="noopener noreferrer" target="_blank">sweeping cuts</a> to spending on science research here in the US, in particular at the National Institutes of Health and the National Science Foundation. I explain a little about what is being cut and why these funds are important to scientific progress. I try, for what it's worth, to provide these explanations in a way that would be informative to those who generally favor cutting government waste in dramatic fashion.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2025/02/12/bonus-cuts-to-science-funding-and-why-they-matter/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2025/02/12/bonus-cuts-to-science-funding-and-why-they-matter/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <ul> <li><a href= "https://nanoscale.blogspot.com/2025/02/indirect-costs-potential-unintended.html" rel="noopener noreferrer" target="_blank">Indirect costs primer</a></li> <li><a href= "https://www.science.org/content/article/nih-slashes-overhead-payments-research-sparking-outrage" rel="noopener noreferrer" target="_blank">Cuts to NIH indirect costs</a></li> <li><a href= "https://buttondown.com/sbagen/archive/indirect-costs-and-trumps-attack-on-independent/" rel="noopener noreferrer" target="_blank">Appropriated funds are mandated by statute</a></li> <li><a href= "https://www.science.org/content/article/my-boss-was-crying-nsf-confronts-potentially-massive-layoffs-and-budget-cuts" rel="noopener noreferrer" target="_blank">Proposed NSF cuts</a></li> <li><a href="https://x.com/elonmusk/status/1888022189984858476" rel="noopener noreferrer" target="_blank">Elon Musk doesn't understand indirect costs</a></li> <li><a href="https://x.com/pitdesi/status/1886642596296229365" rel= "noopener noreferrer" target="_blank">Shrimp treadmill story</a></li> <li><a href= "https://www.reuters.com/world/us/trump-loosen-enforcement-us-law-banning-bribery-foreign-officials-2025-02-10/" rel="noopener noreferrer" target="_blank">Bribing foreign officials</a></li> <li><a href="https://popular.info/p/the-nsas-big-delete" rel= "noopener noreferrer" target="_blank">Deleting NSA web pages</a></li> <li><a href= "https://www.verifythis.com/article/news/verify/donald-trump/executive-orders-are-not-same-laws-passed-by-congress/536-bd4e950e-713b-42e9-b83b-e1ef7f99d19f" rel="noopener noreferrer" target="_blank">Executive Orders are not laws</a></li> <li><a href= "https://www.pbs.org/newshour/politics/what-you-need-to-know-about-impoundment-and-how-trump-vows-to-use-it" rel="noopener noreferrer" target="_blank">History of impoundments</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/solo20science20funding.mp3?dest-id=5264190" length="67888113" type="audio/mpeg" />
+      <itunes:duration>01:10:26</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/d/7/7/e/d77ef944bef4ad4f16c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>bonus</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39645705</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:19Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>282 | Joel David Hamkins on Puzzles of Reality and Infinity</title>
+      <itunes:title>Joel David Hamkins on Puzzles of Reality and Infinity</itunes:title>
+      <pubDate>Mon, 15 Jul 2024 13:54:47 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/8hEtbvJKn5ReTvgueZEvrbwMmYHQg27oCjqHiDCs5MA]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/282-joel-david-hamkins-on-puzzles-of-reality-and-infinity]]></link>
+      <description><![CDATA[<p>The philosophy of mathematics would be so much easier if it weren't for infinity. The concept seems natural, but taking it seriously opens the door to counterintuitive results. As mathematician and philosopher Joel David Hamkins says in this conversation, when we say that the natural numbers are "0, 1, 2, 3, and so on," that "and so on" is hopelessly vague. We talk about different ways to think about the puzzles of infinity, how they might be resolved, and implications for mathematical realism.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2024/07/15/282-joel-david-hamkins-on-puzzles-of-reality-and-infinity/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2024/07/15/282-joel-david-hamkins-on-puzzles-of-reality-and-infinity/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Joel David Hamkins received his Ph.D. in mathematics from the University of California, Berkeley. He is currently the John Cardinal O'Hara Professor of Logic at the University of Notre Dame. He is a pioneer of the idea of the <a href= "https://arxiv.org/abs/1108.4223" rel="noopener noreferrer" target= "_blank">set theory multiverse</a>. He is the top-rated user by reputation score on <a href= "https://meta.mathoverflow.net/a/1902" rel="noopener noreferrer" target="_blank">MathOverflow</a>. He is currently working on <a href= "https://www.infinitelymore.xyz/s/the-book-of-infinity" rel= "noopener noreferrer" target="_blank"><em>The Book of Infinity</em></a>, to be published by MIT Press.</p> <ul> <li><a href="https://jdh.hamkins.org/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href= "https://philosophy.nd.edu/people/faculty/joel-david-hamkins/" rel= "noopener noreferrer" target="_blank">Notre Dame web page</a></li> <li><a href="https://www.infinitelymore.xyz/" rel= "noopener noreferrer" target="_blank">Substack</a></li> <li><a href= "https://scholar.google.com/citations?user=MHLQDYQAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google Scholar publications</a></li> <li><a href="https://philpeople.org/profiles/joel-david-hamkins" rel="noopener noreferrer" target="_blank">PhilPeople profile</a></li> <li><a href="https://en.wikipedia.org/wiki/Joel_David_Hamkins" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>The philosophy of mathematics would be so much easier if it weren't for infinity. The concept seems natural, but taking it seriously opens the door to counterintuitive results. As mathematician and philosopher Joel David Hamkins says in this conversation, when we say that the natural numbers are "0, 1, 2, 3, and so on," that "and so on" is hopelessly vague. We talk about different ways to think about the puzzles of infinity, how they might be resolved, and implications for mathematical realism.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2024/07/15/282-joel-david-hamkins-on-puzzles-of-reality-and-infinity/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2024/07/15/282-joel-david-hamkins-on-puzzles-of-reality-and-infinity/</a></p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Joel David Hamkins received his Ph.D. in mathematics from the University of California, Berkeley. He is currently the John Cardinal O'Hara Professor of Logic at the University of Notre Dame. He is a pioneer of the idea of the <a href= "https://arxiv.org/abs/1108.4223" rel="noopener noreferrer" target= "_blank">set theory multiverse</a>. He is the top-rated user by reputation score on <a href= "https://meta.mathoverflow.net/a/1902" rel="noopener noreferrer" target="_blank">MathOverflow</a>. He is currently working on <a href= "https://www.infinitelymore.xyz/s/the-book-of-infinity" rel= "noopener noreferrer" target="_blank"><em>The Book of Infinity</em></a>, to be published by MIT Press.</p> <ul> <li><a href="https://jdh.hamkins.org/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href= "https://philosophy.nd.edu/people/faculty/joel-david-hamkins/" rel= "noopener noreferrer" target="_blank">Notre Dame web page</a></li> <li><a href="https://www.infinitelymore.xyz/" rel= "noopener noreferrer" target="_blank">Substack</a></li> <li><a href= "https://scholar.google.com/citations?user=MHLQDYQAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google Scholar publications</a></li> <li><a href="https://philpeople.org/profiles/joel-david-hamkins" rel="noopener noreferrer" target="_blank">PhilPeople profile</a></li> <li><a href="https://en.wikipedia.org/wiki/Joel_David_Hamkins" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/joel20david20hamkins204.mp3?dest-id=5264190" length="75537609" type="audio/mpeg" />
+      <itunes:duration>01:18:24</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>282</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/3/5/2/5/35253dac2b87a11fd959afa2a1bf1c87/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39645875</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:19Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>256 | Kelly and Zach Weinersmith on Building Cities on the Moon and Mars</title>
+      <itunes:title>Kelly and Zach Weinersmith on Building Cities on the Moon and Mars</itunes:title>
+      <pubDate>Mon, 13 Nov 2023 12:33:35 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/XXB5Pq9kXv0vBT2fLUNtXRJb-v5njtgzj2tpSS-bPW8]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/256-kelly-and-zach-weinersmith-on-building-cities-on-the-moon-and-mars]]></link>
+      <description><![CDATA[<p>There is an undeniable romance in the idea of traveling to, and even living in, outer space. In recent years, a pragmatic justification has become increasingly popular: the Earth is vulnerable to threats both natural and human-made, and it seems only prudent to spread life to other locations in case a disaster befalls our home planet. But how realistic is such a grand ambition? The wife-and-husband team of Kelly and Zack Weinersmith have tackled this question from a dizzying number of angles, from aeronautics and biology to law and psychology. The result is their new book, <a href= "https://www.penguinrandomhouse.com/books/639449/a-city-on-mars-by-kelly-and-zach-weinersmith/" rel="noopener noreferrer" target="_blank"><em>A City on Mars: Can We Settle Space, Should We Settle Space, and Have We Really Thought This Through?</em></a><em> </em>It provides an exceptionally clear-eyed view of the challenges and opportunities ahead.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2023/11/13/256-kelly-and-zach-weinersmith-on-building-cities-on-the-moon-and-mars/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2023/11/13/256-kelly-and-zach-weinersmith-on-building-cities-on-the-moon-and-mars/</a></p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Kelly Weinersmith received a Ph.D. in ecology from the University of California, Davis. She is currently an adjunct professor in the department of biosciences at Rice University. Zack Weinersmith received a B.S. in English from Pfizer College. He is the creator of the popular webcomic <a href= "https://www.smbc-comics.com/" rel="noopener noreferrer" target= "_blank"><em>Saturday Morning Breakfast Cereal</em></a>, as well as the author and co-author of several books, including <a href= "https://us.macmillan.com/books/9781250776297/beawolf" rel= "noopener noreferrer" target="_blank"><em>Bea Wolf</em></a>, a retelling of Beowulf as a children's story, with illustrations by Boulet. Kelly and Zach are also co-authors of <a href= "https://www.penguinrandomhouse.com/books/536910/soonish-by-kelly-and-zach-weinersmith/" rel="noopener noreferrer" target="_blank"><em>Soonish: Ten Emerging Technologies That'll Improve and/or Ruin Everything</em></a>.</p>]]></description>
+      
+      <content:encoded><![CDATA[<p>There is an undeniable romance in the idea of traveling to, and even living in, outer space. In recent years, a pragmatic justification has become increasingly popular: the Earth is vulnerable to threats both natural and human-made, and it seems only prudent to spread life to other locations in case a disaster befalls our home planet. But how realistic is such a grand ambition? The wife-and-husband team of Kelly and Zack Weinersmith have tackled this question from a dizzying number of angles, from aeronautics and biology to law and psychology. The result is their new book, <a href= "https://www.penguinrandomhouse.com/books/639449/a-city-on-mars-by-kelly-and-zach-weinersmith/" rel="noopener noreferrer" target="_blank"><em>A City on Mars: Can We Settle Space, Should We Settle Space, and Have We Really Thought This Through?</em></a><em> </em>It provides an exceptionally clear-eyed view of the challenges and opportunities ahead.</p> <p>Blog post with transcript: <a href= "https://www.preposterousuniverse.com/podcast/2023/11/13/256-kelly-and-zach-weinersmith-on-building-cities-on-the-moon-and-mars/" rel="noopener noreferrer" target= "_blank">https://www.preposterousuniverse.com/podcast/2023/11/13/256-kelly-and-zach-weinersmith-on-building-cities-on-the-moon-and-mars/</a></p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Kelly Weinersmith received a Ph.D. in ecology from the University of California, Davis. She is currently an adjunct professor in the department of biosciences at Rice University. Zack Weinersmith received a B.S. in English from Pfizer College. He is the creator of the popular webcomic <a href= "https://www.smbc-comics.com/" rel="noopener noreferrer" target= "_blank"><em>Saturday Morning Breakfast Cereal</em></a>, as well as the author and co-author of several books, including <a href= "https://us.macmillan.com/books/9781250776297/beawolf" rel= "noopener noreferrer" target="_blank"><em>Bea Wolf</em></a>, a retelling of Beowulf as a children's story, with illustrations by Boulet. Kelly and Zach are also co-authors of <a href= "https://www.penguinrandomhouse.com/books/536910/soonish-by-kelly-and-zach-weinersmith/" rel="noopener noreferrer" target="_blank"><em>Soonish: Ten Emerging Technologies That'll Improve and/or Ruin Everything</em></a>.</p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/weinersmith.mp3?dest-id=5264190" length="81203476" type="audio/mpeg" />
+      <itunes:duration>01:24:18</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>256</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/7/b/f/1/7bf14007c51fd69ed959afa2a1bf1c87/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39646060</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:20Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>241 | Tim Maudlin on Locality, Hidden Variables, and Quantum Foundations</title>
+      <itunes:title>Tim Maudlin on Locality, Hidden Variables, and Quantum Foundations</itunes:title>
+      <pubDate>Mon, 26 Jun 2023 11:21:02 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/6HqspJSjXk9TK-1L8FKraW8XKadJRaDudNM_lhSGieY]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/241-tim-maudlin-on-locality-hidden-variables-and-quantum-foundations]]></link>
+      <description><![CDATA[<p>Last year's Nobel Prize for experimental tests of Bell's Theorem was the first Nobel in the foundations of quantum mechanics since Max Born in 1954. Quantum foundations is enjoying a bit of a resurgence, inspired in part by improving quantum technology but also by a realization that understanding quantum mechanics might help with other problems in physics (and be important in its own right). Tim Maudlin is a leading philosopher of physics and also a skeptic of the Everett interpretation. We discuss the logic behind hidden-variable approaches such as Bohmian mechanics, and also the broader question of the importance of the foundations of physics.</p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Blog post with transcript: https://www.preposterousuniverse.com/podcast/2023/06/26/241-tim-maudlin-on-locality-hidden-variables-and-quantum-foundations/</p> <p>Tim Maudlin received his Ph.D. in philosophy from the University of Pittsburgh. He is currently a professor of philosophy at New York University. He is a member of the Academie Internationale de Philosophie des Sciences and the Foundational Questions Institute (FQXi). He has been a Guggenheim Fellow. He is the founder and director of the <a href="https://www.johnbellinstitute.org/" rel="noopener noreferrer" target="_blank">John Bell Institute for the Foundations of Physics</a> in Croatia.</p> <ul> <li><a href="http://www.tim-maudlin.site/" rel= "noopener noreferrer" target="_blank">Web site</a></li> <li><a href="https://as.nyu.edu/faculty/tim-maudlin.html" rel= "noopener noreferrer" target="_blank">NYU web page</a></li> <li><a href= "https://scholar.google.com/citations?user=WGu-WUIAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google Scholar publications</a></li> <li><a href="https://philpeople.org/profiles/tim-maudlin" rel= "noopener noreferrer" target="_blank">PhilPeople profile</a></li> <li><a href= "https://www.amazon.com/stores/Tim-Maudlin/author/B001IXTOQO?ref=ap_rdr&store_ref=ap_rdr&isDramIntegrated=true&shoppingPortalEnabled=true" rel="noopener noreferrer" target="_blank">Amazon author page</a></li> <li><a href="https://en.wikipedia.org/wiki/Tim_Maudlin" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> <li><a href= "https://www.gofundme.com/f/a-permanent-home-for-the-john-bell-institute" rel="noopener noreferrer" target="_blank">Contribute to the John Bell Institute!</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Last year's Nobel Prize for experimental tests of Bell's Theorem was the first Nobel in the foundations of quantum mechanics since Max Born in 1954. Quantum foundations is enjoying a bit of a resurgence, inspired in part by improving quantum technology but also by a realization that understanding quantum mechanics might help with other problems in physics (and be important in its own right). Tim Maudlin is a leading philosopher of physics and also a skeptic of the Everett interpretation. We discuss the logic behind hidden-variable approaches such as Bohmian mechanics, and also the broader question of the importance of the foundations of physics.</p> <p>S<em>upport Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Blog post with transcript: https://www.preposterousuniverse.com/podcast/2023/06/26/241-tim-maudlin-on-locality-hidden-variables-and-quantum-foundations/</p> <p>Tim Maudlin received his Ph.D. in philosophy from the University of Pittsburgh. He is currently a professor of philosophy at New York University. He is a member of the Academie Internationale de Philosophie des Sciences and the Foundational Questions Institute (FQXi). He has been a Guggenheim Fellow. He is the founder and director of the <a href="https://www.johnbellinstitute.org/" rel="noopener noreferrer" target="_blank">John Bell Institute for the Foundations of Physics</a> in Croatia.</p> <ul> <li><a href="http://www.tim-maudlin.site/" rel= "noopener noreferrer" target="_blank">Web site</a></li> <li><a href="https://as.nyu.edu/faculty/tim-maudlin.html" rel= "noopener noreferrer" target="_blank">NYU web page</a></li> <li><a href= "https://scholar.google.com/citations?user=WGu-WUIAAAAJ&hl=en" rel="noopener noreferrer" target="_blank">Google Scholar publications</a></li> <li><a href="https://philpeople.org/profiles/tim-maudlin" rel= "noopener noreferrer" target="_blank">PhilPeople profile</a></li> <li><a href= "https://www.amazon.com/stores/Tim-Maudlin/author/B001IXTOQO?ref=ap_rdr&store_ref=ap_rdr&isDramIntegrated=true&shoppingPortalEnabled=true" rel="noopener noreferrer" target="_blank">Amazon author page</a></li> <li><a href="https://en.wikipedia.org/wiki/Tim_Maudlin" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> <li><a href= "https://www.gofundme.com/f/a-permanent-home-for-the-john-bell-institute" rel="noopener noreferrer" target="_blank">Contribute to the John Bell Institute!</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/tim20maudlin.mp3?dest-id=5264190" length="90462944" type="audio/mpeg" />
+      <itunes:duration>01:33:57</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>241</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/e/8/f/e/e8fe36ac34752c1416c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39646160</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:20Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>193 | Daniels on Everything, Everywhere, All at Once</title>
+      <itunes:title>Daniels on Everything, Everywhere, All at Once</itunes:title>
+      <pubDate>Mon, 18 Apr 2022 15:06:28 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/gbuuQaIbjJ7GguUWR5St2G3b3H6JRe2swaFyw9ooXtk]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/193-daniels-on-everything-everywhere-all-at-once]]></link>
+      <description><![CDATA[<p>Every time we make an important decision, it's hard not to wonder how things would have turned out had we chosen differently. The set of all those hypothetical lives is a kind of "multiverse" — not one predicted by quantum mechanics or cosmology, but a space of possibilities that is ripe for contemplation. In their new movie <a href= "https://a24films.com/films/everything-everywhere-all-at-once" rel= "noopener noreferrer" target="_blank"><em>Everything Everywhere All At Once</em></a>, Daniels (the collective moniker for writer/directors Daniel Kwan and Daniel Scheinert) use this idea to tell the story of Evelyn (Michelle Yeoh), who is the "worst" of all her avatars in the multiverse. We talk about philosophy, filmmaking, and how we should all strive to be kind amidst the chaos.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Daniel Kwan and Daniel Scheinert are writers and directors collectively known as Daniels. They met and formed a collaboration while in film school at Emerson College. They have directed a number of music videos for artists such as DJ Snake and Tenacious D. Their first feature film was <em>Swiss Army Man</em>, starring Daniel Radcliffe.</p> <ul> <li><a href="https://www.danieldaniel.us/" rel= "noopener noreferrer" target="_blank">Web site</a></li> <li>IMDb: <a href= "https://www.imdb.com/name/nm3453283/?ref_=tt_ov_dr" rel= "noopener noreferrer" target="_blank">Kwan</a>, <a href= "https://www.imdb.com/name/nm3215397/?ref_=tt_ov_dr" rel= "noopener noreferrer" target="_blank">Scheinert</a></li> <li><a href="https://twitter.com/Daniels" rel="noopener noreferrer" target="_blank">Twitter</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Every time we make an important decision, it's hard not to wonder how things would have turned out had we chosen differently. The set of all those hypothetical lives is a kind of "multiverse" — not one predicted by quantum mechanics or cosmology, but a space of possibilities that is ripe for contemplation. In their new movie <a href= "https://a24films.com/films/everything-everywhere-all-at-once" rel= "noopener noreferrer" target="_blank"><em>Everything Everywhere All At Once</em></a>, Daniels (the collective moniker for writer/directors Daniel Kwan and Daniel Scheinert) use this idea to tell the story of Evelyn (Michelle Yeoh), who is the "worst" of all her avatars in the multiverse. We talk about philosophy, filmmaking, and how we should all strive to be kind amidst the chaos.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Daniel Kwan and Daniel Scheinert are writers and directors collectively known as Daniels. They met and formed a collaboration while in film school at Emerson College. They have directed a number of music videos for artists such as DJ Snake and Tenacious D. Their first feature film was <em>Swiss Army Man</em>, starring Daniel Radcliffe.</p> <ul> <li><a href="https://www.danieldaniel.us/" rel= "noopener noreferrer" target="_blank">Web site</a></li> <li>IMDb: <a href= "https://www.imdb.com/name/nm3453283/?ref_=tt_ov_dr" rel= "noopener noreferrer" target="_blank">Kwan</a>, <a href= "https://www.imdb.com/name/nm3215397/?ref_=tt_ov_dr" rel= "noopener noreferrer" target="_blank">Scheinert</a></li> <li><a href="https://twitter.com/Daniels" rel="noopener noreferrer" target="_blank">Twitter</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/daniels.mp3?dest-id=5264190" length="66418151" type="audio/mpeg" />
+      <itunes:duration>01:08:54</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>193</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/c/1/7/a/c17ac510ec1a1c6116c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39646490</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:21Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>111 | Nick Bostrom on Anthropic Selection and Living in a Simulation</title>
+      <itunes:title>Nick Bostrom on Anthropic Selection and Living in a Simulation</itunes:title>
+      <pubDate>Mon, 24 Aug 2020 15:00:07 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/lL3o6LENC7yafEkewLr0rcOydwriFSSWeoxCOZSn21w]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/111-nick-bostrom-on-anthropic-selection-and-living-in-a-simulation]]></link>
+      <description><![CDATA[<p>Human civilization is only a few thousand years old (depending on how we count). So if civilization will ultimately last for millions of years, it could be considered surprising that we've found ourselves so early in history. Should we therefore predict that human civilization will probably disappear within a few thousand years? This "Doomsday Argument" shares a family resemblance to ideas used by many professional cosmologists to judge whether a model of the universe is natural or not. Philosopher Nick Bostrom is the world's expert on these kinds of anthropic arguments. We talk through them, leading to the biggest doozy of them all: the idea that our perceived reality might be a computer simulation being run by enormously more powerful beings.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Nick Bostrom received his Ph.D. in philosophy from the London School of Economics. He also has bachelor's degrees in philosophy, mathematics, logic, and artificial intelligence from the University of Gothenburg, an M.A. in philosophy and physics from the University of Stockholm, and an M.Sc. in computational neuroscience from King's College London. He is currently a Professor of Applied Ethics at the University of Oxford, Director of the <a href= "https://www.fhi.ox.ac.uk/" rel="noopener noreferrer" target= "_blank">Oxford Future of Humanity Institute</a>, and Director of the Oxford Martin Programme on the Impacts of Future Technology. He is the author of <em>Anthropic Bias: Selection Effects in Science and Philosophy</em> and <em>Superintelligence: Paths, Dangers, Strategies</em>.</p> <ul> <li><a href="https://nickbostrom.com/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href= "https://www.ox.ac.uk/news-and-events/find-an-expert/professor-nick-bostrom" rel="noopener noreferrer" target="_blank">Oxford web page</a></li> <li><a href="https://en.wikipedia.org/wiki/Nick_Bostrom" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> <li><a href= "https://www.amazon.com/Nick-Bostrom/e/B001HCZVL8/ref=dp_byline_cont_pop_book_1" rel="noopener noreferrer" target="_blank">Amazon author page</a></li> <li><a href= "https://www.youtube.com/watch?v=nnl6nY8YKHs&ab_channel=Science%2CTechnology%26theFuture" rel="noopener noreferrer" target="_blank">Talk on the Simulation Argument</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Human civilization is only a few thousand years old (depending on how we count). So if civilization will ultimately last for millions of years, it could be considered surprising that we've found ourselves so early in history. Should we therefore predict that human civilization will probably disappear within a few thousand years? This "Doomsday Argument" shares a family resemblance to ideas used by many professional cosmologists to judge whether a model of the universe is natural or not. Philosopher Nick Bostrom is the world's expert on these kinds of anthropic arguments. We talk through them, leading to the biggest doozy of them all: the idea that our perceived reality might be a computer simulation being run by enormously more powerful beings.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" rel="noopener noreferrer" target="_blank"><em>Patreon</em></a><em>.</em></p> <p>Nick Bostrom received his Ph.D. in philosophy from the London School of Economics. He also has bachelor's degrees in philosophy, mathematics, logic, and artificial intelligence from the University of Gothenburg, an M.A. in philosophy and physics from the University of Stockholm, and an M.Sc. in computational neuroscience from King's College London. He is currently a Professor of Applied Ethics at the University of Oxford, Director of the <a href= "https://www.fhi.ox.ac.uk/" rel="noopener noreferrer" target= "_blank">Oxford Future of Humanity Institute</a>, and Director of the Oxford Martin Programme on the Impacts of Future Technology. He is the author of <em>Anthropic Bias: Selection Effects in Science and Philosophy</em> and <em>Superintelligence: Paths, Dangers, Strategies</em>.</p> <ul> <li><a href="https://nickbostrom.com/" rel="noopener noreferrer" target="_blank">Web site</a></li> <li><a href= "https://www.ox.ac.uk/news-and-events/find-an-expert/professor-nick-bostrom" rel="noopener noreferrer" target="_blank">Oxford web page</a></li> <li><a href="https://en.wikipedia.org/wiki/Nick_Bostrom" rel= "noopener noreferrer" target="_blank">Wikipedia</a></li> <li><a href= "https://www.amazon.com/Nick-Bostrom/e/B001HCZVL8/ref=dp_byline_cont_pop_book_1" rel="noopener noreferrer" target="_blank">Amazon author page</a></li> <li><a href= "https://www.youtube.com/watch?v=nnl6nY8YKHs&ab_channel=Science%2CTechnology%26theFuture" rel="noopener noreferrer" target="_blank">Talk on the Simulation Argument</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/nick-bostrom.mp3?dest-id=5264190" length="78121352" type="audio/mpeg" />
+      <itunes:duration>01:20:41</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>111</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/b/3/6/1/b361b5a0d12e94e216c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647085</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:23Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>100 | Solo | Life and Its Meaning</title>
+      <itunes:title>Solo | Life and Its Meaning</itunes:title>
+      <pubDate>Mon, 08 Jun 2020 14:15:24 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/0iyv3mmKjrUUSKbtF7Lj0E_OKM7m_ppaqlIH3IpC-8Q]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/100-solo-life-and-its-meaning]]></link>
+      <description><![CDATA[<p>A podcast only hits the century mark once! And for Mindscape, this is it. There have been holiday messages and bonus episodes and the like. But this is the 100th officially-numbered episode. To celebrate, I decided to treat myself to a solo episode in which I reflect, somewhat non-systematically, on the age-old question of the meaning of life. I end up spending a lot (most?) of the time talking about the meaning of "life," i.e. what it means to be a living organism in a naturalistic universe. But then I go on to muse about the construction of human meaning in a world where values are not imposed on us or objectively grounded in physical facts.</p> <p>I think life does have meaning, and it's important to understand what forms it might take. I settle largely on the idea that humans can conceive of different possible futures, assign value to them, and work against the natural order of things to create something that otherwise would not have been. This is far from the final word, even in my own mind; it's an invitation to think and converse in a reasonable way about some of the biggest questions there are. Just like the podcast in general.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" target= "_blank"><em>Patreon</em></a><em>.</em></p> <p>Here are some modern works offering other perspectives on the meaning of life:</p> <ul> <li>Owen Flanagan, <a href= "https://www.amazon.com/Really-Hard-Problem-Material-Bradford/dp/0262512483/" target="_blank"><em>The Really Hard Problem: Meaning in a Material World</em></a></li> <li>Susan Wolf, <a href= "https://www.amazon.com/Susan-Wolf/dp/0691154503/" target= "_blank"><em>Meaning in Life and Why it Matters</em></a></li> <li>Terry Eagleton, <a href= "https://www.amazon.com/Meaning-Life-Very-Short-Introduction/dp/0199532176/" target="_blank"><em>The Meaning of Life: A Very Short Introduction</em></a></li> <li>Julian Baggini, <a href= "https://www.amazon.com/Whats-All-About-Philosophy-Meaning/dp/0195315790/" target="_blank"><em>What's It All About? Philosophy and the Meaning of Life</em></a></li> <li>Thaddeus Metz, <a href= "https://plato.stanford.edu/entries/life-meaning/" target= "_blank">"The Meaning of Life" (Stanford Encyclopedia of Philosophy)</a></li> </ul>]]></description>
+      
+      <content:encoded><![CDATA[<p>A podcast only hits the century mark once! And for Mindscape, this is it. There have been holiday messages and bonus episodes and the like. But this is the 100th officially-numbered episode. To celebrate, I decided to treat myself to a solo episode in which I reflect, somewhat non-systematically, on the age-old question of the meaning of life. I end up spending a lot (most?) of the time talking about the meaning of "life," i.e. what it means to be a living organism in a naturalistic universe. But then I go on to muse about the construction of human meaning in a world where values are not imposed on us or objectively grounded in physical facts.</p> <p>I think life does have meaning, and it's important to understand what forms it might take. I settle largely on the idea that humans can conceive of different possible futures, assign value to them, and work against the natural order of things to create something that otherwise would not have been. This is far from the final word, even in my own mind; it's an invitation to think and converse in a reasonable way about some of the biggest questions there are. Just like the podcast in general.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" target= "_blank"><em>Patreon</em></a><em>.</em></p> <p>Here are some modern works offering other perspectives on the meaning of life:</p> <ul> <li>Owen Flanagan, <a href= "https://www.amazon.com/Really-Hard-Problem-Material-Bradford/dp/0262512483/" target="_blank"><em>The Really Hard Problem: Meaning in a Material World</em></a></li> <li>Susan Wolf, <a href= "https://www.amazon.com/Susan-Wolf/dp/0691154503/" target= "_blank"><em>Meaning in Life and Why it Matters</em></a></li> <li>Terry Eagleton, <a href= "https://www.amazon.com/Meaning-Life-Very-Short-Introduction/dp/0199532176/" target="_blank"><em>The Meaning of Life: A Very Short Introduction</em></a></li> <li>Julian Baggini, <a href= "https://www.amazon.com/Whats-All-About-Philosophy-Meaning/dp/0195315790/" target="_blank"><em>What's It All About? Philosophy and the Meaning of Life</em></a></li> <li>Thaddeus Metz, <a href= "https://plato.stanford.edu/entries/life-meaning/" target= "_blank">"The Meaning of Life" (Stanford Encyclopedia of Philosophy)</a></li> </ul>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/solo-meaning-complete.mp3?dest-id=5264190" length="90129702" type="audio/mpeg" />
+      <itunes:duration>01:33:11</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>100</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/5/1/9/3/5193a90d4a65276316c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647140</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:23Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>Holiday Message 2019: On Publishing Books</title>
+      <itunes:title>Holiday Message 2019: On Publishing Books</itunes:title>
+      <pubDate>Sun, 22 Dec 2019 19:26:31 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/SMjqFaxbpyMBj9ny9K0yl6mEkqW0p6uqFP5Tn7pUJdo]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/holiday-message-2019-on-publishing-books]]></link>
+      <description><![CDATA[<p>Welcome to the second annual Mindscape Holiday Message! No substantive content or deep ideas, just me talking a bit about the state of the podcast and what's on my mind. Since the big event for me in 2019 was the publication of<a href= "https://www.preposterousuniverse.com/somethingdeeplyhidden/" target="_blank"><em> Something Deeply Hidden</em></a>, I thought it would be fun to talk about the process of writing and selling a popular book. Might be of interest to some of you out there!</p> <p>Mindscape takes off for the holidays, so the next regular episode will be published on Monday January 6. It's a good one — maybe my favorite episode thus far.</p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Welcome to the second annual Mindscape Holiday Message! No substantive content or deep ideas, just me talking a bit about the state of the podcast and what's on my mind. Since the big event for me in 2019 was the publication of<a href= "https://www.preposterousuniverse.com/somethingdeeplyhidden/" target="_blank"><em> Something Deeply Hidden</em></a>, I thought it would be fun to talk about the process of writing and selling a popular book. Might be of interest to some of you out there!</p> <p>Mindscape takes off for the holidays, so the next regular episode will be published on Monday January 6. It's a good one — maybe my favorite episode thus far.</p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/holiday-message-2019.mp3?dest-id=5264190" length="64168176" type="audio/mpeg" />
+      <itunes:duration>01:06:09</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/3/c/4/4/3c44572ee9a0038516c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>bonus</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647265</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:24Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>75 | Max Tegmark on Reality, Simulation, and the Multiverse</title>
+      <itunes:title>Max Tegmark on Reality, Simulation, and the Multiverse</itunes:title>
+      <pubDate>Mon, 02 Dec 2019 15:22:59 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/M8MsipcHDfTlwCu0J_28nhwtKcOa5mkI4qppETVGThM]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/75-max-tegmark-on-reality-simulation-and-the-multiverse]]></link>
+      <description><![CDATA[<p>We've talked a lot recently about the Many Worlds of quantum mechanics. That's one kind of multiverse that physicists often contemplate. There is also the cosmological multiverse, which we talked about with Brian Greene. Today's guest, Max Tegmark, has thought a great deal about both of those ideas, as well as a more ambitious and speculative one: the Mathematical Multiverse, in which we imagine that every mathematical structure is real, and the universe we perceive is just one such mathematical structure. And there's yet another possibility, that what we experience as "reality" is just a simulation inside computers operated by some advanced civilization. Max has thought about all of these possibilities at a deep level, as his research has ranged from physical cosmology to foundations of quantum mechanics and now to applied artificial intelligence. Strap in and be ready for a wild ride.</p> <p>Max Tegmark received his Ph.D. in physics from the University of California, Berkeley. He is currently professor of physics at the Massachusetts Institute of Technology. He has played an important role analyzing data from large-scale structure and the cosmic microwave background. He is the author of <em>Our Mathematical Universe</em> and <em>Life 2.0: Being Human in the Age of Artificial Intelligence.</em> He is a co-founder of the Foundational Questions Institute and the Future of Life Institute.</p> <ul> <li><a href="https://space.mit.edu/home/tegmark/" target= "_blank">Web site</a></li> <li><a href= "https://scholar.google.com/citations?user=eBXEZxgAAAAJ&hl=en" target="_blank">Google Scholar page</a></li> <li><a href="https://en.wikipedia.org/wiki/Max_Tegmark" target= "_blank">Wikipedia</a></li> <li><a href="https://www.amazon.com/Max-Tegmark/e/B00E8W57TU" target="_blank">Amazon author page</a></li> <li><a href= "https://www.ted.com/talks/max_tegmark_how_to_get_empowered_not_overpowered_by_ai" target="_blank">Talk on AI</a></li> <li><a href="https://twitter.com/tegmark" target= "_blank">Twitter</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>We've talked a lot recently about the Many Worlds of quantum mechanics. That's one kind of multiverse that physicists often contemplate. There is also the cosmological multiverse, which we talked about with Brian Greene. Today's guest, Max Tegmark, has thought a great deal about both of those ideas, as well as a more ambitious and speculative one: the Mathematical Multiverse, in which we imagine that every mathematical structure is real, and the universe we perceive is just one such mathematical structure. And there's yet another possibility, that what we experience as "reality" is just a simulation inside computers operated by some advanced civilization. Max has thought about all of these possibilities at a deep level, as his research has ranged from physical cosmology to foundations of quantum mechanics and now to applied artificial intelligence. Strap in and be ready for a wild ride.</p> <p>Max Tegmark received his Ph.D. in physics from the University of California, Berkeley. He is currently professor of physics at the Massachusetts Institute of Technology. He has played an important role analyzing data from large-scale structure and the cosmic microwave background. He is the author of <em>Our Mathematical Universe</em> and <em>Life 2.0: Being Human in the Age of Artificial Intelligence.</em> He is a co-founder of the Foundational Questions Institute and the Future of Life Institute.</p> <ul> <li><a href="https://space.mit.edu/home/tegmark/" target= "_blank">Web site</a></li> <li><a href= "https://scholar.google.com/citations?user=eBXEZxgAAAAJ&hl=en" target="_blank">Google Scholar page</a></li> <li><a href="https://en.wikipedia.org/wiki/Max_Tegmark" target= "_blank">Wikipedia</a></li> <li><a href="https://www.amazon.com/Max-Tegmark/e/B00E8W57TU" target="_blank">Amazon author page</a></li> <li><a href= "https://www.ted.com/talks/max_tegmark_how_to_get_empowered_not_overpowered_by_ai" target="_blank">Talk on AI</a></li> <li><a href="https://twitter.com/tegmark" target= "_blank">Twitter</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/max-tegmark.mp3?dest-id=5264190" length="69003653" type="audio/mpeg" />
+      <itunes:duration>01:11:35</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>75</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/5/8/3/6/58367177dda0c93ed959afa2a1bf1c87/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647280</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:24Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>9 | Solo -- Why Is There Something Rather than Nothing?</title>
+      <itunes:title>Solo -- Why Is There Something Rather than Nothing?</itunes:title>
+      <pubDate>Mon, 13 Aug 2018 14:08:46 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[9bcd98ef6d32493b829b63f750740edc]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/9-solo-why-is-there-something-rather-than-nothing]]></link>
+      <description><![CDATA[It's fun to be in the exciting, chaotic, youthful days of the podcast, when anything goes and experimentation is the order of the day. So today's show is something different: a solo effort, featuring just me talking without any guests to cramp my style. This won't be the usual format, but I suspect it will happen from time to time. Feel free to chime in below on how often you think alternative formats should be part of the mix. The topic today is "Why Is There Something Rather than Nothing?", or equivalently "Why Does the Universe Exist at All?" Heady stuff, but we're not going to back away from the challenge. What I have to say will roughly follow my recent paper on the subject, although in a more chatty and accessible style. It concerns ideas at the intersection of physics, philosophy, and theology, so tune in if you're into that sort of thing. [smart_track_player url="http://traffic.libsyn.com/seancarroll/something-nothing.mp3" social_gplus="false" social_linkedin="true" social_email="true" hashtag="mindscapepodcast" ] Big news! After a number of people have asked, I have finally opened a Patreon account for people who would like to support Mindscape in some way. You can sign up to kick in a dollar or more per podcast episode, and in return you get 1) access to occasional Ask Me Anything episodes done exclusively for patrons, and 2) my undying gratitude. If the Patreon route is successful enough, I'll forego having ads on the podcast -- we'll see how it goes. Download Episode]]></description>
+      
+      <content:encoded><![CDATA[It's fun to be in the exciting, chaotic, youthful days of the podcast, when anything goes and experimentation is the order of the day. So today's show is something different: a solo effort, featuring just me talking without any guests to cramp my style. This won't be the usual format, but I suspect it will happen from time to time. Feel free to chime in below on how often you think alternative formats should be part of the mix. The topic today is "Why Is There Something Rather than Nothing?", or equivalently "Why Does the Universe Exist at All?" Heady stuff, but we're not going to back away from the challenge. What I have to say will roughly follow my recent paper on the subject, although in a more chatty and accessible style. It concerns ideas at the intersection of physics, philosophy, and theology, so tune in if you're into that sort of thing. [smart_track_player url="http://traffic.libsyn.com/seancarroll/something-nothing.mp3" social_gplus="false" social_linkedin="true" social_email="true" hashtag="mindscapepodcast" ] Big news! After a number of people have asked, I have finally opened a Patreon account for people who would like to support Mindscape in some way. You can sign up to kick in a dollar or more per podcast episode, and in return you get 1) access to occasional Ask Me Anything episodes done exclusively for patrons, and 2) my undying gratitude. If the Patreon route is successful enough, I'll forego having ads on the podcast -- we'll see how it goes. Download Episode]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/something-nothing.mp3?dest-id=5264190" length="78689130" type="audio/mpeg" />
+      <itunes:duration>01:21:31</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>9</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/a/8/7/7/a877ae7c506e867ad959afa2a1bf1c87/5d05067c2ccf158df1a482ad261d06fd1b7821174458a481352135d90ca2681222ff8f300c6d67ac2b2c67ed9bd927b6803ae4b7650415da3b0e0925221e38df.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647645</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:25Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>2 | Carlo Rovelli on Quantum Mechanics, Spacetime, and Reality</title>
+      <itunes:title>Carlo Rovelli on Quantum Mechanics, Spacetime, and Reality</itunes:title>
+      <pubDate>Tue, 10 Jul 2018 14:15:39 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[73d472e8628a49af816a9958b81f9090]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/2-carlo-rovelli-on-quantum-mechanics-spacetime-and-reality]]></link>
+      <description><![CDATA[Quantum mechanics and general relativity are the two great triumphs of twentieth-century theoretical physics. Unfortunately, they don't play well together -- despite years of effort, we currently lack a completely successful quantum theory of gravity, although there are some promising ideas out there. Carlo Rovelli is a pioneer of one of those ideas, loop quantum gravity, as well as the bestselling author of such books as Seven Brief Lessons on Physics and the recent The Order of Time. We talk about how to make progress on this knotty problem, including whether string theory will play a role (Carlo thinks not). [smart_track_player url="http://traffic.libsyn.com/seancarroll/rovelli.mp3" social_email="true" hashtag="mindscapepodcast" ] Carlo Rovelli is a professor of theoretical physics at the Centre de Physique Théorique de Luminy of Aix-Marseille University in France. In 1988, he and Abhay Ashtekar and Lee Smolin introduced the idea of loop quantum gravity. He is also the author of the "relational" interpretation of quantum mechanics. Home page Wikipedia page Google Scholar publications Amazon.com author page Talk on The Physics and Philosophy of Time Twitter Download Episode]]></description>
+      
+      <content:encoded><![CDATA[Quantum mechanics and general relativity are the two great triumphs of twentieth-century theoretical physics. Unfortunately, they don't play well together -- despite years of effort, we currently lack a completely successful quantum theory of gravity, although there are some promising ideas out there. Carlo Rovelli is a pioneer of one of those ideas, loop quantum gravity, as well as the bestselling author of such books as Seven Brief Lessons on Physics and the recent The Order of Time. We talk about how to make progress on this knotty problem, including whether string theory will play a role (Carlo thinks not). [smart_track_player url="http://traffic.libsyn.com/seancarroll/rovelli.mp3" social_email="true" hashtag="mindscapepodcast" ] Carlo Rovelli is a professor of theoretical physics at the Centre de Physique Théorique de Luminy of Aix-Marseille University in France. In 1988, he and Abhay Ashtekar and Lee Smolin introduced the idea of loop quantum gravity. He is also the author of the "relational" interpretation of quantum mechanics. Home page Wikipedia page Google Scholar publications Amazon.com author page Talk on The Physics and Philosophy of Time Twitter Download Episode]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/rovelli.mp3?dest-id=5264190" length="69817536" type="audio/mpeg" />
+      <itunes:duration>01:12:17</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>2</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/4/d/3/a/4d3a577122c5f1a6d959afa2a1bf1c87/5d05067c2ccf158df1a482ad261d06fd1b7821174458a481352135d90ca2681222ff8f300c6d67ac2b2c67ed9bd927b6803ae4b7650415da3b0e0925221e38df.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647680</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:25Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>1 | Carol Tavris on Mistakes, Justification, and Cognitive Dissonance</title>
+      <itunes:title>Carol Tavris on Mistakes, Justification, and Cognitive Dissonance</itunes:title>
+      <pubDate>Wed, 04 Jul 2018 18:00:12 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[bff2cb4fbc944fcdb9547a6021712f8f]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/1-carol-tavris-on-mistakes-justification-and-cognitive-dissonance]]></link>
+      <description><![CDATA[For the first full episode of Mindscape, it's an honor to welcome social psychologist Carol Tavris. Her book with co-author Eliot Aronson, Mistakes Were Made (But Not By Me), explores the effect that cognitive dissonance has on how we think. We talk about the fascinating process by which people justify the mistakes that they make, and how that leads to everything from false memories to political polarization. [smart_track_player url="http://traffic.libsyn.com/seancarroll/carol-tavris.mp3" social_email="true" hashtag="mindscapepodcast" ] Carol Tavris received her Ph.D. in social psychology from the University of Michigan. She is the author of numerous books, covering topics such as gender, biology, and emotion, and is a frequent contributor to a variety of newspapers and magazines. She is a Fellow of the American Psychological Association, the Association for Psychological Science and the Committee for Skeptical Inquiry. Carol Tavris on Wikipedia Social Psychology Network profile Amazon.com author page A lecture on "Dissent and Dissonance: The Science and Art of Argument." Download Episode]]></description>
+      
+      <content:encoded><![CDATA[For the first full episode of Mindscape, it's an honor to welcome social psychologist Carol Tavris. Her book with co-author Eliot Aronson, Mistakes Were Made (But Not By Me), explores the effect that cognitive dissonance has on how we think. We talk about the fascinating process by which people justify the mistakes that they make, and how that leads to everything from false memories to political polarization. [smart_track_player url="http://traffic.libsyn.com/seancarroll/carol-tavris.mp3" social_email="true" hashtag="mindscapepodcast" ] Carol Tavris received her Ph.D. in social psychology from the University of Michigan. She is the author of numerous books, covering topics such as gender, biology, and emotion, and is a frequent contributor to a variety of newspapers and magazines. She is a Fellow of the American Psychological Association, the Association for Psychological Science and the Committee for Skeptical Inquiry. Carol Tavris on Wikipedia Social Psychology Network profile Amazon.com author page A lecture on "Dissent and Dissonance: The Science and Art of Argument." Download Episode]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/carol-tavris.mp3?dest-id=5264190" length="68881732" type="audio/mpeg" />
+      <itunes:duration>01:11:18</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>1</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/2/1/0/b/210be53f78fce212d959afa2a1bf1c87/5d05067c2ccf158df1a482ad261d06fd1b7821174458a481352135d90ca2681222ff8f300c6d67ac2b2c67ed9bd927b6803ae4b7650415da3b0e0925221e38df.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647685</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:25Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>Welcome to the Mindscape Podcast!</title>
+      <itunes:title>Welcome to the Mindscape Podcast!</itunes:title>
+      <pubDate>Sun, 01 Jul 2018 17:48:00 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[36c9e4a4360349ad88ca7de2ead4c9f5]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/welcome-to-the-mindscape-podcast]]></link>
+      <description><![CDATA[I've decided to officially take the plunge into the world of podcasting. The new show will be called Mindscape, and will mostly consist of me talking to smart people about interesting ideas. (Occasionally it will be me talking by myself about ideas of questionable merit.) I'm a grizzled veteran at appearing on other podcasts, and it's past time I sat in the director's chair here. [smart_track_player url="http://traffic.libsyn.com/seancarroll/episode-zero-audio.mp3" artist="Sean Carroll" social_gplus="false" social_email="true" tweet_text="Sean Carroll's Mindscape Podcast, Episode 0: Welcome!" hashtag="mindscapepodcast" ] Today I'm just releasing a short teaser podcast, in both audio (bottom of this post) and video (right here) form. Next week will be a more official launch, with several real episodes, all of which I had enormous fun recording. FAQ: It won't just be about physics, although physics will naturally appear. Indeed, the opportunity to talk about things other than physics is a large part of my motivation here. I have plans/hopes to talk to historians, psychologists, biologists, philosophers, artists, filmmakers, neuroscientists, economists, writers, theologians, political scientists, musicians, and more. The video above is just to lure you in. Almost all episodes will be audio-only. I don't have a strict release schedule, that will depend on other obligations. I would guess one every two weeks, perhaps weekly if things start going super-well. (So if you want more episodes, encourage others to subscribe!) Typical episodes will be an hour long, at least to start, though don't hold me to that. Right now you can both subscribe to the RSS feed, and/or to an email list, both available on the sidebar to the right. If you join the email list, you can choose to either get just the episodes as they are released, or just special announcements relevant to the podcast, or both. Soon I hope to be available on iTunes and Google Play and various other platforms, but I'm not sure how quickly that happens. There won't be any ads to start, but I am planning to monetize it if things go well. These microphones don't pay for themselves. I'm not really in it for the money, but if money starts rolling in, my incentive to keep going will be correspondingly boosted. Feel free to leave comments and discuss individual episodes as they appear. There is also a subreddit which might make a good conversation spot. Like everything else I do that isn't physics research, this is a hobby, and might have to take a temporary back seat if things get busy. But so far it's been a lot of fun, and I'm excited to see where it will go. Show notes for this episode: I mention a study of the different ways in which artists and regular people look at images, which you can read about here. And we're ready to go! Thanks to everyone who has helped me set this up, including Gia Mora (web and technical help), Julian Morris (prodding), Cara Santa Maria (podcasting wisdom), Jason Torchinsky (art), Ted Pyne (music), Robert Alexander (gear), and Jennifer Ouellette (patience, support, wine). Comment here if you have suggestions, for good ideas to talk about, good people to talk to, or format/technical wisdom. (As always, demands that I not talk about this or that will be summarily deleted; those are my choices to make, not anybody else's.) Still very new at this, mistakes both technical and judgmental are practically guaranteed to happen, but I'm optimistic that it should be a fun ride. Download Episode [smart_podcast_player permalink="https://preposterousuniverse.com/podcast/" hashtag="mindscapepodcast" ]]]></description>
+      
+      <content:encoded><![CDATA[I've decided to officially take the plunge into the world of podcasting. The new show will be called Mindscape, and will mostly consist of me talking to smart people about interesting ideas. (Occasionally it will be me talking by myself about ideas of questionable merit.) I'm a grizzled veteran at appearing on other podcasts, and it's past time I sat in the director's chair here. [smart_track_player url="http://traffic.libsyn.com/seancarroll/episode-zero-audio.mp3" artist="Sean Carroll" social_gplus="false" social_email="true" tweet_text="Sean Carroll's Mindscape Podcast, Episode 0: Welcome!" hashtag="mindscapepodcast" ] Today I'm just releasing a short teaser podcast, in both audio (bottom of this post) and video (right here) form. Next week will be a more official launch, with several real episodes, all of which I had enormous fun recording. FAQ: It won't just be about physics, although physics will naturally appear. Indeed, the opportunity to talk about things other than physics is a large part of my motivation here. I have plans/hopes to talk to historians, psychologists, biologists, philosophers, artists, filmmakers, neuroscientists, economists, writers, theologians, political scientists, musicians, and more. The video above is just to lure you in. Almost all episodes will be audio-only. I don't have a strict release schedule, that will depend on other obligations. I would guess one every two weeks, perhaps weekly if things start going super-well. (So if you want more episodes, encourage others to subscribe!) Typical episodes will be an hour long, at least to start, though don't hold me to that. Right now you can both subscribe to the RSS feed, and/or to an email list, both available on the sidebar to the right. If you join the email list, you can choose to either get just the episodes as they are released, or just special announcements relevant to the podcast, or both. Soon I hope to be available on iTunes and Google Play and various other platforms, but I'm not sure how quickly that happens. There won't be any ads to start, but I am planning to monetize it if things go well. These microphones don't pay for themselves. I'm not really in it for the money, but if money starts rolling in, my incentive to keep going will be correspondingly boosted. Feel free to leave comments and discuss individual episodes as they appear. There is also a subreddit which might make a good conversation spot. Like everything else I do that isn't physics research, this is a hobby, and might have to take a temporary back seat if things get busy. But so far it's been a lot of fun, and I'm excited to see where it will go. Show notes for this episode: I mention a study of the different ways in which artists and regular people look at images, which you can read about here. And we're ready to go! Thanks to everyone who has helped me set this up, including Gia Mora (web and technical help), Julian Morris (prodding), Cara Santa Maria (podcasting wisdom), Jason Torchinsky (art), Ted Pyne (music), Robert Alexander (gear), and Jennifer Ouellette (patience, support, wine). Comment here if you have suggestions, for good ideas to talk about, good people to talk to, or format/technical wisdom. (As always, demands that I not talk about this or that will be summarily deleted; those are my choices to make, not anybody else's.) Still very new at this, mistakes both technical and judgmental are practically guaranteed to happen, but I'm optimistic that it should be a fun ride. Download Episode [smart_podcast_player permalink="https://preposterousuniverse.com/podcast/" hashtag="mindscapepodcast" ]]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/episode-zero-audio.mp3?dest-id=5264190" length="15884703" type="audio/mpeg" />
+      <itunes:duration>16:06</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/f/0/2/f/f02f450c68a0813616c3140a3186d450/5d05067c2ccf158df1a482ad261d06fd1b7821174458a481352135d90ca2681222ff8f300c6d67ac2b2c67ed9bd927b6803ae4b7650415da3b0e0925221e38df.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647690</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:25Z</libsyn:last-updated>
+      
+    </item>
+    <item>
+      <title>97 | John Danaher on Our Coming Automated Utopia</title>
+      <itunes:title>John Danaher on Our Coming Automated Utopia</itunes:title>
+      <pubDate>Mon, 18 May 2020 14:40:05 +0000</pubDate>
+      <guid isPermaLink="false"><![CDATA[gid://art19-episode-locator/V0/usyjKNZcLkMXOFrWuU9_auFp6-92IHk43UAWHlfqUuQ]]></guid>
+      <link><![CDATA[https://1d1ac211-8392-45fe-82db-99fa7f77076e.libsyn.com/97-john-danaher-on-our-coming-automated-utopia]]></link>
+      <description><![CDATA[<p>Humans build machines, in part, to relieve themselves from the burden of work on difficult, repetitive tasks. And yet, despite the fact that machines are everywhere, most of us are still working pretty hard. But maybe that's about to change. Futurists like John Danaher believe that society is finally on the brink of making a transition to a world in which work would be optional, rather than mandatory — and he thinks that's a very good thing. It will take some adjusting, personally as well as economically, but he envisions a future in which human creativity and artistic impulse can flourish in a world free of the demands of working for a living. We talk about what that would entail, whether it's realistic, and what comes next.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" target= "_blank"><em>Patreon</em></a><em>.</em></p> <p>John Danaher received an LLM degree from Trinity College Dublin and a Ph.D. from University College, Cork. He is currently Senior Lecturer in the School of Law at the National University of Ireland, Galway. His research is situated at the overlap of legal studies and philosophy, and frequently involves questions of technology, automation, and the future. He is the coeditor of <em>Robot Sex: Social and Ethical Implications</em>, and author of the recent book <a href= "https://www.amazon.com/Automation-Utopia-Human-Flourishing-without/dp/0674984242/" target="_blank"><em>Automation and Utopia: Human Flourishing in a World Without Work</em></a>. He writes frequently for publications such as <em>The Atlantic, The Guardian, </em>and<em> The Irish Times,</em> and is the host of his own podcast, <em>Philosophical Disquisitions</em>.</p> <ul> <li><a href="https://philosophicaldisquisitions.blogspot.com/" target="_blank">Web site and blog</a></li> <li><a href= "https://www.nuigalway.ie/business-public-policy-law/school-of-law/staff/johndanaher/" target="_blank">NUI Galway web page</a></li> <li><a href= "https://scholar.google.com/citations?user=AP0o6D0AAAAJ&hl=en" target="_blank">Google Scholar publications</a></li> <li><a href= "https://www.amazon.com/John-Danaher/e/B076NSLLLX/ref=ntt_dp_epwbk_0" target="_blank">Amazon.com author page</a></li> <li><a href= "https://www.youtube.com/watch?v=foNYcGY59Vc&ab_channel=NUIGalwaySchoolofLaw" target="_blank">Talk on The Algorithmic Self in Love</a></li> <li><a href= "https://philosophicaldisquisitions.blogspot.com/p/podcast.html" target="_blank"><em>Philosophical Disquisitions</em> podcast</a></li> <li><a href="https://twitter.com/JohnDanaher" target= "_blank">Twitter</a></li> </ul> <p><br /></p>]]></description>
+      
+      <content:encoded><![CDATA[<p>Humans build machines, in part, to relieve themselves from the burden of work on difficult, repetitive tasks. And yet, despite the fact that machines are everywhere, most of us are still working pretty hard. But maybe that's about to change. Futurists like John Danaher believe that society is finally on the brink of making a transition to a world in which work would be optional, rather than mandatory — and he thinks that's a very good thing. It will take some adjusting, personally as well as economically, but he envisions a future in which human creativity and artistic impulse can flourish in a world free of the demands of working for a living. We talk about what that would entail, whether it's realistic, and what comes next.</p> <p><em>Support Mindscape on </em><a href= "https://www.patreon.com/seanmcarroll" target= "_blank"><em>Patreon</em></a><em>.</em></p> <p>John Danaher received an LLM degree from Trinity College Dublin and a Ph.D. from University College, Cork. He is currently Senior Lecturer in the School of Law at the National University of Ireland, Galway. His research is situated at the overlap of legal studies and philosophy, and frequently involves questions of technology, automation, and the future. He is the coeditor of <em>Robot Sex: Social and Ethical Implications</em>, and author of the recent book <a href= "https://www.amazon.com/Automation-Utopia-Human-Flourishing-without/dp/0674984242/" target="_blank"><em>Automation and Utopia: Human Flourishing in a World Without Work</em></a>. He writes frequently for publications such as <em>The Atlantic, The Guardian, </em>and<em> The Irish Times,</em> and is the host of his own podcast, <em>Philosophical Disquisitions</em>.</p> <ul> <li><a href="https://philosophicaldisquisitions.blogspot.com/" target="_blank">Web site and blog</a></li> <li><a href= "https://www.nuigalway.ie/business-public-policy-law/school-of-law/staff/johndanaher/" target="_blank">NUI Galway web page</a></li> <li><a href= "https://scholar.google.com/citations?user=AP0o6D0AAAAJ&hl=en" target="_blank">Google Scholar publications</a></li> <li><a href= "https://www.amazon.com/John-Danaher/e/B076NSLLLX/ref=ntt_dp_epwbk_0" target="_blank">Amazon.com author page</a></li> <li><a href= "https://www.youtube.com/watch?v=foNYcGY59Vc&ab_channel=NUIGalwaySchoolofLaw" target="_blank">Talk on The Algorithmic Self in Love</a></li> <li><a href= "https://philosophicaldisquisitions.blogspot.com/p/podcast.html" target="_blank"><em>Philosophical Disquisitions</em> podcast</a></li> <li><a href="https://twitter.com/JohnDanaher" target= "_blank">Twitter</a></li> </ul> <p></p>]]></content:encoded>
+      
+      
+      <enclosure url="https://dts.podtrac.com/redirect.mp3/pscrb.fm/rss/p/traffic.libsyn.com/secure/1d1ac211-8392-45fe-82db-99fa7f77076e/john-danaher.mp3?dest-id=5264190" length="80067350" type="audio/mpeg" />
+      <itunes:duration>01:22:42</itunes:duration>
+      <itunes:explicit>false</itunes:explicit>
+      
+      
+      <itunes:keywords />
+      
+      
+      <itunes:episode>97</itunes:episode>
+      
+      
+      <itunes:image href="https://static.libsyn.com/p/assets/7/0/a/1/70a14a0f12583a7a16c3140a3186d450/21d641ef836c48dff270cbede4360d187bdd6c56cb126be7d6f51078db34d4675527fa72e13c86bb573ec42c5d4fc493e18e7d95fec734ec77168fc379baefcf.jpeg" />
+      
+      
+      <itunes:episodeType>full</itunes:episodeType>
+      
+      
+      
+
+      <libsyn:item-id>39647155</libsyn:item-id>
+      
+      <libsyn:last-updated>2026-09-03T18:14:23Z</libsyn:last-updated>
+      
+    </item>
+  </channel>
+</rss>

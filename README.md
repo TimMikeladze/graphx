@@ -1250,6 +1250,13 @@ the as-of scrubber has something to say.
   anime-offline-database (ODbL) with studios, producers, tags and franchise relations, reloaded
   idempotently every release so `diff` shows what each week changed. `bun run download.ts && bun
 run load.ts` in the example dir.
+- [`examples/lex-graph`](./examples/lex-graph) — every episode of the Lex Fridman Podcast and
+  Sean Carroll's Mindscape scraped from their feeds and sites: 952 episodes, the 753 people in them
+  (43 of them guests on both shows, joined as one node), title topics, sponsors and chapter
+  mentions, each valid from the episode that introduced it, so `asOf` and `diff` read the shows'
+  own timeline. Shows are pluggable modules. `bun run dev:lex` opens Podcast Atlas, an explorer
+  app drawn with the admin UI's graph canvas: a show filter, search, neighborhoods, cross-show
+  paths and a time scrubber.
 - [`examples/skills-graph`](./examples/skills-graph) — occupations, skills and 2.7M observed job
   moves dated from 1955 to 2024, so the as-of scrubber shows seventy years of a labour market.
   `bun run dev:skills`.

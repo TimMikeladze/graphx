@@ -49,6 +49,33 @@
         "vite": "^8",
       },
     },
+    "examples/lex-graph": {
+      "name": "graphx-example-lex-graph",
+      "version": "0.3.0",
+      "dependencies": {
+        "@libsql/client": "^0.17.3",
+        "graphx": "workspace:*",
+        "hono": "^4.12.23",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@cosmograph/react": "^2.3.2",
+        "@hugeicons/core-free-icons": "^4.2.0",
+        "@hugeicons/react": "^1.1.6",
+        "@tailwindcss/vite": "^4",
+        "@tanstack/react-query": "^5.101.0",
+        "@types/bun": "^1.3.14",
+        "@types/node": "^24",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "@vitejs/plugin-react": "^6",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
+        "tailwindcss": "^4",
+        "typescript": "^6.0.3",
+        "vite": "^8",
+      },
+    },
     "examples/mma-graph": {
       "name": "graphx-example-mma-graph",
       "version": "0.3.0",
@@ -1555,6 +1582,8 @@
 
     "graphx-example-iot-fleet": ["graphx-example-iot-fleet@workspace:examples/iot-fleet"],
 
+    "graphx-example-lex-graph": ["graphx-example-lex-graph@workspace:examples/lex-graph"],
+
     "graphx-example-mma-graph": ["graphx-example-mma-graph@workspace:examples/mma-graph"],
 
     "graphx-example-pantheon-graph": ["graphx-example-pantheon-graph@workspace:examples/pantheon-graph"],
@@ -2385,6 +2414,8 @@
 
     "graphx-admin/@types/node": ["@types/node@24.13.1", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-RSpUJGmvsJ1ZeBehQZFhIdpsz+bIpES0nIQXko4Ybq+N+kX6XvOq3Jo+iJ82FWLdblFq85AsMikd3m35jgezYg=="],
 
+    "graphx-example-lex-graph/@types/node": ["@types/node@24.13.1", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-RSpUJGmvsJ1ZeBehQZFhIdpsz+bIpES0nIQXko4Ybq+N+kX6XvOq3Jo+iJ82FWLdblFq85AsMikd3m35jgezYg=="],
+
     "lightningcss/detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "log-symbols/is-unicode-supported": ["is-unicode-supported@1.3.0", "", {}, "sha512-43r2mRvz+8JRIKnWJ+3j8JtjRKZ6GmjzfaE/qiBJnikNnYv/6bagRJ1kUhNk8R5EX/GkobD+r+sfxCPJsiKBLQ=="],
@@ -2452,6 +2483,8 @@
     "eslint/ajv/json-schema-traverse": ["json-schema-traverse@0.4.1", "", {}, "sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg=="],
 
     "graphx-admin/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
+
+    "graphx-example-lex-graph/@types/node/undici-types": ["undici-types@7.18.2", "", {}, "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w=="],
 
     "next/postcss/nanoid": ["nanoid@3.3.19", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug=="],
 

@@ -1,0 +1,22 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": { "noEmit": true, "types": ["bun", "node"] },
+	"include": [
+		"schema.ts",
+		"graphx.config.ts",
+		"parse.ts",
+		"scrape.ts",
+		"dataset.ts",
+		"load.ts",
+		"load.test.ts",
+		"lex.test.ts",
+		"mindscape.test.ts",
+		"fixtures.ts",
+		"podcasts/*.ts",
+		"api.test.ts",
+		"queries.ts",
+		"server.ts",
+		"api.ts",
+		"dev.ts"
+	]
+}
