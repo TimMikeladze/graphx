@@ -47,9 +47,9 @@ Nodes and edges are Zod objects. Typed mutations, pattern matching, HTTP routes,
 contract, React Query hooks and MCP tools are all inferred from that one `Schema` type — there is no
 generate step to run and nothing to keep in sync.
 
-### Every write is bitemporal
+### Versioned history with as-of reads
 
-Versions carry `valid_from` / `valid_to`, so history is append-only and nothing is erased — a delete
+Every write opens a new version carrying `valid_from` / `valid_to`, so nothing is erased — a delete
 closes a version. An `asOf` read reconstructs the graph exactly as it stood at any instant.
 
 ### One contract, everywhere it runs
@@ -247,7 +247,9 @@ concurrent writer's win surfaces as `RevisionConflict` instead of a silent overw
 
 **Bulk loading.** `bulkLoad` and `bulkEdges` insert history-shaped rows directly — multi-row inserts,
 a shared `loadTs`, batched embedding, and (on libSQL) the ANN index and FTS trigger deferred across
-the load and rebuilt after.
+the load and rebuilt after. A row may carry its own `id` with `validFrom` / `validTo` to import
+history; a load that would overlap a version already stored for that id throws before writing
+anything, so a load can extend a timeline but never rewrite one.
 
 ```ts
 import { bulkLoad, bulkEdges } from 'graphx';
@@ -382,15 +384,15 @@ const page = await q.page({ limit: 100 }); // keyset pagination over the same pa
 
 ## Time travel
 
-Every write is bitemporal: versions carry `valid_from` / `valid_to` (`FOREVER` = live), so history is
-append-only and a delete closes an interval rather than erasing a row.
+Every write is versioned: versions carry `valid_from` / `valid_to` (`FOREVER` = live), so a delete
+closes an interval rather than erasing a row, and an `asOf` read sees the graph as it stood then.
 
 ```ts
 import { history, diff, changeFeed, timeline } from 'graphx';
 
 await history(db, id); // every version of a node, oldest first
 await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants
-await changeFeed(db, cursor, { limit: 500 }); // CDC: keyset stream of node + edge versions
+await changeFeed(db, cursor, { limit: 500 }); // CDC: node + edge versions in write order
 await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks
 ```
 
@@ -414,8 +416,9 @@ asOf t0    [
 ]
 ```
 
-`changeFeed` is what `graphx/react`'s `useChangeFeedSync` tails to invalidate exactly the query keys
-that moved; `timeline` is what drives the admin UI's as-of scrubber.
+`changeFeed` pages by write order (`ver`), so a `bulkLoad` row backdated before a consumer's cursor
+still reaches it. It is what `graphx/react`'s `useChangeFeedSync` tails to invalidate exactly the
+query keys that moved; `timeline` is what drives the admin UI's as-of scrubber.
 
 ### Branching
 
@@ -435,6 +438,9 @@ const replay = await g.fork(getDb('acme__replay'), { asOf: lastWeek }); // the g
 // The raw form takes two clients — on any backend, so a fork can also move a graph between them.
 const { nodes, edges, needsEmbedding } = await fork(db, getDb('acme__copy'), { asOf: t1 });
 ```
+
+A branch's write clock starts after the fork point, so everything written to it is later than the
+cut, even when a burst of writes pushed the source's monotonic clock ahead of wall time.
 
 Node and edge ids are preserved. Vectors, local blobs, declared constraints and (on a full fork) the
 analytics tables travel too. On an `asOf` fork, a node whose stored vector belongs to a later version
@@ -456,7 +462,16 @@ Traversal respects time; the analytics run over a compressed mirror of the graph
 scores, so `topNodes` reads them back rather than recomputing.
 
 ```ts
-import { journey, shortestPath, pagerank, community, centrality, topNodes, buildCSR } from 'graphx';
+import {
+	journey,
+	shortestPath,
+	pagerank,
+	community,
+	centrality,
+	betweenness,
+	topNodes,
+	buildCSR,
+} from 'graphx';
 
 // A time-respecting walk: only edges valid at each step are followed. `from` (epoch ms) is required.
 await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
@@ -464,11 +479,21 @@ await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
 await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
 await pagerank(db, { damping: 0.85 }); // Map<id, score>; `rels` limits it to some edges
 await community(db, { rels: ['relatedTo'] }); // label propagation → Map<id, community>
-await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
+await centrality(db, 'degree', { rels: ['raised'] }); // 'degree' | 'in' | 'out'
+await betweenness(db, { samples: 500, seed: 1 }); // Brandes, 0–1; sampled for big graphs
 await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
-await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
+await topNodes(db, { by: 'score:betweenness' }); // betweenness persists as a score
+await topNodes(db, { by: 'score:risk', type: 'alert' }); // or any persisted score — see scoreNodes
 await buildCSR(db); // the compressed mirror the analytics run over, if you want it directly
 ```
+
+Every algorithm also takes `asOf` and runs over the graph as it stood then — the edge versions,
+weights included, valid at that instant. A route at 08:00 last Tuesday is
+`shortestPath(db, a, b, { asOf: tuesday8am })`. An `asOf` run is returned and not persisted, so it
+never overwrites the current scores `topNodes` reads — `persistScores` keeps one under a name of
+your own. `types` restricts any of them to some node types, so a road network's analytics are not
+diluted by the crashes and reports hanging off it:
+`betweenness(db, { rels: ['road'], types: ['intersection'], samples: 1000 })`.
 
 ## Events and triggers
 
@@ -579,7 +604,7 @@ g.useGraphEvents(); // subscribes to the SSE stream
 ```
 
 The rest of the set: `useHistory`, `useGraphSlice`, `useHybrid`, `useJourney`, `useDiff`,
-`useShortestPath`, `useTopNodes`, `usePagerank`, `useCommunity`, `useCentrality`, `useKeys`.
+`useShortestPath`, `useTopNodes`, `usePagerank`, `useCommunity`, `useCentrality`, `useBetweenness`, `useKeys`.
 
 ## MCP
 
@@ -806,7 +831,7 @@ await judgePairs(g, [[srcId, dstId]], { fields: ['name', 'pantheon'] });
 
 A written edge's `weight` is the probability of "same", and with `sameEntityData` on the rel its
 data keeps the whole judgment: score, confidence, per-field agreement and the model that answered.
-The write is bitemporal like any other, so a link a curator rejects is closed, not lost — and the
+The write is versioned like any other, so a link a curator rejects is closed, not lost — and the
 history of what Jev decided, and what people overturned, stays queryable.
 
 A second run skips pairs already linked by either rel. Pairs judged different are not recorded, so
@@ -973,7 +998,7 @@ best?.path; // [{ label: 'life' }, { label: 'animals' }, { label: 'mammals' }, {
 ### Checking calibration
 
 Every edge Jev writes carries its probability as `weight` and `source: 'jev'`, and the write is
-bitemporal — so history already records what Jev decided and what people later closed.
+versioned — so history already records what Jev decided and what people later closed.
 `jevCalibration` buckets those edges by weight and reads off each bucket's overturn rate: the number
 to set `minConfidence` and review thresholds against, measured on your own data.
 
@@ -1152,7 +1177,7 @@ is why bql.sh is opt-in rather than the default. In this repo, `bun run bql:buil
 
 `graphx/core` is the same graph engine with the drivers and the HTTP/control-plane layer removed: no
 Node built-ins, no `TextEncoder`, no `atob`. Give it a `DbClient` and it runs wherever you are —
-schema init, typed writes, bitemporal reads, FTS, pattern matching, traversal and algorithms all
+schema init, typed writes, as-of reads, FTS, pattern matching, traversal and algorithms all
 included. Hosts need standard timers and `crypto.getRandomValues` for ULID creation.
 
 ```ts
@@ -1225,16 +1250,29 @@ the as-of scrubber has something to say.
 - [`examples/seaport-traffic-bql`](https://github.com/TimMikeladze/graphx/blob/main/examples/seaport-traffic-bql) — the same what-if on an
   embedded bql.sh server, where the 8am branch is a native fork: bql.sh branches the database file
   and graphx trims it to 8am. `bun run sqlite:build` once, then `bun run start`.
+- [`examples/city-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/city-graph) — the seaport demo at city scale: Boston's
+  11k intersections and 26k road segments from OpenStreetMap, 762 city signals, 813k census
+  commuters, 44k crashes, 23k 311 cases and live MBTA buses, with a modelled weekday as one road
+  version per window. A map app answers congestion at any time (`asOf`), time-aware routing,
+  who drives through a light, critical intersections (`betweenness`) and crash risk, and its
+  scenario lab forks the city, replays the day with an edit, and shows who wins and who pays.
+  `bun run download && bun run prepare-data && bun run load && bun run dev` in the example dir.
 - [`examples/iot-fleet`](https://github.com/TimMikeladze/graphx/blob/main/examples/iot-fleet) — end-to-end Vite + Bun + SQLite + React app. Run
   `bun run server.ts` and `bun run dev` in two shells, or `bun test` for an in-process run with no
   server and no port.
+- [`examples/synthesis-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/synthesis-graph) — synthesis route planning for
+  ibuprofen. Molecules and reactions are a graph; the Boots (1961), BHC (1992) and flow (2009,
+  re-versioned 2015) routes are bulk-loaded with their own valid time, so "the best route in 1995"
+  is an AND/OR planner run on an `asOf` read. `shortestPath`, `match`, `diff` and `history` answer
+  the side questions, and a supplier dropping out is `fork` plus one `updateNode`.
+  `bun run server.ts` in the example dir.
 - [`examples/vault-ingest`](https://github.com/TimMikeladze/graphx/blob/main/examples/vault-ingest) — ingest a markdown vault.
 - [`examples/mma-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/mma-graph) — a real vault at real scale, scraped to order:
   every fighter, fight and event across MMA history pulled from Wikipedia into markdown, ingested
   with `graphx/ingest`, and served by a Next.js app — server-component dashboard, temporal API
   (records as of any date, championship reigns rebuilt from title fights) and graphx's generated
   routes side by side — plus `scrape.ts tail` to keep it minutes-fresh or watch a card land
-  live as bitemporal history. `bun run dev:mma` after `bun scrape.ts full` in the example dir.
+  live as versioned history. `bun run dev:mma` after `bun scrape.ts full` in the example dir.
 - [`examples/file-upload-ingest.ts`](https://github.com/TimMikeladze/graphx/blob/main/examples/file-upload-ingest.ts) — blob-backed ingestion.
 - [`examples/pantheon-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/pantheon-graph) — a real graph from a real corpus: ~10k
   deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`
@@ -1243,6 +1281,13 @@ the as-of scrubber has something to say.
   anime-offline-database (ODbL) with studios, producers, tags and franchise relations, reloaded
   idempotently every release so `diff` shows what each week changed. `bun run download.ts && bun
 run load.ts` in the example dir.
+- [`examples/lex-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/lex-graph) — every episode of the Lex Fridman Podcast and
+  Sean Carroll's Mindscape scraped from their feeds and sites: 952 episodes, the 753 people in them
+  (43 of them guests on both shows, joined as one node), title topics, sponsors and chapter
+  mentions, each valid from the episode that introduced it, so `asOf` and `diff` read the shows'
+  own timeline. Shows are pluggable modules. `bun run dev:lex` opens Podcast Atlas, an explorer
+  app drawn with the admin UI's graph canvas: a show filter, search, neighborhoods, cross-show
+  paths and a time scrubber.
 - [`examples/skills-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/skills-graph) — occupations, skills and 2.7M observed job
   moves dated from 1955 to 2024, so the as-of scrubber shows seventy years of a labour market.
   `bun run dev:skills`.

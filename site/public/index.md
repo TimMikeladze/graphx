@@ -190,7 +190,7 @@ import { history, diff, changeFeed, timeline } from 'graphx';
 
 await history(db, id); // every version of a node, oldest first
 await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants
-await changeFeed(db, cursor, { limit: 500 }); // CDC: keyset stream of node + edge versions
+await changeFeed(db, cursor, { limit: 500 }); // CDC: node + edge versions in write order
 await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks
 ```
 
@@ -250,7 +250,16 @@ const page = await q.page({ limit: 100 }); // keyset pagination over the same pa
 `journey` follows only edges valid at each step. `pagerank`, `community` and `centrality` run over a compressed mirror and persist their scores, so `topNodes` reads them back.
 
 ```ts
-import { journey, shortestPath, pagerank, community, centrality, topNodes, buildCSR } from 'graphx';
+import {
+	journey,
+	shortestPath,
+	pagerank,
+	community,
+	centrality,
+	betweenness,
+	topNodes,
+	buildCSR,
+} from 'graphx';
 
 // A time-respecting walk: only edges valid at each step are followed. `from` (epoch ms) is required.
 await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
@@ -258,9 +267,11 @@ await journey(db, { start: id, from: 0, maxDepth: 6, direction: 'forward' });
 await shortestPath(db, srcId, dstId, { weighted: true, rels: ['deployedAt'] });
 await pagerank(db, { damping: 0.85 }); // Map<id, score>; `rels` limits it to some edges
 await community(db, { rels: ['relatedTo'] }); // label propagation → Map<id, community>
-await centrality(db, 'degree'); // 'degree' | 'in' | 'out'
+await centrality(db, 'degree', { rels: ['raised'] }); // 'degree' | 'in' | 'out'
+await betweenness(db, { samples: 500, seed: 1 }); // Brandes, 0–1; sampled for big graphs
 await topNodes(db, { by: 'pagerank', type: 'gateway', limit: 10 }); // reads persisted analytics
-await topNodes(db, { by: 'score:risk', type: 'alert' }); // or a persisted score — see scoreNodes
+await topNodes(db, { by: 'score:betweenness' }); // betweenness persists as a score
+await topNodes(db, { by: 'score:risk', type: 'alert' }); // or any persisted score — see scoreNodes
 await buildCSR(db); // the compressed mirror the analytics run over, if you want it directly
 ```
 
