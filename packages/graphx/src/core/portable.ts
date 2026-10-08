@@ -267,9 +267,13 @@ export { journey, type JourneyOpts, type JourneyRow } from './journey.ts';
 
 // P8 — graph algorithms (CSR mirror, shortestPath, analytics)
 export {
+	type BetweennessOpts,
+	betweenness,
 	buildCSR,
+	type CsrScope,
 	centrality,
 	type CentralityKind,
+	type CentralityOpts,
 	community,
 	type CommunityOpts,
 	type CSR,

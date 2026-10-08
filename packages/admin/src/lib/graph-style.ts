@@ -17,11 +17,28 @@ export const KIND_PALETTE = [
 	'#a3e635', // lime
 ] as const;
 
+/** Colors an app pinned for its own types ({@link setTypeColors}); consulted before the hash. */
+const pinned = new Map<string, string>();
+
 /**
- * Deterministic type→color: a stable string hash into {@link KIND_PALETTE}, so the same type
- * always gets the same color across renders and slices (the legend stays consistent).
+ * Pin colors for known types. The hash below is fine for an arbitrary schema, but with more types
+ * than palette slots two of them can share a color — an app that knows its types can make every
+ * one distinct. Applies wherever the default palette is used (canvas, legend, dots).
+ */
+export function setTypeColors(colors: Record<string, string>): void {
+	for (const [type, color] of Object.entries(colors)) pinned.set(type, color);
+}
+
+/**
+ * Deterministic type→color: a pinned color when the app set one, else a stable string hash into
+ * {@link KIND_PALETTE}, so the same type always gets the same color across renders and slices
+ * (the legend stays consistent).
  */
 export function colorForType(type: string, palette: readonly string[] = KIND_PALETTE): string {
+	if (palette === KIND_PALETTE) {
+		const p = pinned.get(type);
+		if (p) return p;
+	}
 	let h = 0;
 	for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) | 0;
 	return palette[Math.abs(h) % palette.length];

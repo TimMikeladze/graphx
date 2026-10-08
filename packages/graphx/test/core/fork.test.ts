@@ -8,6 +8,7 @@ import { fork, ForkError } from '../../src/core/fork.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { createLocalBlobStore } from '../../src/core/local-blobs.ts';
 import { init, readEmbeddingMeta } from '../../src/core/schema.ts';
+import { history } from '../../src/core/temporal.ts';
 import {
 	indexBackedConstraints,
 	libsqlOnly,
@@ -91,6 +92,30 @@ test('asOf forks the world as it stood: later versions stay behind, open ones re
 	await branch.updateNode(a.id, { data: { name: 'A', green: 45 } });
 	expect((await branch.getNode(a.id))?.data).toEqual({ name: 'A', green: 45 });
 });
+
+// Graph.atomic (the many-writes-one-transaction scope that drives the clock ahead) is SQLite/libSQL only.
+libsqlOnly(
+	'a branch writes after its fork point even when the write clock ran ahead of wall time',
+	async () => {
+		const { raw, g, a } = await seeded();
+		// One transaction of many writes: the monotonic clock steps 1 ms per write, past Date.now().
+		await g.atomic(async (tx) => {
+			for (let green = 0; green < 300; green++) {
+				const cur = await tx.getNodeVersion(a.id);
+				await tx.updateNode(a.id, { data: { green } }, { expectedRevision: cur!.revision });
+			}
+		});
+		const versions = await history(raw, a.id);
+		const cut = Number(versions.at(-1)!.valid_from);
+		expect(cut).toBeGreaterThan(Date.now());
+
+		const branch = await g.fork(db(), { asOf: cut });
+		const c = await branch.addNode({ type: 'light', data: { name: 'C', green: 1 } });
+		expect(await branch.getNode(c.id, { asOf: cut })).toBeNull();
+		await branch.updateNode(a.id, { data: { green: -1 } });
+		expect((await branch.getNode(a.id, { asOf: cut }))?.data.green).toBe(299);
+	},
+);
 
 test('vectors travel; a cut re-embeds the nodes whose stored vector is from a later version', async () => {
 	const { raw, g, a, b } = await seeded({ embed: true });

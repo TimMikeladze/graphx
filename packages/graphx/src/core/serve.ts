@@ -11,6 +11,7 @@ import { logger as honoLogger } from 'hono/logger';
 import { streamSSE } from 'hono/streaming';
 import { ZodError } from 'zod';
 import {
+	betweenness,
 	centrality,
 	type CentralityKind,
 	community,
@@ -371,20 +372,45 @@ const shortestPathSchema = z.object({
 	mode: z.enum(['sql', 'memory']).optional(),
 	rels: z.array(z.string()).optional(),
 	maxDepth: z.number().int().nonnegative().optional(),
+	asOf: z.number().optional(),
+	types: z.array(z.string()).optional(),
 });
+
+/** Shared analytics fields: restrict to some rels, or run over the graph as of an instant
+ * (an `asOf` run is returned, not persisted). */
+const analyticsScope = {
+	rels: z.array(z.string()).optional(),
+	types: z.array(z.string()).optional(),
+	asOf: z.number().optional(),
+};
 
 /** POST /algorithms/pagerank body. */
 const pageRankSchema = z.object({
 	damping: z.number().optional(),
 	tol: z.number().optional(),
 	maxIter: z.number().int().positive().optional(),
+	...analyticsScope,
 });
 
 /** POST /algorithms/community body. */
-const communitySchema = z.object({ maxIter: z.number().int().positive().optional() });
+const communitySchema = z.object({
+	maxIter: z.number().int().positive().optional(),
+	...analyticsScope,
+});
 
 /** POST /algorithms/centrality body. */
-const centralitySchema = z.object({ type: z.enum(['degree', 'in', 'out']).optional() });
+const centralitySchema = z.object({
+	type: z.enum(['degree', 'in', 'out']).optional(),
+	...analyticsScope,
+});
+
+/** POST /algorithms/betweenness body. */
+const betweennessSchema = z.object({
+	weighted: z.boolean().optional(),
+	samples: z.number().int().positive().optional(),
+	seed: z.number().int().optional(),
+	...analyticsScope,
+});
 
 /** GET /algorithms/top query — `by` is whitelisted to the persisted metric columns. */
 const topNodesQuerySchema = z.object({
@@ -1299,7 +1325,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			},
 		)
 		// §19.10 CDC tail — the headline live-sync route. RAW changelog (no upcaster):
-		// reports the bytes written, paged by opaque per-stream `(valid_from, ver)` cursors.
+		// reports the bytes written, paged by opaque per-stream `ver` cursors (insertion order).
 		.openapi(
 			createRoute({
 				method: 'get',
@@ -1640,10 +1666,32 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', scoresSchema), ...WRITE_ERRORS },
 			}),
 			async (c) => {
+				const { type, ...opts } = c.req.valid('json');
 				const scores = await centrality(
 					c.get('graph').raw,
-					c.req.valid('json').type as CentralityKind | undefined,
+					type as CentralityKind | undefined,
+					opts,
 				);
+				return c.json({ scores: Object.fromEntries(scores) }, 200);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/algorithms/betweenness',
+				operationId: 'betweenness',
+				tags: ['write'],
+				summary: 'Betweenness centrality (persists as score:betweenness)',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: scopeParams,
+					body: { required: true, content: { 'application/json': { schema: betweennessSchema } } },
+				},
+				responses: { 200: json('OK', scoresSchema), ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				const scores = await betweenness(c.get('graph').raw, c.req.valid('json'));
 				return c.json({ scores: Object.fromEntries(scores) }, 200);
 			},
 		)

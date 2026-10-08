@@ -11,6 +11,8 @@ The canvas toolbar switches between them, and the choice rides in the URL (`?ren
 - **Force canvas** (`@cosmograph/react`, the default) — WebGL, built for the whole slice. Node captions, edge captions at the midpoints, a settle budget, pause/resume.
 - **Flow** (`@xyflow/react`) — DOM cards on a computed layout: dagre ranks (`?flowLayout=layered`, the default) or a d3-force settle (`?flowLayout=organic`). Readable, and the only renderer with editing gestures — but every node is real DOM, so it refuses a slice over 500 nodes and points back at the force canvas.
 
+Nodes are colored by type: a stable hash into an 8-color palette, the same in the canvas, legend and lists. An app that embeds the canvas and knows its types can pin them with `setTypeColors({ person: '#fbbf24', … })` from `lib/graph-style`, so no two share a color.
+
 ## Editing
 
 Nodes are created, edited and retracted from the toolbar, the detail panel, and the flow canvas's right-click menu; edges are drawn by dragging one card's handle onto another's and removed from that same menu. Forms are generated from the project's declared schema (see `GET /schema` below) — scalars and enums become inputs, anything richer degrades to a JSON field, and the server's validation error renders inline.

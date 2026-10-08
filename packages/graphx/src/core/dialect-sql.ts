@@ -288,9 +288,8 @@ CREATE INDEX IF NOT EXISTS na_degree ON node_analytics(degree);
  *
  * Other differences from libSQL, all forced:
  *  - `ver`/`seq` come from explicit SEQUENCEs — no rowid alias, no AUTOINCREMENT, no
- *    IDENTITY. The writer allocates from the manifest high-water marks rather than these
- *    at commit time (sequences are non-transactional), but the DEFAULT keeps ad-hoc SQL
- *    and the test suite working.
+ *    IDENTITY. `materialize` restarts them past the manifest high-water marks
+ *    (`verHigh`/`seqHigh`), so a reopened or rebased namespace never reuses an id.
  *  - Temporal columns are `BIGINT`: DuckDB's INTEGER is 32-bit and FOREVER is 8.64e15.
  *  - `node_embeddings.emb` is `FLOAT[]`, not a fixed-size `FLOAT[dim]`. Parquet cannot
  *    preserve `FLOAT[N]` — even a pyarrow fixed_size_list reads back as a variable-length

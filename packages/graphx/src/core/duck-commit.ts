@@ -181,8 +181,10 @@ export async function buildManifest(
 		embModel: metaOf('emb_model') ?? null,
 		embDim: dimValue === undefined ? null : Number(dimValue),
 		schemaHash: base?.schemaHash ?? '',
-		verHigh: Math.max(Number(row.nv ?? 0), Number(row.ev ?? 0)),
-		seqHigh: Number(row.sq ?? 0),
+		// Never below the base's marks: a purge can delete the highest rows, and the next
+		// materialize restarts the sequences from these, so a lower mark would reuse ids.
+		verHigh: Math.max(base?.verHigh ?? 0, Number(row.nv ?? 0), Number(row.ev ?? 0)),
+		seqHigh: Math.max(base?.seqHigh ?? 0, Number(row.sq ?? 0)),
 		tables,
 		indexes,
 	};

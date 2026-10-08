@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import { z } from 'zod';
+import { bulkLoad } from '../../src/core/bulk.ts';
 import { changeFeed, diff } from '../../src/core/temporal.ts';
 import { FOREVER } from '../../src/core/db.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
@@ -12,10 +13,10 @@ import { insertOrIgnoreSql, makeTestDb } from './harness.ts';
 import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P15 — change feed / CDC (§19.10). "The temporal log IS the changelog." changeFeed
-// is the tailable sibling of diff(): new versions WHERE valid_from > cursor, ordered
-// by (valid_from, ver), keyset-paginated so polling never skips or overlaps — even
-// when ≥2 versions share a valid_from (a bare `valid_from > cursor` would skip them).
-// Decision (A.3): valid_from-only "new-versions" feed — a pure close/delete (no
+// is the tailable sibling of diff(): new versions WHERE ver > cursor, in insertion
+// order, keyset-paginated so polling never skips or overlaps — and a row written with
+// a valid_from older than the cursor (a backdated bulkLoad) is still emitted.
+// Decision (A.3): "new-versions" feed — a pure close/delete (no
 // successor row) is NOT surfaced; consumers reconcile closes via diff().
 
 const SCHEMA = defineGraphSchema({
@@ -73,7 +74,7 @@ test('P15 CDC: initial (no cursor) returns all node + edge versions from the beg
 	await insertNodeVersion(client, b, { name: 'b' }, 2000);
 
 	const feed = await changeFeed(client);
-	expect(feed.nodes.map((r) => String(r.id))).toEqual([a, b]); // ordered by (valid_from, ver)
+	expect(feed.nodes.map((r) => String(r.id))).toEqual([a, b]); // insertion (ver) order
 	expect(feed.edges.length).toBe(0);
 	client.close();
 });
@@ -83,8 +84,7 @@ test('P15 CDC: keyset pages rows sharing a valid_from with NO skip/overlap (≥2
 	const a = ulid();
 	const b = ulid();
 	const c = ulid();
-	// A and B share valid_from=1000 (the boundary a bare `valid_from > cursor` would split
-	// and SKIP); C is strictly later. ver disambiguates A vs B within the shared ms.
+	// A and B share valid_from=1000; the ver keyset pages them apart without a skip.
 	await insertNodeVersion(client, a, { name: 'a' }, 1000);
 	await insertNodeVersion(client, b, { name: 'b' }, 1000);
 	await insertNodeVersion(client, c, { name: 'c' }, 2000);
@@ -125,7 +125,7 @@ test('P15 CDC: polling with nextCursor across many versions yields no overlap/no
 		cursor = page.nextCursor.nodes;
 	} while (cursor);
 
-	expect(seen).toEqual(ids); // every version once, in (valid_from, ver) order
+	expect(seen).toEqual(ids); // every version once, in ver order
 	client.close();
 });
 
@@ -240,20 +240,18 @@ test('P15 CDC: malformed and wrong-arity cursors are rejected cleanly', async ()
 	const client = await memClient();
 	await insertNodeVersion(client, ulid(), { name: 'x' }, 1000);
 	await expect(changeFeed(client, { nodes: 'not-base64-json!!' })).rejects.toThrow(/cursor/i);
-	// a 1-tuple cursor (the keyset is the 2-tuple (valid_from, ver))
-	const oneTuple = encodeCursor(['1000']);
-	await expect(changeFeed(client, { nodes: oneTuple })).rejects.toThrow(/cursor/i);
-	// structurally-valid 2-tuples whose strings are not canonical integers must ALSO be
+	// a 2-tuple cursor (the keyset is the 1-tuple (ver))
+	const twoTuple = encodeCursor(['1000', '1']);
+	await expect(changeFeed(client, { nodes: twoTuple })).rejects.toThrow(/cursor/i);
+	// structurally-valid 1-tuples whose strings are not canonical integers must ALSO be
 	// rejected as `invalid cursor` — never reach the bind and crash with a libSQL RangeError
 	// (which onError would map to 500, not 400). Covers: non-numeric, non-finite, and the
 	// empty-string tuple (Number('') === 0 would silently reset the stream to the beginning).
-	await expect(changeFeed(client, { nodes: encodeCursor(['abc', 'def']) })).rejects.toThrow(
+	await expect(changeFeed(client, { nodes: encodeCursor(['abc']) })).rejects.toThrow(/cursor/i);
+	await expect(changeFeed(client, { nodes: encodeCursor(['Infinity']) })).rejects.toThrow(
 		/cursor/i,
 	);
-	await expect(changeFeed(client, { nodes: encodeCursor(['Infinity', '0']) })).rejects.toThrow(
-		/cursor/i,
-	);
-	await expect(changeFeed(client, { nodes: encodeCursor(['', '']) })).rejects.toThrow(/cursor/i);
+	await expect(changeFeed(client, { nodes: encodeCursor(['']) })).rejects.toThrow(/cursor/i);
 	client.close();
 });
 
@@ -261,5 +259,39 @@ test('P15 CDC: a non-positive limit is rejected with a clear error', async () =>
 	const client = await memClient();
 	await expect(changeFeed(client, undefined, { limit: 0 })).rejects.toThrow(/limit/);
 	await expect(changeFeed(client, undefined, { limit: -3 })).rejects.toThrow(/limit/);
+	client.close();
+});
+
+test('P15 CDC: a backdated bulkLoad row written after the cursor is still emitted', async () => {
+	const client = await memClient();
+	const live = ulid();
+	await insertNodeVersion(client, live, { name: 'live' }, Date.now());
+	const first = await changeFeed(client);
+	expect(first.nodes.map((r) => String(r.id))).toEqual([live]);
+	// a tailing consumer resumes from the last row it saw
+	const cursor = encodeCursor([String(first.nodes[0]!.ver)]);
+
+	const { ids } = await bulkLoad(client, SCHEMA, [
+		{ type: 'person', data: { name: 'from 1992' }, validFrom: Date.UTC(1992, 0, 1) },
+	]);
+	const next = await changeFeed(client, { nodes: cursor });
+	expect(next.nodes.map((r) => String(r.id))).toEqual(ids);
+	client.close();
+});
+
+test('P15 CDC: ver is never reused after the newest version is deleted', async () => {
+	const client = await memClient();
+	await insertNodeVersion(client, ulid(), { name: 'a' }, 1000);
+	const b = ulid();
+	await insertNodeVersion(client, b, { name: 'b' }, 2000);
+	const seen = await changeFeed(client);
+	const cursor = encodeCursor([String(seen.nodes[1]!.ver)]);
+	// a purge hard-deletes rows; the next insert must not take the purged row's ver, or a
+	// consumer already past it would never see the new row
+	await client.execute({ sql: 'DELETE FROM node_versions WHERE id = ?', args: [b] });
+	const c = ulid();
+	await insertNodeVersion(client, c, { name: 'c' }, 3000);
+	const next = await changeFeed(client, { nodes: cursor });
+	expect(next.nodes.map((r) => String(r.id))).toEqual([c]);
 	client.close();
 });

@@ -309,3 +309,59 @@ test('P13 bulk history: one edge id carries several versions', async () => {
 	expect(Number(live.rows[0]!.weight)).toBeCloseTo(0.9);
 	client.close();
 });
+
+test('P13 bulk history: reloading an id that has a stored open version throws, nothing written', async () => {
+	// file-backed: updateNode runs a transaction, which detaches a :memory: client
+	const { client, teardown } = makeTestDb({ file: true });
+	await init(client, hashEmbed(4));
+	const id = 'HIST0000000000000000000006';
+	await bulkLoad(client, SCHEMA, [{ id, type: 'person', data: { name: 'v1' }, validFrom: 1000 }]);
+	// a second load of the same id from the same date used to leave TWO open versions
+	await expect(
+		bulkLoad(client, SCHEMA, [
+			{ type: 'person', data: { name: 'fresh' } },
+			{ id, type: 'person', data: { name: 'v2' }, validFrom: 1000 },
+		]),
+	).rejects.toThrow(/already has a version/);
+	expect((await history(client, id)).length).toBe(1);
+	const n = await client.execute('SELECT COUNT(*) AS c FROM node_versions');
+	expect(Number(n.rows[0]!.c)).toBe(1); // the minted row in the refused batch was not written
+
+	// the stored row is still the one live row, so a later update is what reads return
+	const g = new Graph(client, SCHEMA);
+	await g.updateNode(id, { data: { name: 'v3' } });
+	expect(((await g.getNode(id))!.data as { name: string }).name).toBe('v3');
+	await teardown();
+});
+
+test('P13 bulk history: a load may extend a stored closed timeline', async () => {
+	const client = await mem();
+	const id = 'HIST0000000000000000000007';
+	await bulkLoad(client, SCHEMA, [
+		{ id, type: 'person', data: { name: 'a' }, validFrom: 1000, validTo: 2000 },
+	]);
+	await bulkLoad(client, SCHEMA, [{ id, type: 'person', data: { name: 'b' }, validFrom: 2000 }]);
+	expect((await history(client, id)).length).toBe(2);
+	// but not overlap it
+	await expect(
+		bulkLoad(client, SCHEMA, [
+			{ id, type: 'person', data: { name: 'c' }, validFrom: 500, validTo: 1500 },
+		]),
+	).rejects.toThrow(/already has a version/);
+	client.close();
+});
+
+test('P13 bulkEdges: reloading an edge id that has a stored open version throws, nothing written', async () => {
+	const client = await mem();
+	const { persons } = await seedNodes(client, 2);
+	const id = 'EHIST000000000000000000002';
+	const edge = { id, rel: 'knows' as const, src: persons[0]!, dst: persons[1]! };
+	await bulkEdges(client, SCHEMA, [{ ...edge, weight: 0.1, validFrom: 1000 }]);
+	await expect(
+		bulkEdges(client, SCHEMA, [{ ...edge, weight: 0.9, validFrom: 1000 }]),
+	).rejects.toThrow(/already has a version/);
+	const live = await client.execute('SELECT weight FROM edges');
+	expect(live.rows.length).toBe(1);
+	expect(Number(live.rows[0]!.weight)).toBeCloseTo(0.1);
+	client.close();
+});

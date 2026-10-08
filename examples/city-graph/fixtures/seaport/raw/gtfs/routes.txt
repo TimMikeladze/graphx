@@ -1,0 +1,36 @@
+route_id,route_short_name,route_long_name,route_type,route_color
+Red,,Red Line,1,DA291C
+Orange,,Orange Line,1,ED8B00
+741,SL1,Logan Airport Terminals - South Station,3,7C878E
+742,SL2,Design Center - South Station,3,7C878E
+743,SL3,Chelsea Station - South Station,3,7C878E
+751,SL4,Nubian Station - South Station,3,7C878E
+746,SLW,Silver Line Way - South Station,3,7C878E
+CR-Fairmount,,Fairmount Line,2,80276C
+CR-NewBedford,,Fall River/New Bedford Line,2,80276C
+CR-Worcester,,Framingham/Worcester Line,2,80276C
+CR-Franklin,,Franklin/Foxboro Line,2,80276C
+CR-Greenbush,,Greenbush Line,2,80276C
+CR-Kingston,,Kingston Line,2,80276C
+CR-Needham,,Needham Line,2,80276C
+CR-Providence,,Providence/Stoughton Line,2,80276C
+CR-Foxboro,,Foxboro Event Service,2,80276C
+Boat-F1,,Hingham Ferry,4,008EAA
+Boat-F6,,Winthrop Ferry,4,008EAA
+Boat-F7,,Quincy Ferry,4,008EAA
+Boat-F8,,Winthrop/Quincy Ferry,4,008EAA
+Boat-F10,,Harbor Loop Ferry,4,008EAA
+708,CT3,Beth Israel Deaconess Hospital - Andrew Station,3,FFC72C
+4,4,North Station - Design Center,3,FFC72C
+7,7,City Point - Otis Street & Summer Street,3,FFC72C
+9,9,City Point - Copley Square,3,FFC72C
+10,10,City Point - Arlington Station,3,FFC72C
+11,11,City Point - Chauncy Street & Summer Street,3,FFC72C
+16,16,Forest Hills Station - Andrew Station or Harbor Point,3,FFC72C
+17,17,Fields Corner Station - Andrew Station,3,FFC72C
+18,18,Ashmont Station - Andrew Station,3,FFC72C
+47,47,"Central Square, Cambridge - Broadway Station",3,FFC72C
+171,171,Logan Airport Terminals - Nubian Station,3,FFC72C
+501,501,Brighton Center - Federal Street & Franklin Street,3,FFC72C
+504,504,Watertown Yard - Federal Street & Franklin Street,3,FFC72C
+505,505,Waltham Center - Federal Street & Franklin Street,3,FFC72C

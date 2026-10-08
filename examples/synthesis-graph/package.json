@@ -1,0 +1,43 @@
+{
+	"name": "graphx-example-synthesis-graph",
+	"version": "0.3.0",
+	"private": true,
+	"description": "Synthesis route planning for ibuprofen on a bitemporal graphx graph — the Boots, BHC and flow routes enter on their real dates; plan as of any year, fork a supply cut",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/synthesis-graph"
+	},
+	"type": "module",
+	"scripts": {
+		"start": "bun run server.ts",
+		"dev": "bun --hot server.ts",
+		"test": "bun test",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@tanstack/charts": "^0.18.0",
+		"d3-scale": "^4.0.2",
+		"graphx": "workspace:*",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"@types/d3-scale": "^4.0.8",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"typescript": "^6.0.3"
+	}
+}

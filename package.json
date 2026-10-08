@@ -58,6 +58,7 @@
 		"dev:skills": "bun scripts/dev-admin.ts examples/skills-graph/server.ts 8789",
 		"dev:mma": "bun run --filter graphx-example-mma-graph dev",
 		"dev:lex": "bun examples/lex-graph/dev.ts",
+		"dev:city": "bun run --filter graphx-example-city-graph dev",
 		"dev:lex:admin": "bun scripts/dev-admin.ts examples/lex-graph/server.ts 8790",
 		"format": "oxfmt",
 		"lint": "oxlint",

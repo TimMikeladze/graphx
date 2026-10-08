@@ -113,9 +113,13 @@ export interface ShortestPathParams {
 	mode?: 'sql' | 'memory';
 	rels?: string[];
 	maxDepth?: number;
+	/** Route over the graph as of this instant (epoch ms). */
+	asOf?: number;
+	/** Route through nodes of these types only. */
+	types?: string[];
 }
 export interface TopNodesParams {
-	by: 'pagerank' | 'community' | 'degree';
+	by: 'pagerank' | 'community' | 'degree' | `score:${string}`;
 	type?: string;
 	limit?: number;
 }
@@ -137,16 +141,27 @@ export interface DeleteEdgeInput {
 	src?: string;
 	dst?: string;
 }
-export interface PageRankParams {
+/** Shared analytics fields: some rels only, or the graph as of an instant (returned, not persisted). */
+export interface AnalyticsScope {
+	rels?: string[];
+	types?: string[];
+	asOf?: number;
+}
+export interface PageRankParams extends AnalyticsScope {
 	damping?: number;
 	tol?: number;
 	maxIter?: number;
 }
-export interface CommunityParams {
+export interface CommunityParams extends AnalyticsScope {
 	maxIter?: number;
 }
-export interface CentralityParams {
+export interface CentralityParams extends AnalyticsScope {
 	type?: 'degree' | 'in' | 'out';
+}
+export interface BetweennessParams extends AnalyticsScope {
+	weighted?: boolean;
+	samples?: number;
+	seed?: number;
 }
 /** id -> score map from pagerank/community/centrality (the route serializes the Map as an object). */
 export interface ScoresResult {
@@ -346,7 +361,7 @@ function encodeCursor(parts: string[]): string {
 
 /**
  * Next per-stream change-feed cursor. The feed returns `null` whenever a page isn't full, so a
- * partial page (rows present, `next === null`) advances to the LAST ROW's `(valid_from, ver)` —
+ * partial page (rows present, `next === null`) advances to the LAST ROW's `ver` —
  * keeping the tail incremental; an empty page keeps the prior position.
  */
 function advanceCursor(
@@ -356,8 +371,8 @@ function advanceCursor(
 ): string | undefined {
 	if (next) return next;
 	if (rows.length === 0) return prev;
-	const last = rows[rows.length - 1] as { valid_from: unknown; ver: unknown };
-	return encodeCursor([String(last.valid_from), String(last.ver)]);
+	const last = rows[rows.length - 1] as { ver: unknown };
+	return encodeCursor([String(last.ver)]);
 }
 
 /**
@@ -763,16 +778,16 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 	const usePagerank = makeAnalytics<PageRankParams>('/algorithms/pagerank');
 	const useCommunity = makeAnalytics<CommunityParams>('/algorithms/community');
 	const useCentrality = makeAnalytics<CentralityParams>('/algorithms/centrality');
+	const useBetweenness = makeAnalytics<BetweennessParams>('/algorithms/betweenness');
 
 	/**
 	 * CDC live-sync (§19.10, the differentiator). Polls `/changes` and invalidates EXACTLY the
 	 * affected keys — `node(id)` per changed node, `neighbors(src/dst)` per changed edge — instead
-	 * of a blind interval refetch. The `(valid_from, ver)` keyset advances per stream so polling
-	 * never skips or double-counts.
+	 * of a blind interval refetch. The `ver` keyset advances per stream so polling never skips or
+	 * double-counts, and backdated writes still arrive.
 	 *
 	 * Cursor advance: the feed reports `nextCursor: null` whenever a page isn't full (the common
-	 * steady state), so we advance to the LAST ROW SEEN ourselves — re-deriving the `(valid_from,
-	 * ver)` cursor — to keep polling incremental rather than re-scanning from the last full page.
+	 * steady state), so we advance to the LAST ROW SEEN ourselves — re-deriving the `ver` cursor — to keep polling incremental rather than re-scanning from the last full page.
 	 *
 	 * Close caveat (decision A.3): the feed is `valid_from`-only — it carries INSERTs and
 	 * UPDATE-successors, NOT pure closes (`deleteEdge`, single-valued supersession). Edge REMOVALS
@@ -979,6 +994,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 		usePagerank,
 		useCommunity,
 		useCentrality,
+		useBetweenness,
 		useChangeFeedSync,
 		useGraphEvents,
 	};

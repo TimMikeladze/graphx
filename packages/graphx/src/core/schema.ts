@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);   -- ULID
 CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
 
 CREATE TABLE IF NOT EXISTS node_versions (
-  ver          INTEGER PRIMARY KEY,
+  ver          INTEGER PRIMARY KEY AUTOINCREMENT, -- never reused (changeFeed pages by ver)
   id           TEXT NOT NULL REFERENCES node_identity(id),
   type         TEXT NOT NULL,
   body         TEXT,
@@ -60,7 +60,7 @@ ${ftsTableDDL(dialect)}
 ${ftsTriggerDDL(dialect)}
 
 CREATE TABLE IF NOT EXISTS edge_versions (
-  ver        INTEGER PRIMARY KEY,
+  ver        INTEGER PRIMARY KEY AUTOINCREMENT,
   id         TEXT NOT NULL REFERENCES edge_identity(id),
   src        TEXT NOT NULL REFERENCES node_identity(id),
   dst        TEXT NOT NULL REFERENCES node_identity(id),

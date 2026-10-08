@@ -1,0 +1,10 @@
+{
+	"extends": "../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"jsx": "react-jsx",
+		"types": ["bun", "node"],
+		"lib": ["ESNext", "DOM", "DOM.Iterable"]
+	},
+	"include": ["src", "web", "server.ts", "schema.ts", "*.test.ts"]
+}

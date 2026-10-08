@@ -1,0 +1,741 @@
+stop_id,stop_name,stop_lat,stop_lon
+1,Washington St opp Ruggles St,42.330957,-71.082754
+10,Theo Glynn Way @ Newmarket Sq,42.330555,-71.068787
+10003,Albany St opp Randall St,42.331591,-71.076237
+10005,Albany St opp E Concord St,42.335017,-71.07128
+10006,Albany St opp E Newton St,42.335814,-71.070135
+10007,540 Albany St opp Wareham St,42.338372,-71.066556
+10008,Albany St opp Randolph St,42.339915,-71.064356
+10010,Southampton St @ Newmarket Sq,42.330865,-71.064242
+10011,Albany St @ Randolph St,42.340162,-71.064227
+10012,Albany St @ Wareham St,42.338361,-71.066667
+10013,Albany St @ E Dedham St,42.337556,-71.067875
+10014,Albany St opp Boston Medical,42.334117,-71.07251
+10015,Harrison Ave @ E Newton St,42.337402,-71.072162
+10031,E 1st St @ P St,42.338307,-71.027132
+10032,E 1st St opp O St,42.338274,-71.029203
+10033,E 1st St @ O St,42.338176,-71.029444
+10522,Circuit Dr @ Glen Ln,42.305104,-71.094684
+11,Melnea Cass Blvd opp Kerr Way,42.334763,-71.084459
+1111,Cambridge St opp Hano St,42.353931,-71.136365
+1112,Cambridge St @ Harvard Ave,42.355645,-71.132363
+1114,Cambridge St @ N Harvard St,42.357758,-71.126505
+11158,Harrison Ave @ E Brookline St,42.338393,-71.070917
+11219,A St @ Necco St,42.348062,-71.050338
+1123,Green St @ Magazine St,42.364935,-71.104405
+11241,South Bay Mall @ Target,42.330107,-71.062519
+11242,South Bay Mall opp Macy's,42.327145,-71.061951
+11244,South Bay Mall @ Allstate Rd,42.326102,-71.062666
+113,Portland St @ Causeway St,42.364737,-71.062198
+11319,W Second St opp W Third St,42.343047,-71.055038
+11384,Dartmouth St @ Back Bay Sta,42.347346,-71.075956
+114,Causeway St @ North Station,42.366114,-71.060067
+11419,A St @ Mt Washington Ave,42.346677,-71.051426
+11481,Herald St @ Harrison Ave,42.346122,-71.062369
+11512,Bowdoin opp Mt Ida,42.307529,-71.065751
+11587,Circuit Dr @ Glen Ln,42.305236,-71.094725
+11592,Ruggles St @ Cabot St,42.333862,-71.087173
+11593,Ruggles St opp Kerr Way,42.333186,-71.086016
+11599,Seaport Blvd @ Fan Pier Blvd,42.352561,-71.046914
+117,Congress St @ Haymarket Sta,42.362059,-71.057916
+11767,Pearl St @ Putnam Ave,42.358164,-71.109771
+11780,Ave Louis Pasteur @ Longwood Ave,42.337451,-71.102838
+11781,Ave Louis Pasteur @ The Fenway,42.340095,-71.101014
+11792,Harrison Ave @ Melnea Cass Blvd,42.332146,-71.079293
+11799,Ave Louis Pasteur @ The Fenway,42.340129,-71.101132
+118,Causeway St @ Medford St,42.366283,-71.059491
+11802,Ave Louis Pasteur @ Longwood Ave,42.337935,-71.102713
+11803,Longwood Ave @ Binney St,42.338207,-71.105846
+11809,Mountfort St @ Carlton St,42.348846,-71.108581
+11891,Pearl St @ Congress St,42.357495,-71.056251
+1226,Tremont St @ Whittier St,42.334564,-71.088992
+124,Massachusetts Ave @ Boston St,42.321137,-71.06198
+125,Massachusetts Ave @ Clapp St,42.323479,-71.063945
+127,Massachusetts Ave @ Newmarket Station,42.325633,-71.065816
+128,Massachusetts Ave opp Magazine St,42.327984,-71.067744
+12891,Pearl St @ High St,42.355395,-71.054079
+12932,Columbia Rd @ Bird St,42.314492,-71.067211
+12940,Boston St @ Fr Songin Way,42.328037,-71.057845
+1301,7 Winship St,42.348462,-71.151033
+131,Massachusetts Ave opp Newmarket Station,42.325569,-71.065959
+13121,Dewar St @ Dorchester Ave,42.309967,-71.057763
+133,Massachusetts Ave opp Clapp St,42.323417,-71.064112
+134,Massachusetts Ave @ Columbia Rd,42.320995,-71.062033
+1381,W Dedham St @ Washington St,42.340934,-71.071104
+1382,43 W Dedham St,42.341882,-71.072691
+1383,Dartmouth St @ Tremont St,42.342976,-71.07376
+1384,Dartmouth St @ Appleton St,42.345018,-71.074771
+1395,Dartmouth St @ Appleton St,42.345156,-71.074969
+1396,Dartmouth St @ Tremont St,42.342885,-71.073849
+1397,Opp 43 W Dedham St,42.341714,-71.07269
+1398,W Dedham St @ Washington St,42.340883,-71.071385
+14,Dorchester St @ Dorchester Ave,42.329773,-71.056582
+143,Boylston St @ Clarendon St,42.350593,-71.075289
+144,Boylston St @ Berkeley St,42.351234,-71.07295
+145,Arlington St @ Saint James Ave,42.351105,-71.070442
+146,Arlington St @ Isabella St,42.34881,-71.069533
+1468,Bowdoin St @ Geneva Ave,42.303639,-71.071079
+1469,169 Bowdoin St opp Eunice St,42.304268,-71.06958
+147,Herald St @ Tremont St,42.347374,-71.068436
+1470,Bowdoin St @ Norton St,42.305319,-71.06809
+1471,Bowdoin St @ Hamilton St,42.306443,-71.066699
+1472,Bowdoin St opp Elba Terr,42.307568,-71.065473
+1473,Bowdoin St @ Quincy St,42.308395,-71.064656
+14731,Bowdoin St @ Adams St,42.308937,-71.064051
+1474,Bowdoin St @ Winter St,42.310208,-71.062685
+1475,Hancock St @ Bowdoin St,42.311233,-71.062553
+1478,Hancock St @ Rowell St,42.312676,-71.06448
+1479,Hancock St @ Jerome St,42.31491,-71.065813
+148,Herald St @ Washington St,42.346575,-71.064724
+1480,Columbia Rd @ Hancock St,42.316363,-71.065765
+15,Dorchester St @ Vinton St,42.330825,-71.054238
+150,Broadway Station - Red Line,42.342556,-71.057015
+1504,Hancock St @ Bird St,42.314602,-71.065879
+1506,Hancock St @ Trull St,42.312677,-71.064654
+1508,Hancock St @ Bowdoin St,42.311094,-71.062621
+15088,Harrison Ave opp East Springfield St,42.335445,-71.074414
+1509,Bowdoin St @ Tovar St,42.310132,-71.063188
+15095,Washington St @ Herald St,42.345582,-71.064848
+151,W Broadway @ Broadway Station,42.342664,-71.056949
+1510,Bowdoin St @ Hendry St,42.308917,-71.064277
+1511,Bowdoin St @ Quincy St,42.308321,-71.064944
+1512,Bowdoin St @ Bowdoin Pk,42.305849,-71.067582
+1514,Bowdoin St @ Eunice St,42.304293,-71.069728
+1515,Bowdoin St @ Geneva Ave,42.303753,-71.071158
+15176,Washington St @ Worcester St,42.337353,-71.075909
+153,W Broadway @ B St,42.340642,-71.053809
+154,W Broadway @ D St,42.339188,-71.051503
+155,W Broadway @ E St,42.337652,-71.049177
+156,W Broadway @ F St,42.336634,-71.04761
+157,W Broadway @ Dorchester St,42.335582,-71.045971
+158,442 W Broadway,42.336218,-71.046724
+1587,Franklin Park Zoo @ Entrance,42.303124,-71.08595
+159,W Broadway @ F St,42.337094,-71.047973
+1593,Ruggles St @ Shawmut Ave,42.332076,-71.084203
+16,Dorchester St @ Old Colony Ave,42.331629,-71.052919
+160,W Broadway @ E St,42.337921,-71.049404
+161,W Broadway @ D St,42.338923,-71.050952
+162,W Broadway @ C St,42.339917,-71.052494
+163,W Broadway @ B St,42.34072,-71.053732
+16535,Otis St @ Summer St,42.354243,-71.058557
+16538,Chauncy St @ Summer St,42.354273,-71.059524
+16551,Congress St @ Franklin St,42.35555,-71.055682
+17,Dorchester St @ E 8th St,42.332717,-71.051146
+17091,Terminal A,42.364612,-71.020862
+17093,Terminal B Stop 2 - Arrivals Level,42.362099,-71.017983
+17094,Terminal C - Arrivals Level,42.366496,-71.017265
+17095,Terminal E - Arrivals Level,42.369494,-71.020171
+17096,Congress St @ World Trade Center Sta,42.348769,-71.042336
+171,Berkeley St @ Columbus Ave,42.348569,-71.071717
+173,Saint James Ave @ Berkeley St,42.350295,-71.073414
+174,Ring Rd @ Boylston St,42.348825,-71.080571
+175,Boylston St @ Dartmouth St,42.350011,-71.077432
+176,Dartmouth St opp Back Bay Sta,42.347343,-71.076035
+1764,Pearl St @ William St,42.362536,-71.10505
+1766,Pearl St @ Erie St,42.360199,-71.107594
+177,Saint James Ave @ Arlington St,42.351039,-71.070502
+1771,Granite St @ Pearl St,42.355854,-71.111914
+1772,Granite St @ Brookline St,42.355065,-71.110476
+1773,Mountfort St @ Lenox St,42.349273,-71.109993
+1775,Park Dr @ Beacon St,42.346727,-71.105259
+1777,Brookline Ave @ Pilgrim Rd,42.342351,-71.103831
+1778,Brookline Ave @ Short St,42.340455,-71.105828
+1779,Longwood Ave @ Brookline Ave,42.338701,-71.107013
+178,Saint James Ave @ Dartmouth St,42.349505,-71.076639
+1780,Longwood Ave @ Blackfan St,42.337436,-71.104448
+17813,Crescent St @ Moody St,42.371834,-71.237473
+1784,Ruggles St @ Huntington Ave,42.337278,-71.09467
+17846,Crescent St @ Spruce St,42.371032,-71.239454
+1785,Ruggles St @ Annunciation Rd,42.336552,-71.092772
+1787,Washington St @ Worcester St,42.337524,-71.075479
+1788,Washington St @ E Newton St,42.338763,-71.073677
+179,Huntington Ave @ Ring Rd,42.347288,-71.079598
+1790,Harrison Ave @ Worcester Sq,42.335883,-71.074011
+1791,Harrison Ave @ E Lenox St,42.333801,-71.076875
+1798,Ruggles St @ Parker St,42.336896,-71.093235
+1799,Ruggles St @ Huntington Ave,42.337523,-71.095101
+18,180 Dorchester St opp W 7th St,42.333589,-71.049528
+180,Auckland St @ Bay St,42.31105,-71.05668
+1804,Brookline Ave @ Longwood Ave,42.339097,-71.106836
+1805,Brookline Ave opp Short St,42.340438,-71.105523
+1806,Brookline Ave @ The Fenway,42.342626,-71.103291
+1807,Park Dr @ Fenway Station,42.345214,-71.104266
+1808,Park Dr @ Beacon St,42.3471,-71.105198
+1810,Commonwealth Ave @ University Rd,42.350602,-71.110135
+1811,Brookline St @ Granite St,42.355374,-71.109987
+1812,Brookline St @ Putnam Ave,42.357438,-71.107841
+1813,Brookline St @ Erie St,42.359218,-71.105984
+1814,Brookline St @ Pacific St,42.361158,-71.103988
+1816,Brookline St @ Green St,42.363303,-71.101948
+19,Dorchester St @ Old Harbor St,42.334495,-71.047576
+190,Congress St @ State St,42.358299,-71.056529
+1900,Centre St @ Pearl St,42.358456,-71.185026
+19031,400 Centre St - West,42.355938,-71.185299
+191,Congress St @ North St,42.360387,-71.057129
+19201,Cambridge St opp Elko St,42.349476,-71.148656
+19402,Washington St @ W Newton St,42.338788,-71.073825
+1994,Winship St @ Union St,42.346244,-71.152468
+2,Washington St @ Melnea Cass Blvd,42.332324,-71.081252
+20,Dorchester St @ E Broadway,42.335377,-71.045728
+204,Congress St opp North St,42.359546,-71.057192
+21,E Broadway @ G St,42.335423,-71.044136
+210,Summer St @ Drydock Ave,42.344381,-71.039016
+21158,Harrison Ave opp Plympton St,42.339855,-71.069091
+2116,Purchase St @ Pearl St,42.354588,-71.053278
+212,Summer St @ D St,42.345781,-71.04118
+214,Seaport Blvd @ Pier 4 Blvd,42.351012,-71.043647
+21587,Circuit Dr opp Shattuck Hospital,42.30107,-71.103436
+21599,Seaport Blvd @ Sleeper St,42.35257,-71.047578
+22,E Broadway @ H St,42.335457,-71.04167
+221,Atlantic Ave @ Congress St,42.353697,-71.05337
+222,Atlantic Ave @ Seaport Blvd.,42.354896,-71.051128
+223,Atlantic Ave @ Rowes Wharf,42.356271,-71.050665
+224,Atlantic Ave @ State St,42.359101,-71.051566
+225,Atlantic Ave @ Atlantic Ave,42.360797,-71.052557
+23,E Broadway @ I St,42.335495,-71.04012
+230,Commercial St @ Hanover St,42.367193,-71.052338
+231,Commercial St opp Hull St,42.367838,-71.057329
+233,Commercial St @ Battery St,42.366409,-71.051526
+234,Commercial St @ Fleet St,42.363939,-71.051147
+236,Atlantic Ave @ Central St,42.359022,-71.052369
+24,E Broadway @ K St,42.335528,-71.037553
+243,Northern Ave @ D St,42.348896,-71.039266
+247,Northern Ave @ Harbor St,42.346634,-71.035301
+249,B St @ W 4th St,42.340204,-71.054739
+25,E Broadway @ L St,42.335567,-71.03554
+250,B St @ W 5th St,42.339575,-71.055477
+252,W 7th St @ C St,42.337229,-71.055505
+253,W 7th St @ D St,42.336252,-71.054025
+254,W 7th St @ E St,42.33525,-71.052445
+255,W 7th St @ F St,42.33425,-71.050899
+256,W 7th St @ Dorchester St,42.333612,-71.049923
+258,E 8th St @ Dorchester St,42.332451,-71.050603
+25800,E 8th St @ Mercer St,42.33154,-71.049154
+259,E 8th St @ Old Harbor St,42.331193,-71.047219
+260,E 8th St @ Covington St,42.331204,-71.045994
+261,E 8th St @ G St,42.331243,-71.043908
+262,E 8th St @ H St,42.331302,-71.041552
+263,E 8th St @ I St,42.331328,-71.039961
+264,E 8th St @ K St,42.331379,-71.037417
+265,E 8th St @ L St,42.331409,-71.03539
+266,E 8th St @ M St,42.331439,-71.033352
+267,E 8th St @ N St,42.331477,-71.031299
+268,Columbia Rd @ O St,42.331676,-71.029247
+269,W 7th St @ B St,42.338065,-71.056782
+27,E Broadway @ N St,42.335642,-71.031087
+270,Columbia Rd @ P St,42.332487,-71.027186
+27092,Terminal B Stop 1 - Arrivals Level,42.3621,-71.01882
+275,E 8th @ Columbia Rd,42.331565,-71.030048
+2755,Green St @ Pearl St,42.364128,-71.103034
+277,E 8th St @ M St,42.331537,-71.033111
+278,E 8th St @ L St,42.331504,-71.035149
+279,E 8th St @ K St,42.331469,-71.037505
+28,E Broadway @ O St,42.335674,-71.029349
+280,E 8th St @ I St,42.331426,-71.039724
+281,E 8th St @ H St,42.331405,-71.041311
+282,E 8th St @ G St,42.331329,-71.044314
+283,E 8th St @ Covington St,42.331295,-71.046082
+284,E 8th St @ Old Harbor St,42.331286,-71.047299
+285,E 8th St @ Mercer St,42.331495,-71.048888
+286,E 8th St @ Dorchester St,42.332782,-71.050957
+288,W 6th St @ F St,42.334842,-71.0499
+289,W 6th St @ E St,42.335827,-71.051409
+29,E Broadway @ P St,42.335716,-71.026898
+290,W 6th St @ D St,42.336832,-71.053007
+2904,Columbia Rd @ Wolcott St,42.303472,-71.083225
+29049,South Bay Mall @ Allstate Rd,42.326086,-71.062473
+2905,Boston St @ Ellery St,42.328459,-71.057733
+29051,South Bay Mall @ Marshalls,42.327382,-71.061681
+29052,South Bay Mall @ Target,42.330197,-71.062576
+2906,Boston St opp Washburn St,42.326188,-71.058828
+2907,Boston St @ W Howell St,42.325142,-71.059251
+2908,Boston St opp Harvest St,42.323907,-71.060127
+2909,Boston St opp Mayhew St,42.321863,-71.061285
+291,W 7th St @ D St,42.336362,-71.054006
+2910,Columbia Rd @ Dudley St,42.317228,-71.065045
+2911,Columbia Rd @ Bird St,42.314688,-71.067432
+2912,Columbia Rd @ Glendale St,42.31282,-71.068523
+2913,Columbia Rd @ Quincy St,42.311271,-71.070413
+2914,Columbia Rd @ Hamilton St,42.310291,-71.072279
+2915,Columbia Rd opp Wyola Pl,42.308461,-71.075087
+2916,Columbia Rd @ Devon St,42.307465,-71.076246
+2918,Columbia Rd @ Geneva Ave,42.306216,-71.078321
+2919,Columbia Rd @ Washington St,42.305519,-71.080507
+292,W 7th St @ C St,42.337181,-71.055242
+2920,Columbia Rd @ Seaver St,42.30431,-71.082426
+2922,Glen Ln @ Blue Hill Ave - Franklin Park Zoo,42.301806,-71.086667
+2924,Columbia Rd @ Seaver St,42.304183,-71.082124
+2925,Columbia Rd @ Washington St,42.305402,-71.080253
+2926,185 Columbia Rd,42.306567,-71.077044
+2928,Columbia Rd @ Devon St,42.307362,-71.075996
+2929,Columbia Rd @ Intervale St,42.308895,-71.073962
+293,W 7th @ B Street,42.338194,-71.05677
+2930,Columbia Rd @ Hamilton St,42.310128,-71.072044
+2931,Columbia Rd @ Quincy St,42.31118,-71.070077
+2932,Columbia Rd @ Glendale St,42.312835,-71.068184
+2933,Columbia Rd @ Stoughton St,42.317122,-71.064572
+2934,Columbia Rd @ Annabel St,42.318702,-71.063102
+2935,Columbia Rd @ Massachusetts Ave,42.319915,-71.062177
+2937,Boston St @ Mayhew St,42.321914,-71.061132
+2938,Boston St @ Dorset St,42.324096,-71.059813
+2939,Boston St @ Howell St,42.325163,-71.059106
+2940,Boston St @ Rawson St,42.326661,-71.058451
+295,P St @ E 5th St,42.334111,-71.027196
+296,P St @ Columbia Rd,42.332657,-71.027166
+298,Dorchester Ave opp Kemp St,42.326839,-71.057047
+299,Dorchester Ave @ Howell St,42.325012,-71.056987
+3,Washington St @ Melnea Cass Blvd - Silver Line,42.333164,-71.080749
+30,E Broadway @ Farragut Rd,42.335738,-71.02519
+300,Dorchester Ave @ Dorset St,42.323237,-71.056879
+30009,Massachusetts Ave @ Magazine St,42.327877,-71.067901
+301,Dorchester Ave @ Mt Vernon St,42.321708,-71.056845
+30203,Congress St @ Sudbury St,42.362175,-71.058498
+30235,Atlantic Ave @ Commercial Wharf,42.362334,-71.051095
+30249,Northern Ave @ Tide St,42.34508,-71.031986
+30250,23 Drydock Ave,42.344649,-71.030268
+30251,27 Drydock Ave,42.344706,-71.028419
+30256,Drydock Ave @ Harbor St,42.344669,-71.037379
+30270,Farragut Rd opp E Sixth St,42.333672,-71.024883
+30272,Farragut Rd @ Broadway,42.336028,-71.025028
+30287,W 6th S @ Dorchester St,42.334168,-71.048924
+30294,250 Dorchester Avenue,42.339547,-71.057089
+303,Dorchester Ave @ Edison Green,42.319181,-71.056844
+30336,Dorchester Ave @ Dracut St,42.287003,-71.063901
+305,Dorchster Ave @ Howes St,42.317797,-71.056787
+306,Dorchester Ave @ Mayfield St,42.316398,-71.056738
+308,Dorchester Ave @ Pearl St,42.314548,-71.056932
+309,Dorchester Ave @ Thornley Rd,42.313795,-71.057082
+312,Auckland St @ Dewar St,42.309914,-71.056946
+31255,Drydock Ave @ Design Center Place,42.3446,-71.034476
+31256,Northern Ave opp Harbor St,42.346538,-71.034878
+31257,Northern Ave @ Tide St,42.345192,-71.031996
+31259,Drydock Ave @ Black Falcon Ave,42.344232,-71.027213
+317,Dorchester Ave @ Hancock St,42.30862,-71.058298
+3176,Dorchester Ave @ Hecla St,42.307117,-71.058617
+318,Dorchester Ave @ Linden St,42.306096,-71.058836
+319,Dorchester Ave @ Ellet St,42.304333,-71.059214
+32,Farragut Rd opp E 2nd St,42.337629,-71.025051
+320,Dorchester Ave @ Adams St,42.301835,-71.059793
+322,Geneva Ave opp Vinson St,42.299071,-71.064001
+325,Park St Busway @ Dorchester Ave,42.298197,-71.060956
+32501,Park St Busway @ Dorchester Ave,42.298337,-71.060997
+326,Dorchester Ave opp Gibson St,42.297293,-71.061082
+327,Dorchester Ave @ Melville Ave,42.296156,-71.0614
+328,1621 Dorchester Ave opp Dix St,42.295155,-71.061707
+329,Dorchester Ave @ Centre St,42.293336,-71.06228
+33,City Point Bus Terminal,42.338537,-71.031181
+330,Dorchester Ave @ Cheverus Rd,42.292014,-71.062617
+331,Dorchester Ave opp Shepton St,42.289422,-71.063344
+332,Dorchester Ave @ Banton St,42.288313,-71.063639
+337,Dorchester Ave @ Msgr Lydon Way,42.288229,-71.063529
+338,Dorchester Ave @ Shepton St,42.289355,-71.063224
+339,Dorchester Ave @ King St,42.291937,-71.062505
+34,P St @ E 2nd St,42.33733,-71.027298
+340,Dorchester Ave @ Centre St,42.293551,-71.06205
+341,Dorchester Ave @ Dix St,42.294957,-71.061634
+342,Dorchester Ave @ Parkman St,42.29603,-71.061336
+343,Dorchester Ave @ Gibson St,42.297101,-71.061006
+345,Dorchester Ave opp Charles St,42.300648,-71.059987
+346,Dorchester Ave @ Adams St,42.301806,-71.059649
+347,Dorchester Ave @ Kimball St,42.30462,-71.059004
+348,Dorchester Ave @ Linden St,42.305898,-71.058749
+349,Dorchester Ave @ Hoyt St,42.308242,-71.058222
+35,P St @ E Broadway,42.335837,-71.027244
+350,Dorchester Ave @ Dewar St,42.309828,-71.057855
+351,Dorchester Ave @ Savin Hill Ave,42.312997,-71.057141
+352,Dorchester Ave @ Belfort St,42.315311,-71.056616
+353,Dorchester Ave @ Romsey St,42.316434,-71.056601
+354,Dorchester Ave @ Crescent Ave,42.318234,-71.056645
+355,Dorchester Ave @ Columbia Rd,42.320615,-71.056709
+357,Dorchester Ave @ Locust St,42.323299,-71.056756
+358,Dorchester Ave opp Howell St,42.324726,-71.056787
+359,Dorchester Ave @ Kemp St,42.326765,-71.056806
+362,Columbia Rd @ Holden St,42.318764,-71.063583
+36538,E Berkeley St @ Harrison Ave,42.343485,-71.064079
+36539,E Berkeley St @ Tremont St,42.345137,-71.069335
+36540,Berkeley St @ Chandler St,42.347293,-71.071004
+36541,E Berkeley St @ Washington St,42.343942,-71.065731
+383,Blue Hill Ave @ Ellington St,42.302768,-71.085185
+4,Washington St @ Lenox St,42.335164,-71.078518
+41,E Broadway @ L St,42.335658,-71.035628
+42,E Broadway @ K St,42.335626,-71.037312
+43,E Broadway @ I St,42.335594,-71.039686
+44,E Broadway @ H St,42.335548,-71.041754
+45,E Broadway @ G St,42.335505,-71.044151
+46,Dorchester St @ Broadway,42.335457,-71.045901
+47,Dorchester St @ W 5th St,42.334588,-71.04774
+48,Dorchester St @ W 6th St,42.333973,-71.049151
+49,Dorchester St @ W 8th St,42.332952,-71.051028
+49002,Washington St @ Tufts Med Ctr,42.349908,-71.063684
+49003,Washington St @ Herald St,42.346457,-71.064695
+5,Washington St @ Massachusetts Ave,42.336339,-71.07707
+50,Dorchester St @ Old Colony Ave,42.331696,-71.053061
+5089,91 E Concord St,42.33556,-71.072264
+5091,E Newton St @ Harrison Ave,42.337629,-71.072068
+5093,Washington St @ Union Pk,42.341476,-71.069042
+5095,Washington St @ E Berkeley St,42.344189,-71.065726
+5098,Washington St @ E Berkeley St,42.343739,-71.066256
+51,Dorchester St @ Middle St,42.330942,-71.054465
+5100,Washington St @ W Dedham St,42.340497,-71.071317
+52,Dorchester St @ Dorchester Ave,42.330056,-71.056389
+520,Arborway @ Courthouse,42.30135,-71.109364
+522,Circuit Dr @ Shattuck Hospital,42.30082,-71.102995
+547,Arborway opp Courthouse,42.301615,-71.109803
+55,Washington St @ Massachusetts Ave,42.336361,-71.077214
+553,Geneva Ave @ Holiday St,42.302368,-71.069795
+554,Geneva Ave @ Westville St,42.301075,-71.06761
+556,Geneva Ave @ Tonawanda St,42.299681,-71.065237
+55600,Fields Corner Sta @ Geneva Ave,42.299024,-71.063789
+557,452 Geneva Ave opp Bloomfield St,42.299875,-71.065374
+558,Geneva Ave @ Westville St,42.300925,-71.067152
+559,Geneva Ave @ Topliff St,42.301443,-71.068069
+560,Geneva Ave @ Holiday St,42.302248,-71.069383
+561,Geneva Ave @ Levant St,42.303035,-71.070724
+6,Melnea Cass Blvd @ Harrison Ave,42.332016,-71.079576
+60,Washington St @ Lenox St,42.334963,-71.078951
+61,Washington St @ Melnea Cass Blvd,42.332672,-71.081298
+62,Washington St @ Williams St,42.332045,-71.081738
+63,Washington St @ Ruggles St,42.331035,-71.082875
+6535,Federal St @ Matthews St,42.35479,-71.056314
+6537,Washington St @ Essex St,42.352288,-71.062581
+6538,Essex St @ Atlantic Ave,42.35176,-71.056003
+6542,Kneeland St @ Washington St,42.350845,-71.062868
+65471,Devonshire St @ Water St,42.357732,-71.057373
+6550,Lincoln St @ Essex St,42.352188,-71.057992
+6551,Federal St @ Franklin St,42.355286,-71.056411
+65541,Washington St @ Prospect St,42.345765,-71.233474
+65542,Washington St @ Auburn St,42.344979,-71.234461
+65543,Washington St @ Greenough St,42.343304,-71.236355
+65544,Washington St @ Commonwealth Ave,42.341284,-71.238435
+65546,Commonwealth Ave opp Cheswick Rd,42.343185,-71.241232
+65547,Commonwealth Ave @ Pamela Ct,42.347531,-71.245414
+6555,Chinatown Gate,42.35068,-71.059655
+6564,Summer St @ South Station - Red Line entrance,42.352253,-71.054774
+6565,Washington St @ Tufts Med Ctr,42.34997,-71.063413
+6598,Common St opp Middle St,42.376933,-71.236903
+7,Melnea Cass Blvd @ Washington St,42.333318,-71.081579
+71855,Stuart St @ Dartmouth St,42.348245,-71.076218
+7659,Lexington St @ Whitlowe Rd,42.359169,-71.239345
+76592,Moody St @ Underwood Pk,42.360775,-71.239108
+76593,Moody St @ Washington Ave,42.363169,-71.238784
+76594,Moody St @ Ash St,42.365462,-71.238189
+76597,Moody St @ Pine St,42.371852,-71.236758
+7660,Moody St @ Robbins St,42.364485,-71.238487
+77777,Melnea Cass Blvd @ Washington St,42.333093,-71.081535
+7797,Lexington St @ School St,42.377103,-71.235824
+7813,Crescent St opp Spruce St,42.370855,-71.2399
+7814,113 Crescent St,42.369672,-71.241288
+78201,Lexington St @ Rumford Ave,42.357685,-71.239754
+78203,181 Lexington St,42.354884,-71.243162
+78204,Lexington St @ Orris St,42.352099,-71.245893
+78205,Lexington St @ Freeman St,42.349851,-71.247226
+78211,Commonwealth Ave opp Pamela Ct,42.347446,-71.245416
+78212,Commonwealth Ave @ Auburn St,42.344958,-71.241044
+78213,Commonwealth Ave @ Cheswick Rd,42.3432,-71.241367
+78215,Washington St @ Commonwealth Ave,42.34127,-71.238283
+78216,1600 Washington St,42.343383,-71.236076
+78218,Washington St @ Auburn St,42.345208,-71.234066
+78219,Washington St @ Prospect St,42.345723,-71.233334
+7833,Commonwealth Ave @ Auburn St,42.344937,-71.240918
+7834,Lexington St @ Auburndale Ave,42.349949,-71.247017
+7835,Lexington St @ Orris St,42.351895,-71.245871
+7836,180 Lexington St,42.354866,-71.242884
+7837,Lexington St @ Roberta Rd,42.355732,-71.241216
+7838,Lexington St @ River St,42.357715,-71.23961
+7845,Crescent St @ Maple St,42.368863,-71.24194
+78451,Maple St @ Crescent St,42.368391,-71.242208
+78452,Maple St @ Moody St,42.367548,-71.237722
+7846,Crescent St @ Walnut St,42.370165,-71.240569
+8,Massachusetts Ave @ Island St,42.330882,-71.070429
+855,Massachusetts Ave @ Albany St,42.33325,-71.073291
+86943,Moody St @ Main St,42.375625,-71.236982
+86964,Moody St @ Ash St,42.365931,-71.238159
+86965,Moody St @ Orange St,42.363493,-71.238865
+86967,Moody St opp Underwood Pk,42.360719,-71.239316
+86968,Lexington St @ Whitlowe Rd,42.359108,-71.239519
+86971,Moody St @ Carter St,42.373876,-71.236394
+8717,Dorchester Ave @ Talbot Ave,42.287014,-71.063999
+883321,Elm St @ Main St,42.376033,-71.234936
+88333,Carter St opp Waltham Station,42.374664,-71.235376
+884,Summer St @ E 1st St,42.33828,-71.035424
+886,L St @ Broadway,42.336037,-71.03534
+888,Summer St @ Melcher St,42.350208,-71.05039
+88801,350 Summer St,42.34886,-71.04753
+889,Summer St opp WTC Ave,42.346836,-71.043514
+890,Summer St @ WTC Ave,42.347405,-71.044125
+89001,400 Summer St,42.34876,-71.04675
+891,Summer St opp Melcher St,42.350545,-71.050865
+892,Summer St @ Atlantic Ave,42.352649,-71.055136
+895,E Broadway @ N St,42.335747,-71.031442
+900,Technology Way @ Watertown Yard,42.363394,-71.185809
+902,Galen St @ Boyd St,42.360008,-71.185448
+903,Washington St @ Bacon St,42.357134,-71.185943
+9031,400 Centre St - East,42.356158,-71.184249
+90311,Dorchester Ave @ Melvinside Ter,42.311856,-71.05752
+904,Park St @ Elmwood St,42.355599,-71.182378
+905,Tremont St opp Hibbard Rd,42.354693,-71.181072
+906,Tremont St @ Waverley Ave,42.354039,-71.17911
+907,Tremont St @ Pembroke St,42.352946,-71.17681
+909,Tremont St @ Cufflin St,42.351451,-71.173786
+910,Tremont St @ Tremont Pl,42.350693,-71.172209
+912,Tremont St @ Washington St,42.350378,-71.168875
+913,Washington St @ Breck Ave,42.350442,-71.166883
+915,Washington St @ Langley Rd,42.349181,-71.163647
+916,Washington St @ Lake St,42.348823,-71.160127
+917,Washington St @ Foster St,42.349007,-71.157011
+918,Washington St @ Chestnut Hill Ave,42.349043,-71.154176
+919,Washington St opp Waldo Terr,42.349002,-71.152193
+920,Cambridge St @ Washington St,42.348903,-71.150156
+922,Cambridge St opp Dustin St,42.350692,-71.145688
+924,Cambridge St @ Gordon St,42.352276,-71.140761
+925,Cambridge St @ Barrows St,42.353091,-71.13843
+9421,E Newton St @ Washington St,42.33882,-71.073503
+9434,Park Dr @ Fenway Sta,42.345304,-71.104558
+972,Washington St @ Waldo Terr,42.349081,-71.151941
+973,Washington St @ Market St,42.349206,-71.15404
+974,Washington St @ Foster St,42.34916,-71.157223
+975,Washington St @ Brock St,42.348976,-71.160573
+977,Washington St @ Oak Square Ave,42.349897,-71.164524
+9780,Washington St @ Oak Sq,42.350573,-71.166766
+979,Tremont St @ Washington St,42.350535,-71.168904
+981,Tremont St opp Tremont Pl,42.35091,-71.172329
+982,Tremont St opp Cufflin St,42.351667,-71.173976
+983,Tremont St @ Whittemore Rd,42.35292,-71.176534
+985,Tremont St @ Waverley Ave,42.353972,-71.178781
+986,Tremont St @ Hibbard Rd,42.35492,-71.18172
+987,Park St @ Tremont St,42.355606,-71.182247
+988,Centre St @ Jefferson St,42.35804,-71.184642
+989,Galen St @ Maple St,42.360079,-71.185332
+994,Winship St @ Union St,42.3463,-71.15224
+9960,Massachusetts Ave @ Theo Glynn Way,42.329903,-71.069388
+9983,Stuart St @ Charles St S,42.351039,-71.066798
+999,Galen St @ Water St,42.363754,-71.185942
+Boat-Aquarium,Central Wharf (Aquarium),42.35886,-71.0486
+Boat-Commonwealth,Seaport (Commonwealth Pier),42.3505,-71.04018
+Boat-Fan,Seaport (Fan Pier),42.35349,-71.04322
+Boat-Hingham,Hingham (Hewitts Cove),42.25415,-70.91985
+Boat-Logan,Logan Airport Ferry Terminal,42.35985,-71.02767
+Boat-Lovejoy,Lovejoy Wharf (North Station),42.36748,-71.06
+Boat-Quincy,Quincy (Squantum Point),42.30188,-71.03187
+Boat-Rowes,Rowes Wharf,42.35558,-71.04902
+Boat-Winthrop,Winthrop (Winthrop Landing),42.36669,-70.97384
+FB-0095-04,Readville,42.237769,-71.133569
+FB-0095-05,Readville,42.237781,-71.134295
+DB-2205-01,Fairmount,42.253638,-71.11927
+DB-2205-02,Fairmount,42.253638,-71.11927
+DB-2222-01,Blue Hill Avenue,42.271466,-71.095782
+DB-2222-02,Blue Hill Avenue,42.271466,-71.095782
+DB-2230-01,Morton Street,42.280994,-71.085475
+DB-2230-02,Morton Street,42.280994,-71.085475
+DB-2240-01,Talbot Avenue,42.292246,-71.07814
+DB-2240-02,Talbot Avenue,42.292246,-71.07814
+DB-2249-01,Four Corners/Geneva,42.303955,-71.077979
+DB-2249-02,Four Corners/Geneva,42.305692,-71.076096
+DB-2258-01,Uphams Corner,42.319125,-71.068627
+DB-2258-02,Uphams Corner,42.319125,-71.068627
+DB-2265-01,Newmarket,42.327415,-71.065674
+DB-2265-02,Newmarket,42.327415,-71.065674
+FB-0109-01,Endicott,42.233249,-71.158647
+FB-0109-02,Endicott,42.233249,-71.158647
+FB-0118-01,Dedham Corporate Center,42.227079,-71.174254
+FB-0118-02,Dedham Corporate Center,42.227079,-71.174254
+FB-0125-01,Islington,42.22105,-71.183961
+FB-0125-02,Islington,42.22105,-71.183961
+FB-0143-01,Norwood Depot,42.196857,-71.196688
+FB-0143-02,Norwood Depot,42.196857,-71.196688
+FB-0148-01,Norwood Central,42.188775,-71.199665
+FB-0148-02,Norwood Central,42.188775,-71.199665
+FB-0166-S,Windsor Gardens,42.172127,-71.219366
+FB-0191-S,Walpole,42.145548,-71.257646
+FB-0230-S,Norfolk,42.120694,-71.325217
+FB-0275-S,Franklin,42.083071,-71.396375
+FB-0303-S,Forge Park/495,42.089941,-71.43902
+FRS-0054-S,Freetown,41.773482,-71.091052
+FRS-0109-S,Fall River Depot,41.713982,-71.154182
+FS-0049-S,Foxboro,42.0951,-71.26151
+GRB-0118-S,Weymouth Landing/East Braintree,42.221503,-70.968152
+GRB-0146-S,East Weymouth,42.2191,-70.9214
+GRB-0162-S,West Hingham,42.235838,-70.902708
+GRB-0183-S,Nantasket Junction,42.244959,-70.869205
+GRB-0199-S,Cohasset,42.24421,-70.837529
+GRB-0233-S,North Scituate,42.219528,-70.788602
+GRB-0276-S,Greenbush,42.178776,-70.746641
+KB-0351-S,Kingston,41.97762,-70.721709
+MBS-0350-S,Middleborough,41.887,-70.923209
+MM-0150-S,Holbrook/Randolph,42.156343,-71.027371
+MM-0186-CS,Montello,42.106555,-71.022001
+MM-0186-S,Montello,42.106555,-71.022001
+MM-0200-CS,Brockton,42.084659,-71.016534
+MM-0200-S,Brockton,42.084659,-71.016534
+MM-0219-S,Campello,42.060951,-71.011004
+MM-0277-S,Bridgewater,41.984916,-70.96537
+NB-0064-S,Roslindale Village,42.287442,-71.130283
+NB-0072-S,Bellevue,42.286588,-71.145557
+NB-0076-S,Highland,42.284969,-71.153937
+NB-0080-S,West Roxbury,42.281358,-71.160065
+NB-0109-S,Hersey,42.275648,-71.215528
+NB-0120-S,Needham Junction,42.273187,-71.235559
+NB-0127-S,Needham Center,42.280775,-71.237686
+NB-0137-S,Needham Heights,42.293444,-71.236027
+NBM-0374-01,East Taunton,41.868178,-71.061727
+NBM-0523-S,Church Street,41.67433,-70.939126
+NBM-0546-S,New Bedford,41.644306,-70.925211
+NEC-1659-03,Wickford Junction,41.581289,-71.491147
+NEC-1768-03,TF Green Airport,41.726599,-71.442453
+NEC-1851-03,Providence,41.829293,-71.413301
+NEC-1891-01,Pawtucket/Central Falls,41.878804,-71.392048
+NEC-1891-02,Pawtucket/Central Falls,41.878721,-71.391959
+NEC-1969-03,Attleboro,41.940229,-71.285521
+NEC-1969-04,Attleboro,41.941732,-71.284214
+NEC-2040-01,Mansfield,42.032787,-71.219917
+NEC-2040-02,Mansfield,42.032787,-71.219917
+NEC-2108-01,Sharon,42.124553,-71.184468
+NEC-2108-02,Sharon,42.124553,-71.184468
+NEC-2139-01,Canton Junction,42.162024,-71.153828
+NEC-2139-02,Canton Junction,42.162197,-71.153718
+SB-0150-04,Canton Junction,42.161746,-71.152837
+SB-0150-06,Canton Junction,42.163115,-71.153581
+NEC-2173-01,Route 128,42.210308,-71.147134
+NEC-2173-02,Route 128,42.210308,-71.147134
+NEC-2203-02,Hyde Park,42.25503,-71.125526
+PB-0158-S,South Weymouth,42.155025,-70.953302
+PB-0194-S,Abington,42.107156,-70.934405
+PB-0212-S,Whitman,42.082749,-70.923411
+PB-0245-S,Hanson,42.043967,-70.882438
+PB-0281-S,Halifax,42.014739,-70.824263
+SB-0156-S,Canton Center,42.157095,-71.14628
+SB-0189-S,Stoughton,42.124084,-71.103627
+WML-0025-05,Lansdowne,42.347581,-71.099974
+WML-0025-07,Lansdowne,42.347581,-71.099974
+WML-0035-01,Boston Landing,42.357293,-71.139883
+WML-0035-02,Boston Landing,42.357293,-71.139883
+WML-0081-02,Newtonville,42.351702,-71.205408
+WML-0091-02,West Newton,42.347878,-71.230528
+WML-0102-02,Auburndale,42.345833,-71.250373
+WML-0125-01,Wellesley Farms,42.323608,-71.272288
+WML-0125-02,Wellesley Farms,42.323608,-71.272288
+WML-0135-01,Wellesley Hills,42.31037,-71.277044
+WML-0135-02,Wellesley Hills,42.31037,-71.277044
+WML-0147-01,Wellesley Square,42.296963,-71.295709
+WML-0147-02,Wellesley Square,42.296559,-71.296746
+WML-0177-01,Natick Center,42.285719,-71.347133
+WML-0177-02,Natick Center,42.285719,-71.347133
+WML-0199-01,West Natick,42.283064,-71.391797
+WML-0199-02,West Natick,42.283064,-71.391797
+WML-0214-01,Framingham,42.276108,-71.420055
+WML-0214-02,Framingham,42.276108,-71.420055
+WML-0252-01,Ashland,42.26149,-71.482161
+WML-0252-02,Ashland,42.26149,-71.482161
+WML-0274-01,Southborough,42.267024,-71.524371
+WML-0274-02,Southborough,42.267024,-71.524371
+WML-0340-01,Westborough,42.269644,-71.647076
+WML-0340-02,Westborough,42.269644,-71.647076
+WML-0364-01,Grafton,42.2466,-71.685325
+WML-0364-02,Grafton,42.2466,-71.685325
+WML-0442-CS,Worcester,42.261056,-71.794428
+70061,Alewife,42.396148,-71.140698
+13,Andrew,42.329962,-71.057625
+70083,Andrew,42.330154,-71.057655
+70084,Andrew,42.330154,-71.057655
+7096,Airport,42.3745,-71.029541
+7097,Airport,42.374304,-71.029726
+334,Ashmont,42.284195,-71.063879
+70093,Ashmont,42.284508,-71.063833
+70094,Ashmont,42.28453,-71.063725
+70279,Assembly,42.392336,-71.07718
+70015,Back Bay,42.34735,-71.075727
+NEC-2276,Back Bay,42.34735,-71.075727
+NEC-2276-01,Back Bay,42.347283,-71.075312
+NEC-2276-02,Back Bay,42.347196,-71.075299
+NEC-2276-03,Back Bay,42.347283,-71.075312
+WML-0012-05,Back Bay,42.34759,-71.075393
+WML-0012-07,Back Bay,42.34759,-71.075393
+74632,Bellingham Square,42.395328,-71.033291
+74633,Bellingham Square,42.395638,-71.034599
+74634,Box District,42.394018,-71.028439
+74635,Box District,42.394168,-71.028452
+70081,Broadway,42.342622,-71.056967
+70082,Broadway,42.342622,-71.056967
+70105,Braintree,42.207424,-71.001645
+MM-0109-S,Braintree,42.209964,-71.001088
+70029,Community College,42.373622,-71.069533
+74630,Chelsea,42.396661,-71.04029
+74631,Chelsea,42.39682,-71.040437
+70073,Charles/MGH,42.361187,-71.071505
+70074,Charles/MGH,42.361263,-71.071602
+70019,Chinatown,42.352547,-71.062752
+70069,Central,42.365304,-71.103621
+70070,Central,42.365379,-71.103554
+74614,Silver Line Way,42.347241,-71.038801
+74624,Silver Line Way,42.347066,-71.037969
+74612,Courthouse,42.352161,-71.046469
+74616,Courthouse,42.352329,-71.046342
+70063,Davis,42.39674,-71.121815
+70064,Davis,42.39674,-71.121815
+70021,Downtown Crossing,42.35588,-71.059978
+70077,Downtown Crossing,42.354672,-71.059426
+70078,Downtown Crossing,42.354763,-71.059375
+74636,Eastern Avenue,42.388403,-71.02409
+74637,Eastern Avenue,42.388476,-71.023829
+32303,Fields Corner,42.300142,-71.060923
+70089,Fields Corner,42.299993,-71.062021
+70090,Fields Corner,42.299935,-71.061945
+70001,Forest Hills,42.300926,-71.114129
+875,Forest Hills,42.300479,-71.113634
+NEC-2237-03,Forest Hills,42.301065,-71.113491
+NEC-2237-05,Forest Hills,42.301105,-71.113625
+70003,Green Street,42.309796,-71.107988
+70025,Haymarket,42.363021,-71.05829
+70067,Harvard,42.374663,-71.118814
+70068,Harvard,42.374663,-71.118814
+70007,Jackson Square,42.323132,-71.099592
+70085,JFK/UMass,42.320632,-71.052514
+70086,JFK/UMass,42.320637,-71.052473
+70095,JFK/UMass,42.320418,-71.052287
+70096,JFK/UMass,42.320434,-71.052215
+70071,Kendall/MIT,42.362355,-71.085605
+70072,Kendall/MIT,42.362434,-71.085591
+70013,Massachusetts Avenue,42.340892,-71.084124
+70035,Malden Center,42.426662,-71.074314
+70027,North Station,42.36528,-71.060205
+70097,North Quincy,42.27577,-71.030194
+70098,North Quincy,42.275802,-71.030144
+64,Nubian,42.329789,-71.083887
+70036,Oak Grove,42.437735,-71.070875
+70075,Park Street,42.3563946,-71.0624242
+70076,Park Street,42.3563946,-71.0624242
+70065,Porter,42.3884,-71.119149
+70066,Porter,42.3884,-71.119149
+70103,Quincy Adams,42.233391,-71.007153
+70104,Quincy Adams,42.233391,-71.007153
+70101,Quincy Center,42.251809,-71.005409
+70102,Quincy Center,42.251809,-71.005409
+MM-0079-S,Quincy Center,42.251809,-71.005409
+70009,Roxbury Crossing,42.33064,-71.09604
+17861,Ruggles,42.336855,-71.089449
+17866,Ruggles,42.336638,-71.088853
+17870,Ruggles,42.336479,-71.08874
+17871,Ruggles,42.336539,-71.088668
+70011,Ruggles,42.336451,-71.089635
+NEC-2265-01,Ruggles,42.336339,-71.089517
+NEC-2265-02,Ruggles,42.337659,-71.087737
+NEC-2265-03,Ruggles,42.336368,-71.089554
+70005,Stony Brook,42.317062,-71.104248
+70087,Savin Hill,42.310603,-71.053678
+70088,Savin Hill,42.310591,-71.053612
+70091,Shawmut,42.2931258,-71.065738
+70092,Shawmut,42.2931258,-71.065738
+70079,South Station,42.352271,-71.055242
+70080,South Station,42.352271,-71.055242
+74611,South Station,42.352271,-71.055242
+74617,South Station,42.352271,-71.055242
+84611,South Station,42.352271,-71.055242
+NEC-2287,South Station,42.351497,-71.055059
+70023,State,42.358978,-71.057598
+70031,Sullivan Square,42.383975,-71.076994
+70017,Tufts Medical Center,42.349662,-71.063917
+70033,Wellington,42.401507,-71.07715
+70099,Wollaston,42.266762,-71.020542
+70100,Wollaston,42.266788,-71.020457
+74613,World Trade Center,42.348222,-71.042661
+74615,World Trade Center,42.348354,-71.042565

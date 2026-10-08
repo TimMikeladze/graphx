@@ -1,0 +1,58 @@
+{
+	"name": "graphx-example-city-graph",
+	"version": "0.3.0",
+	"private": true,
+	"description": "Boston as a bitemporal graph — every road and signal, a modelled weekday of traffic, census commute flows, crashes, 311 and the MBTA — with a map UI and a scenario lab that forks the city",
+	"homepage": "https://graphx.sh",
+	"bugs": {
+		"url": "https://github.com/TimMikeladze/graphx/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Tim Mikeladze",
+		"email": "tim.mikeladze@gmail.com",
+		"url": "https://github.com/TimMikeladze"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/TimMikeladze/graphx.git",
+		"directory": "examples/city-graph"
+	},
+	"type": "module",
+	"scripts": {
+		"download": "bun src/download.ts",
+		"prepare-data": "bun src/prepare.ts",
+		"load": "bun src/load.ts",
+		"serve": "bun server.ts",
+		"dev": "bun dev.ts",
+		"build": "vite build",
+		"fixture": "bun src/make-fixture.ts",
+		"test": "bun test",
+		"type-check": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@deck.gl/aggregation-layers": "^9.4.0",
+		"@deck.gl/core": "^9.4.0",
+		"@deck.gl/layers": "^9.4.0",
+		"@deck.gl/mapbox": "^9.4.0",
+		"@tanstack/charts": "^0.18.0",
+		"@tanstack/react-query": "^5.104.0",
+		"d3-scale": "^4.0.2",
+		"graphx": "workspace:*",
+		"hono": "^4.12.23",
+		"maplibre-gl": "^6.11.2",
+		"react": "^19.2.6",
+		"react-dom": "^19.2.6",
+		"ulidx": "^2.4.1",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"@types/d3-scale": "^4.0.8",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"@vitejs/plugin-react": "^6",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.1"
+	}
+}

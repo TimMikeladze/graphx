@@ -64,6 +64,10 @@ export interface ShortestPathOpts {
 	 * via the cycle guard) and agrees with memory mode.
 	 */
 	maxDepth?: number;
+	/** Route over the graph as of this instant (epoch ms) instead of the live graph. */
+	asOf?: number;
+	/** Route through nodes of these types only (memory mode). */
+	types?: string[];
 }
 
 /** A shortest path: ULID ids `src..dst` and the total cost. */
@@ -79,6 +83,10 @@ export interface PageRankOpts {
 	maxIter?: number;
 	/** Run over only these rels' edges (default: every rel). Every live node still gets a score. */
 	rels?: string[];
+	/** Score the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
+	asOf?: number;
+	/** Over nodes of these types only (default: every type). Other nodes get no score. */
+	types?: string[];
 }
 
 /** Options for {@link community}. */
@@ -86,6 +94,39 @@ export interface CommunityOpts {
 	maxIter?: number;
 	/** Group over only these rels' edges (default: every rel). */
 	rels?: string[];
+	/** Group the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
+	asOf?: number;
+	/** Over nodes of these types only (default: every type). Other nodes get no score. */
+	types?: string[];
+}
+
+/** Options for {@link centrality}. */
+export interface CentralityOpts {
+	/** Count only these rels' edges (default: every rel). */
+	rels?: string[];
+	/** Count over the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
+	asOf?: number;
+	/** Over nodes of these types only (default: every type). Other nodes get no score. */
+	types?: string[];
+}
+
+/** Options for {@link betweenness}. */
+export interface BetweennessOpts {
+	/** Over only these rels' edges (default: every rel). */
+	rels?: string[];
+	/** Shortest paths by summed edge weight (default) or by hop count (`false`). */
+	weighted?: boolean;
+	/**
+	 * Brandes from this many sampled sources instead of every node, scaled up by `n / samples`
+	 * — the usual estimate for large graphs. Default: every node (exact).
+	 */
+	samples?: number;
+	/** Seed for the source sample, so a sampled run is reproducible. Default 1. */
+	seed?: number;
+	/** Over the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
+	asOf?: number;
+	/** Over nodes of these types only (default: every type). Other nodes get no score. */
+	types?: string[];
 }
 
 /** Centrality flavor. All persist to the `node_analytics.degree` column. */
@@ -127,12 +168,23 @@ export interface TopNode {
  * The node universe is the ascending scan of live node ids (deterministic → stable
  * dense indices, B8); edges whose endpoints are not both live are skipped.
  */
-async function loadCSR(raw: DbClient, t: number | null, rels: string[] | null): Promise<CSR> {
+async function loadCSR(
+	raw: DbClient,
+	t: number | null,
+	rels: string[] | null,
+	types: string[] | null = null,
+): Promise<CSR> {
 	const relIn = rels ? ` AND rel IN (${rels.map(() => '?').join(',')})` : '';
+	const typeIn = types ? ` AND type IN (${types.map(() => '?').join(',')})` : '';
 	let nodeRows: Array<{ id: unknown }>;
 	let edgeRows: Array<{ src: unknown; dst: unknown; weight: unknown }>;
 	if (t === null) {
-		nodeRows = (await raw.execute('SELECT id FROM nodes ORDER BY id')).rows as never;
+		nodeRows = (
+			await raw.execute({
+				sql: `SELECT id FROM nodes WHERE 1 = 1${typeIn} ORDER BY id`,
+				args: types ?? [],
+			})
+		).rows as never;
 		edgeRows = (
 			await raw.execute({
 				sql: `SELECT src, dst, weight FROM edges WHERE 1 = 1${relIn} ORDER BY src, dst`,
@@ -142,8 +194,8 @@ async function loadCSR(raw: DbClient, t: number | null, rels: string[] | null): 
 	} else {
 		nodeRows = (
 			await raw.execute({
-				sql: 'SELECT id FROM node_versions WHERE valid_from <= ? AND ? < valid_to ORDER BY id',
-				args: [t, t],
+				sql: `SELECT id FROM node_versions WHERE valid_from <= ? AND ? < valid_to${typeIn} ORDER BY id`,
+				args: [t, t, ...(types ?? [])],
 			})
 		).rows as never;
 		edgeRows = (
@@ -184,9 +236,19 @@ async function loadCSR(raw: DbClient, t: number | null, rels: string[] | null): 
 	return { n, offsets, targets, weights, idToIdx, idxToId, t };
 }
 
+/** Which part of the graph a CSR mirrors: some rels' edges, some node types (default: all). */
+export interface CsrScope {
+	rels?: string[];
+	/** Only nodes of these types — an edge to any other node is dropped. */
+	types?: string[];
+}
+
+const scope = (o: CsrScope) =>
+	[o.rels?.length ? o.rels : null, o.types?.length ? o.types : null] as const;
+
 /** CSR over the current/live graph (`edges` view). */
-export function buildCSR(raw: DbClient, opts: { rels?: string[] } = {}): Promise<CSR> {
-	return loadCSR(raw, null, opts.rels?.length ? opts.rels : null);
+export function buildCSR(raw: DbClient, opts: CsrScope = {}): Promise<CSR> {
+	return loadCSR(raw, null, ...scope(opts));
 }
 
 /**
@@ -194,13 +256,13 @@ export function buildCSR(raw: DbClient, opts: { rels?: string[] } = {}): Promise
  * at/after `FOREVER` means "now" and is routed to the live path — never bound into
  * a `:t < valid_to` predicate (which is false for every live row, D3).
  */
-export function snapshotCSR(
-	raw: DbClient,
-	t: number,
-	opts: { rels?: string[] } = {},
-): Promise<CSR> {
-	const rels = opts.rels?.length ? opts.rels : null;
-	return loadCSR(raw, t >= FOREVER ? null : t, rels);
+export function snapshotCSR(raw: DbClient, t: number, opts: CsrScope = {}): Promise<CSR> {
+	return loadCSR(raw, t >= FOREVER ? null : t, ...scope(opts));
+}
+
+/** The live CSR, or the one at `asOf` when given. */
+function csrAt(raw: DbClient, asOf: number | undefined, o: CsrScope): Promise<CSR> {
+	return asOf === undefined ? buildCSR(raw, o) : snapshotCSR(raw, asOf, o);
 }
 
 /** Out-neighbors of dense node `u` — the `offsets[u]..offsets[u+1]` slice, ULID-translated. */
@@ -343,7 +405,12 @@ async function sqlShortestPath(
 	weighted: boolean,
 	rels: string[] | null,
 	maxDepth: number | undefined,
+	asOf: number | undefined,
 ): Promise<ShortestPathResult | null> {
+	// As of an instant, walk the edge versions valid then instead of the live `edges` view.
+	const historic = asOf !== undefined && asOf < FOREVER;
+	const edgeSource = historic ? 'edge_versions' : 'edges';
+	const timeClause = historic ? ' AND e.valid_from <= ? AND ? < e.valid_to' : '';
 	const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
 	const costExpr = weighted ? 'e.weight' : '1.0';
 	// Optional M17 depth bound: omitted = unbounded (the cycle guard still terminates
@@ -368,7 +435,7 @@ WITH RECURSIVE walk(node, cost, path, depth) AS (
   UNION ALL
   SELECT e.dst, w.cost + ${costExpr}, w.path || e.dst || ',', w.depth + 1
   FROM walk w
-  JOIN edges e ON e.src = w.node${relClause}
+  JOIN ${edgeSource} e ON e.src = w.node${timeClause}${relClause}
   WHERE w.node <> ?${depthClause}
     AND w.path NOT LIKE '%,' || e.dst || ',%'${orderClause}
 )
@@ -376,6 +443,7 @@ SELECT cost, path FROM walk WHERE node = ? ORDER BY cost LIMIT 1`;
 	const args: (string | number)[] = [
 		src,
 		src,
+		...(historic ? [asOf, asOf] : []),
 		...(rels ?? []),
 		dst,
 		...(maxDepth !== undefined ? [maxDepth] : []),
@@ -406,10 +474,10 @@ export async function shortestPath(
 	const rels = opts.rels?.length ? opts.rels : null;
 
 	if (mode === 'sql') {
-		return sqlShortestPath(raw, src, dst, weighted, rels, opts.maxDepth);
+		return sqlShortestPath(raw, src, dst, weighted, rels, opts.maxDepth, opts.asOf);
 	}
 
-	const csr = await buildCSR(raw, rels ? { rels } : {});
+	const csr = await csrAt(raw, opts.asOf, { rels: rels ?? undefined, types: opts.types });
 	const s = csr.idToIdx.get(src);
 	const d = csr.idToIdx.get(dst);
 	if (s === undefined || d === undefined) return null;
@@ -501,9 +569,10 @@ function buildUndirected(csr: CSR): { uOff: Int32Array; uTar: Int32Array } {
 }
 
 /**
- * PageRank via power iteration over the live CSR. Dangling (out-degree-0) mass is
- * redistributed uniformly so the vector stays a distribution (sums to ~1). Results
- * are persisted to `node_analytics.pagerank` and returned as `id → score`.
+ * PageRank via power iteration over the live CSR (or the one at `asOf`). Dangling
+ * (out-degree-0) mass is redistributed uniformly so the vector stays a distribution
+ * (sums to ~1). Returned as `id → score`; a live run is also persisted to
+ * `node_analytics.pagerank`.
  */
 export async function pagerank(
 	raw: DbClient,
@@ -512,7 +581,7 @@ export async function pagerank(
 	const damping = opts.damping ?? 0.85;
 	const tol = opts.tol ?? 1e-9;
 	const maxIter = opts.maxIter ?? 100;
-	const csr = await buildCSR(raw, { rels: opts.rels });
+	const csr = await csrAt(raw, opts.asOf, opts);
 	const { n, offsets, targets, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -552,22 +621,22 @@ export async function pagerank(
 	}
 
 	for (let u = 0; u < n; u++) result.set(idxToId[u] ?? '', pr[u] ?? 0);
-	await persist(raw, 'pagerank', [...result]);
+	if (opts.asOf === undefined) await persist(raw, 'pagerank', [...result]);
 	return result;
 }
 
 /**
  * Community detection by asynchronous label propagation over the undirected live
- * graph. Ties break to the smallest label for determinism; final labels are
- * remapped to dense community ids in ascending-node order. Persisted to
- * `node_analytics.community`.
+ * graph (or the one at `asOf`). Ties break to the smallest label for determinism;
+ * final labels are remapped to dense community ids in ascending-node order. A live
+ * run is persisted to `node_analytics.community`.
  */
 export async function community(
 	raw: DbClient,
 	opts: CommunityOpts = {},
 ): Promise<Map<string, number>> {
 	const maxIter = opts.maxIter ?? 20;
-	const csr = await buildCSR(raw, { rels: opts.rels });
+	const csr = await csrAt(raw, opts.asOf, opts);
 	const { n, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -614,19 +683,20 @@ export async function community(
 		}
 		result.set(idxToId[u] ?? '', c);
 	}
-	await persist(raw, 'community', [...result]);
+	if (opts.asOf === undefined) await persist(raw, 'community', [...result]);
 	return result;
 }
 
 /**
- * Degree centrality over the live CSR. `'degree'` = in + out, `'in'`/`'out'` isolate
- * one side. Persisted to `node_analytics.degree`.
+ * Degree centrality over the live CSR (or the one at `asOf`). `'degree'` = in + out,
+ * `'in'`/`'out'` isolate one side. A live run is persisted to `node_analytics.degree`.
  */
 export async function centrality(
 	raw: DbClient,
 	kind: CentralityKind = 'degree',
+	opts: CentralityOpts = {},
 ): Promise<Map<string, number>> {
-	const csr = await buildCSR(raw);
+	const csr = await csrAt(raw, opts.asOf, opts);
 	const { n, offsets, targets, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -651,7 +721,119 @@ export async function centrality(
 					: (out[u] ?? 0) + (inn[u] ?? 0);
 		result.set(idxToId[u] ?? '', val);
 	}
-	await persist(raw, 'degree', [...result]);
+	if (opts.asOf === undefined) await persist(raw, 'degree', [...result]);
+	return result;
+}
+
+/** mulberry32 — a tiny seeded PRNG, so a sampled betweenness run is reproducible. */
+function seeded(seed: number): () => number {
+	let a = seed >>> 0;
+	return () => {
+		a = (a + 0x6d2b79f5) >>> 0;
+		let t = a;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/**
+ * Betweenness centrality (Brandes) over the directed live CSR (or the one at `asOf`):
+ * how many shortest paths between other nodes run through each node. Normalised to
+ * 0–1 by `(n − 1)(n − 2)`. With `samples`, Brandes runs from that many sampled sources
+ * and scales up — the standard estimate when every-source is too slow.
+ *
+ * A live run is persisted as the score `betweenness`, so
+ * `topNodes({ by: 'score:betweenness' })` reads it back.
+ */
+export async function betweenness(
+	raw: DbClient,
+	opts: BetweennessOpts = {},
+): Promise<Map<string, number>> {
+	const weighted = opts.weighted ?? true;
+	const csr = await csrAt(raw, opts.asOf, opts);
+	const { n, offsets, targets, weights, idxToId } = csr;
+	const result = new Map<string, number>();
+	if (n === 0) return result;
+
+	let sources: number[] = Array.from({ length: n }, (_, i) => i);
+	if (opts.samples !== undefined && opts.samples < n) {
+		const rand = seeded(opts.seed ?? 1);
+		for (let i = n - 1; i > 0; i--) {
+			const j = Math.floor(rand() * (i + 1));
+			const tmp = sources[i] ?? 0;
+			sources[i] = sources[j] ?? 0;
+			sources[j] = tmp;
+		}
+		sources = sources.slice(0, Math.max(1, opts.samples));
+	}
+
+	const cb = new Float64Array(n);
+	const sigma = new Float64Array(n);
+	const dist = new Float64Array(n);
+	const delta = new Float64Array(n);
+	const order = new Int32Array(n);
+	// Predecessor lists, reused across sources: preds of v are predBuf[predOff[v] .. predOff[v] + predLen[v]).
+	const indeg = new Int32Array(n);
+	for (let i = 0; i < targets.length; i++)
+		indeg[targets[i] ?? 0] = (indeg[targets[i] ?? 0] ?? 0) + 1;
+	const predOff = new Int32Array(n + 1);
+	for (let v = 0; v < n; v++) predOff[v + 1] = (predOff[v] ?? 0) + (indeg[v] ?? 0);
+	const predBuf = new Int32Array(targets.length);
+	const predLen = new Int32Array(n);
+
+	for (const s of sources) {
+		sigma.fill(0);
+		dist.fill(Number.POSITIVE_INFINITY);
+		delta.fill(0);
+		predLen.fill(0);
+		sigma[s] = 1;
+		dist[s] = 0;
+		let count = 0;
+		const settled = new Uint8Array(n);
+		const heap = new MinHeap();
+		heap.push(0, s);
+		while (heap.size() > 0) {
+			const u = heap.pop();
+			if (u === undefined) break;
+			if (settled[u]) continue;
+			settled[u] = 1;
+			order[count++] = u;
+			const du = dist[u] ?? 0;
+			const start = offsets[u] ?? 0;
+			const end = offsets[u + 1] ?? 0;
+			for (let i = start; i < end; i++) {
+				const v = targets[i] ?? 0;
+				const nd = du + (weighted ? (weights[i] ?? 0) : 1);
+				const dv = dist[v] ?? Number.POSITIVE_INFINITY;
+				if (nd < dv - 1e-9) {
+					dist[v] = nd;
+					sigma[v] = sigma[u] ?? 0;
+					predBuf[predOff[v] ?? 0] = u;
+					predLen[v] = 1;
+					heap.push(nd, v);
+				} else if (Math.abs(nd - dv) <= 1e-9 && !settled[v]) {
+					sigma[v] = (sigma[v] ?? 0) + (sigma[u] ?? 0);
+					predBuf[(predOff[v] ?? 0) + (predLen[v] ?? 0)] = u;
+					predLen[v] = (predLen[v] ?? 0) + 1;
+				}
+			}
+		}
+		for (let k = count - 1; k >= 0; k--) {
+			const w = order[k] ?? 0;
+			const base = predOff[w] ?? 0;
+			const coeff = (1 + (delta[w] ?? 0)) / (sigma[w] || 1);
+			for (let j = 0; j < (predLen[w] ?? 0); j++) {
+				const v = predBuf[base + j] ?? 0;
+				delta[v] = (delta[v] ?? 0) + (sigma[v] ?? 0) * coeff;
+			}
+			if (w !== s) cb[w] = (cb[w] ?? 0) + (delta[w] ?? 0);
+		}
+	}
+
+	const scale = n / sources.length / (n > 2 ? (n - 1) * (n - 2) : 1);
+	for (let u = 0; u < n; u++) result.set(idxToId[u] ?? '', (cb[u] ?? 0) * scale);
+	if (opts.asOf === undefined) await persistScores(raw, 'betweenness', [...result]);
 	return result;
 }
 

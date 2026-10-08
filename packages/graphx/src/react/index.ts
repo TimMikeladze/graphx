@@ -4,6 +4,8 @@ export { createGraphHooks, MatchBuilder } from './create-hooks.ts';
 // Input/result types for the hooks, so consumers can type their own args/results.
 export type {
 	BuiltMatchSpec,
+	AnalyticsScope,
+	BetweennessParams,
 	CentralityParams,
 	CommunityParams,
 	CreateHooksOptions,

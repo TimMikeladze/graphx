@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { ulid } from 'ulidx';
 import type { DbClient } from '../../src/core/dialect.ts';
 import {
+	betweenness,
 	buildCSR,
 	centrality,
 	community,
@@ -596,4 +597,85 @@ test('P8: pagerank and community honor the rels filter', async () => {
 	expect(com.get(a)).toBe(com.get(b)!);
 	expect(com.get(c)).not.toBe(com.get(b)!);
 	client.close();
+});
+
+// --- asOf on the algorithms + betweenness -------------------------------------------------
+
+test('shortestPath asOf routes over the edge weights valid at that instant (memory + sql)', async () => {
+	const c = await fresh();
+	const a = await node(c, 'a');
+	const b = await node(c, 'b');
+	const d = await node(c, 'd');
+	// Direct a→d is cheap until t=100 (rush hour), then expensive; the detour via b is steady.
+	await edge(c, a, d, { weight: 1, validFrom: 0, validTo: 100 });
+	await edge(c, a, d, { weight: 50, validFrom: 100 });
+	await edge(c, a, b, { weight: 5 });
+	await edge(c, b, d, { weight: 5 });
+	for (const mode of ['memory', 'sql'] as const) {
+		expect(await shortestPath(c, a, d, { mode, asOf: 50 })).toEqual({ path: [a, d], cost: 1 });
+		expect(await shortestPath(c, a, d, { mode })).toEqual({ path: [a, b, d], cost: 10 });
+	}
+});
+
+test('analytics asOf score the past graph and do not overwrite persisted live scores', async () => {
+	const c = await fresh();
+	const hub = await node(c, 'hub');
+	const x = await node(c, 'x');
+	const y = await node(c, 'y');
+	await edge(c, x, hub);
+	await edge(c, y, hub, { validFrom: 0, validTo: 100 }); // y stopped linking at t=100
+	const live = await centrality(c, 'in');
+	expect(live.get(hub)).toBe(1);
+	const past = await centrality(c, 'in', { asOf: 50 });
+	expect(past.get(hub)).toBe(2);
+	const [top] = await topNodes(c, { by: 'degree', limit: 1 });
+	expect(top?.degree).toBe(1); // the asOf run did not persist
+	const pr = await pagerank(c, { asOf: 50 });
+	expect(pr.get(hub)!).toBeGreaterThan(pr.get(x)!);
+});
+
+test('betweenness: the bridge of a bow-tie carries every cross path; persisted as a score', async () => {
+	const c = await fresh();
+	// two triangles (l1,l2,bridge) and (bridge,r1,r2), all edges both ways
+	const [l1, l2, br, r1, r2] = await Promise.all(
+		['l1', 'l2', 'br', 'r1', 'r2'].map((n) => node(c, n)),
+	);
+	const both = async (u: string, v: string) => {
+		await edge(c, u, v);
+		await edge(c, v, u);
+	};
+	await both(l1, l2);
+	await both(l1, br);
+	await both(l2, br);
+	await both(br, r1);
+	await both(br, r2);
+	await both(r1, r2);
+	const bc = await betweenness(c, { weighted: false });
+	// 8 ordered pairs cross the bridge, out of (n-1)(n-2) = 12
+	expect(bc.get(br)).toBeCloseTo(8 / 12, 9);
+	expect(bc.get(l1)).toBe(0);
+	const [top] = await topNodes(c, { by: 'score:betweenness', limit: 1 });
+	expect(top?.id).toBe(br);
+	// A full sample equals the exact run; a partial one is reproducible under a seed.
+	expect((await betweenness(c, { weighted: false, samples: 5 })).get(br)).toBeCloseTo(8 / 12, 9);
+	const s1 = await betweenness(c, { weighted: false, samples: 2, seed: 7 });
+	const s2 = await betweenness(c, { weighted: false, samples: 2, seed: 7 });
+	expect([...s1]).toEqual([...s2]);
+});
+
+test('types scopes the CSR: only those nodes are scored, and sampling never wastes a source', async () => {
+	const c = await fresh();
+	const a = await node(c, 'a', { type: 'stop' });
+	const b = await node(c, 'b', { type: 'stop' });
+	const d = await node(c, 'd', { type: 'stop' });
+	const noise = await node(c, 'n', { type: 'note' });
+	await edge(c, a, b);
+	await edge(c, b, d);
+	await edge(c, noise, b, { rel: 'mentions' });
+	const pr = await pagerank(c, { types: ['stop'] });
+	expect([...pr.keys()].sort()).toEqual([a, b, d].sort());
+	const bc = await betweenness(c, { types: ['stop'], weighted: false });
+	expect(bc.get(b)).toBeCloseTo(1 / 2, 9); // a→d of the (3-1)(3-2) = 2 ordered pairs
+	expect(bc.has(noise)).toBe(false);
+	expect((await centrality(c, 'in', { types: ['stop'] })).get(b)).toBe(1); // the note's edge is dropped
 });

@@ -153,4 +153,17 @@ describe('duckdb end to end', () => {
 		expect(rows.rows[0]?.n).toBe(2);
 		await r.end();
 	});
+	test('a reopened namespace keeps allocating vers past the snapshot', async () => {
+		const store = await newStore();
+		const first = client(store);
+		await graph(first).addNode({ type: 'Doc', data: { slug: 'a' } });
+		await graph(first).addNode({ type: 'Doc', data: { slug: 'b' } });
+		await first.end();
+		// a fresh process used to restart seq_ver at 1 and fail on a duplicate key
+		const second = client(store);
+		await graph(second).addNode({ type: 'Doc', data: { slug: 'c' } });
+		const r = await second.execute('SELECT ver FROM node_versions ORDER BY ver');
+		expect(r.rows.map((row) => Number(row.ver))).toEqual([1, 2, 3]);
+		await second.end();
+	});
 });

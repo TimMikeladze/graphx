@@ -1,0 +1,1325 @@
+{
+	"type": "FeatureCollection",
+	"features": [
+		{
+			"type": "Feature",
+			"id": 24,
+			"geometry": { "type": "Point", "coordinates": [-71.05567797599997, 42.35563680100006] },
+			"properties": {
+				"OBJECTID": 24,
+				"Count_": 437,
+				"Int_Number": 362,
+				"Location": "Congress St. & Franklin St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.05567797599997 42.35563680100006)",
+				"POINT_X": -71.05567797599997,
+				"POINT_Y": 42.35563680100006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 26,
+			"geometry": { "type": "Point", "coordinates": [-71.05464248599998, 42.35465452500006] },
+			"properties": {
+				"OBJECTID": 26,
+				"Count_": 439,
+				"Int_Number": 47,
+				"Location": "Congress St. & High St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.054642485999977 42.354654525000058)",
+				"POINT_X": -71.05464248599998,
+				"POINT_Y": 42.35465452500006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 28,
+			"geometry": { "type": "Point", "coordinates": [-71.05412665299997, 42.35416612600005] },
+			"properties": {
+				"OBJECTID": 28,
+				"Count_": 441,
+				"Int_Number": 3055,
+				"Location": "Congress St. & Purchase St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.054126652999969 42.354166126000052)",
+				"POINT_X": -71.05412665299997,
+				"POINT_Y": 42.35416612600005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 39,
+			"geometry": { "type": "Point", "coordinates": [-71.04787380299996, 42.341340554000055] },
+			"properties": {
+				"OBJECTID": 39,
+				"Count_": 473,
+				"Int_Number": 4085,
+				"Location": "Cypher & D St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.047873802999959 42.341340554000055)",
+				"POINT_X": -71.04787380299996,
+				"POINT_Y": 42.341340554000055
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 40,
+			"geometry": { "type": "Point", "coordinates": [-71.05701887099997, 42.33364800900006] },
+			"properties": {
+				"OBJECTID": 40,
+				"Count_": 474,
+				"Int_Number": 1128,
+				"Location": "D St. & Dorchester Ave.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.057018870999968 42.333648009000058)",
+				"POINT_X": -71.05701887099997,
+				"POINT_Y": 42.33364800900006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 41,
+			"geometry": { "type": "Point", "coordinates": [-71.04215870699994, 42.34621545500005] },
+			"properties": {
+				"OBJECTID": 41,
+				"Count_": 479,
+				"Int_Number": 374,
+				"Location": "D St. & Summer St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.042158706999942 42.346215455000049)",
+				"POINT_X": -71.04215870699994,
+				"POINT_Y": 42.34621545500005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 42,
+			"geometry": { "type": "Point", "coordinates": [-71.05083464399996, 42.33881654800007] },
+			"properties": {
+				"OBJECTID": 42,
+				"Count_": 480,
+				"Int_Number": 373,
+				"Location": "D St. & West Broadway",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.050834643999963 42.338816548000068)",
+				"POINT_X": -71.05083464399996,
+				"POINT_Y": 42.33881654800007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 43,
+			"geometry": { "type": "Point", "coordinates": [-71.04861203599995, 42.34071156700003] },
+			"properties": {
+				"OBJECTID": 43,
+				"Count_": 481,
+				"Int_Number": 1484,
+				"Location": "D St. & West First St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048612035999952 42.340711567000028)",
+				"POINT_X": -71.04861203599995,
+				"POINT_Y": 42.34071156700003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 44,
+			"geometry": { "type": "Point", "coordinates": [-71.05387644999996, 42.336254421000035] },
+			"properties": {
+				"OBJECTID": 44,
+				"Count_": 482,
+				"Int_Number": 540,
+				"Location": "D St. & West Seventh St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.053876449999962 42.336254421000035)",
+				"POINT_X": -71.05387644999996,
+				"POINT_Y": 42.336254421000035
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 45,
+			"geometry": { "type": "Point", "coordinates": [-71.04992938599997, 42.33959439200004] },
+			"properties": {
+				"OBJECTID": 45,
+				"Count_": 483,
+				"Int_Number": 786,
+				"Location": "D St. & West Third St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.049929385999974 42.339594392000038)",
+				"POINT_X": -71.04992938599997,
+				"POINT_Y": 42.33959439200004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 51,
+			"geometry": { "type": "Point", "coordinates": [-71.05314438999994, 42.33153514300005] },
+			"properties": {
+				"OBJECTID": 51,
+				"Count_": 523,
+				"Int_Number": 173,
+				"Location": "Dorchester St. & Old Colony Ave.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.053144389999943 42.331535143000053)",
+				"POINT_X": -71.05314438999994,
+				"POINT_Y": 42.33153514300005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 52,
+			"geometry": { "type": "Point", "coordinates": [-71.04780280099999, 42.33448269500008] },
+			"properties": {
+				"OBJECTID": 52,
+				"Count_": 524,
+				"Int_Number": 949,
+				"Location": "Dorchester St. & West Fifth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.047802800999989 42.334482695000077)",
+				"POINT_X": -71.04780280099999,
+				"POINT_Y": 42.33448269500008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 55,
+			"geometry": { "type": "Point", "coordinates": [-71.05716194899998, 42.35208206200008] },
+			"properties": {
+				"OBJECTID": 55,
+				"Count_": 563,
+				"Int_Number": 377,
+				"Location": "Essex St. & South St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.057161948999976 42.352082062000079)",
+				"POINT_X": -71.05716194899998,
+				"POINT_Y": 42.35208206200008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 56,
+			"geometry": { "type": "Point", "coordinates": [-71.05617801799997, 42.35364308900006] },
+			"properties": {
+				"OBJECTID": 56,
+				"Count_": 580,
+				"Int_Number": 48,
+				"Location": "Federal St. & High St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.056178017999969 42.353643089000059)",
+				"POINT_X": -71.05617801799997,
+				"POINT_Y": 42.35364308900006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 67,
+			"geometry": { "type": "Point", "coordinates": [-71.05402530699996, 42.35524828900003] },
+			"properties": {
+				"OBJECTID": 67,
+				"Count_": 643,
+				"Int_Number": 1197,
+				"Location": "High St. & Pearl St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.054025306999961 42.355248289000031)",
+				"POINT_X": -71.05402530699996,
+				"POINT_Y": 42.35524828900003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 69,
+			"geometry": { "type": "Point", "coordinates": [-71.05698460099995, 42.35327094400003] },
+			"properties": {
+				"OBJECTID": 69,
+				"Count_": 645,
+				"Int_Number": 60,
+				"Location": "High St. & Summer St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.056984600999954 42.35327094400003)",
+				"POINT_X": -71.05698460099995,
+				"POINT_Y": 42.35327094400003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 101,
+			"geometry": { "type": "Point", "coordinates": [-71.04849193799998, 42.353167265000025] },
+			"properties": {
+				"OBJECTID": 101,
+				"Count_": 805,
+				"Int_Number": 3109,
+				"Location": "Seaport Blvd. & Sleeper St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048491937999984 42.353167265000025)",
+				"POINT_X": -71.04849193799998,
+				"POINT_Y": 42.353167265000025
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 108,
+			"geometry": { "type": "Point", "coordinates": [-71.04948040099998, 42.34908173800005] },
+			"properties": {
+				"OBJECTID": 108,
+				"Count_": 1,
+				"Int_Number": 1251,
+				"Location": "A St. & Melcher St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.049480400999983 42.349081738000052)",
+				"POINT_X": -71.04948040099998,
+				"POINT_Y": 42.34908173800005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 112,
+			"geometry": { "type": "Point", "coordinates": [-71.05537014699996, 42.35268365100006] },
+			"properties": {
+				"OBJECTID": 112,
+				"Count_": 91,
+				"Int_Number": 43,
+				"Location": "Atlantic Ave. & Summer St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.055370146999962 42.352683651000063)",
+				"POINT_X": -71.05537014699996,
+				"POINT_Y": 42.35268365100006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 130,
+			"geometry": { "type": "Point", "coordinates": [-71.04293909399996, 42.34555119600003] },
+			"properties": {
+				"OBJECTID": 130,
+				"Count_": 475,
+				"Int_Number": 4062,
+				"Location": "D St. & Fargo St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.042939093999962 42.345551196000031)",
+				"POINT_X": -71.04293909399996,
+				"POINT_Y": 42.34555119600003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 131,
+			"geometry": { "type": "Point", "coordinates": [-71.05529473899998, 42.33505593900003] },
+			"properties": {
+				"OBJECTID": 131,
+				"Count_": 477,
+				"Int_Number": 147,
+				"Location": "D St. & Old Colony",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.055294738999976 42.335055939000029)",
+				"POINT_X": -71.05529473899998,
+				"POINT_Y": 42.33505593900003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 133,
+			"geometry": { "type": "Point", "coordinates": [-71.05731785899997, 42.35545624500003] },
+			"properties": {
+				"OBJECTID": 133,
+				"Count_": 499,
+				"Int_Number": 56,
+				"Location": "Devonshire St. & Franklin St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.057317858999966 42.355456245000028)",
+				"POINT_X": -71.05731785899997,
+				"POINT_Y": 42.35545624500003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 137,
+			"geometry": { "type": "Point", "coordinates": [-71.05712325099995, 42.33891434900005] },
+			"properties": {
+				"OBJECTID": 137,
+				"Count_": 504,
+				"Int_Number": 2307,
+				"Location": "Dorchester Ave. & Haul Rd.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.05712325099995 42.338914349000049)",
+				"POINT_X": -71.05712325099995,
+				"POINT_Y": 42.33891434900005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 138,
+			"geometry": { "type": "Point", "coordinates": [-71.05712862399997, 42.337932598000066] },
+			"properties": {
+				"OBJECTID": 138,
+				"Count_": 505,
+				"Int_Number": 271,
+				"Location": "Dorchester Ave. & Old Colony Ave.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.057128623999972 42.337932598000066)",
+				"POINT_X": -71.05712862399997,
+				"POINT_Y": 42.337932598000066
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 142,
+			"geometry": { "type": "Point", "coordinates": [-71.05286469499998, 42.35141345100004] },
+			"properties": {
+				"OBJECTID": 142,
+				"Count_": 509,
+				"Int_Number": 46,
+				"Location": "Dorchester Ave. & Summer St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.052864694999982 42.351413451000042)",
+				"POINT_X": -71.05286469499998,
+				"POINT_Y": 42.35141345100004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 145,
+			"geometry": { "type": "Point", "coordinates": [-71.05715315999998, 42.34159696300003] },
+			"properties": {
+				"OBJECTID": 145,
+				"Count_": 512,
+				"Int_Number": 309,
+				"Location": "Dorchester Ave. & West Fourth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.057153159999984 42.341596963000029)",
+				"POINT_X": -71.05715315999998,
+				"POINT_Y": 42.34159696300003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 150,
+			"geometry": { "type": "Point", "coordinates": [-71.05104067999997, 42.332812561000026] },
+			"properties": {
+				"OBJECTID": 150,
+				"Count_": 522,
+				"Int_Number": 752,
+				"Location": "Dorchester St. & East Eighth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.051040679999971 42.332812561000026)",
+				"POINT_X": -71.05104067999997,
+				"POINT_Y": 42.332812561000026
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 152,
+			"geometry": { "type": "Point", "coordinates": [-71.04873122099997, 42.33399743600006] },
+			"properties": {
+				"OBJECTID": 152,
+				"Count_": 525,
+				"Int_Number": 2161,
+				"Location": "Dorchester St. & West Sixth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048731220999969 42.333997436000061)",
+				"POINT_X": -71.04873122099997,
+				"POINT_Y": 42.33399743600006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 158,
+			"geometry": { "type": "Point", "coordinates": [-71.04838900799996, 42.33859773000006] },
+			"properties": {
+				"OBJECTID": 158,
+				"Count_": 536,
+				"Int_Number": 945,
+				"Location": "E St. & West Third St",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048389007999958 42.33859773000006)",
+				"POINT_X": -71.04838900799996,
+				"POINT_Y": 42.33859773000006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 164,
+			"geometry": { "type": "Point", "coordinates": [-71.04426437699993, 42.33549158900007] },
+			"properties": {
+				"OBJECTID": 164,
+				"Count_": 540,
+				"Int_Number": 625,
+				"Location": "East Broadway & G St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.044264376999934 42.335491589000071)",
+				"POINT_X": -71.04426437699993,
+				"POINT_Y": 42.33549158900007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 166,
+			"geometry": { "type": "Point", "coordinates": [-71.03542320999998, 42.33564211400005] },
+			"properties": {
+				"OBJECTID": 166,
+				"Count_": 541,
+				"Int_Number": 304,
+				"Location": "East Broadway & L St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.035423209999976 42.335642114000052)",
+				"POINT_X": -71.03542320999998,
+				"POINT_Y": 42.33564211400005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 172,
+			"geometry": { "type": "Point", "coordinates": [-71.03525792099998, 42.33148823500005] },
+			"properties": {
+				"OBJECTID": 172,
+				"Count_": 546,
+				"Int_Number": 455,
+				"Location": "East Eighth St. & L St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.035257920999982 42.331488235000052)",
+				"POINT_X": -71.03525792099998,
+				"POINT_Y": 42.33148823500005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 174,
+			"geometry": { "type": "Point", "coordinates": [-71.03992106399994, 42.33387378700007] },
+			"properties": {
+				"OBJECTID": 174,
+				"Count_": 547,
+				"Int_Number": 1462,
+				"Location": "East Fifth St. & I St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.039921063999941 42.333873787000073)",
+				"POINT_X": -71.03992106399994,
+				"POINT_Y": 42.33387378700007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 176,
+			"geometry": { "type": "Point", "coordinates": [-71.03533134499997, 42.33395480200005] },
+			"properties": {
+				"OBJECTID": 176,
+				"Count_": 548,
+				"Int_Number": 2242,
+				"Location": "East Fifth St. & L St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.035331344999975 42.333954802000051)",
+				"POINT_X": -71.03533134499997,
+				"POINT_Y": 42.33395480200005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 187,
+			"geometry": { "type": "Point", "coordinates": [-71.05939337799998, 42.35252625700008] },
+			"properties": {
+				"OBJECTID": 187,
+				"Count_": 561,
+				"Int_Number": 375,
+				"Location": "Essex St. & Kingston St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059393377999982 42.352526257000079)",
+				"POINT_X": -71.05939337799998,
+				"POINT_Y": 42.35252625700008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 193,
+			"geometry": { "type": "Point", "coordinates": [-71.05860303499998, 42.35408736200003] },
+			"properties": {
+				"OBJECTID": 193,
+				"Count_": 767,
+				"Int_Number": 605,
+				"Location": "Otis St. & Summer St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.058603034999976 42.35408736200003)",
+				"POINT_X": -71.05860303499998,
+				"POINT_Y": 42.35408736200003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 203,
+			"geometry": { "type": "Point", "coordinates": [-71.05335722799998, 42.35453428900007] },
+			"properties": {
+				"OBJECTID": 203,
+				"Count_": 775,
+				"Int_Number": 602,
+				"Location": "Pearl St. & Purchase St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.053357227999982 42.354534289000071)",
+				"POINT_X": -71.05335722799998,
+				"POINT_Y": 42.35453428900007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 204,
+			"geometry": { "type": "Point", "coordinates": [-71.05652267999994, 42.355504229000076] },
+			"properties": {
+				"OBJECTID": 204,
+				"Count_": 579,
+				"Int_Number": 49,
+				"Location": "Federal St. & Franklin St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.056522679999944 42.355504229000076)",
+				"POINT_X": -71.05652267999994,
+				"POINT_Y": 42.355504229000076
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 216,
+			"geometry": { "type": "Point", "coordinates": [-71.05550395899996, 42.34183262800008] },
+			"properties": {
+				"OBJECTID": 216,
+				"Count_": 2,
+				"Int_Number": 1110,
+				"Location": "A St. & West Broadway",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.055503958999964 42.341832628000077)",
+				"POINT_X": -71.05550395899996,
+				"POINT_Y": 42.34183262800008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 218,
+			"geometry": { "type": "Point", "coordinates": [-71.05632523999998, 42.341123706000076] },
+			"properties": {
+				"OBJECTID": 218,
+				"Count_": 3,
+				"Int_Number": 417,
+				"Location": "A St. & West Fourth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.056325239999978 42.341123706000076)",
+				"POINT_X": -71.05632523999998,
+				"POINT_Y": 42.341123706000076
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 220,
+			"geometry": { "type": "Point", "coordinates": [-71.05427976699997, 42.34286035700006] },
+			"properties": {
+				"OBJECTID": 220,
+				"Count_": 4,
+				"Int_Number": 1984,
+				"Location": "A St. & West Second St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.054279766999969 42.342860357000063)",
+				"POINT_X": -71.05427976699997,
+				"POINT_Y": 42.34286035700006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 237,
+			"geometry": { "type": "Point", "coordinates": [-71.05892110899998, 42.34995528800005] },
+			"properties": {
+				"OBJECTID": 237,
+				"Count_": 678,
+				"Int_Number": 403,
+				"Location": "Kneeland St., Lincoln St., & Ramp X",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.058921108999982 42.349955288000046)",
+				"POINT_X": -71.05892110899998,
+				"POINT_Y": 42.34995528800005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 293,
+			"geometry": { "type": "Point", "coordinates": [-71.05147885199995, 42.35473748700008] },
+			"properties": {
+				"OBJECTID": 293,
+				"Count_": 95,
+				"Int_Number": 1216,
+				"Location": "Atlantic Ave., Ramp CA-N, & Seaport Blvd.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.051478851999946 42.354737487000079)",
+				"POINT_X": -71.05147885199995,
+				"POINT_Y": 42.35473748700008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 328,
+			"geometry": { "type": "Point", "coordinates": [-71.03892164299998, 42.344289125000046] },
+			"properties": {
+				"OBJECTID": 328,
+				"Count_": 527,
+				"Int_Number": 2249,
+				"Location": "Dry Dock Ave., Pappas Way, & Summer St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.038921642999981 42.344289125000046)",
+				"POINT_X": -71.03892164299998,
+				"POINT_Y": 42.344289125000046
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 334,
+			"geometry": { "type": "Point", "coordinates": [-71.05803581299995, 42.355446940000036] },
+			"properties": {
+				"OBJECTID": 334,
+				"Count_": 65,
+				"Int_Number": 550,
+				"Location": "Arch St. & Franklin St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.058035812999947 42.355446940000036)",
+				"POINT_X": -71.05803581299995,
+				"POINT_Y": 42.355446940000036
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 344,
+			"geometry": { "type": "Point", "coordinates": [-71.05767566199995, 42.353470798000046] },
+			"properties": {
+				"OBJECTID": 344,
+				"Count_": 683,
+				"Int_Number": 58,
+				"Location": "Lincoln St. & Summer St. (Church Green)",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.057675661999951 42.353470798000046)",
+				"POINT_X": -71.05767566199995,
+				"POINT_Y": 42.353470798000046
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 352,
+			"geometry": { "type": "Point", "coordinates": [-71.05098991999995, 42.35048378700003] },
+			"properties": {
+				"OBJECTID": 352,
+				"Count_": 719,
+				"Int_Number": 1165,
+				"Location": "Melcher St. & Summer St.  (Monitor #2008)",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.05098991999995 42.35048378700003)",
+				"POINT_X": -71.05098991999995,
+				"POINT_Y": 42.35048378700003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 353,
+			"geometry": { "type": "Point", "coordinates": [-71.05661920599994, 42.35044174500007] },
+			"properties": {
+				"OBJECTID": 353,
+				"Count_": 81,
+				"Int_Number": 44,
+				"Location": "Atlantic Ave. & Beach St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.056619205999937 42.350441745000069)",
+				"POINT_X": -71.05661920599994,
+				"POINT_Y": 42.35044174500007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 358,
+			"geometry": { "type": "Point", "coordinates": [-71.05575206499998, 42.35279146100004] },
+			"properties": {
+				"OBJECTID": 358,
+				"Count_": 785,
+				"Int_Number": 3012,
+				"Location": "Purchase St., Ramp RR, Summer St., & Surface Rd. SB",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.055752064999979 42.352791461000038)",
+				"POINT_X": -71.05575206499998,
+				"POINT_Y": 42.35279146100004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 361,
+			"geometry": { "type": "Point", "coordinates": [-71.05356171399995, 42.35367137900005] },
+			"properties": {
+				"OBJECTID": 361,
+				"Count_": 83,
+				"Int_Number": 3056,
+				"Location": "Atlantic Ave. & Congress St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.053561713999954 42.353671379000048)",
+				"POINT_X": -71.05356171399995,
+				"POINT_Y": 42.35367137900005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 365,
+			"geometry": { "type": "Point", "coordinates": [-71.04382625799997, 42.347170221000056] },
+			"properties": {
+				"OBJECTID": 365,
+				"Count_": 823,
+				"Int_Number": 664,
+				"Location": "Summer St. & World Trade Center Ave (Viaduct St)",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.043826257999967 42.347170221000056)",
+				"POINT_X": -71.04382625799997,
+				"POINT_Y": 42.347170221000056
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 367,
+			"geometry": { "type": "Point", "coordinates": [-71.05590821199996, 42.351793213000064] },
+			"properties": {
+				"OBJECTID": 367,
+				"Count_": 85,
+				"Int_Number": 45,
+				"Location": "Atlantic Ave. & Essex St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.055908211999963 42.351793213000064)",
+				"POINT_X": -71.05590821199996,
+				"POINT_Y": 42.351793213000064
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 390,
+			"geometry": { "type": "Point", "coordinates": [-71.04032973499994, 42.34519598900005] },
+			"properties": {
+				"OBJECTID": 390,
+				"Count_": 782,
+				"Int_Number": 3126,
+				"Location": "Pumphouse Rd. & Summer St.  (Monitor #4061)",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.040329734999943 42.345195989000047)",
+				"POINT_X": -71.04032973499994,
+				"POINT_Y": 42.34519598900005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 398,
+			"geometry": { "type": "Point", "coordinates": [-71.05717555099994, 42.342984588000036] },
+			"properties": {
+				"OBJECTID": 398,
+				"Count_": 248,
+				"Int_Number": 136,
+				"Location": "Broadway Bridge, Dorchester Ave, & West Broadway",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.057175550999943 42.342984588000036)",
+				"POINT_X": -71.05717555099994,
+				"POINT_Y": 42.342984588000036
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 399,
+			"geometry": { "type": "Point", "coordinates": [-71.05935837599998, 42.35333563200004] },
+			"properties": {
+				"OBJECTID": 399,
+				"Count_": 138,
+				"Int_Number": 101,
+				"Location": "Bedford St. & Kingston St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059358375999977 42.353335632000039)",
+				"POINT_X": -71.05935837599998,
+				"POINT_Y": 42.35333563200004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 435,
+			"geometry": { "type": "Point", "coordinates": [-71.04846567499999, 42.35036954200007] },
+			"properties": {
+				"OBJECTID": 435,
+				"Count_": 5,
+				"Int_Number": 1662,
+				"Location": "A St., Congress St., & Thompson St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048465674999989 42.350369542000067)",
+				"POINT_X": -71.04846567499999,
+				"POINT_Y": 42.35036954200007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 436,
+			"geometry": { "type": "Point", "coordinates": [-71.05716185799997, 42.34059551100006] },
+			"properties": {
+				"OBJECTID": 436,
+				"Count_": 6,
+				"Int_Number": 933,
+				"Location": "A St., Dorchester Ave., & West Fifth St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.057161857999972 42.34059551100006)",
+				"POINT_X": -71.05716185799997,
+				"POINT_Y": 42.34059551100006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 438,
+			"geometry": { "type": "Point", "coordinates": [-71.05311285699997, 42.344399001000056] },
+			"properties": {
+				"OBJECTID": 438,
+				"Count_": 7,
+				"Int_Number": 3138,
+				"Location": "A St., Richards St., & Sobin Park",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.053112856999974 42.344399001000056)",
+				"POINT_X": -71.05311285699997,
+				"POINT_Y": 42.344399001000056
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 467,
+			"geometry": { "type": "Point", "coordinates": [-71.05705701999995, 42.34953239200007] },
+			"properties": {
+				"OBJECTID": 467,
+				"Count_": 94,
+				"Int_Number": 3078,
+				"Location": "Atlantic Ave., Kneeland St., & Ramps",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.057057019999945 42.349532392000071)",
+				"POINT_X": -71.05705701999995,
+				"POINT_Y": 42.34953239200007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 496,
+			"geometry": { "type": "Point", "coordinates": [-71.05696808499994, 42.329509734000055] },
+			"properties": {
+				"OBJECTID": 496,
+				"Count_": 207,
+				"Int_Number": 172,
+				"Location": "Boston St., Dorchester Ave., Dorchester St., Southampton St., & Preble St. (Andrew Square)",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.056968084999937 42.329509734000055)",
+				"POINT_X": -71.05696808499994,
+				"POINT_Y": 42.329509734000055
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 497,
+			"geometry": { "type": "Point", "coordinates": [-71.04716757499995, 42.34955431000003] },
+			"properties": {
+				"OBJECTID": 497,
+				"Count_": 209,
+				"Int_Number": 4057,
+				"Location": "Boston Wharf Rd., Congress St., & West Service Rd.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.047167574999946 42.34955431000003)",
+				"POINT_X": -71.04716757499995,
+				"POINT_Y": 42.34955431000003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 553,
+			"geometry": { "type": "Point", "coordinates": [-71.04554986099998, 42.351734941000075] },
+			"properties": {
+				"OBJECTID": 553,
+				"Count_": 208,
+				"Int_Number": 3108,
+				"Location": "Boston Wharf Rd. & Seaport Blvd.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.045549860999984 42.351734941000075)",
+				"POINT_X": -71.04554986099998,
+				"POINT_Y": 42.351734941000075
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 617,
+			"geometry": { "type": "Point", "coordinates": [-71.05926096699994, 42.354572845000064] },
+			"properties": {
+				"OBJECTID": 617,
+				"Count_": 342,
+				"Int_Number": 59,
+				"Location": "Chauncy St. & Summer St.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059260966999943 42.354572845000064)",
+				"POINT_X": -71.05926096699994,
+				"POINT_Y": 42.354572845000064
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 682,
+			"geometry": { "type": "Point", "coordinates": [-71.04588018399994, 42.348760209000034] },
+			"properties": {
+				"OBJECTID": 682,
+				"Count_": 443,
+				"Int_Number": 4056,
+				"Location": "Congress St., East Service Rd., & Ramp CI",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.045880183999941 42.348760209000034)",
+				"POINT_X": -71.04588018399994,
+				"POINT_Y": 42.348760209000034
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 698,
+			"geometry": { "type": "Point", "coordinates": [-71.04392466099995, 42.35100067900004] },
+			"properties": {
+				"OBJECTID": 698,
+				"Count_": 485,
+				"Int_Number": 606,
+				"Location": "D St., Northern Ave., & Seaport Blvd.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.043924660999949 42.351000679000038)",
+				"POINT_X": -71.04392466099995,
+				"POINT_Y": 42.35100067900004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 704,
+			"geometry": { "type": "Point", "coordinates": [-71.05691162099998, 42.32803452100006] },
+			"properties": {
+				"OBJECTID": 704,
+				"Count_": 518,
+				"Int_Number": 1050,
+				"Location": "Dorchester Ave., Father Anthony Songin Way, & Major O'Connor Way",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.056911620999983 42.328034521000063)",
+				"POINT_X": -71.05691162099998,
+				"POINT_Y": 42.32803452100006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 708,
+			"geometry": { "type": "Point", "coordinates": [-71.04546731199997, 42.33546342200003] },
+			"properties": {
+				"OBJECTID": 708,
+				"Count_": 526,
+				"Int_Number": 175,
+				"Location": "Dorchester St., East Broadway, & West Broadway (Perkins Sq.)",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.045467311999971 42.335463422000032)",
+				"POINT_X": -71.04546731199997,
+				"POINT_Y": 42.33546342200003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 712,
+			"geometry": { "type": "Point", "coordinates": [-71.03993176499995, 42.33556980600008] },
+			"properties": {
+				"OBJECTID": 712,
+				"Count_": 542,
+				"Int_Number": 1008,
+				"Location": "East Broadway, Emerson St., & I St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.039931764999949 42.33556980600008)",
+				"POINT_X": -71.03993176499995,
+				"POINT_Y": 42.33556980600008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 714,
+			"geometry": { "type": "Point", "coordinates": [-71.03547346099998, 42.337330630000054] },
+			"properties": {
+				"OBJECTID": 714,
+				"Count_": 549,
+				"Int_Number": 991,
+				"Location": "East First St., L St., & Summer St.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.035473460999981 42.337330630000054)",
+				"POINT_X": -71.03547346099998,
+				"POINT_Y": 42.337330630000054
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 716,
+			"geometry": { "type": "Point", "coordinates": [-71.04392466099995, 42.35100067900004] },
+			"properties": {
+				"OBJECTID": 716,
+				"Count_": 552,
+				"Int_Number": 3107,
+				"Location": "East Service Rd., Northern Ave., &  Seaport Blvd.",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.043924660999949 42.351000679000038)",
+				"POINT_X": -71.04392466099995,
+				"POINT_Y": 42.35100067900004
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 720,
+			"geometry": { "type": "Point", "coordinates": [-71.05801273699996, 42.35232954600008] },
+			"properties": {
+				"OBJECTID": 720,
+				"Count_": 564,
+				"Int_Number": 1291,
+				"Location": "Essex St., Lincoln St., & Surface Rd.",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.058012736999956 42.352329546000078)",
+				"POINT_X": -71.05801273699996,
+				"POINT_Y": 42.35232954600008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 753,
+			"geometry": { "type": "Point", "coordinates": [-71.05289228699996, 42.35400408800007] },
+			"properties": {
+				"OBJECTID": 753,
+				"Count_": 88,
+				"Int_Number": 4102,
+				"Location": "Atlantic Ave & Pearl St",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.052892286999963 42.354004088000067)",
+				"POINT_X": -71.05289228699996,
+				"POINT_Y": 42.35400408800007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 754,
+			"geometry": { "type": "Point", "coordinates": [-71.05199106499998, 42.35519336200008] },
+			"properties": {
+				"OBJECTID": 754,
+				"Count_": 784,
+				"Int_Number": 558,
+				"Location": "Purchase St, Ramp CS-P, & Seaport Blvd",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.051991064999982 42.35519336200008)",
+				"POINT_X": -71.05199106499998,
+				"POINT_Y": 42.35519336200008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 755,
+			"geometry": { "type": "Point", "coordinates": [-71.05269916799995, 42.35484451100007] },
+			"properties": {
+				"OBJECTID": 755,
+				"Count_": 783,
+				"Int_Number": 1217,
+				"Location": "Purchase St @ Firehouse",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.052699167999947 42.354844511000067)",
+				"POINT_X": -71.05269916799995,
+				"POINT_Y": 42.35484451100007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 762,
+			"geometry": { "type": "Point", "coordinates": [-71.04283126599995, 42.35045703600008] },
+			"properties": {
+				"OBJECTID": 762,
+				"Count_": 102,
+				"Int_Number": 2351,
+				"Location": "B St & Seaport Blvd",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.042831265999951 42.35045703600008)",
+				"POINT_X": -71.04283126599995,
+				"POINT_Y": 42.35045703600008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 763,
+			"geometry": { "type": "Point", "coordinates": [-71.04368957199995, 42.34925181300008] },
+			"properties": {
+				"OBJECTID": 763,
+				"Count_": 103,
+				"Int_Number": 4058,
+				"Location": "B St, Congress St, & Ramps D & F",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.043689571999948 42.34925181300008)",
+				"POINT_X": -71.04368957199995,
+				"POINT_Y": 42.34925181300008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 764,
+			"geometry": { "type": "Point", "coordinates": [-71.05225118399994, 42.35232825600008] },
+			"properties": {
+				"OBJECTID": 764,
+				"Count_": 436,
+				"Int_Number": 361,
+				"Location": "Congress St & Dorchester Ave",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.052251183999942 42.352328256000078)",
+				"POINT_X": -71.05225118399994,
+				"POINT_Y": 42.35232825600008
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 765,
+			"geometry": { "type": "Point", "coordinates": [-71.04027780299998, 42.34793555700003] },
+			"properties": {
+				"OBJECTID": 765,
+				"Count_": 435,
+				"Int_Number": 4059,
+				"Location": "Congress St & D St",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.040277802999981 42.347935557000028)",
+				"POINT_X": -71.04027780299998,
+				"POINT_Y": 42.34793555700003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 771,
+			"geometry": { "type": "Point", "coordinates": [-71.05978282599995, 42.35010815800007] },
+			"properties": {
+				"OBJECTID": 771,
+				"Count_": 676,
+				"Int_Number": 1273,
+				"Location": "Kneeland St & Surface Rd SB",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059782825999946 42.350108158000069)",
+				"POINT_X": -71.05978282599995,
+				"POINT_Y": 42.35010815800007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 772,
+			"geometry": { "type": "Point", "coordinates": [-71.05943950399995, 42.34869676900007] },
+			"properties": {
+				"OBJECTID": 772,
+				"Count_": 684,
+				"Int_Number": 4109,
+				"Location": "Lincoln St, South Station Connector, & Ramp K",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059439503999954 42.348696769000071)",
+				"POINT_X": -71.05943950399995,
+				"POINT_Y": 42.34869676900007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 783,
+			"geometry": { "type": "Point", "coordinates": [-71.04530753599994, 42.34798149400007] },
+			"properties": {
+				"OBJECTID": 783,
+				"Count_": 822,
+				"Int_Number": 4111,
+				"Location": "Summer St & West Side Dr",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.045307535999939 42.347981494000067)",
+				"POINT_X": -71.04530753599994,
+				"POINT_Y": 42.34798149400007
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 795,
+			"geometry": { "type": "Point", "coordinates": [-71.05936220099994, 42.35104217300005] },
+			"properties": {
+				"OBJECTID": 795,
+				"Count_": 114,
+				"Int_Number": 1292,
+				"Location": "Beach St & Surface Rd SB",
+				"Dist": "BP",
+				"shape_wkt": "POINT (-71.059362200999942 42.351042173000053)",
+				"POINT_X": -71.05936220099994,
+				"POINT_Y": 42.35104217300005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 808,
+			"geometry": { "type": "Point", "coordinates": [-71.04835314399998, 42.34634800300006] },
+			"properties": {
+				"OBJECTID": 808,
+				"Count_": 808,
+				"Int_Number": 9063,
+				"Location": "South Boston Haul Rd & West Service Rd Exit",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.048353143999975 42.34634800300006)",
+				"POINT_X": -71.04835314399998,
+				"POINT_Y": 42.34634800300006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 824,
+			"geometry": { "type": "Point", "coordinates": [-71.03934714799993, 42.34896761700003] },
+			"properties": {
+				"OBJECTID": 824,
+				"Count_": 0,
+				"Int_Number": 606,
+				"Location": "D St & Northern Ave",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.039347147999933 42.348967617000028)",
+				"POINT_X": -71.03934714799993,
+				"POINT_Y": 42.34896761700003
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 825,
+			"geometry": { "type": "Point", "coordinates": [-71.04078481199997, 42.34749276800005] },
+			"properties": {
+				"OBJECTID": 825,
+				"Count_": 476,
+				"Int_Number": 3129,
+				"Location": "D St & MBTA Silver Line Transitway",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.04078481199997 42.347492768000052)",
+				"POINT_X": -71.04078481199997,
+				"POINT_Y": 42.34749276800005
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 826,
+			"geometry": { "type": "Point", "coordinates": [-71.04151437299998, 42.34682669500006] },
+			"properties": {
+				"OBJECTID": 826,
+				"Count_": 478,
+				"Int_Number": 4116,
+				"Location": "D St & Ramp DB",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.041514372999984 42.346826695000061)",
+				"POINT_X": -71.04151437299998,
+				"POINT_Y": 42.34682669500006
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 828,
+			"geometry": { "type": "Point", "coordinates": [-71.04653546799995, 42.347750064000024] },
+			"properties": {
+				"OBJECTID": 828,
+				"Count_": 203,
+				"Int_Number": 9062,
+				"Location": "Boston Haul Rd, Mass Haul Rd, & Ramp CT-S",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.046535467999945 42.347750064000024)",
+				"POINT_X": -71.04653546799995,
+				"POINT_Y": 42.347750064000024
+			}
+		},
+		{
+			"type": "Feature",
+			"id": 831,
+			"geometry": { "type": "Point", "coordinates": [-71.04464533499998, 42.34407579400005] },
+			"properties": {
+				"OBJECTID": 831,
+				"Count_": 484,
+				"Int_Number": 3130,
+				"Location": "D St @ Mid-block Ped Crossing",
+				"Dist": "SB",
+				"shape_wkt": "POINT (-71.044645334999984 42.344075794000048)",
+				"POINT_X": -71.04464533499998,
+				"POINT_Y": 42.34407579400005
+			}
+		}
+	]
+}

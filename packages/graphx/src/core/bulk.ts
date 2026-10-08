@@ -30,8 +30,10 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  * A row MAY instead carry an explicit `id` plus `validFrom`/`validTo`, which is how an
  * import brings its own history: several rows sharing one id become several version rows
  * under one identity. That shifts interval correctness onto the caller, so the loaders
- * check it up front — per id, intervals must not overlap and at most one may be open. A
- * fully closed timeline is legal and means the entity existed and ended (no live row).
+ * check it up front — per id, intervals must not overlap each other or any version already
+ * stored for that id, and at most one may be open. A load can extend a stored timeline
+ * (add history before it, or a successor after a closed one) but never rewrite it. A fully
+ * closed timeline is legal and means the entity existed and ended (no live row).
  *
  * Both loaders are admin/initial-load paths and are NOT safe to interleave with concurrent
  * live writes (the trigger is absent mid-load; the final FTS `'rebuild'` reindexes
@@ -164,6 +166,46 @@ function validateIntervals(label: string, rows: Interval[]): void {
 	}
 }
 
+/**
+ * Refuse a load that would overlap a version already stored for a supplied id. The per-batch
+ * check above cannot see stored rows, and no index enforces one live row per id, so without
+ * this a second load of an existing id leaves two open versions: reads return the stale one
+ * and a later `updateNode` closes only one of them. Checks every stored version, open or
+ * closed — overlapping history breaks as-of reads the same way. Runs before any write.
+ */
+async function refuseStoredOverlaps(
+	raw: DbClient,
+	label: string,
+	table: 'node_versions' | 'edge_versions',
+	rows: Interval[],
+	chunkSize: number,
+): Promise<void> {
+	const byId = new Map<string, Interval[]>();
+	for (const r of rows) {
+		if (!r.supplied) continue;
+		const group = byId.get(r.id);
+		if (group) group.push(r);
+		else byId.set(r.id, [r]);
+	}
+	for (const part of chunk([...byId.keys()], chunkSize)) {
+		const stored = await raw.execute({
+			sql: `SELECT id, valid_from, valid_to FROM ${table} WHERE id IN (${part.map(() => '?').join(',')})`,
+			args: part,
+		});
+		for (const s of stored.rows) {
+			const id = String(s.id);
+			const from = Number(s.valid_from);
+			const to = Number(s.valid_to);
+			const hit = byId.get(id)?.find((r) => r.validFrom < to && from < r.validTo);
+			if (hit) {
+				throw new Error(
+					`${label}: id '${id}' already has a version [${from},${to}) overlapping [${hit.validFrom},${hit.validTo}) — a bulk load cannot rewrite stored history`,
+				);
+			}
+		}
+	}
+}
+
 /** Distinct ids in first-seen order — one identity row per identity, however many versions it has. */
 function distinctIds(rows: { id: string }[]): string[] {
 	return [...new Set(rows.map((r) => r.id))];
@@ -284,15 +326,14 @@ export async function bulkLoad<S extends GraphSchema>(
 			validTo: row.validTo ?? FOREVER,
 		};
 	});
-	validateIntervals(
-		'bulkLoad',
-		prepared.map((p, i) => ({
-			id: p.id,
-			supplied: rows[i]!.id !== undefined,
-			validFrom: p.validFrom,
-			validTo: p.validTo,
-		})),
-	);
+	const intervals = prepared.map((p, i) => ({
+		id: p.id,
+		supplied: rows[i]!.id !== undefined,
+		validFrom: p.validFrom,
+		validTo: p.validTo,
+	}));
+	validateIntervals('bulkLoad', intervals);
+	await refuseStoredOverlaps(raw, 'bulkLoad', 'node_versions', intervals, chunkSize);
 
 	// 1b. Vectors: one PreparedEmbedding per LIVE row that ends up with one — explicit rows,
 	// raw `emb`, or (with an embedder) the type's embedding input, batch-embedded. Validated
@@ -528,15 +569,14 @@ export async function bulkEdges<S extends GraphSchema>(
 			validTo: row.validTo ?? FOREVER,
 		};
 	});
-	validateIntervals(
-		'bulkEdges',
-		prepared.map((p, i) => ({
-			id: p.id,
-			supplied: rows[i]!.id !== undefined,
-			validFrom: p.validFrom,
-			validTo: p.validTo,
-		})),
-	);
+	const intervals = prepared.map((p, i) => ({
+		id: p.id,
+		supplied: rows[i]!.id !== undefined,
+		validFrom: p.validFrom,
+		validTo: p.validTo,
+	}));
+	validateIntervals('bulkEdges', intervals);
+	await refuseStoredOverlaps(raw, 'bulkEdges', 'edge_versions', intervals, chunkSize);
 
 	const stmts: SqlStatement[] = [];
 	// Every identity row precedes every version row so the immediate FK check passes.

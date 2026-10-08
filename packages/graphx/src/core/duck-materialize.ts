@@ -80,6 +80,15 @@ export async function materialize(
 	for (const t of [...SNAPSHOT_TABLES, ...FTS_TABLES].reverse()) {
 		await client.execute(`DROP TABLE IF EXISTS ${t}`);
 	}
+	// Restart the id sequences past the snapshot's high-water marks. A fresh process would
+	// otherwise start `seq_ver` at 1 and collide with the loaded rows on the first write, and
+	// a rebase onto a concurrent writer's snapshot would reuse the vers it published. `ver`
+	// must never repeat: the change feed pages by it. The tables are gone, so nothing
+	// depends on the sequences and they can be dropped.
+	await client.execute('DROP SEQUENCE IF EXISTS seq_ver');
+	await client.execute('DROP SEQUENCE IF EXISTS seq_outbox');
+	await client.execute(`CREATE SEQUENCE seq_ver START ${(manifest?.verHigh ?? 0) + 1}`);
+	await client.execute(`CREATE SEQUENCE seq_outbox START ${(manifest?.seqHigh ?? 0) + 1}`);
 	await client.executeMultiple(duckdbSchema());
 	await applyReaderSettings(client);
 	if (manifest === null) return;

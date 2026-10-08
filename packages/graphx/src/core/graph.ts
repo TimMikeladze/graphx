@@ -550,6 +550,20 @@ function backoff(attempt: number): Promise<void> {
 	return sleep(base + Math.random() * base);
 }
 
+/** The newest instant a namespace records: any version opened, or any interval closed. */
+async function latestInstant(raw: DbClient): Promise<number> {
+	let latest = 0;
+	for (const table of ['node_versions', 'edge_versions']) {
+		const r = await raw.execute({
+			sql: `SELECT MAX(valid_from) AS opened, MAX(CASE WHEN valid_to < ? THEN valid_to END) AS closed FROM ${table}`,
+			args: [FOREVER],
+		});
+		const row = r.rows[0] as { opened?: unknown; closed?: unknown } | undefined;
+		latest = Math.max(latest, Number(row?.opened ?? 0), Number(row?.closed ?? 0));
+	}
+	return latest;
+}
+
 export class Graph<S extends GraphSchema> {
 	/** Set only on the private view created by atomic(); never exposed to callers. */
 	private atomicTransaction?: DbTransaction;
@@ -859,6 +873,10 @@ export class Graph<S extends GraphSchema> {
 	async fork(target: DbClient, opts: ForkOpts = {}): Promise<Graph<S>> {
 		const result = await fork(this.raw, target, opts);
 		const branch = new Graph(target, this.schema, this.options);
+		// Start the branch's write clock past every instant it holds. Under a burst of writes the
+		// monotonic clock (M6) runs ahead of wall time, so a fork point can lie in the future;
+		// a branch clocked from Date.now() would then write versions that land before the cut.
+		branch.lastTs = Math.max(opts.asOf ?? 0, await latestInstant(target));
 		if (this.embedder && this.embeddingMode !== 'off') {
 			for (const id of result.needsEmbedding) await branch.embedNode(id);
 		}
