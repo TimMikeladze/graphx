@@ -46,7 +46,7 @@ import { match, type PatternBuilder } from './pattern.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
 import { timeline } from './timeline.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
-import { createGraphQLEndpoint, type GraphQLOptions } from './graphql.ts';
+import { createGraphQLEndpoint, type GraphQLOptions, sampleQuery } from './graphql.ts';
 
 /**
  * P11 — Serving (§14, D2). The SDK is a library; this exposes it over HTTP as a
@@ -2031,6 +2031,11 @@ async function bootstrapDevApp<S extends GraphSchema>(
 	if (cfg.seed) await cfg.seed(graph);
 	const app = buildApp<S>({
 		...cfg,
+		// The dev GraphiQL opens on a sample already scoped to the bootstrapped project.
+		graphql: cfg.graphql && {
+			defaultQuery: sampleQuery({ tenant, project }),
+			...(cfg.graphql === true ? {} : cfg.graphql),
+		},
 		control,
 		// dev auth: honor the client's x-user/x-tenant headers, else default to the seeded principal.
 		authenticate: (c) => ({

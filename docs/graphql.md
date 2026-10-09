@@ -27,7 +27,10 @@ package installed answers 501 with an install hint.
 
 ## Surface
 
-- `ServeConfig.graphql` / `DevServeConfig.graphql`: `boolean | { path?: string; graphiql?: boolean }`.
+- `ServeConfig.graphql` / `DevServeConfig.graphql`: `boolean | { path?, graphiql?, defaultQuery? }`.
+- GraphiQL opens on `sampleQuery()` (schema + first nodes). graphx renders the page itself, since the
+  library's starter queries `_info`, which graphx leaves out. Dev `createApp` inlines its tenant and
+  project ids so the sample runs unedited; production uses `$tenant`/`$project` variables.
 - `graphx serve --graphql`.
 - CORS comes from the app's own `cors` middleware (the library's CORS is disabled).
 

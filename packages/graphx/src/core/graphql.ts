@@ -9,6 +9,33 @@ export interface GraphQLOptions {
 	path?: string;
 	/** Serve GraphiQL on a browser `GET` of the endpoint. Default `true`. */
 	graphiql?: boolean;
+	/**
+	 * Query GraphiQL opens with on a first visit. Default: a sample that reads the schema and the
+	 * first nodes. The dev `createApp` fills in its own tenant and project, so it runs as is.
+	 */
+	defaultQuery?: string;
+}
+
+/** The GraphiQL starter query, run against `tenant`/`project` (literal ids, or `$tenant`/`$project`). */
+export function sampleQuery(scope?: { tenant: string; project: string }): string {
+	const t = scope ? JSON.stringify(scope.tenant) : '$tenant';
+	const p = scope ? JSON.stringify(scope.project) : '$project';
+	const head = scope
+		? 'query Sample {'
+		: '# Set tenant and project in the Variables pane below.\nquery Sample($tenant: String!, $project: String!) {';
+	return `# graphx over GraphQL: every REST route is a field. Open Docs (top left) for all of them.
+# Press the run button (Cmd/Ctrl+Enter).
+${head}
+  getSchema(tenant: ${t}, project: ${p}) {
+    nodes { type }
+    edges { rel }
+  }
+  listNodes(tenant: ${t}, project: ${p}, limit: 5) {
+    nodes { id type data }
+    nextCursor
+  }
+}
+`;
 }
 
 /** The parts of an `OpenAPIHono` app this module needs. */
@@ -71,7 +98,8 @@ export function createGraphQLEndpoint(
 		});
 		return createGraphQLHandler(schema, {
 			path,
-			graphiql: opts.graphiql,
+			// GraphiQL is served below, with graphx's own starter query.
+			graphiql: false,
 			title: opts.title,
 			// The app's own `cors` middleware already ran; don't add a second set of headers.
 			cors: false,
@@ -80,6 +108,26 @@ export function createGraphQLEndpoint(
 	};
 
 	return async (request) => {
+		const url = new URL(request.url);
+		if (
+			opts.graphiql !== false &&
+			request.method === 'GET' &&
+			!url.searchParams.has('query') &&
+			(request.headers.get('accept') ?? '').includes('text/html')
+		) {
+			try {
+				const { renderGraphiQL } = await import('openapi-x-graphql');
+				const html = renderGraphiQL({
+					endpoint: path,
+					title: opts.title,
+					defaultQuery: opts.defaultQuery ?? sampleQuery(),
+				});
+				return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+			} catch (err) {
+				if (!isMissingModule(err)) throw err;
+				return missingPackage();
+			}
+		}
 		handler ??= build();
 		try {
 			return await (
@@ -88,21 +136,25 @@ export function createGraphQLEndpoint(
 		} catch (err) {
 			if (isMissingModule(err)) {
 				handler = undefined;
-				return Response.json(
-					{
-						errors: [
-							{
-								message:
-									'GraphQL needs the optional `openapi-x-graphql` package: install it next to graphx',
-							},
-						],
-					},
-					{ status: 501 },
-				);
+				return missingPackage();
 			}
 			throw err;
 		}
 	};
+}
+
+function missingPackage(): Response {
+	return Response.json(
+		{
+			errors: [
+				{
+					message:
+						'GraphQL needs the optional `openapi-x-graphql` package: install it next to graphx',
+				},
+			],
+		},
+		{ status: 501 },
+	);
 }
 
 function isMissingModule(err: unknown): boolean {

@@ -700,8 +700,9 @@ const res = await fetch('http://localhost:8899/graphql', {
 console.log(await res.json()); // { data: { listNodes: { nodes: [{ id, data: { name: 'us-east-1', … } }] } } }
 ```
 
-Open `http://localhost:8899/graphql` in a browser for GraphiQL, with docs and autocomplete. From the
-CLI, `graphx serve --graphql` does the same.
+Open `http://localhost:8899/graphql` in a browser for GraphiQL, with docs and autocomplete. It opens
+on a sample query that reads the schema and the first nodes; the dev `createApp` fills in its tenant
+and project, so it runs as is. From the CLI, `graphx serve --graphql` does the same.
 
 Every route becomes a field named after its `operationId` — `list_nodes` is `listNodes`,
 `create_node` is `createNode`. Reads are queries, writes are mutations:
@@ -723,7 +724,7 @@ There is no second API behind it. The schema is generated from `/openapi.json` b
 route in-process with the caller's headers, so auth, permissions, validation and limits are the
 route's own. A failed route returns a GraphQL error carrying `extensions.status` and
 `extensions.body`. Pass `graphql: { path: '/gql', graphiql: false }` to move the endpoint or drop
-GraphiQL. The SSE `/events` stream has no GraphQL counterpart.
+GraphiQL, and `defaultQuery` to open it on your own query. The SSE `/events` stream has no GraphQL counterpart.
 
 ## React
 

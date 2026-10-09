@@ -162,3 +162,27 @@ test('graphql: off by default, and routes without an operationId are not fields'
 	expect(names.some((n) => /events/i.test(n))).toBe(false);
 	cleanup(control, db2);
 });
+
+test('graphql: GraphiQL opens on a sample query that runs against the dev project', async () => {
+	const db = `gql_${ulid().toLowerCase()}`;
+	const { app, control, tenant, project } = await createApp({
+		schema: SCHEMA,
+		db,
+		graphql: true,
+		seed: async (g) => {
+			await g.addNode({ type: 'person', data: { name: 'ada' } });
+		},
+	});
+	const page = await (await app.request('/graphql', { headers: { accept: 'text/html' } })).text();
+	const config = JSON.parse(page.match(/var config = (\{.*\});/)?.[1] ?? '{}') as {
+		defaultQuery: string;
+	};
+	expect(config.defaultQuery).toContain(tenant);
+	expect(config.defaultQuery).toContain(project);
+
+	const res = await gql(app, config.defaultQuery);
+	expect(res.body.errors).toBeUndefined();
+	expect(res.body.data.getSchema.nodes).toEqual([{ type: 'person' }]);
+	expect(res.body.data.listNodes.nodes[0].data).toEqual({ name: 'ada' });
+	cleanup(control, db);
+});
