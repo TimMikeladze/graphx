@@ -67,6 +67,7 @@ test('upgradeSchema runs only the steps above the stored version, in order, stam
 			ran.push(`b@${await readSchemaVersion(c)}`);
 		},
 	];
+	await setVersion(client, '1');
 	await upgradeSchema(client, 1, steps);
 	expect(ran).toEqual(['a@1', 'b@2']);
 	expect(await readSchemaVersion(client)).toBe(3);

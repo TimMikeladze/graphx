@@ -23,7 +23,7 @@ export async function edgesInto(
 		asOf === undefined
 			? `SELECT src, ${sr} AS sr FROM edges WHERE dst = ? AND rel = ?`
 			: `SELECT src, ${sr} AS sr FROM edge_versions
-				WHERE dst = ? AND rel = ? AND valid_from <= ? AND valid_to > ?`;
+				WHERE dst = ? AND rel = ? AND valid_from <= ? AND valid_to > ? AND recorded_to = 8640000000000000`;
 	const args = asOf === undefined ? [object, relation] : [object, relation, asOf, asOf];
 	const r = await raw.execute({ sql, args });
 	return r.rows.map((row) => ({

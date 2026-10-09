@@ -28,17 +28,17 @@ export interface ExplorerSearch extends ExplorerFilters {
 export function parseExplorerSearch(raw: Record<string, unknown>): ExplorerSearch {
 	const str = (v: unknown): string | undefined =>
 		typeof v === 'string' && v.length > 0 ? v : undefined;
-	const asOfRaw = raw.asOf;
-	const asOf =
-		typeof asOfRaw === 'number'
-			? asOfRaw
-			: typeof asOfRaw === 'string' && asOfRaw.trim() !== '' && Number.isFinite(Number(asOfRaw))
-				? Number(asOfRaw)
+	const instant = (v: unknown): number | undefined =>
+		typeof v === 'number'
+			? v
+			: typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))
+				? Number(v)
 				: undefined;
 	return {
 		type: str(raw.type),
 		q: str(raw.q),
-		asOf,
+		asOf: instant(raw.asOf),
+		recordedAsOf: instant(raw.recordedAsOf),
 		mode: parseMode(raw.mode),
 		node: str(raw.node),
 		expand: parseExpand(raw.expand),
@@ -67,7 +67,13 @@ function parseExpand(raw: unknown): string[] {
 
 /** The filter subset of the search (what the data hooks key on). */
 export function filtersOf(search: ExplorerSearch): ExplorerFilters {
-	return { type: search.type, q: search.q, asOf: search.asOf, mode: search.mode };
+	return {
+		type: search.type,
+		q: search.q,
+		asOf: search.asOf,
+		recordedAsOf: search.recordedAsOf,
+		mode: search.mode,
+	};
 }
 
 /** Add an id to the expand set (immutably). */

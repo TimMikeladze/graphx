@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { FOREVER } from '../../src/core/db.ts';
 import { ftsSeedAsOf, ftsSeedLive, ftsWhere } from '../../src/core/dialect-sql.ts';
+import { slicePredicate } from '../../src/core/temporal.ts';
 import { createDuckClient, type DuckClient } from '../../src/core/duck.ts';
 import { duckdbSchema } from '../../src/core/dialect-sql.ts';
 import { rebuildIndex } from '../../src/core/fts/index-tables.ts';
@@ -57,7 +58,7 @@ describe('duckdb fts fragments', () => {
 	test('ftsSeedAsOf matches the version live at t — the exactness ANN cannot give', async () => {
 		const c = await seeded();
 		const r = await c.execute({
-			sql: ftsSeedAsOf('duckdb'),
+			sql: ftsSeedAsOf('duckdb', slicePredicate('n', { asOf: 50 }).sql),
 			args: [terms('temporal'), 50, 50, 10],
 		});
 		expect(r.rows.map((row) => String(row.id))).toEqual(['a']);
@@ -67,7 +68,7 @@ describe('duckdb fts fragments', () => {
 	test('ftsSeedAsOf does not match a version that had not been written yet', async () => {
 		const c = await seeded();
 		const r = await c.execute({
-			sql: ftsSeedAsOf('duckdb'),
+			sql: ftsSeedAsOf('duckdb', slicePredicate('n', { asOf: 50 }).sql),
 			args: [terms('rewritten'), 50, 50, 10],
 		});
 		expect(r.rows).toEqual([]);
@@ -90,6 +91,7 @@ describe('duckdb fts fragments', () => {
 		const count = (sql: string): number => (sql.match(/\?/g) ?? []).length;
 		expect(count(ftsWhere('duckdb', 'nv'))).toBe(count(ftsWhere('libsql', 'nv')));
 		expect(count(ftsSeedLive('duckdb'))).toBe(count(ftsSeedLive('libsql')));
-		expect(count(ftsSeedAsOf('duckdb'))).toBe(count(ftsSeedAsOf('libsql')));
+		const at = slicePredicate('n', { asOf: 50 }).sql;
+		expect(count(ftsSeedAsOf('duckdb', at))).toBe(count(ftsSeedAsOf('libsql', at)));
 	});
 });

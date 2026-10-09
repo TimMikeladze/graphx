@@ -132,6 +132,11 @@ export interface NodeVersion {
 	data: string;
 	valid_from: number;
 	valid_to: number;
+	/** When graphx recorded this belief, and when a later write superseded it (FOREVER = still held). */
+	recorded_from: number;
+	recorded_to: number;
+	/** False for a belief a correction or update has superseded. */
+	current: boolean;
 }
 
 /**
@@ -207,8 +212,10 @@ export interface Timeline {
 export interface ExplorerFilters {
 	type?: string;
 	q?: string;
-	/** As-of epoch ms; absent ⇒ current (live). */
+	/** As-of epoch ms (valid time: the world then); absent ⇒ current (live). */
 	asOf?: number;
+	/** Recorded-as-of epoch ms (what the graph believed then); absent ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Absent ⇒ `text`. */
 	mode?: SearchMode;
 }

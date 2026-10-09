@@ -70,7 +70,7 @@ test('P1: deleteTuple closes the live edge — no live tuple, history retained',
 	expect(await liveTupleExists(db, 'user:alice', 'viewer', 'doc:42')).toBe(false);
 	// the closed version still exists with a finite valid_to
 	const r = await db.execute({
-		sql: 'SELECT valid_to FROM edge_versions WHERE src = ? AND rel = ? AND dst = ?',
+		sql: 'SELECT valid_to FROM edge_versions WHERE src = ? AND rel = ? AND dst = ? AND recorded_to = 8640000000000000',
 		args: ['user:alice', 'viewer', 'doc:42'],
 	});
 	expect(r.rows.length).toBe(1);

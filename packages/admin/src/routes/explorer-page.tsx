@@ -92,7 +92,7 @@ export function ExplorerPage() {
 	const detailOpen = Boolean(search.node) && !isMobile;
 	// A write issued from a historical view lands on the LIVE version, not the one on screen. That
 	// is a silent footgun, so the past is read-only rather than merely discouraged.
-	const readOnly = filters.asOf !== undefined;
+	const readOnly = filters.asOf !== undefined || filters.recordedAsOf !== undefined;
 	// Playback churns the slice every step; the canvas holds its layout still for the duration.
 	const [playing, setPlaying] = useState(false);
 	// Whether the canvas is still ingesting the current slice. Playback waits on it so it advances
@@ -140,8 +140,12 @@ export function ExplorerPage() {
 				</header>
 
 				{slice.data?.truncated && <ResultsBanner />}
-				{filters.asOf !== undefined && (
-					<TimeTravelBanner asOf={filters.asOf} onReturn={() => setSearch({ asOf: undefined })} />
+				{readOnly && (
+					<TimeTravelBanner
+						asOf={filters.asOf}
+						recordedAsOf={filters.recordedAsOf}
+						onReturn={() => setSearch({ asOf: undefined, recordedAsOf: undefined })}
+					/>
 				)}
 
 				<div className="flex min-h-0 flex-1">
@@ -169,18 +173,32 @@ export function ExplorerPage() {
 							onDrawEdge={readOnly ? undefined : (edge) => setDrawnEdge(edge)}
 							onDeleteEdge={readOnly ? undefined : (edge) => setEdgeToRemove(edge)}
 							timeline={
-								<TimelineBar
-									tenant={tenant}
-									project={project}
-									asOf={filters.asOf}
-									onChange={(asOf) => setSearch({ asOf })}
-									onPlayingChange={setPlaying}
-									// Fetching counts as busy too. While a step's slice is in flight the canvas
-									// still holds the previous one (the placeholder keeps its identity), so it
-									// reports idle — and playback would step straight past change points that were
-									// never drawn.
-									rendererBusy={rendererBusy || slice.isFetching}
-								/>
+								<>
+									<TimelineBar
+										tenant={tenant}
+										project={project}
+										label="World"
+										asOf={filters.asOf}
+										onChange={(asOf) => setSearch({ asOf })}
+										onPlayingChange={setPlaying}
+										// Fetching counts as busy too. While a step's slice is in flight the canvas
+										// still holds the previous one (the placeholder keeps its identity), so it
+										// reports idle — and playback would step straight past change points that were
+										// never drawn.
+										rendererBusy={rendererBusy || slice.isFetching}
+									/>
+									{/* What the graph believed when: scrub it to see the graph before a correction. */}
+									<TimelineBar
+										tenant={tenant}
+										project={project}
+										axis="recorded"
+										label="Recorded"
+										asOf={filters.recordedAsOf}
+										onChange={(recordedAsOf) => setSearch({ recordedAsOf })}
+										onPlayingChange={setPlaying}
+										rendererBusy={rendererBusy || slice.isFetching}
+									/>
+								</>
 							}
 							pinSimulation={playing}
 							onRendererBusyChange={setRendererBusy}
@@ -197,6 +215,7 @@ export function ExplorerPage() {
 								onEdit={readOnly ? undefined : (id) => setEditorFor(id)}
 								onDelete={readOnly ? undefined : (id) => setDeleteFor(id)}
 								asOf={filters.asOf}
+								recordedAsOf={filters.recordedAsOf}
 								readOnly={readOnly}
 							/>
 						</aside>
@@ -215,6 +234,7 @@ export function ExplorerPage() {
 					onEdit={readOnly ? undefined : (id) => setEditorFor(id)}
 					onDelete={readOnly ? undefined : (id) => setDeleteFor(id)}
 					asOf={filters.asOf}
+					recordedAsOf={filters.recordedAsOf}
 					readOnly={readOnly}
 				/>
 			)}

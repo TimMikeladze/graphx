@@ -25,7 +25,7 @@ export async function jevCalibration<S extends GraphSchema>(
 ): Promise<CalibrationBucket[]> {
 	const n = opts.buckets ?? 5;
 	const r = await g.raw.execute({
-		sql: 'SELECT weight, valid_to FROM edge_versions WHERE rel = ? AND source = ?',
+		sql: 'SELECT weight, valid_to FROM edge_versions WHERE rel = ? AND source = ? AND recorded_to = 8640000000000000',
 		args: [opts.rel, opts.source ?? 'jev'],
 	});
 	const buckets: CalibrationBucket[] = Array.from({ length: n }, (_, i) => ({

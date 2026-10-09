@@ -71,3 +71,25 @@ test('P1: check asOf sees the grant in the past, not before it or after revoke',
 	expect(await auth.check('doc:42', 'viewer', 'user:alice')).toBe(false); // live = now (revoked)
 	db.close();
 });
+
+test('D6: a correction to a past grant changes past checks, never the current one', async () => {
+	// file-backed: retractEdge runs a transaction, which detaches a :memory: client
+	const { client: db, teardown } = makeTestDb({ file: true });
+	await init(db, hashEmbed(4));
+	const g = new Graph(db, MODEL.schema);
+	const auth = new Auth(g, MODEL);
+	await auth.write([{ object: 'doc:42', relation: 'viewer', subject: 'user:alice' }]);
+	const edge = (await g.listEdges({ rel: 'viewer', dst: 'doc:42' })).edges[0]!;
+	await sleep(5);
+	const during = Date.now();
+	await sleep(5);
+	const end = Date.now();
+	expect(await auth.check('doc:42', 'viewer', 'user:alice', { asOf: during })).toBe(true);
+
+	// we learn alice's access was suspended for a while: authz reads the current belief
+	const start = during - 1;
+	await g.retractEdge(edge.id, { validFrom: start, validTo: end });
+	expect(await auth.check('doc:42', 'viewer', 'user:alice', { asOf: during })).toBe(false);
+	expect(await auth.check('doc:42', 'viewer', 'user:alice')).toBe(true);
+	await teardown();
+});

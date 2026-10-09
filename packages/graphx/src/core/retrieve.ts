@@ -1,6 +1,6 @@
 import { type DbClient, dialectOf } from './dialect.ts';
 import { annSeeds, jsonArrayRows } from './dialect-sql.ts';
-import { FOREVER } from './runtime.ts';
+import { isLive, slicePredicate, type TimeSlice } from './temporal.ts';
 import { assertVector, type Embedder, EmbeddingError } from './embedder.ts';
 import {
 	applyLimit,
@@ -70,6 +70,8 @@ export interface RetrieveOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
 	limits?: Partial<QueryLimits>;
 	/**
@@ -205,32 +207,37 @@ export async function vectorSeedRows(
 	return [...best.values()].sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : 1)).slice(0, k);
 }
 
-/** The subset of `ids` that has a version valid at `t`, in the order given. */
-export async function idsValidAt(raw: DbClient, ids: string[], t: number): Promise<string[]> {
+/** The subset of `ids` that has a version in the slice, in the order given. */
+export async function idsValidAt(
+	raw: DbClient,
+	ids: string[],
+	slice: TimeSlice,
+): Promise<string[]> {
 	if (ids.length === 0) return [];
+	const pred = slicePredicate('n', slice);
 	const r = await raw.execute({
 		sql: `SELECT DISTINCT n.id AS id FROM node_versions n
 JOIN (${jsonArrayRows(dialectOf(raw))}) s ON s.id = n.id
-WHERE n.valid_from <= ? AND ? < n.valid_to`,
-		args: [JSON.stringify(ids), t, t],
+WHERE ${pred.sql}`,
+		args: [JSON.stringify(ids), ...pred.args],
 	});
 	const keep = new Set(r.rows.map((row) => String(row.id)));
 	return ids.filter((id) => keep.has(id));
 }
 
 /**
- * Vector seeds for `query`: the `k` nearest nodes now, or — as-of-past — the `k` nearest live
- * nodes that also existed at `t`. Scores are cosine similarity (`1 − distance`).
+ * Vector seeds for `query`: the `k` nearest nodes now, or — in a past slice — the `k` nearest
+ * live nodes that also existed in it. Scores are cosine similarity (`1 − distance`).
  */
 export async function vectorSeeds(
 	raw: DbClient,
 	embedder: Embedder,
 	query: string,
 	k: number,
-	asOf: number | undefined,
+	slice: TimeSlice,
 ): Promise<Seed[]> {
 	const qEmb = await embedder.embedOne(query);
-	const isPast = asOf !== undefined && asOf < FOREVER;
+	const isPast = !isLive(slice);
 	const rows = await vectorSeedRows(raw, qEmb, isPast ? k * ASOF_SEED_MULTIPLIER : k);
 	let ordered = rows;
 	if (isPast) {
@@ -238,7 +245,7 @@ export async function vectorSeeds(
 			await idsValidAt(
 				raw,
 				rows.map((r) => r.id),
-				asOf as number,
+				slice,
 			),
 		);
 		ordered = rows.filter((r) => keep.has(r.id)).slice(0, k);
@@ -272,7 +279,7 @@ export interface WalkOpts {
 	maxDepth: number;
 	direction: 'forward' | 'reverse' | 'both';
 	rels: string[] | null;
-	asOf: number | undefined;
+	slice: TimeSlice;
 	limits: QueryLimits;
 	metrics?: MetricsContext;
 	upcast?: (type: string, data: Record<string, unknown>) => Record<string, unknown>;
@@ -290,16 +297,11 @@ export async function walk<S extends GraphSchema>(
 ): Promise<RetrievedNode<S>[]> {
 	if (seeds.length === 0) return [];
 	const d = dialectOf(raw);
-	const isPast = opts.asOf !== undefined && opts.asOf < FOREVER;
-	const t = opts.asOf as number;
 	const relPred = opts.rels ? ` AND rel IN (${opts.rels.map(() => '?').join(',')})` : '';
-	const edgePred = isPast
-		? `valid_from <= ? AND ? < valid_to${relPred}`
-		: `valid_to = ${FOREVER}${relPred}`;
-	const nodePred = (alias: string): string =>
-		isPast
-			? `${alias}.valid_from <= ? AND ? < ${alias}.valid_to`
-			: `${alias}.valid_to = ${FOREVER}`;
+	const edgeSlice = slicePredicate('', opts.slice);
+	const edgePred = `${edgeSlice.sql}${relPred}`;
+	const nodePred = (alias: string): string => slicePredicate(alias, opts.slice).sql;
+	const nodeArgs = slicePredicate('n', opts.slice).args;
 
 	const sql = `
 WITH RECURSIVE seeds(id) AS (${jsonArrayRows(d)}),
@@ -331,10 +333,10 @@ ORDER BY depth, id`;
 	const args: (string | number)[] = [JSON.stringify(seeds.map((s) => s.id))];
 	const sides = opts.direction === 'both' ? 2 : 1;
 	for (let i = 0; i < sides; i++) {
-		if (isPast) args.push(t, t);
+		args.push(...edgeSlice.args);
 		args.push(...(opts.rels ?? []));
 	}
-	if (isPast) args.push(t, t, t, t);
+	args.push(...nodeArgs, ...nodeArgs);
 	args.push(opts.maxDepth);
 
 	const r = await withTimeout(
@@ -384,12 +386,12 @@ export async function retrieve<S extends GraphSchema = GraphSchema>(
 ): Promise<RetrievedNode<S>[]> {
 	await requireEmbeddings(raw, embedder, 'retrieve');
 	const k = opts.k ?? 10;
-	const seeds = await vectorSeeds(raw, embedder, opts.query, k, opts.asOf);
+	const seeds = await vectorSeeds(raw, embedder, opts.query, k, opts);
 	return walk<S>(raw, seeds, {
 		maxDepth: opts.maxDepth ?? 2,
 		direction: opts.direction ?? 'both',
 		rels: opts.rels && opts.rels.length > 0 ? opts.rels : null,
-		asOf: opts.asOf,
+		slice: { asOf: opts.asOf, recordedAsOf: opts.recordedAsOf },
 		limits: resolveLimits(opts.limits),
 		metrics: opts.metrics,
 		upcast: opts.upcast,

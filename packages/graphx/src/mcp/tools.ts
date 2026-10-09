@@ -44,10 +44,10 @@ export interface RegistryHost {
 	openAPIRegistry: { definitions: readonly unknown[] };
 }
 
-/** Retracts are recoverable via `asOf`, but they still remove the live version. */
-const DESTRUCTIVE = new Set(['delete_node', 'delete_edge']);
-/** A patch applied twice lands the same node state. */
-const IDEMPOTENT = new Set(['update_node']);
+/** Deletes and retractions are recoverable via `asOf`/`recordedAsOf`, but they remove what reads see. */
+const DESTRUCTIVE = new Set(['delete_node', 'delete_edge', 'retract_node', 'retract_edge']);
+/** A patch or correction applied twice lands the same state. */
+const IDEMPOTENT = new Set(['update_node', 'correct_node', 'correct_edge']);
 
 /** A Zod object's field map, or `{}` for anything that isn't one. */
 function shapeOf(schema: unknown): Record<string, ZodType> {

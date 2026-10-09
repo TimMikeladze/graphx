@@ -101,7 +101,7 @@ test('bundled core runs graph mutations and history without Node or text codec g
 		expect(note.id).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/);
 		await graph.updateNode(note.id, { body: 'second' });
 		expect((await graph.getNodeContent(note.id))?.body).toBe('second');
-		expect(await core.history(db.client, note.id)).toHaveLength(2);
+		expect((await core.history(db.client, note.id)).filter((v) => v.current)).toHaveLength(2);
 	} finally {
 		await db.teardown();
 	}

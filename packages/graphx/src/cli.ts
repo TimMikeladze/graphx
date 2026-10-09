@@ -2,7 +2,17 @@ import { parseArgs } from 'node:util';
 import { join, resolve } from 'node:path';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import type { CreateAppResult, GraphSchema } from './core/index.ts';
-import { createApp, fork, getDb, Graph, init, TriggerRunner } from './core/index.ts';
+import {
+	createApp,
+	findOverlaps,
+	fork,
+	getDb,
+	Graph,
+	init,
+	OverlapError,
+	repairOverlaps,
+	TriggerRunner,
+} from './core/index.ts';
 import { loadConfig, namespaceOf, openDb, openGraph } from './cli-config.ts';
 import { ingestDir, watchDir } from './ingest/index.ts';
 import type { IngestResult } from './ingest/index.ts';
@@ -117,6 +127,26 @@ export function parseTriggersArgs(argv: string[]): ParsedTriggersArgs {
 	return { config: (values.config as string | undefined) ?? './graphx.config.ts' };
 }
 
+export interface ParsedDoctorArgs {
+	config: string;
+	repairOverlaps: boolean;
+}
+
+export function parseDoctorArgs(argv: string[]): ParsedDoctorArgs {
+	const { values } = parseArgs({
+		args: argv,
+		allowPositionals: true,
+		options: {
+			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
+			'repair-overlaps': { type: 'boolean', default: false },
+		},
+	});
+	return {
+		config: (values.config as string | undefined) ?? './graphx.config.ts',
+		repairOverlaps: (values['repair-overlaps'] as boolean | undefined) ?? false,
+	};
+}
+
 export interface ParsedReembedArgs {
 	config: string;
 	dryRun: boolean;
@@ -164,13 +194,14 @@ export interface ParsedForkArgs {
 	config: string;
 	target: string;
 	asOf: number | undefined;
+	recordedAsOf: number | undefined;
 }
 
-/** `--as-of` takes epoch ms or anything `Date.parse` reads (an ISO timestamp). */
-function parseInstant(raw: string): number {
+/** `--as-of` / `--recorded-as-of` take epoch ms or anything `Date.parse` reads (an ISO timestamp). */
+function parseInstant(raw: string, flag: string): number {
 	const t = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
 	if (!Number.isFinite(t))
-		throw new Error(`fork: --as-of expects epoch ms or an ISO date, got '${raw}'`);
+		throw new Error(`fork: --${flag} expects epoch ms or an ISO date, got '${raw}'`);
 	return t;
 }
 
@@ -181,15 +212,19 @@ export function parseForkArgs(argv: string[]): ParsedForkArgs {
 		options: {
 			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
 			'as-of': { type: 'string' },
+			'recorded-as-of': { type: 'string' },
 		},
 	});
 	const target = positionals[1];
 	if (!target) throw new Error('fork: missing <namespace> argument');
 	const asOf = values['as-of'] as string | undefined;
+	const recordedAsOf = values['recorded-as-of'] as string | undefined;
 	return {
 		config: (values.config as string | undefined) ?? './graphx.config.ts',
 		target,
-		asOf: asOf === undefined ? undefined : parseInstant(asOf),
+		asOf: asOf === undefined ? undefined : parseInstant(asOf, 'as-of'),
+		recordedAsOf:
+			recordedAsOf === undefined ? undefined : parseInstant(recordedAsOf, 'recorded-as-of'),
 	};
 }
 
@@ -370,10 +405,14 @@ upcast options:
 
 doctor options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
+  --repair-overlaps       Keep the last-written of several open versions of one id
+                          (damage the schema v2 upgrade refuses); deletes nothing
 
 fork options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
   --as-of <ms|ISO date>   Branch the graph as it stood at this instant
+  --recorded-as-of <ms|ISO date>
+                          Branch the database as it was recorded at this instant
 
 dedupe options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -634,7 +673,10 @@ async function runFork(argv: string[]): Promise<void> {
 	const source = openDb(cfg);
 	await init(source);
 	const target = getDb(args.target, { ...cfg.db, duckPath: undefined });
-	const result = await fork(source, target, { asOf: args.asOf });
+	const result = await fork(source, target, {
+		asOf: args.asOf,
+		recordedAsOf: args.recordedAsOf,
+	});
 	if (cfg.embedder && result.needsEmbedding.length > 0) {
 		const branch = new Graph(target, cfg.schema, {
 			embedder: cfg.embedder,
@@ -643,7 +685,7 @@ async function runFork(argv: string[]): Promise<void> {
 		for (const id of result.needsEmbedding) await branch.embedNode(id);
 	}
 	console.log(
-		`forked ${namespaceOf(cfg)} -> ${args.target} (${result.method})${result.asOf === null ? '' : ` asOf=${new Date(result.asOf).toISOString()}`} ` +
+		`forked ${namespaceOf(cfg)} -> ${args.target} (${result.method})${result.asOf === null ? '' : ` asOf=${new Date(result.asOf).toISOString()}`}${result.recordedAsOf === null ? '' : ` recordedAsOf=${new Date(result.recordedAsOf).toISOString()}`} ` +
 			`nodes=${result.nodes} edges=${result.edges} versions=${result.nodeVersions + result.edgeVersions} ` +
 			`vectors=${result.vectors} reembedded=${cfg.embedder ? result.needsEmbedding.length : 0}`,
 	);
@@ -741,12 +783,45 @@ async function runAsk(argv: string[]): Promise<void> {
 	console.log(`${rows.length} row(s)`);
 }
 
-/** `graphx doctor` — the namespace's embedding model, width, counts, and staleness. */
+/**
+ * `graphx doctor` — the namespace's embedding model, width, counts, staleness, and version
+ * integrity. An upgrade refused for overlapping open versions is reported, or with
+ * `--repair-overlaps` settled and then completed.
+ */
 async function runDoctor(argv: string[]): Promise<void> {
-	const args = parseTriggersArgs(argv);
+	const args = parseDoctorArgs(argv);
 	const cfg = await loadConfig(args.config);
 	const client = openDb(cfg);
-	await init(client);
+	const integrity: string[] = [];
+	if (args.repairOverlaps) {
+		const fixed = await repairOverlaps(client);
+		integrity.push(
+			`repaired       ${fixed.nodes} node and ${fixed.edges} edge version(s) are no longer current`,
+		);
+	}
+	try {
+		await init(client);
+	} catch (e) {
+		if (!(e instanceof OverlapError)) throw e;
+		console.log(
+			`${e.message}\n\n${e.nodes.length} node id(s), ${e.edges.length} edge id(s) affected — run \`graphx doctor --repair-overlaps\``,
+		);
+		process.exitCode = 1;
+		return;
+	}
+	const overlaps = await findOverlaps(client);
+	integrity.push(
+		`overlaps       ${overlaps.nodes.length} node id(s), ${overlaps.edges.length} edge id(s) with more than one open version`,
+	);
+	const backfill = await client.execute({
+		sql: 'SELECT value FROM graph_meta WHERE key = ?',
+		args: ['recorded_backfill'],
+	});
+	if (backfill.rows.length > 0) {
+		integrity.push(
+			`recorded time  ${String(backfill.rows[0]!.value)} version(s) from before schema v2 are recorded at their valid time (a bulk-loaded row's real load time is unknown)`,
+		);
+	}
 	const graph = new Graph(client, cfg.schema, {
 		embedder: cfg.embedder,
 		embedding: 'off',
@@ -779,6 +854,7 @@ async function runDoctor(argv: string[]): Promise<void> {
 			`\n! ${behind} node(s) stored below their upcaster version; \`where\` filters miss them — run \`graphx upcast\``,
 		);
 	}
+	lines.push(...integrity);
 	console.log(lines.join('\n'));
 }
 

@@ -165,10 +165,10 @@ test('P8: snapshotCSR reflects the graph as of a past instant (half-open, D3)', 
 	await edge(client, a, b, { validFrom: 0, validTo: 100 });
 	await edge(client, a, c, { validFrom: 100, validTo: FOREVER });
 
-	const past = await snapshotCSR(client, 50);
+	const past = await snapshotCSR(client, { asOf: 50 });
 	expect(neighbors(past, past.idToIdx.get(a)!).map((x) => x.id)).toEqual([b]);
 
-	const later = await snapshotCSR(client, 150);
+	const later = await snapshotCSR(client, { asOf: 150 });
 	expect(neighbors(later, later.idToIdx.get(a)!).map((x) => x.id)).toEqual([c]);
 
 	// current view agrees with "later"
@@ -477,7 +477,7 @@ test('P8: snapshotCSR(FOREVER) means "now" — agrees with buildCSR, not an empt
 	await edge(client, a, b, { weight: 3 });
 
 	const live = await buildCSR(client);
-	const atForever = await snapshotCSR(client, FOREVER);
+	const atForever = await snapshotCSR(client, { asOf: FOREVER });
 	expect(atForever.n).toBe(live.n);
 	expect(atForever.targets.length).toBe(live.targets.length);
 	expect(neighbors(atForever, atForever.idToIdx.get(a)!).map((x) => x.id)).toEqual([b]);
@@ -492,7 +492,7 @@ test('P8: snapshotCSR honors the rels filter', async () => {
 	await edge(client, a, b, { rel: 'red', validFrom: 0, validTo: FOREVER });
 	await edge(client, a, c, { rel: 'blue', validFrom: 0, validTo: FOREVER });
 
-	const redPast = await snapshotCSR(client, 50, { rels: ['red'] });
+	const redPast = await snapshotCSR(client, { asOf: 50 }, { rels: ['red'] });
 	expect(neighbors(redPast, redPast.idToIdx.get(a)!).map((x) => x.id)).toEqual([b]);
 	const redNow = await buildCSR(client, { rels: ['red'] });
 	expect(neighbors(redNow, redNow.idToIdx.get(a)!).map((x) => x.id)).toEqual([b]);

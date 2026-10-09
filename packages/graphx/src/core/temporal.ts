@@ -1,4 +1,5 @@
 import { type DbClient, dialectOf, type SqlValue } from './dialect.ts';
+import { FOREVER } from './runtime.ts';
 import type { GraphEvent, GraphEventOp } from './events.ts';
 import { decodeCursor, encodeCursor, type QueryLimits, resolveLimits } from './governance.ts';
 
@@ -19,34 +20,65 @@ export interface TemporalDiff {
 	edges: Array<Record<string, unknown>>;
 }
 
+/** Which time axis a {@link diff} or {@link import('./timeline.ts').timeline} reads (D10). */
+export type TimeAxis = 'valid' | 'recorded';
+
+const HISTORY_COLS =
+	'ver, id, type, body, uri, content_hash, content_type, data, valid_from, valid_to, recorded_from, recorded_to';
+
 /**
- * All versions for a node id (hot rows only — `includeCold`/Parquet is P10),
- * ordered by `valid_from`. Closed versions are byte-stable, so this is the
- * immutable audit trail for the id.
+ * Every stored row for a node id (hot rows only — `includeCold`/Parquet is P10): current
+ * beliefs and the superseded ones a correction or update replaced, ordered by
+ * `(valid_from, recorded_from)` and each flagged `current` (D10). Rows are never edited — only
+ * `recorded_to` closes — so this is the immutable audit trail for the id.
  */
 export async function history(raw: DbClient, id: string): Promise<Array<Record<string, unknown>>> {
 	const r = await raw.execute({
-		sql: 'SELECT ver, id, type, body, uri, content_hash, content_type, data, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: `SELECT ${HISTORY_COLS} FROM node_versions WHERE id = ? ORDER BY valid_from, recorded_from, ver`,
 		args: [id],
 	});
-	return r.rows as unknown as Array<Record<string, unknown>>;
+	const cols = HISTORY_COLS.split(', ');
+	return r.rows.map((row) => {
+		const out: Record<string, unknown> = {};
+		for (const c of cols) out[c] = row[c];
+		out.current = Number(row.recorded_to) === FOREVER;
+		return out;
+	});
+}
+
+/** Options for {@link diff}. */
+export interface DiffOpts {
+	/**
+	 * `'valid'` (default): what changed in the world between the instants, as currently
+	 * believed — current beliefs whose valid interval opened or closed in the window.
+	 * `'recorded'`: what graphx learned or revised between the instants — rows recorded, or
+	 * superseded, in the window, whatever valid time they describe.
+	 */
+	axis?: TimeAxis;
 }
 
 /**
- * Rows whose `[valid_from,valid_to)` interval changed between `t1` and `t2`:
- * any version that opened (`valid_from`) or closed (`valid_to`) within the
- * half-open window `(t1, t2]`. Covers both new versions and supersession
- * closes for nodes and edges.
+ * Rows whose interval on one axis changed in the half-open window `(t1, t2]`: any row that
+ * opened or closed in it, for nodes and edges. Covers new versions and closes.
  */
-export async function diff(raw: DbClient, t1: number, t2: number): Promise<TemporalDiff> {
-	const where = '(valid_from > ? AND valid_from <= ?) OR (valid_to > ? AND valid_to <= ?)';
+export async function diff(
+	raw: DbClient,
+	t1: number,
+	t2: number,
+	opts: DiffOpts = {},
+): Promise<TemporalDiff> {
+	const where =
+		(opts.axis ?? 'valid') === 'valid'
+			? `recorded_to = ${FOREVER} AND ((valid_from > ? AND valid_from <= ?) OR (valid_to > ? AND valid_to <= ?))`
+			: '(recorded_from > ? AND recorded_from <= ?) OR (recorded_to > ? AND recorded_to <= ?)';
 	const args = [t1, t2, t1, t2];
+	const time = 'valid_from, valid_to, recorded_from, recorded_to';
 	const nodes = await raw.execute({
-		sql: `SELECT ver, id, type, data, valid_from, valid_to FROM node_versions WHERE ${where}`,
+		sql: `SELECT ver, id, type, data, ${time} FROM node_versions WHERE ${where}`,
 		args,
 	});
 	const edges = await raw.execute({
-		sql: `SELECT ver, id, src, dst, rel, weight, data, valid_from, valid_to FROM edge_versions WHERE ${where}`,
+		sql: `SELECT ver, id, src, dst, rel, weight, data, ${time} FROM edge_versions WHERE ${where}`,
 		args,
 	});
 	return {
@@ -56,13 +88,53 @@ export async function diff(raw: DbClient, t1: number, t2: number): Promise<Tempo
 }
 
 /**
- * The half-open as-of predicate (D3): `<alias>.valid_from <= ? AND ? < <alias>.valid_to`.
- * Bind the as-of timestamp twice (positionally). Use ONLY for genuine past
- * reads where `:t < FOREVER`; current reads go through the `nodes`/`edges`
- * views instead.
+ * Which slice of the two time axes a read sees (docs/bitemporal.md D1). `asOf` is valid time —
+ * the world at that instant; `recordedAsOf` is recorded time — what graphx believed at that
+ * instant. Omitted means now on that axis, so a read with neither sees the live graph.
  */
-export function asOfPredicate(alias: string): string {
-	return `${alias}.valid_from <= ? AND ? < ${alias}.valid_to`;
+export interface TimeSlice {
+	asOf?: number;
+	recordedAsOf?: number;
+}
+
+/** The slice with each axis resolved: `undefined` means now (FOREVER and beyond count as now). */
+export function resolveSlice(s: TimeSlice): { asOf?: number; recordedAsOf?: number } {
+	const at = (t: number | undefined, name: string): number | undefined => {
+		if (t === undefined || t >= FOREVER) return undefined;
+		if (!Number.isInteger(t)) throw new Error(`${name} must be an integer epoch ms, got ${t}`);
+		return t;
+	};
+	return { asOf: at(s.asOf, 'asOf'), recordedAsOf: at(s.recordedAsOf, 'recordedAsOf') };
+}
+
+/** True when the slice is now on both axes, so the live `nodes`/`edges` views answer it. */
+export function isLive(s: TimeSlice): boolean {
+	const r = resolveSlice(s);
+	return r.asOf === undefined && r.recordedAsOf === undefined;
+}
+
+/**
+ * The rows of `alias` (a version table) in a slice, with the binds in SQL order. Valid time is
+ * half-open (`valid_from <= t < valid_to`, D3) or, at now, `valid_to = FOREVER` (no future dating
+ * makes the two the same). Recorded time is the same on its own columns, or `recorded_to =
+ * FOREVER` — the current beliefs — at now. `alias` may be `''` for an unaliased table.
+ */
+export function slicePredicate(alias: string, s: TimeSlice): { sql: string; args: number[] } {
+	const a = alias === '' ? '' : `${alias}.`;
+	const { asOf, recordedAsOf } = resolveSlice(s);
+	const parts: string[] = [];
+	const args: number[] = [];
+	if (asOf === undefined) parts.push(`${a}valid_to = ${FOREVER}`);
+	else {
+		parts.push(`${a}valid_from <= ? AND ? < ${a}valid_to`);
+		args.push(asOf, asOf);
+	}
+	if (recordedAsOf === undefined) parts.push(`${a}recorded_to = ${FOREVER}`);
+	else {
+		parts.push(`${a}recorded_from <= ? AND ? < ${a}recorded_to`);
+		args.push(recordedAsOf, recordedAsOf);
+	}
+	return { sql: parts.join(' AND '), args };
 }
 
 /** Opaque per-stream cursors for {@link changeFeed}; pass a prior page's `nextCursor` back. */
@@ -153,13 +225,10 @@ async function feedStream(
  * consumer keeps polling and resumes from the last non-null cursor it held (the last row's
  * `ver`) to pick up versions written after it caught up.
  *
- * Semantics (decision A.3): this surfaces
- * INSERTs and UPDATE-successors only. A pure close is NOT surfaced — there are TWO such paths:
- * `deleteEdge` (closes the live row with NO successor), and the supersession of a prior
- * single-valued `(src, rel)` edge by a new `addEdge` (the old edge's `valid_to` moves with no
- * new `valid_from` row for that id; the NEW edge appears as an INSERT). In both, a closed id
- * silently leaves the live set, so consumers reconcile EVERY close via {@link diff}, which also
- * keys on `valid_to`. A `valid_to`-keyed companion close-feed is a possible follow-up.
+ * Every write inserts rows (docs/bitemporal.md D2): an update inserts the closed remainder of
+ * what it replaced plus the successor, and a delete, retraction or single-valued supersession
+ * inserts the closed remainder of what it ended. So every change reaches the feed, deletes
+ * included; a row whose `valid_to` is not FOREVER is how a close shows up.
  *
  * RAW by construction: there is no upcaster parameter, so the feed reports the actual stored
  * bytes (a changelog must report what was written, not the P12 read-time shape).
@@ -174,8 +243,9 @@ export async function changeFeed(
 	}
 	const maxRows = resolveLimits(opts.limits).maxRows;
 	const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
-	const nodeCols = 'ver, id, type, data, valid_from, valid_to';
-	const edgeCols = 'ver, id, src, dst, rel, weight, data, valid_from, valid_to';
+	const time = 'valid_from, valid_to, recorded_from, recorded_to';
+	const nodeCols = `ver, id, type, data, ${time}`;
+	const edgeCols = `ver, id, src, dst, rel, weight, data, ${time}`;
 	const nodes = await feedStream(raw, 'node_versions', nodeCols, cursor.nodes, pageSize);
 	const edges = await feedStream(raw, 'edge_versions', edgeCols, cursor.edges, pageSize);
 	return {

@@ -229,7 +229,7 @@ async function rawNode(
 /** Read the raw stored data text for a node's live version (bypasses upcast). */
 async function rawProps(client: DbClient, id: string): Promise<string> {
 	const r = await client.execute({
-		sql: 'SELECT data FROM node_versions WHERE id = ? AND valid_to = ?',
+		sql: 'SELECT data FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? AND valid_to = ?',
 		args: [id, FOREVER],
 	});
 	return String(r.rows[0]!.data);
@@ -342,7 +342,7 @@ test('P12: updateNode leaves the OLD (closed) v1 version bytes immutable', async
 
 	// the closed version still carries the original v1 bytes
 	const rows = await client.execute({
-		sql: 'SELECT data, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT data, valid_to FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? ORDER BY valid_from',
 		args: [id],
 	});
 	expect(rows.rows.length).toBe(2);
@@ -366,7 +366,7 @@ test('P12 (asOf DECISION): a v1-era row read via .asOf() also upcasts to the v2 
 
 	// but the underlying stored bytes are STILL v1 (storage immutability = "v1 shape")
 	const stored = await client.execute({
-		sql: 'SELECT data FROM node_versions WHERE id = ?',
+		sql: 'SELECT data FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ?',
 		args: [id],
 	});
 	expect(JSON.parse(String(stored.rows[0]!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
@@ -526,7 +526,7 @@ test('P12 (asOf DECISION): a CLOSED v1 version read via .asOf() upcasts to lates
 
 	// the CLOSED v1 version row bytes are byte-identical v1 (immutable history)
 	const closed = await client.execute({
-		sql: 'SELECT data FROM node_versions WHERE id = ? AND valid_to = ?',
+		sql: 'SELECT data FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? AND valid_to = ?',
 		args: [id, 100],
 	});
 	expect(JSON.parse(String(closed.rows[0]!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
@@ -565,13 +565,18 @@ test('P12: a `where` on a renamed field misses v1 rows until upcastAll rewrites 
 		status: 'online',
 		_v: 2,
 	});
-	// The v1 bytes survive as a closed version; a second pass has nothing to do.
+	// D9: a representation change is a correction, not a change in the world. The fact keeps
+	// its valid interval; the v1 bytes survive as a superseded belief over the same interval.
 	const versions = await client.execute({
-		sql: 'SELECT data FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT data, valid_from, valid_to, recorded_from, recorded_to FROM node_versions WHERE id = ? ORDER BY ver',
 		args: [old],
 	});
-	expect(JSON.parse(String(versions.rows[0]!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
 	expect(versions.rows).toHaveLength(2);
+	const [was, now] = versions.rows as Array<Record<string, unknown>>;
+	expect(JSON.parse(String(was!.data))).toEqual({ name: 'r1', crit: 5, _v: 1 });
+	expect(Number(was!.recorded_to)).toBe(Number(now!.recorded_from));
+	expect([now!.valid_from, now!.valid_to]).toEqual([was!.valid_from, was!.valid_to]);
+	expect(Number(now!.recorded_to)).toBe(FOREVER);
 	expect(await g.upcastAll()).toEqual({ scanned: 2, upcast: 0 });
 	expect(await g.upcastReport()).toEqual({ device: { current: 2, live: 2, behind: 0 } });
 	client.close();

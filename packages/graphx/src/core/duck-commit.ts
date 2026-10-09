@@ -1,6 +1,6 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { FOREVER } from './runtime.ts';
+import { LIVE_SQL } from './dialect-sql.ts';
 import type { DbClient } from './dialect.ts';
 import { SNAPSHOT_TABLES } from './duck-materialize.ts';
 import { rebuildIndex } from './fts/index-tables.ts';
@@ -74,10 +74,7 @@ export async function exportTable(
  * split was for — a reader that only needs current state fetches the live file alone, and
  * history partitions by close time for tiering.
  */
-const SPLIT_TABLES: Record<string, string> = {
-	node_versions: 'valid_to',
-	edge_versions: 'valid_to',
-};
+const SPLIT_TABLES = new Set(['node_versions', 'edge_versions']);
 
 /**
  * Rebuild and export the full-text index. Runs only when `node_versions` changed — the index
@@ -131,23 +128,15 @@ export async function buildManifest(
 			tables[table] = carried;
 			continue;
 		}
-		const splitOn = SPLIT_TABLES[table];
-		if (splitOn) {
+		if (SPLIT_TABLES.has(table)) {
 			// Live first, so a reader that wants only current state can take files[0].
-			const live = await exportTable(
-				client,
-				table,
-				cache,
-				tmpDir,
-				`${splitOn} = ${FOREVER}`,
-				'live',
-			);
+			const live = await exportTable(client, table, cache, tmpDir, LIVE_SQL, 'live');
 			const history = await exportTable(
 				client,
 				table,
 				cache,
 				tmpDir,
-				`${splitOn} <> ${FOREVER}`,
+				`NOT (${LIVE_SQL})`,
 				'history',
 			);
 			const files = [live, history].filter((k): k is string => k !== null);

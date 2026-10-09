@@ -145,6 +145,13 @@ export interface RetrieveOpts {
 	/** Hops expanded from each seed. `0` ⇒ seeds only (a pure ranked list). */
 	maxDepth?: number;
 	asOf?: number;
+	recordedAsOf?: number;
+}
+
+/** A read's time slice: the world at `asOf`, as believed at `recordedAsOf`; absent ⇒ now. */
+export interface Slice {
+	asOf?: number;
+	recordedAsOf?: number;
 }
 
 const tp = (tenant: string, project: string) => `/t/${tenant}/p/${project}`;
@@ -176,27 +183,33 @@ export const api = {
 				type: opts.type,
 				q: opts.q,
 				asOf: opts.asOf,
+				recordedAsOf: opts.recordedAsOf,
 				limit: opts.limit,
 				cursor: opts.cursor,
 			})}`,
 		),
 	graphSlice: (tenant: string, project: string, filters: ExplorerFilters = {}) =>
 		request<GraphSlice>(
-			`${tp(tenant, project)}/graph${qs({ type: filters.type, q: filters.q, asOf: filters.asOf })}`,
+			`${tp(tenant, project)}/graph${qs({
+				type: filters.type,
+				q: filters.q,
+				asOf: filters.asOf,
+				recordedAsOf: filters.recordedAsOf,
+			})}`,
 		),
 	/** The project's declared node types and rels, as JSON Schema (drives the node editor). */
 	getSchema: (tenant: string, project: string) =>
 		request<SchemaDoc>(`${tp(tenant, project)}/schema`),
-	getNode: (tenant: string, project: string, id: string, asOf?: number) =>
-		request<GraphNode>(`${tp(tenant, project)}/nodes/${id}${qs({ asOf })}`),
+	getNode: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		request<GraphNode>(`${tp(tenant, project)}/nodes/${id}${qs({ ...at })}`),
 	/** Change points for the scrubber: full extent, a density histogram, and the snap ticks. */
 	timeline: (
 		tenant: string,
 		project: string,
-		opts: { from?: number; to?: number; buckets?: number } = {},
+		opts: { from?: number; to?: number; buckets?: number; axis?: 'valid' | 'recorded' } = {},
 	) =>
 		request<Timeline>(
-			`${tp(tenant, project)}/timeline${qs({ from: opts.from, to: opts.to, buckets: opts.buckets })}`,
+			`${tp(tenant, project)}/timeline${qs({ from: opts.from, to: opts.to, buckets: opts.buckets, axis: opts.axis })}`,
 		),
 
 	// --- writes (editor role or above; a viewer's token gets 403) ---
@@ -231,16 +244,16 @@ export const api = {
 	/** Close an edge's live version. Like a node retraction, earlier times still see it. */
 	deleteEdge: (tenant: string, project: string, id: string) =>
 		request<void>(`${tp(tenant, project)}/edges/${id}`, { method: 'DELETE' }),
-	getNodeContent: (tenant: string, project: string, id: string, asOf?: number) =>
-		request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content${qs({ asOf })}`),
+	getNodeContent: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		request<NodeContent>(`${tp(tenant, project)}/nodes/${id}/content${qs({ ...at })}`),
 	/** Replace a node's markdown body. Bitemporal — the server opens a successor version. */
 	updateNodeBody: (tenant: string, project: string, id: string, body: string) =>
 		request<GraphNode>(`${tp(tenant, project)}/nodes/${id}`, {
 			method: 'PATCH',
 			body: JSON.stringify({ body }),
 		}),
-	neighbors: (tenant: string, project: string, id: string, asOf?: number) =>
-		request<GraphNode[]>(`${tp(tenant, project)}/nodes/${id}/neighbors${qs({ asOf })}`),
+	neighbors: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		request<GraphNode[]>(`${tp(tenant, project)}/nodes/${id}/neighbors${qs({ ...at })}`),
 	history: (tenant: string, project: string, id: string) =>
 		request<{ versions: NodeVersion[] }>(`${tp(tenant, project)}/nodes/${id}/history`).then(
 			(r) => r.versions,
@@ -254,6 +267,7 @@ export const api = {
 				k: opts.k,
 				maxDepth: opts.maxDepth,
 				asOf: opts.asOf,
+				recordedAsOf: opts.recordedAsOf,
 			})}`,
 		),
 	hybrid: (tenant: string, project: string, opts: RetrieveOpts) =>

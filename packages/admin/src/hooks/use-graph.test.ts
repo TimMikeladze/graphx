@@ -58,7 +58,7 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 		fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: {} }));
 		const qc = freshClient();
 		qc.setQueryData(qk.nodeContent('t', 'p', 'n1'), { body: 'old' });
-		qc.setQueryData(qk.nodeContent('t', 'p', 'n1', 5), { body: 'old-asof' });
+		qc.setQueryData(qk.nodeContent('t', 'p', 'n1', { asOf: 5 }), { body: 'old-asof' });
 
 		const { result } = renderHook(() => useUpdateNodeBody('t', 'p', 'n1'), {
 			wrapper: wrapperFor(qc),
@@ -68,16 +68,16 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 		});
 
 		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1'))?.isInvalidated).toBe(true);
-		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1', 5))?.isInvalidated).toBe(true);
+		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1', { asOf: 5 }))?.isInvalidated).toBe(true);
 	});
 
 	it('useUpdateNode invalidates the live and asOf node + content cache', async () => {
 		fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: { crit: 9 } }));
 		const qc = freshClient();
 		qc.setQueryData(qk.node('t', 'p', 'n1'), { id: 'n1', type: 'device', data: {} });
-		qc.setQueryData(qk.node('t', 'p', 'n1', 5), { id: 'n1', type: 'device', data: {} });
+		qc.setQueryData(qk.node('t', 'p', 'n1', { asOf: 5 }), { id: 'n1', type: 'device', data: {} });
 		qc.setQueryData(qk.nodeContent('t', 'p', 'n1'), { body: 'old' });
-		qc.setQueryData(qk.nodeContent('t', 'p', 'n1', 5), { body: 'old-asof' });
+		qc.setQueryData(qk.nodeContent('t', 'p', 'n1', { asOf: 5 }), { body: 'old-asof' });
 
 		const { result } = renderHook(() => useUpdateNode('t', 'p', 'n1'), { wrapper: wrapperFor(qc) });
 		await act(async () => {
@@ -85,9 +85,9 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 		});
 
 		expect(qc.getQueryState(qk.node('t', 'p', 'n1'))?.isInvalidated).toBe(true);
-		expect(qc.getQueryState(qk.node('t', 'p', 'n1', 5))?.isInvalidated).toBe(true);
+		expect(qc.getQueryState(qk.node('t', 'p', 'n1', { asOf: 5 }))?.isInvalidated).toBe(true);
 		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1'))?.isInvalidated).toBe(true);
-		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1', 5))?.isInvalidated).toBe(true);
+		expect(qc.getQueryState(qk.nodeContent('t', 'p', 'n1', { asOf: 5 }))?.isInvalidated).toBe(true);
 	});
 
 	it('useCreateEdge invalidates the live and asOf neighbors cache for both endpoints', async () => {
@@ -95,7 +95,7 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 		const qc = freshClient();
 		for (const id of ['src1', 'dst1']) {
 			qc.setQueryData(qk.neighbors('t', 'p', id), []);
-			qc.setQueryData(qk.neighbors('t', 'p', id, 5), []);
+			qc.setQueryData(qk.neighbors('t', 'p', id, { asOf: 5 }), []);
 		}
 
 		const { result } = renderHook(() => useCreateEdge('t', 'p'), { wrapper: wrapperFor(qc) });
@@ -105,7 +105,7 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 
 		for (const id of ['src1', 'dst1']) {
 			expect(qc.getQueryState(qk.neighbors('t', 'p', id))?.isInvalidated).toBe(true);
-			expect(qc.getQueryState(qk.neighbors('t', 'p', id, 5))?.isInvalidated).toBe(true);
+			expect(qc.getQueryState(qk.neighbors('t', 'p', id, { asOf: 5 }))?.isInvalidated).toBe(true);
 		}
 	});
 
@@ -114,7 +114,7 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 		const qc = freshClient();
 		for (const id of ['src1', 'dst1']) {
 			qc.setQueryData(qk.neighbors('t', 'p', id), []);
-			qc.setQueryData(qk.neighbors('t', 'p', id, 5), []);
+			qc.setQueryData(qk.neighbors('t', 'p', id, { asOf: 5 }), []);
 		}
 
 		const { result } = renderHook(() => useDeleteEdge('t', 'p'), { wrapper: wrapperFor(qc) });
@@ -124,7 +124,7 @@ describe('mutation invalidation reaches every asOf cache entry', () => {
 
 		for (const id of ['src1', 'dst1']) {
 			expect(qc.getQueryState(qk.neighbors('t', 'p', id))?.isInvalidated).toBe(true);
-			expect(qc.getQueryState(qk.neighbors('t', 'p', id, 5))?.isInvalidated).toBe(true);
+			expect(qc.getQueryState(qk.neighbors('t', 'p', id, { asOf: 5 }))?.isInvalidated).toBe(true);
 		}
 	});
 });

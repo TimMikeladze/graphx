@@ -16,6 +16,31 @@ import { bm25Cte, FTS_DDL } from './fts/index-tables.ts';
 const FOREVER_LIT = '8640000000000000';
 
 /**
+ * The live predicate on a version table: the current belief (`recorded_to`) whose valid
+ * interval is still open (`valid_to`). The `nodes`/`edges` views and the one-live indexes use it.
+ */
+export const LIVE_SQL: string = `valid_to = ${FOREVER_LIT} AND recorded_to = ${FOREVER_LIT}`;
+
+/** Version-table indexes shared by every dialect (as-of reads by id, and the CDC order). */
+export const NODE_VERSION_INDEXES_SQL: string = `
+CREATE INDEX IF NOT EXISTS nv_bitemporal ON node_versions(id, valid_from, valid_to, recorded_from, recorded_to);
+CREATE INDEX IF NOT EXISTS nv_recorded ON node_versions(recorded_from, ver);`;
+
+/** Edge-version indexes shared by every dialect (as-of reads from either endpoint, CDC order). */
+export const EDGE_VERSION_INDEXES_SQL: string = `
+CREATE INDEX IF NOT EXISTS ev_src_bitemporal ON edge_versions(src, valid_from, valid_to, recorded_from, recorded_to);
+CREATE INDEX IF NOT EXISTS ev_dst_bitemporal ON edge_versions(dst, valid_from, valid_to, recorded_from, recorded_to);
+CREATE INDEX IF NOT EXISTS ev_recorded ON edge_versions(recorded_from, ver);`;
+
+/**
+ * At most one live row per id, held by the database (bulk loads once broke this in code).
+ * SQLite and Postgres only: DuckDB has no partial indexes.
+ */
+export const ONE_LIVE_INDEXES_SQL: string = `
+CREATE UNIQUE INDEX IF NOT EXISTS nv_one_live ON node_versions(id) WHERE ${LIVE_SQL};
+CREATE UNIQUE INDEX IF NOT EXISTS ev_one_live ON edge_versions(id) WHERE ${LIVE_SQL};`;
+
+/**
  * Scalar 2-argument max. libSQL overloads `MAX(a, b)` as a scalar; Postgres `max` is
  * strictly an aggregate, so the scalar form is `GREATEST(a, b)`.
  */
@@ -174,9 +199,11 @@ CREATE TABLE IF NOT EXISTS node_versions (
   data        text NOT NULL DEFAULT '{}',
   valid_from   bigint NOT NULL,
   valid_to     bigint NOT NULL DEFAULT ${FOREVER_LIT},
+  recorded_from bigint NOT NULL DEFAULT 0,
+  recorded_to   bigint NOT NULL DEFAULT ${FOREVER_LIT},
   body_tsv     tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(body, ''))) STORED
 );
-CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+${NODE_VERSION_INDEXES_SQL}
 CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 CREATE INDEX IF NOT EXISTS nodes_fts_gin ON node_versions USING gin(body_tsv);
 
@@ -192,17 +219,19 @@ CREATE TABLE IF NOT EXISTS edge_versions (
   data      text NOT NULL DEFAULT '{}',
   source     text,
   valid_from bigint NOT NULL,
-  valid_to   bigint NOT NULL DEFAULT ${FOREVER_LIT}
+  valid_to   bigint NOT NULL DEFAULT ${FOREVER_LIT},
+  recorded_from bigint NOT NULL DEFAULT 0,
+  recorded_to   bigint NOT NULL DEFAULT ${FOREVER_LIT}
 );
-CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
+${EDGE_VERSION_INDEXES_SQL}
+${ONE_LIVE_INDEXES_SQL}
 
 CREATE OR REPLACE VIEW nodes AS
   SELECT id, type, body, uri, content_hash, content_type, data
-  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
+  FROM node_versions WHERE ${LIVE_SQL};
 CREATE OR REPLACE VIEW edges AS
   SELECT id, src, dst, rel, weight, data, source
-  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
+  FROM edge_versions WHERE ${LIVE_SQL};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name text PRIMARY KEY, watermark bigint NOT NULL, updated_at bigint NOT NULL
@@ -317,7 +346,9 @@ export function duckdbSchema(): string {
   content_type TEXT,
   data         TEXT NOT NULL DEFAULT '{}',
   valid_from   BIGINT NOT NULL,
-  valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+  valid_to     BIGINT NOT NULL DEFAULT ${FOREVER_LIT},
+  recorded_from BIGINT NOT NULL DEFAULT 0,
+  recorded_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
 	const edgeCols = `
   ver        BIGINT NOT NULL DEFAULT nextval('seq_ver'),
   id         TEXT NOT NULL REFERENCES edge_identity(id),
@@ -328,7 +359,9 @@ export function duckdbSchema(): string {
   data       TEXT NOT NULL DEFAULT '{}',
   source     TEXT,
   valid_from BIGINT NOT NULL,
-  valid_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
+  valid_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT},
+  recorded_from BIGINT NOT NULL DEFAULT 0,
+  recorded_to   BIGINT NOT NULL DEFAULT ${FOREVER_LIT}`;
 	// The declared width is not enforceable on a FLOAT[] column, so `node_embeddings` is
 	// static here and the width is recorded in graph_meta (and the manifest) by `init`.
 	return `
@@ -344,21 +377,20 @@ ${embeddingsTableDDL('duckdb', 0)}
 CREATE TABLE IF NOT EXISTS node_versions (${nodeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+${NODE_VERSION_INDEXES_SQL}
 CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 
 CREATE TABLE IF NOT EXISTS edge_versions (${edgeCols},
   PRIMARY KEY (ver)
 );
-CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
+${EDGE_VERSION_INDEXES_SQL}
 
 CREATE OR REPLACE VIEW nodes AS
   SELECT id, type, body, uri, content_hash, content_type, data
-  FROM node_versions WHERE valid_to = ${FOREVER_LIT};
+  FROM node_versions WHERE ${LIVE_SQL};
 CREATE OR REPLACE VIEW edges AS
   SELECT id, src, dst, rel, weight, data, source
-  FROM edge_versions WHERE valid_to = ${FOREVER_LIT};
+  FROM edge_versions WHERE ${LIVE_SQL};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark BIGINT NOT NULL, updated_at BIGINT NOT NULL
@@ -647,14 +679,14 @@ export function ftsSeedLive(dialect: Dialect): string {
 			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
-WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER_LIT}
+WHERE nodes_fts MATCH ? AND n.valid_to = ${FOREVER_LIT} AND n.recorded_to = ${FOREVER_LIT}
 ORDER BY rank
 LIMIT ?`;
 		case 'postgres':
 			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
 SELECT n.id AS id
 FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT}
+WHERE n.body_tsv @@ q.tq AND n.valid_to = ${FOREVER_LIT} AND n.recorded_to = ${FOREVER_LIT}
 ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
 LIMIT ?`;
 		// BM25 over the live index, joined back to logical ids. Args: terms JSON, k.
@@ -663,7 +695,7 @@ LIMIT ?`;
 SELECT n.id AS id
 FROM scored
 JOIN node_versions n ON n.ver = scored.ver
-WHERE n.valid_to = ${FOREVER_LIT}
+WHERE n.valid_to = ${FOREVER_LIT} AND n.recorded_to = ${FOREVER_LIT}
 ORDER BY scored.score DESC, n.id
 LIMIT ?`;
 		default:
@@ -671,32 +703,32 @@ LIMIT ?`;
 	}
 }
 
-/** As-of full-text seed list. Bound args: ftsArg, t, t, k (Postgres binds tsquery once via CTE). */
-export function ftsSeedAsOf(dialect: Dialect): string {
+/** Full-text seed list in a past slice (`slice` from `slicePredicate`). Bound args: ftsArg, slice args, k. */
+export function ftsSeedAsOf(dialect: Dialect, slice: string): string {
 	switch (dialect) {
 		case 'sqlite':
 		case 'libsql':
 			return `SELECT n.id AS id
 FROM nodes_fts
 JOIN node_versions n ON n.ver = nodes_fts.rowid
-WHERE nodes_fts MATCH ? AND n.valid_from <= ? AND ? < n.valid_to
+WHERE nodes_fts MATCH ? AND ${slice}
 ORDER BY rank
 LIMIT ?`;
 		case 'postgres':
 			return `WITH q AS (SELECT ${tsQueryOr()} AS tq)
 SELECT n.id AS id
 FROM node_versions n, q
-WHERE n.body_tsv @@ q.tq AND n.valid_from <= ? AND ? < n.valid_to
+WHERE n.body_tsv @@ q.tq AND ${slice}
 ORDER BY ts_rank_cd(n.body_tsv, q.tq) DESC
 LIMIT ?`;
 		// The index covers every version, so the as-of match is exact rather than the
-		// over-fetch-and-filter the live-only ANN index forces. Args: terms JSON, t, t, k.
+		// over-fetch-and-filter the live-only ANN index forces. Args: terms JSON, slice args, k.
 		case 'duckdb':
 			return `WITH scored AS (${bm25Cte('all')})
 SELECT n.id AS id
 FROM scored
 JOIN node_versions n ON n.ver = scored.ver
-WHERE n.valid_from <= ? AND ? < n.valid_to
+WHERE ${slice}
 ORDER BY scored.score DESC, n.id
 LIMIT ?`;
 		default:

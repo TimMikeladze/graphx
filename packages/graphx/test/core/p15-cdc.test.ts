@@ -16,8 +16,8 @@ import { hashEmbed } from '../../src/core/embedder.ts';
 // is the tailable sibling of diff(): new versions WHERE ver > cursor, in insertion
 // order, keyset-paginated so polling never skips or overlaps — and a row written with
 // a valid_from older than the cursor (a backdated bulkLoad) is still emitted.
-// Decision (A.3): "new-versions" feed — a pure close/delete (no
-// successor row) is NOT surfaced; consumers reconcile closes via diff().
+// Every write inserts rows (a delete inserts the closed remainder of what it ended), so deletes
+// and supersessions reach the feed too.
 
 const SCHEMA = defineGraphSchema({
 	nodes: { person: z.object({ name: z.string() }), device: z.object({ type: z.string() }) },
@@ -150,61 +150,47 @@ test('P15 CDC: nodes and edges advance on independent cursors', async () => {
 	client.close();
 });
 
-test('P15 CDC: a pure deleteEdge close is NOT surfaced (valid_from-only); diff reconciles it', async () => {
+test('P15 CDC: a deleteEdge reaches the feed as the closed remainder of the edge', async () => {
 	const { client, g } = await fileGraph();
 	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
 	const d = await g.addNode({ type: 'device', data: { type: 'r' } });
 	const e = await g.addEdge({ rel: 'owns', src: p.id, dst: d.id });
 
 	const before = await changeFeed(client);
-	expect(before.edges.map((r) => String(r.id))).toEqual([e.id]); // the insert version is in the feed
-	const eValidFrom = Number(before.edges[0]?.valid_from);
+	expect(before.edges.map((r) => String(r.id))).toEqual([e.id]);
+	const cursor = encodeCursor([String(before.edges[0]!.ver)]);
 
-	await g.deleteEdge(e.id); // closes the live row (valid_to=now); NO successor row inserted
-
-	// the close created no new valid_from row → the feed still shows ONLY the insert version,
-	// never a close event (valid_from-only semantics, decision A.3).
-	const after = await changeFeed(client);
+	// a delete never edits the open row: it supersedes it and records its closed part as a new
+	// row, so a tailing consumer sees the close
+	await g.deleteEdge(e.id);
+	const after = await changeFeed(client, { edges: cursor });
 	expect(after.edges.map((r) => String(r.id))).toEqual([e.id]);
-	expect(after.edges.length).toBe(1);
+	expect(Number(after.edges[0]!.valid_to)).toBeLessThan(FOREVER);
 
-	// reconciliation path: diff() DOES surface the close (valid_to moved into the window)
-	const closeTs = Number(
-		(
-			await client.execute({
-				sql: 'SELECT valid_to AS t FROM edge_versions WHERE id = ?',
-				args: [e.id],
-			})
-		).rows[0]?.t,
+	// diff reports the close too
+	const d2 = await diff(
+		client,
+		Number(before.edges[0]!.valid_from),
+		Number(after.edges[0]!.valid_to),
 	);
-	const d2 = await diff(client, eValidFrom, closeTs);
 	expect(d2.edges.map((r) => String(r.id))).toContain(e.id);
 	client.close();
 });
 
-test('P15 CDC: a single-valued addEdge supersession close is NOT surfaced (only the new INSERT)', async () => {
+test('P15 CDC: a single-valued addEdge supersession reaches the feed', async () => {
 	const { client, g } = await fileGraph();
 	const p = await g.addNode({ type: 'person', data: { name: 'p' } });
 	const d1 = await g.addNode({ type: 'device', data: { type: 'a' } });
 	const d2 = await g.addNode({ type: 'device', data: { type: 'b' } });
 	const e1 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d1.id });
-	const e2 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d2.id }); // supersedes e1 (single-valued)
+	const cursor = encodeCursor([String((await changeFeed(client)).edges.at(-1)!.ver)]);
+	const e2 = await g.addEdge({ rel: 'licensed', src: p.id, dst: d2.id }); // supersedes e1
 
-	// the feed shows BOTH edges as INSERTs; superseding e1 moved its valid_to with NO new
-	// valid_from row, so the close is invisible to the valid_from-keyed feed (decision A.3).
-	const feed = await changeFeed(client);
-	expect(feed.edges.map((r) => String(r.id)).sort()).toEqual([e1.id, e2.id].sort());
-
-	// e1 genuinely left the live set (valid_to closed) — reconciled only via diff(), not the feed
-	const e1Row = (
-		await client.execute({
-			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE id = ?',
-			args: [e1.id],
-		})
-	).rows[0];
-	expect(Number(e1Row?.valid_to)).not.toBe(FOREVER); // closed by the supersession
-	const d = await diff(client, Number(e1Row?.valid_from), Number(e1Row?.valid_to));
-	expect(d.edges.map((r) => String(r.id))).toContain(e1.id);
+	// e1's closed remainder, then e2, in write order
+	const feed = await changeFeed(client, { edges: cursor });
+	expect(feed.edges.map((r) => String(r.id))).toEqual([e1.id, e2.id]);
+	expect(Number(feed.edges[0]!.valid_to)).toBeLessThan(FOREVER);
+	expect(Number(feed.edges[1]!.valid_to)).toBe(FOREVER);
 	client.close();
 });
 

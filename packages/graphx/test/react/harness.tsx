@@ -59,7 +59,7 @@ export interface Harness {
 	cleanup: () => void;
 }
 
-export async function setup(): Promise<Harness> {
+export async function setup(opts: { allowValidTime?: boolean } = {}): Promise<Harness> {
 	const control = makeTestDb().client;
 	await initControl(control);
 	const tenant = await createTenant(control, { name: 'Acme' });
@@ -78,6 +78,7 @@ export async function setup(): Promise<Harness> {
 		schema: SCHEMA,
 		authenticate,
 		embedder: stubEmbedder((q) => vec(q.length), { dim: 768 }),
+		allowValidTime: opts.allowValidTime,
 	});
 	return {
 		app,

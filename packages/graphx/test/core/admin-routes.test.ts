@@ -178,14 +178,15 @@ test('PATCH /nodes/:id {body} appends a version and leaves type/data intact', as
 	).json();
 	expect(content.body).toBe('# new');
 
-	// Bitemporal: the old version is closed, the successor is live — the History tab's trail.
+	// The old version is closed, the successor is live — the History tab's trail. History also
+	// carries the superseded original, flagged `current: false`.
 	const versions = (
 		await (
 			await s.app.request(`/t/${s.tenantA}/p/${s.pA}/nodes/${id}/history`, { headers: hdr(s) })
 		).json()
-	).versions;
-	expect(versions.length).toBe(2);
-	expect(versions.map((v: { body: string }) => v.body)).toEqual(['old', '# new']);
+	).versions as Array<{ body: string; current: boolean }>;
+	expect(versions.length).toBe(3);
+	expect(versions.filter((v) => v.current).map((v) => v.body)).toEqual(['old', '# new']);
 	cleanup(s);
 });
 

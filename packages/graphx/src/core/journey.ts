@@ -1,6 +1,7 @@
 import { type DbClient, dialectOf, type SqlRow } from './dialect.ts';
 import { epochIntType, jsonField, scalarMax } from './dialect-sql.ts';
 import { FOREVER } from './runtime.ts';
+import { resolveSlice } from './temporal.ts';
 import {
 	applyLimit,
 	type MetricsContext,
@@ -33,6 +34,11 @@ export interface JourneyOpts {
 	rels?: string[];
 	direction?: 'forward' | 'reverse' | 'both';
 	maxDepth?: number;
+	/**
+	 * Walk the beliefs graphx held at this instant (recorded time, epoch ms). The walk itself is
+	 * always in valid time. Omit ⇒ current beliefs.
+	 */
+	recordedAsOf?: number;
 	/** §19.2 governance: row cap, fan-out guard, and fail-safe timeout (M7). */
 	limits?: Partial<QueryLimits>;
 	/**
@@ -80,6 +86,12 @@ export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow
 	const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
 	const limits = resolveLimits(o.limits);
 	const maxFanout = Math.floor(limits.maxFanout);
+	// Beliefs as of `recordedAsOf`, inlined: resolveSlice has checked it is an integer.
+	const { recordedAsOf } = resolveSlice({ recordedAsOf: o.recordedAsOf });
+	const held = (a: string) =>
+		recordedAsOf === undefined
+			? `${a}.recorded_to = ${FOREVER}`
+			: `${a}.recorded_from <= ${recordedAsOf} AND ${recordedAsOf} < ${a}.recorded_to`;
 
 	// Supernode fan-out guard (§19.2): live out-degree per node in the walk direction.
 	// A LEFT JOIN + `IS NULL OR <= maxFanout` predicate means only genuine live
@@ -89,13 +101,13 @@ export async function journey(raw: DbClient, o: JourneyOpts): Promise<JourneyRow
 	// per-arrival usable set is time-varying and can't be a static CTE.
 	let degBody: string;
 	if (dir === 'forward') {
-		degBody = `SELECT e.src AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause} GROUP BY e.src`;
+		degBody = `SELECT e.src AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER} AND ${held('e')}${relClause} GROUP BY e.src`;
 	} else if (dir === 'reverse') {
-		degBody = `SELECT e.dst AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause} GROUP BY e.dst`;
+		degBody = `SELECT e.dst AS node, COUNT(*) AS c FROM edge_versions e WHERE e.valid_to = ${FOREVER} AND ${held('e')}${relClause} GROUP BY e.dst`;
 	} else {
 		degBody = `SELECT node, COUNT(*) AS c FROM (
-    SELECT e.src AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause}
-    UNION ALL SELECT e.dst AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER}${relClause}
+    SELECT e.src AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER} AND ${held('e')}${relClause}
+    UNION ALL SELECT e.dst AS node FROM edge_versions e WHERE e.valid_to = ${FOREVER} AND ${held('e')}${relClause}
   ) GROUP BY node`;
 	}
 	const degParams = dir === 'both' ? [...(rels ?? []), ...(rels ?? [])] : [...(rels ?? [])];
@@ -111,7 +123,7 @@ journey(node, t_arrive, depth, path) AS (
   SELECT ${nextExpr}, ${scalarMax(d, 'j.t_arrive', 'e.valid_from')}, j.depth+1, j.path || ${nextExpr} || ','
   FROM journey j
   LEFT JOIN deg ON deg.node = j.node
-  JOIN edge_versions e ON ${edgeMatch} AND e.valid_to > j.t_arrive${relClause}
+  JOIN edge_versions e ON ${edgeMatch} AND e.valid_to > j.t_arrive AND ${held('e')}${relClause}
   WHERE j.depth < ? AND j.path NOT LIKE '%,' || ${nextExpr} || ',%'
     AND (deg.c IS NULL OR deg.c <= ${maxFanout})
 ),
@@ -119,7 +131,7 @@ reached AS (SELECT node AS id, MIN(t_arrive) AS arrival_t, MIN(depth) AS hops
             FROM journey WHERE node <> ? GROUP BY node)
 SELECT r.id, r.arrival_t, r.hops, n.type, ${jsonField(d, 'n.data', 'name')} AS name, n.data AS data_json
 FROM reached r JOIN node_versions n
-  ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to
+  ON n.id = r.id AND n.valid_from <= r.arrival_t AND r.arrival_t < n.valid_to AND ${held('n')}
 ORDER BY r.arrival_t, r.hops`;
 
 	const res = await withTimeout(

@@ -104,6 +104,7 @@ export function AppSidebar({
 		filters.type !== undefined ||
 		filters.q !== undefined ||
 		filters.asOf !== undefined ||
+		filters.recordedAsOf !== undefined ||
 		filters.mode !== undefined;
 
 	return (
@@ -171,6 +172,7 @@ export function AppSidebar({
 										type: undefined,
 										q: undefined,
 										asOf: undefined,
+										recordedAsOf: undefined,
 										mode: undefined,
 									})
 								}
@@ -206,6 +208,11 @@ export function AppSidebar({
 								{filters.asOf !== undefined && (
 									<FilterChip onClear={() => onFilterChange({ asOf: undefined })}>
 										as of {fmtTime(filters.asOf)}
+									</FilterChip>
+								)}
+								{filters.recordedAsOf !== undefined && (
+									<FilterChip onClear={() => onFilterChange({ recordedAsOf: undefined })}>
+										recorded {fmtTime(filters.recordedAsOf)}
 									</FilterChip>
 								)}
 							</div>

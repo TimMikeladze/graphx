@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type EdgeInput, type NodeInput, type NodePatch } from '@/lib/api';
+import { api, type EdgeInput, type NodeInput, type NodePatch, type Slice } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { acceptedData } from '@/lib/review';
 import type { EdgeRecord, ExplorerFilters } from '@/lib/types';
@@ -111,11 +111,11 @@ export function useSchema(tenant?: string, project?: string) {
 	});
 }
 
-/** A single node (detail Sheet), at `asOf` when one is set. */
-export function useNode(tenant?: string, project?: string, id?: string, asOf?: number) {
+/** A single node (detail Sheet), in the viewed time slice when one is set. */
+export function useNode(tenant?: string, project?: string, id?: string, at: Slice = {}) {
 	return useQuery({
-		queryKey: qk.node(tenant ?? '', project ?? '', id ?? '', asOf),
-		queryFn: () => api.getNode(tenant as string, project as string, id as string, asOf),
+		queryKey: qk.node(tenant ?? '', project ?? '', id ?? '', at),
+		queryFn: () => api.getNode(tenant as string, project as string, id as string, at),
 		enabled: Boolean(tenant && project && id),
 	});
 }
@@ -129,11 +129,11 @@ export function useNodeContent(
 	project?: string,
 	id?: string,
 	enabled = true,
-	asOf?: number,
+	at: Slice = {},
 ) {
 	return useQuery({
-		queryKey: qk.nodeContent(tenant ?? '', project ?? '', id ?? '', asOf),
-		queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, asOf),
+		queryKey: qk.nodeContent(tenant ?? '', project ?? '', id ?? '', at),
+		queryFn: () => api.getNodeContent(tenant as string, project as string, id as string, at),
 		enabled: Boolean(enabled && tenant && project && id),
 	});
 }
@@ -244,11 +244,11 @@ export function useDeleteEdge(tenant?: string, project?: string) {
 	});
 }
 
-/** A node's neighbors (detail Sheet · Neighbors tab), at `asOf` when one is set. */
-export function useNeighbors(tenant?: string, project?: string, id?: string, asOf?: number) {
+/** A node's neighbors (detail Sheet · Neighbors tab), in the viewed time slice when one is set. */
+export function useNeighbors(tenant?: string, project?: string, id?: string, at: Slice = {}) {
 	return useQuery({
-		queryKey: qk.neighbors(tenant ?? '', project ?? '', id ?? '', asOf),
-		queryFn: () => api.neighbors(tenant as string, project as string, id as string, asOf),
+		queryKey: qk.neighbors(tenant ?? '', project ?? '', id ?? '', at),
+		queryFn: () => api.neighbors(tenant as string, project as string, id as string, at),
 		enabled: Boolean(tenant && project && id),
 	});
 }
@@ -272,7 +272,13 @@ export function useRetrieval(tenant?: string, project?: string, filters: Explore
 		queryKey: qk.retrieval(tenant ?? '', project ?? '', mode, filters),
 		enabled,
 		queryFn: () => {
-			const opts = { query, k: RETRIEVE_K, maxDepth: RETRIEVE_DEPTH, asOf: filters.asOf };
+			const opts = {
+				query,
+				k: RETRIEVE_K,
+				maxDepth: RETRIEVE_DEPTH,
+				asOf: filters.asOf,
+				recordedAsOf: filters.recordedAsOf,
+			};
 			return mode === 'hybrid'
 				? api.hybrid(tenant as string, project as string, opts)
 				: api.retrieve(tenant as string, project as string, opts);
@@ -297,10 +303,11 @@ export function useTimeline(
 	tenant?: string,
 	project?: string,
 	window: { from?: number; to?: number } = {},
+	axis: 'valid' | 'recorded' = 'valid',
 ) {
 	return useQuery({
-		queryKey: qk.timeline(tenant ?? '', project ?? '', window),
-		queryFn: () => api.timeline(tenant as string, project as string, window),
+		queryKey: qk.timeline(tenant ?? '', project ?? '', window, axis),
+		queryFn: () => api.timeline(tenant as string, project as string, { ...window, axis }),
 		enabled: Boolean(tenant && project),
 		staleTime: 60_000,
 		// The zoom window is part of the query key, so every narrow/widen is a fresh cache entry —

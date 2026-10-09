@@ -188,13 +188,13 @@ for (const [driver, open] of [
 				null,
 				null,
 			]);
-			const versions = await history(client, node.id);
+			const versions = await history(client, node.id).then((vs) => vs.filter((v) => v.current));
 			expect(versions).toHaveLength(2);
 			expect(Number(versions[0]!.valid_to)).toBe(Number(versions[1]!.valid_from));
 			expect(Number(versions[0]!.valid_from)).toBeLessThan(Number(versions[0]!.valid_to));
 			expect(
 				await graph.getNodeVersion(node.id, { asOf: Number(versions[0]!.valid_from) }),
-			).toEqual(before);
+			).toEqual({ ...before, revision: String(versions[0]!.ver) });
 			const carried = await graph.atomic((scope) =>
 				scope.updateNode(node.id, { data: { extra: 'new' } }, { expectedRevision: after.revision }),
 			);
@@ -226,7 +226,7 @@ for (const [driver, open] of [
 				});
 			}
 			expect(await graph.getNodeVersion(created.id)).toEqual(winner);
-			expect(await history(client, created.id)).toHaveLength(2);
+			expect((await history(client, created.id)).filter((v) => v.current)).toHaveLength(2);
 		});
 
 		test('scope validates updated schemas and caught validation or SQL failures poison the transaction', async () => {
@@ -441,7 +441,7 @@ for (const [driver, open] of [
 				reason: { name: 'RevisionConflict' },
 			});
 			expect(callbacks).toBe(2);
-			expect(await history(client, node.id)).toHaveLength(2);
+			expect((await history(client, node.id)).filter((v) => v.current)).toHaveLength(2);
 		});
 
 		test('commit failure rolls back all writes, emits nothing, and never replays the callback', async () => {
@@ -593,7 +593,7 @@ for (const [driver, open] of [
 				}),
 			).rejects.toThrow();
 			expect(await graph.getNodeVersion(a.id)).toEqual(before);
-			expect(await history(client, a.id)).toHaveLength(1);
+			expect((await history(client, a.id)).filter((v) => v.current)).toHaveLength(1);
 			expect((await client.execute('SELECT * FROM graphx_blobs')).rows).toEqual([]);
 		});
 
@@ -642,7 +642,7 @@ for (const [driver, open] of [
 						{ expectedRevision: before.revision, replaceData: true },
 					),
 				);
-				const versions = await history(client, a.id);
+				const versions = await history(client, a.id).then((vs) => vs.filter((v) => v.current));
 				expect((await graph[reader](a.id, { asOf: Number(versions[0]!.valid_from) }))?.type).toBe(
 					'note',
 				);
@@ -664,7 +664,7 @@ for (const [driver, open] of [
 					{ expectedRevision: before.revision, replaceData: true },
 				),
 			);
-			const asOf = Number((await history(client, a.id))[0]!.valid_to) - 1;
+			const asOf = Number((await history(client, a.id)).filter((v) => v.current)[0]!.valid_to) - 1;
 			const assertLiveType = () =>
 				expect(graph.addEdge({ rel: 'links', src: a.id, dst: b.id })).rejects.toThrow('type');
 			expect((await graph.listNodes({ asOf, type: 'note' })).nodes.map((n) => n.id)).toContain(

@@ -147,7 +147,7 @@ describe('duckdb end to end', () => {
 		const r = client(store);
 		expect((await graph(r).getNode(n.id))?.data).toEqual({ v: 1 });
 		const rows = await r.execute({
-			sql: 'SELECT count(*) AS n FROM node_versions WHERE id = ?',
+			sql: 'SELECT count(*) AS n FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ?',
 			args: [n.id],
 		});
 		expect(rows.rows[0]?.n).toBe(2);

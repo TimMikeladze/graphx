@@ -1,5 +1,5 @@
 import { type DbClient, dialectOf } from './dialect.ts';
-import { FOREVER } from './runtime.ts';
+import { isLive, resolveSlice, slicePredicate, type TimeSlice } from './temporal.ts';
 
 /**
  * P8 — graph algorithms (§11; D3/D4, B8/B9/B10, M15/M17).
@@ -36,8 +36,8 @@ export interface CSR {
 	idToIdx: Map<string, number>;
 	/** Dense int → ULID id (ascending-by-id, deterministic). */
 	idxToId: string[];
-	/** Snapshot instant (epoch ms), or `null` for the current/live graph. */
-	t: number | null;
+	/** The time slice this CSR mirrors; `{}` is the live graph. */
+	slice: { asOf?: number; recordedAsOf?: number };
 }
 
 /** One out-neighbor of a CSR node: dense index, ULID id, and edge weight. */
@@ -66,6 +66,8 @@ export interface ShortestPathOpts {
 	maxDepth?: number;
 	/** Route over the graph as of this instant (epoch ms) instead of the live graph. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Route through nodes of these types only (memory mode). */
 	types?: string[];
 }
@@ -85,6 +87,8 @@ export interface PageRankOpts {
 	rels?: string[];
 	/** Score the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Over nodes of these types only (default: every type). Other nodes get no score. */
 	types?: string[];
 }
@@ -96,6 +100,8 @@ export interface CommunityOpts {
 	rels?: string[];
 	/** Group the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Over nodes of these types only (default: every type). Other nodes get no score. */
 	types?: string[];
 }
@@ -106,6 +112,8 @@ export interface CentralityOpts {
 	rels?: string[];
 	/** Count over the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Over nodes of these types only (default: every type). Other nodes get no score. */
 	types?: string[];
 }
@@ -125,6 +133,8 @@ export interface BetweennessOpts {
 	seed?: number;
 	/** Over the graph as of this instant (epoch ms). An `asOf` run is returned, not persisted. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Over nodes of these types only (default: every type). Other nodes get no score. */
 	types?: string[];
 }
@@ -170,7 +180,7 @@ export interface TopNode {
  */
 async function loadCSR(
 	raw: DbClient,
-	t: number | null,
+	slice: TimeSlice,
 	rels: string[] | null,
 	types: string[] | null = null,
 ): Promise<CSR> {
@@ -178,7 +188,7 @@ async function loadCSR(
 	const typeIn = types ? ` AND type IN (${types.map(() => '?').join(',')})` : '';
 	let nodeRows: Array<{ id: unknown }>;
 	let edgeRows: Array<{ src: unknown; dst: unknown; weight: unknown }>;
-	if (t === null) {
+	if (isLive(slice)) {
 		nodeRows = (
 			await raw.execute({
 				sql: `SELECT id FROM nodes WHERE 1 = 1${typeIn} ORDER BY id`,
@@ -192,16 +202,17 @@ async function loadCSR(
 			})
 		).rows as never;
 	} else {
+		const pred = slicePredicate('', slice);
 		nodeRows = (
 			await raw.execute({
-				sql: `SELECT id FROM node_versions WHERE valid_from <= ? AND ? < valid_to${typeIn} ORDER BY id`,
-				args: [t, t, ...(types ?? [])],
+				sql: `SELECT id FROM node_versions WHERE ${pred.sql}${typeIn} ORDER BY id`,
+				args: [...pred.args, ...(types ?? [])],
 			})
 		).rows as never;
 		edgeRows = (
 			await raw.execute({
-				sql: `SELECT src, dst, weight FROM edge_versions WHERE valid_from <= ? AND ? < valid_to${relIn} ORDER BY src, dst`,
-				args: [t, t, ...(rels ?? [])],
+				sql: `SELECT src, dst, weight FROM edge_versions WHERE ${pred.sql}${relIn} ORDER BY src, dst`,
+				args: [...pred.args, ...(rels ?? [])],
 			})
 		).rows as never;
 	}
@@ -233,7 +244,7 @@ async function loadCSR(
 		weights[pos] = e.w;
 	}
 
-	return { n, offsets, targets, weights, idToIdx, idxToId, t };
+	return { n, offsets, targets, weights, idToIdx, idxToId, slice: resolveSlice(slice) };
 }
 
 /** Which part of the graph a CSR mirrors: some rels' edges, some node types (default: all). */
@@ -248,21 +259,21 @@ const scope = (o: CsrScope) =>
 
 /** CSR over the current/live graph (`edges` view). */
 export function buildCSR(raw: DbClient, opts: CsrScope = {}): Promise<CSR> {
-	return loadCSR(raw, null, ...scope(opts));
+	return loadCSR(raw, {}, ...scope(opts));
 }
 
 /**
- * CSR over the graph as of instant `t` (half-open over `edge_versions`, D3). A `t`
- * at/after `FOREVER` means "now" and is routed to the live path — never bound into
- * a `:t < valid_to` predicate (which is false for every live row, D3).
+ * CSR over the graph in a time slice: as it stood at `asOf` (valid time) and as graphx
+ * believed it at `recordedAsOf` (recorded time). An axis omitted, or at/after `FOREVER`,
+ * means now; both now is the live graph.
  */
-export function snapshotCSR(raw: DbClient, t: number, opts: CsrScope = {}): Promise<CSR> {
-	return loadCSR(raw, t >= FOREVER ? null : t, ...scope(opts));
+export function snapshotCSR(raw: DbClient, slice: TimeSlice, opts: CsrScope = {}): Promise<CSR> {
+	return loadCSR(raw, slice, ...scope(opts));
 }
 
-/** The live CSR, or the one at `asOf` when given. */
-function csrAt(raw: DbClient, asOf: number | undefined, o: CsrScope): Promise<CSR> {
-	return asOf === undefined ? buildCSR(raw, o) : snapshotCSR(raw, asOf, o);
+/** The CSR for an algorithm's options: live, or the slice they name. */
+function csrAt(raw: DbClient, slice: TimeSlice, o: CsrScope): Promise<CSR> {
+	return loadCSR(raw, slice, ...scope(o));
 }
 
 /** Out-neighbors of dense node `u` — the `offsets[u]..offsets[u+1]` slice, ULID-translated. */
@@ -405,12 +416,13 @@ async function sqlShortestPath(
 	weighted: boolean,
 	rels: string[] | null,
 	maxDepth: number | undefined,
-	asOf: number | undefined,
+	slice: TimeSlice,
 ): Promise<ShortestPathResult | null> {
-	// As of an instant, walk the edge versions valid then instead of the live `edges` view.
-	const historic = asOf !== undefined && asOf < FOREVER;
+	// In a past slice, walk the edge versions in it instead of the live `edges` view.
+	const historic = !isLive(slice);
+	const pred = slicePredicate('e', slice);
 	const edgeSource = historic ? 'edge_versions' : 'edges';
-	const timeClause = historic ? ' AND e.valid_from <= ? AND ? < e.valid_to' : '';
+	const timeClause = historic ? ` AND ${pred.sql}` : '';
 	const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
 	const costExpr = weighted ? 'e.weight' : '1.0';
 	// Optional M17 depth bound: omitted = unbounded (the cycle guard still terminates
@@ -443,7 +455,7 @@ SELECT cost, path FROM walk WHERE node = ? ORDER BY cost LIMIT 1`;
 	const args: (string | number)[] = [
 		src,
 		src,
-		...(historic ? [asOf, asOf] : []),
+		...(historic ? pred.args : []),
 		...(rels ?? []),
 		dst,
 		...(maxDepth !== undefined ? [maxDepth] : []),
@@ -474,10 +486,10 @@ export async function shortestPath(
 	const rels = opts.rels?.length ? opts.rels : null;
 
 	if (mode === 'sql') {
-		return sqlShortestPath(raw, src, dst, weighted, rels, opts.maxDepth, opts.asOf);
+		return sqlShortestPath(raw, src, dst, weighted, rels, opts.maxDepth, opts);
 	}
 
-	const csr = await csrAt(raw, opts.asOf, { rels: rels ?? undefined, types: opts.types });
+	const csr = await csrAt(raw, opts, { rels: rels ?? undefined, types: opts.types });
 	const s = csr.idToIdx.get(src);
 	const d = csr.idToIdx.get(dst);
 	if (s === undefined || d === undefined) return null;
@@ -581,7 +593,7 @@ export async function pagerank(
 	const damping = opts.damping ?? 0.85;
 	const tol = opts.tol ?? 1e-9;
 	const maxIter = opts.maxIter ?? 100;
-	const csr = await csrAt(raw, opts.asOf, opts);
+	const csr = await csrAt(raw, opts, opts);
 	const { n, offsets, targets, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -621,7 +633,7 @@ export async function pagerank(
 	}
 
 	for (let u = 0; u < n; u++) result.set(idxToId[u] ?? '', pr[u] ?? 0);
-	if (opts.asOf === undefined) await persist(raw, 'pagerank', [...result]);
+	if (isLive(opts)) await persist(raw, 'pagerank', [...result]);
 	return result;
 }
 
@@ -636,7 +648,7 @@ export async function community(
 	opts: CommunityOpts = {},
 ): Promise<Map<string, number>> {
 	const maxIter = opts.maxIter ?? 20;
-	const csr = await csrAt(raw, opts.asOf, opts);
+	const csr = await csrAt(raw, opts, opts);
 	const { n, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -683,7 +695,7 @@ export async function community(
 		}
 		result.set(idxToId[u] ?? '', c);
 	}
-	if (opts.asOf === undefined) await persist(raw, 'community', [...result]);
+	if (isLive(opts)) await persist(raw, 'community', [...result]);
 	return result;
 }
 
@@ -696,7 +708,7 @@ export async function centrality(
 	kind: CentralityKind = 'degree',
 	opts: CentralityOpts = {},
 ): Promise<Map<string, number>> {
-	const csr = await csrAt(raw, opts.asOf, opts);
+	const csr = await csrAt(raw, opts, opts);
 	const { n, offsets, targets, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -721,7 +733,7 @@ export async function centrality(
 					: (out[u] ?? 0) + (inn[u] ?? 0);
 		result.set(idxToId[u] ?? '', val);
 	}
-	if (opts.asOf === undefined) await persist(raw, 'degree', [...result]);
+	if (isLive(opts)) await persist(raw, 'degree', [...result]);
 	return result;
 }
 
@@ -751,7 +763,7 @@ export async function betweenness(
 	opts: BetweennessOpts = {},
 ): Promise<Map<string, number>> {
 	const weighted = opts.weighted ?? true;
-	const csr = await csrAt(raw, opts.asOf, opts);
+	const csr = await csrAt(raw, opts, opts);
 	const { n, offsets, targets, weights, idxToId } = csr;
 	const result = new Map<string, number>();
 	if (n === 0) return result;
@@ -833,7 +845,7 @@ export async function betweenness(
 
 	const scale = n / sources.length / (n > 2 ? (n - 1) * (n - 2) : 1);
 	for (let u = 0; u < n; u++) result.set(idxToId[u] ?? '', (cb[u] ?? 0) * scale);
-	if (opts.asOf === undefined) await persistScores(raw, 'betweenness', [...result]);
+	if (isLive(opts)) await persistScores(raw, 'betweenness', [...result]);
 	return result;
 }
 

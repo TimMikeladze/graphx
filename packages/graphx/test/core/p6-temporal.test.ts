@@ -5,7 +5,7 @@ import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
-import { asOfPredicate, diff, history } from '../../src/core/temporal.ts';
+import { diff, history, slicePredicate } from '../../src/core/temporal.ts';
 import { embReadSql, makeTestDb } from './harness.ts';
 import { hashEmbed } from '../../src/core/embedder.ts';
 
@@ -51,7 +51,7 @@ afterAll(async () => {
 // Read a node version row directly (bypassing the live view) by valid_to.
 async function versionRows(client: DbClient, id: string): Promise<Record<string, unknown>[]> {
 	const r = await client.execute({
-		sql: 'SELECT ver, type, body, uri, content_hash, content_type, data, valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT ver, type, body, uri, content_hash, content_type, data, valid_from, valid_to FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? ORDER BY valid_from',
 		args: [id],
 	});
 	return r.rows as unknown as Record<string, unknown>[];
@@ -185,10 +185,10 @@ test('P6 (§9): asOf semantics — read before update sees old, after sees new',
 
 	await g.updateNode(n.id, { data: { type: 'new' } });
 
-	const pred = asOfPredicate('nv');
+	const pred = slicePredicate('nv', { asOf: 1 }).sql;
 	// asOf(beforeUpdate) -> old data
 	const past = await client.execute({
-		sql: `SELECT data FROM node_versions nv WHERE nv.id = ? AND ${pred}`,
+		sql: `SELECT data FROM node_versions nv WHERE recorded_to = 8640000000000000 AND nv.id = ? AND ${pred}`,
 		args: [n.id, beforeUpdate, beforeUpdate],
 	});
 	expect(JSON.parse(String(past.rows[0]!.data))).toEqual({ type: 'old', crit: 1 });
@@ -197,27 +197,33 @@ test('P6 (§9): asOf semantics — read before update sees old, after sees new',
 	const read = await g.getNode(n.id);
 	expect(read!.data).toEqual({ type: 'new', crit: 1 });
 
-	// original (closed) version row bytes are unchanged (data + valid_from intact)
-	const afterRows = await versionRows(client, n.id);
-	const closed = afterRows.find((r) => Number(r.ver) === Number(original.ver))!;
+	// the original row is never edited: same data and valid interval, it just stops being a
+	// current belief (its earlier part was re-recorded as closed history)
+	const stored = await client.execute({
+		sql: 'SELECT data, valid_from, valid_to, recorded_to FROM node_versions WHERE ver = ?',
+		args: [original.ver as number],
+	});
+	const closed = stored.rows[0]!;
 	expect(String(closed.data)).toBe(String(original.data));
 	expect(Number(closed.valid_from)).toBe(Number(original.valid_from));
+	expect(Number(closed.valid_to)).toBe(FOREVER);
+	expect(Number(closed.recorded_to)).toBeLessThan(FOREVER);
 	client.close();
 });
 
-test('P6 (§9): history returns all versions ordered by valid_from; grows by 1 per update', async () => {
+test('P6 (§9): history returns every row, superseded ones flagged; current ones grow by 1 per update', async () => {
 	const { client, g } = await freshGraph();
 	const n = await g.addNode({ type: 'device', data: { type: 'v0' } });
+	const current = async () => (await history(client, n.id)).filter((r) => r.current);
 
-	let h = await history(client, n.id);
-	expect(h.length).toBe(1);
-
+	expect(await current()).toHaveLength(1);
 	await g.updateNode(n.id, { data: { type: 'v1' } });
-	h = await history(client, n.id);
-	expect(h.length).toBe(2);
-
+	expect(await current()).toHaveLength(2);
 	await g.updateNode(n.id, { data: { type: 'v2' } });
-	h = await history(client, n.id);
+	// each update superseded the open row and re-recorded its closed part (D2)
+	const all = await history(client, n.id);
+	expect(all.map((r) => r.current)).toEqual([false, true, false, true, true]);
+	const h = await current();
 	expect(h.length).toBe(3);
 
 	// ordered ascending by valid_from
@@ -241,7 +247,7 @@ test('P6: deleteEdge closes the live edge (no successor); edges view drops it', 
 
 	// exactly ONE version row (the now-closed one); no successor inserted
 	const rows = await client.execute({
-		sql: 'SELECT valid_to FROM edge_versions WHERE id = ?',
+		sql: 'SELECT valid_to FROM edge_versions WHERE recorded_to = 8640000000000000 AND id = ?',
 		args: [e.id],
 	});
 	expect(rows.rows.length).toBe(1);
@@ -282,15 +288,16 @@ test('P6: deleteNode closes the live node (no successor); view drops it; history
 	// the `nodes` live view drops it
 	expect(await g.getNode(n.id)).toBeNull();
 
-	// history still sees the closed version (reads node_versions directly, ignores valid_to)
+	// history still sees the closed version (and the open row the delete superseded)
 	const h = await history(client, n.id);
-	expect(h.length).toBe(1);
+	expect(h.filter((r) => r.current)).toHaveLength(1);
+	expect(h).toHaveLength(2);
 
 	// as-of a t inside the original interval STILL returns the data — the close preserved
 	// the past rather than destroying it.
-	const pred = asOfPredicate('nv');
+	const pred = slicePredicate('nv', { asOf: 1 }).sql;
 	const past = await client.execute({
-		sql: `SELECT data FROM node_versions nv WHERE nv.id = ? AND ${pred}`,
+		sql: `SELECT data FROM node_versions nv WHERE recorded_to = 8640000000000000 AND nv.id = ? AND ${pred}`,
 		args: [n.id, beforeDelete, beforeDelete],
 	});
 	expect(JSON.parse(String(past.rows[0]!.data))).toEqual({ type: 'doomed', crit: 1 });
@@ -336,7 +343,7 @@ test('P6 (§9): diff returns rows whose interval changed between t1 and t2', asy
 	// window captures the close+insert events but excludes the untouched rows'
 	// original valid_from. Avoids racing the wall clock.
 	const preMax = await client.execute({
-		sql: 'SELECT MAX(vf) AS m FROM (SELECT valid_from AS vf FROM node_versions UNION ALL SELECT valid_from FROM edge_versions)',
+		sql: 'SELECT MAX(vf) AS m FROM (SELECT valid_from AS vf FROM node_versions WHERE recorded_to = 8640000000000000 UNION ALL SELECT valid_from FROM edge_versions WHERE recorded_to = 8640000000000000)',
 	});
 	const t1 = Number(preMax.rows[0]!.m);
 
@@ -347,10 +354,10 @@ test('P6 (§9): diff returns rows whose interval changed between t1 and t2', asy
 	// non-FOREVER valid_to from a close), so the edge close lands inside the window.
 	const postMax = await client.execute({
 		sql: `SELECT MAX(t) AS m FROM (
-				SELECT valid_from AS t FROM node_versions
-				UNION ALL SELECT valid_from FROM edge_versions
-				UNION ALL SELECT valid_to FROM node_versions WHERE valid_to <> ?
-				UNION ALL SELECT valid_to FROM edge_versions WHERE valid_to <> ?)`,
+				SELECT valid_from AS t FROM node_versions WHERE recorded_to = 8640000000000000
+				UNION ALL SELECT valid_from FROM edge_versions WHERE recorded_to = 8640000000000000
+				UNION ALL SELECT valid_to FROM node_versions WHERE recorded_to = 8640000000000000 AND valid_to <> ?
+				UNION ALL SELECT valid_to FROM edge_versions WHERE recorded_to = 8640000000000000 AND valid_to <> ?)`,
 		args: [FOREVER, FOREVER],
 	});
 	const t2 = Number(postMax.rows[0]!.m);
@@ -365,9 +372,18 @@ test('P6 (§9): diff returns rows whose interval changed between t1 and t2', asy
 	client.close();
 });
 
-test('P6: asOfPredicate returns the half-open D3 form referencing the alias', async () => {
-	expect(asOfPredicate('nv')).toBe('nv.valid_from <= ? AND ? < nv.valid_to');
-	expect(asOfPredicate('e')).toBe('e.valid_from <= ? AND ? < e.valid_to');
+test('P6: slicePredicate is half-open on each axis it binds, current beliefs otherwise', async () => {
+	expect(slicePredicate('nv', { asOf: 5 })).toEqual({
+		sql: 'nv.valid_from <= ? AND ? < nv.valid_to AND nv.recorded_to = 8640000000000000',
+		args: [5, 5],
+	});
+	expect(slicePredicate('e', { recordedAsOf: 7 })).toEqual({
+		sql: 'e.valid_to = 8640000000000000 AND e.recorded_from <= ? AND ? < e.recorded_to',
+		args: [7, 7],
+	});
+	expect(slicePredicate('', {}).sql).toBe(
+		'valid_to = 8640000000000000 AND recorded_to = 8640000000000000',
+	);
 });
 
 test('P6: getNode(asOf) reads the version live at that instant', async () => {

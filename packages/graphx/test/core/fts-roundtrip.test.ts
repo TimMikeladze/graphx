@@ -65,11 +65,12 @@ describe('full-text round trip', () => {
 			sql: `SELECT term FROM fts_terms WHERE live AND term IN ('sphinx','griffin')`,
 		});
 		expect(live.rows.map((r) => String(r.term))).toEqual(['griffin']);
-		// ...but history still carries it, which is what makes as-of lexical search exact.
+		// ...but history still carries it, which is what makes as-of lexical search exact: the
+		// superseded open row and the closed remainder the update recorded in its place.
 		const all = await c.execute({
 			sql: `SELECT count(*) AS n FROM fts_terms WHERE term = 'sphinx'`,
 		});
-		expect(all.rows[0]?.n).toBe(1);
+		expect(all.rows[0]?.n).toBe(2);
 		await c.end();
 	});
 

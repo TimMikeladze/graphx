@@ -1,13 +1,13 @@
-import { FOREVER } from './runtime.ts';
 import { type DbClient, dialectOf } from './dialect.ts';
+import { LIVE_SQL } from './dialect-sql.ts';
 import { declareDuckUniqueProp } from './duck-constraints.ts';
 import type { GraphSchema } from './graph.ts';
 import { ensureColumn } from './schema.ts';
 
 /**
  * P14 — constraints (§19.5). Two declarative guards, both scoped to LIVE rows only
- * (`WHERE valid_to = FOREVER`) so the immutable history (closed versions) can never
- * collide with itself:
+ * (`WHERE valid_to = FOREVER AND recorded_to = FOREVER`) so history (closed or superseded
+ * versions) can never collide with itself:
  *
  *  - **Uniqueness** ({@link declareUniqueNodeProp}): a prop is made unique among the
  *    live versions of one type. On libSQL a VIRTUAL generated column extracting the
@@ -66,7 +66,7 @@ export async function declareUniqueNodeProp(
 	// both → ux_user_account_id), which would make the 2nd CREATE IF NOT EXISTS a silent
 	// no-op and leave its uniqueness unenforced.
 	const idx = `ux_${type.length}_${type}_${prop}`;
-	const pred = `WHERE valid_to = ${FOREVER} AND type = ${sqlLiteral(type)}`;
+	const pred = `WHERE ${LIVE_SQL} AND type = ${sqlLiteral(type)}`;
 	switch (dialectOf(client)) {
 		case 'postgres':
 			// Postgres has no VIRTUAL generated columns — use a partial UNIQUE EXPRESSION index
@@ -127,7 +127,7 @@ export async function declareSingleValuedRel(client: DbClient, rel: string): Pro
 		return;
 	}
 	await client.execute(
-		`CREATE UNIQUE INDEX IF NOT EXISTS ux_single_${safe} ON edge_versions(src) WHERE valid_to = ${FOREVER} AND rel = ${sqlLiteral(safe)}`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ux_single_${safe} ON edge_versions(src) WHERE ${LIVE_SQL} AND rel = ${sqlLiteral(safe)}`,
 	);
 }
 
@@ -149,4 +149,20 @@ export async function materializeConstraints(client: DbClient, schema: GraphSche
 			await declareSingleValuedRel(client, rel);
 		}
 	}
+}
+
+/** A declared constraint, independent of how a backend stores it. */
+export type Constraint =
+	| { kind: 'unique'; type: string; prop: string }
+	| { kind: 'single'; rel: string };
+
+/** Parse a libSQL/Postgres constraint index name (`ux_*`) back into its declaration. */
+export function parseIndexName(name: string): Constraint | null {
+	if (name.startsWith('ux_single_')) return { kind: 'single', rel: name.slice(10) };
+	const m = /^ux_(\d+)_(.+)$/.exec(name);
+	if (!m) return null;
+	const n = Number(m[1]);
+	const rest = m[2]!;
+	if (rest[n] !== '_') return null;
+	return { kind: 'unique', type: rest.slice(0, n), prop: rest.slice(n + 1) };
 }

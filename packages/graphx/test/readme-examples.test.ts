@@ -30,6 +30,9 @@ declare const id: string;
 declare const t1: number;
 declare const t2: number;
 declare const lastWeek: number;
+declare const y1992: number;
+declare const y1995: number;
+declare const beforeFix: number;
 declare const edgeId: string;
 declare const srcId: string;
 declare const dstId: string;
@@ -110,6 +113,7 @@ export const schema = defineGraphSchema({
 		note: z.object({ path: z.string() }),
 		doc: z.object({ title: z.string() }),
 		deity: z.object({ name: z.string(), pantheon: z.string(), source: z.string() }),
+		field: z.object({ name: z.string(), yield: z.number() }),
 	},
 	edges: {
 		deployedAt: { from: 'gateway', to: 'site', single: true },

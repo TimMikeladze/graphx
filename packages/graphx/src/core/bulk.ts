@@ -1,7 +1,14 @@
 import { FOREVER, ftsIndexOwner, managedWriter } from './runtime.ts';
-import { type DbClient, dialectOf, type SqlStatement, type SqlValue } from './dialect.ts';
+import {
+	type DbClient,
+	dialectOf,
+	type SqlRow,
+	type SqlStatement,
+	type SqlValue,
+} from './dialect.ts';
 import { embValueExpr, insertOrIgnore } from './dialect-sql.ts';
 import { newId } from './ids.ts';
+import { assertWriteTime, CONTENT_COLS, versionInsert, type VersionTable } from './portion.ts';
 import type { NodeType, Rel } from './define-graph-schema.ts';
 import {
 	assertVector,
@@ -24,7 +31,7 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  * magnitude faster than per-row `addNode` for initial import.
  *
  * NOT an upsert. By default every row mints a FRESH ULID and a single open version
- * (`valid_from = loadTs`, `valid_to = FOREVER`) — no versioning, no close of prior rows,
+ * (`valid_from = opts.validFrom ?? now`, `valid_to = FOREVER`) — no versioning, no close of prior rows,
  * so distinct ids never produce overlapping intervals.
  *
  * A row MAY instead carry an explicit `id` plus `validFrom`/`validTo`, which is how an
@@ -57,7 +64,7 @@ export interface BulkRow<S extends GraphSchema> {
 	uri?: string;
 	content_hash?: string;
 	content_type?: string;
-	/** Interval start (epoch ms). Default: the load's `loadTs`. */
+	/** Interval start (epoch ms). Default: the load's `validFrom`, else now. Never in the future. */
 	validFrom?: number;
 	/** Interval end, exclusive (epoch ms). Default: FOREVER, i.e. an open (live) version. */
 	validTo?: number;
@@ -76,8 +83,14 @@ export interface BulkResult {
 export interface BulkOpts {
 	/** Rows per multi-row INSERT (default 100; keeps bound-arg count well under limits). */
 	chunkSize?: number;
-	/** Shared `valid_from` for every row (epoch ms; default `Date.now()`). */
-	loadTs?: number;
+	/** Valid-time start for every row without its own `validFrom` (epoch ms; default now). */
+	validFrom?: number;
+	/**
+	 * What to do when a row overlaps a version already stored for its supplied `id`: `'refuse'`
+	 * (default) throws before writing anything; `'correct'` replaces what the row covers and
+	 * keeps the stored rest (see {@link Graph.correctNode}).
+	 */
+	mode?: BulkMode;
 	/**
 	 * Embed every LIVE row (open interval) that carries no `emb` / `embedding`, in batches,
 	 * before the insert. Rows with a closed interval are history and get no vector. Omit to
@@ -129,19 +142,16 @@ interface Interval {
 
 /**
  * Guard the interval invariants the loaders can no longer take for granted once callers
- * supply their own ids: every interval non-empty, and per supplied id, no two intervals
- * overlapping with at most one left open. Runs BEFORE any index is dropped or row written,
- * so a bad plan cannot half-apply. Minted ids are unique by construction and skip the
- * per-id pass.
+ * supply their own ids: every interval non-empty and not future-dated (D3), and per supplied
+ * id, no two intervals overlapping with at most one left open. Runs BEFORE any index is
+ * dropped or row written, so a bad plan cannot half-apply. Minted ids are unique by
+ * construction and skip the per-id pass.
  */
-function validateIntervals(label: string, rows: Interval[]): void {
+function validateIntervals(label: string, rows: Interval[], now: number): void {
 	const byId = new Map<string, Interval[]>();
 	for (const r of rows) {
-		if (!(r.validFrom < r.validTo)) {
-			throw new Error(
-				`${label}: validFrom must be < validTo, got ${r.validFrom} >= ${r.validTo} for '${r.id}'`,
-			);
-		}
+		// D3: non-empty, not future-dated (an open row may run to FOREVER).
+		assertWriteTime(`${label} '${r.id}'`, r.validFrom, r.validTo, now);
 		if (!r.supplied) continue;
 		const group = byId.get(r.id);
 		if (group) group.push(r);
@@ -166,20 +176,31 @@ function validateIntervals(label: string, rows: Interval[]): void {
 	}
 }
 
+/** How a bulk load treats rows that overlap what is already stored for their id. */
+export type BulkMode = 'refuse' | 'correct';
+
 /**
- * Refuse a load that would overlap a version already stored for a supplied id. The per-batch
- * check above cannot see stored rows, and no index enforces one live row per id, so without
- * this a second load of an existing id leaves two open versions: reads return the stale one
- * and a later `updateNode` closes only one of them. Checks every stored version, open or
- * closed — overlapping history breaks as-of reads the same way. Runs before any write.
+ * Check a load against what is stored for its supplied ids. The per-batch check above cannot
+ * see stored rows, and without this a second load of an existing id would leave two open
+ * versions: reads return the stale one and a later `updateNode` closes only one of them.
+ * Every current belief counts, open or closed — overlapping history breaks as-of reads the
+ * same way. Runs before any write.
+ *
+ * `refuse` (default) throws on the first overlap. `correct` returns the statements that apply
+ * the portion primitive (portion.ts) to each overlapped belief: supersede it at `recordedAt` and
+ * re-insert its parts outside the load's intervals for that id, so the load replaces what it
+ * covers and leaves the rest. Also returns the recorded instant to stamp, bumped past every
+ * superseded row so no recorded interval is empty.
  */
-async function refuseStoredOverlaps(
+async function planStoredOverlaps(
 	raw: DbClient,
 	label: string,
-	table: 'node_versions' | 'edge_versions',
+	table: VersionTable,
 	rows: Interval[],
 	chunkSize: number,
-): Promise<void> {
+	mode: BulkMode,
+	recordedAt: number,
+): Promise<{ stmts: SqlStatement[]; recordedAt: number }> {
 	const byId = new Map<string, Interval[]>();
 	for (const r of rows) {
 		if (!r.supplied) continue;
@@ -187,23 +208,52 @@ async function refuseStoredOverlaps(
 		if (group) group.push(r);
 		else byId.set(r.id, [r]);
 	}
+	const hits: Array<{ row: SqlRow; covers: Interval[] }> = [];
 	for (const part of chunk([...byId.keys()], chunkSize)) {
 		const stored = await raw.execute({
-			sql: `SELECT id, valid_from, valid_to FROM ${table} WHERE id IN (${part.map(() => '?').join(',')})`,
+			sql: `SELECT ver, id, ${CONTENT_COLS[table].join(', ')}, valid_from, valid_to, recorded_from FROM ${table}
+			      WHERE recorded_to = ${FOREVER} AND id IN (${part.map(() => '?').join(',')})`,
 			args: part,
 		});
 		for (const s of stored.rows) {
-			const id = String(s.id);
 			const from = Number(s.valid_from);
 			const to = Number(s.valid_to);
-			const hit = byId.get(id)?.find((r) => r.validFrom < to && from < r.validTo);
-			if (hit) {
+			const covers = (byId.get(String(s.id)) ?? []).filter(
+				(r) => r.validFrom < to && from < r.validTo,
+			);
+			if (covers.length === 0) continue;
+			if (mode === 'refuse') {
+				const hit = covers[0] as Interval;
 				throw new Error(
-					`${label}: id '${id}' already has a version [${from},${to}) overlapping [${hit.validFrom},${hit.validTo}) — a bulk load cannot rewrite stored history`,
+					`${label}: id '${String(s.id)}' already has a version [${from},${to}) overlapping [${hit.validFrom},${hit.validTo}) — pass mode: 'correct' to replace it`,
 				);
 			}
+			hits.push({ row: s, covers });
 		}
 	}
+	let at = recordedAt;
+	for (const h of hits) at = Math.max(at, Number(h.row.recorded_from) + 1);
+	const stmts: SqlStatement[] = [];
+	for (const h of hits) {
+		stmts.push({
+			sql: `UPDATE ${table} SET recorded_to = ? WHERE ver = ? AND recorded_to = ${FOREVER}`,
+			args: [at, h.row.ver as SqlValue],
+		});
+	}
+	for (const h of hits) {
+		// The stored interval minus the union of the load's intervals for this id.
+		const covers = [...h.covers].sort((a, b) => a.validFrom - b.validFrom);
+		let cursor = Number(h.row.valid_from);
+		const end = Number(h.row.valid_to);
+		for (const c of covers) {
+			if (cursor < c.validFrom) {
+				stmts.push(versionInsert(table, String(h.row.id), h.row, cursor, c.validFrom, at));
+			}
+			cursor = Math.max(cursor, c.validTo);
+		}
+		if (cursor < end) stmts.push(versionInsert(table, String(h.row.id), h.row, cursor, end, at));
+	}
+	return { stmts, recordedAt: at };
 }
 
 /** Distinct ids in first-seen order — one identity row per identity, however many versions it has. */
@@ -296,7 +346,9 @@ export async function bulkLoad<S extends GraphSchema>(
 	opts: BulkOpts = {},
 ): Promise<BulkResult> {
 	const chunkSize = opts.chunkSize ?? 100;
-	const loadTs = opts.loadTs ?? Date.now();
+	// Recorded time is when graphx learned the rows, whatever valid time they carry.
+	const now = Date.now();
+	const loadFrom = opts.validFrom ?? now;
 	const d = dialectOf(raw);
 	// libSQL defers the ANN index and FTS trigger across a bulk load and rebuilds after.
 	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
@@ -322,7 +374,7 @@ export async function bulkLoad<S extends GraphSchema>(
 			plain: parsed,
 			emb: row.emb ?? null,
 			embedding: row.embedding,
-			validFrom: row.validFrom ?? loadTs,
+			validFrom: row.validFrom ?? loadFrom,
 			validTo: row.validTo ?? FOREVER,
 		};
 	});
@@ -332,8 +384,18 @@ export async function bulkLoad<S extends GraphSchema>(
 		validFrom: p.validFrom,
 		validTo: p.validTo,
 	}));
-	validateIntervals('bulkLoad', intervals);
-	await refuseStoredOverlaps(raw, 'bulkLoad', 'node_versions', intervals, chunkSize);
+	validateIntervals('bulkLoad', intervals, now);
+	const plan = await planStoredOverlaps(
+		raw,
+		'bulkLoad',
+		'node_versions',
+		intervals,
+		chunkSize,
+		opts.mode ?? 'refuse',
+		now,
+	);
+	// Recorded time is when graphx learned the rows, whatever valid time they carry (D5).
+	const recordedAt = plan.recordedAt;
 
 	// 1b. Vectors: one PreparedEmbedding per LIVE row that ends up with one — explicit rows,
 	// raw `emb`, or (with an embedder) the type's embedding input, batch-embedded. Validated
@@ -360,15 +422,17 @@ export async function bulkLoad<S extends GraphSchema>(
 				args: part,
 			});
 		}
+		// Corrections first: supersede and re-record what the load replaces, before its rows land.
+		stmts.push(...plan.stmts);
 		for (const part of chunk(prepared, chunkSize)) {
-			const valuesSql = part.map(() => '(?,?,?,?,?,?,?,?,?)').join(',');
+			const valuesSql = part.map(() => '(?,?,?,?,?,?,?,?,?,?)').join(',');
 			const args: SqlValue[] = [];
 			for (const p of part) {
 				args.push(p.id, p.type, p.body, p.uri, p.content_hash, p.content_type, p.data);
-				args.push(p.validFrom, p.validTo);
+				args.push(p.validFrom, p.validTo, recordedAt);
 			}
 			stmts.push({
-				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from, valid_to) VALUES ${valuesSql}`,
+				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from, valid_to, recorded_from) VALUES ${valuesSql}`,
 				args,
 			});
 		}
@@ -457,7 +521,7 @@ export interface BulkEdgeRow<S extends GraphSchema> {
 	weight?: number;
 	data?: Record<string, unknown>;
 	source?: string;
-	/** Interval start (epoch ms). Default: the load's `loadTs`. */
+	/** Interval start (epoch ms). Default: the load's `validFrom`, else now. Never in the future. */
 	validFrom?: number;
 	/** Interval end, exclusive (epoch ms). Default: FOREVER, i.e. an open (live) edge. */
 	validTo?: number;
@@ -467,8 +531,10 @@ export interface BulkEdgeRow<S extends GraphSchema> {
 export interface BulkEdgeOpts {
 	/** Rows per multi-row INSERT (default 100; keeps bound-arg count well under limits). */
 	chunkSize?: number;
-	/** Shared `valid_from` for every row lacking an explicit `validFrom` (epoch ms; default now). */
-	loadTs?: number;
+	/** Valid-time start for every row without its own `validFrom` (epoch ms; default now). */
+	validFrom?: number;
+	/** See {@link BulkOpts.mode}. */
+	mode?: BulkMode;
 	/**
 	 * `id -> node type` for endpoint validation. `Graph.addEdge` checks `from`/`to` with a
 	 * SELECT per endpoint, which is the dominant cost at import scale — a bulk caller already
@@ -523,7 +589,8 @@ export async function bulkEdges<S extends GraphSchema>(
 	opts: BulkEdgeOpts = {},
 ): Promise<BulkResult> {
 	const chunkSize = opts.chunkSize ?? 100;
-	const loadTs = opts.loadTs ?? Date.now();
+	const now = Date.now();
+	const loadFrom = opts.validFrom ?? now;
 	const d = dialectOf(raw);
 	const types = opts.types;
 
@@ -565,7 +632,7 @@ export async function bulkEdges<S extends GraphSchema>(
 			weight: row.weight ?? 1.0,
 			data: JSON.stringify(parsedData),
 			source: row.source ?? null,
-			validFrom: row.validFrom ?? loadTs,
+			validFrom: row.validFrom ?? loadFrom,
 			validTo: row.validTo ?? FOREVER,
 		};
 	});
@@ -575,8 +642,17 @@ export async function bulkEdges<S extends GraphSchema>(
 		validFrom: p.validFrom,
 		validTo: p.validTo,
 	}));
-	validateIntervals('bulkEdges', intervals);
-	await refuseStoredOverlaps(raw, 'bulkEdges', 'edge_versions', intervals, chunkSize);
+	validateIntervals('bulkEdges', intervals, now);
+	const plan = await planStoredOverlaps(
+		raw,
+		'bulkEdges',
+		'edge_versions',
+		intervals,
+		chunkSize,
+		opts.mode ?? 'refuse',
+		now,
+	);
+	const recordedAt = plan.recordedAt;
 
 	const stmts: SqlStatement[] = [];
 	// Every identity row precedes every version row so the immediate FK check passes.
@@ -586,14 +662,16 @@ export async function bulkEdges<S extends GraphSchema>(
 			args: part,
 		});
 	}
+	stmts.push(...plan.stmts);
 	for (const part of chunk(prepared, chunkSize)) {
 		const args: SqlValue[] = [];
 		for (const p of part) {
 			args.push(p.id, p.src, p.dst, p.rel, p.weight, p.data, p.source, p.validFrom, p.validTo);
+			args.push(recordedAt);
 		}
 		stmts.push({
-			sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from, valid_to)
-				VALUES ${part.map(() => '(?,?,?,?,?,?,?,?,?)').join(',')}`,
+			sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from, valid_to, recorded_from)
+				VALUES ${part.map(() => '(?,?,?,?,?,?,?,?,?,?)').join(',')}`,
 			args,
 		});
 	}

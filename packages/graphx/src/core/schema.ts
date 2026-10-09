@@ -6,10 +6,15 @@ import {
 	embeddingsTableDDL,
 	ftsTableDDL,
 	ftsTriggerDDL,
+	EDGE_VERSION_INDEXES_SQL,
+	LIVE_SQL,
 	META_UPSERT_SQL,
+	NODE_VERSION_INDEXES_SQL,
+	ONE_LIVE_INDEXES_SQL,
 	postgresSchema,
 } from './dialect-sql.ts';
 import { type Embedder, EmbeddingError } from './embedder.ts';
+import { upgradeToRecordedTime } from './upgrade.ts';
 
 /**
  * The FTS5 external-content sync trigger DDL (M2, §19.3). External-content FTS5 does
@@ -20,6 +25,46 @@ import { type Embedder, EmbeddingError } from './embedder.ts';
  * sync would defeat the deferral) and recreate it before the final `'rebuild'`.
  */
 export const NODES_FTS_TRIGGER_DDL: string = ftsTriggerDDL('libsql');
+
+/**
+ * The SQLite/libSQL `node_versions` table. `AUTOINCREMENT` so a purged row's `ver` is never
+ * handed out again: the change feed pages by `ver`. `name` lets the v2 upgrade build the
+ * replacement table beside the old one.
+ */
+export function sqliteNodeVersionsTable(name = 'node_versions'): string {
+	return `CREATE TABLE IF NOT EXISTS ${name} (
+  ver           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id            TEXT NOT NULL REFERENCES node_identity(id),
+  type          TEXT NOT NULL,
+  body          TEXT,
+  uri           TEXT,
+  content_hash  TEXT,
+  content_type  TEXT,
+  data          TEXT NOT NULL DEFAULT '{}',
+  valid_from    INTEGER NOT NULL,
+  valid_to      INTEGER NOT NULL DEFAULT 8640000000000000,
+  recorded_from INTEGER NOT NULL DEFAULT 0,
+  recorded_to   INTEGER NOT NULL DEFAULT 8640000000000000
+);`;
+}
+
+/** The SQLite/libSQL `edge_versions` table; see {@link sqliteNodeVersionsTable}. */
+export function sqliteEdgeVersionsTable(name = 'edge_versions'): string {
+	return `CREATE TABLE IF NOT EXISTS ${name} (
+  ver           INTEGER PRIMARY KEY AUTOINCREMENT,
+  id            TEXT NOT NULL REFERENCES edge_identity(id),
+  src           TEXT NOT NULL REFERENCES node_identity(id),
+  dst           TEXT NOT NULL REFERENCES node_identity(id),
+  rel           TEXT NOT NULL,
+  weight        REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
+  data          TEXT NOT NULL DEFAULT '{}',
+  source        TEXT,
+  valid_from    INTEGER NOT NULL,
+  valid_to      INTEGER NOT NULL DEFAULT 8640000000000000,
+  recorded_from INTEGER NOT NULL DEFAULT 0,
+  recorded_to   INTEGER NOT NULL DEFAULT 8640000000000000
+);`;
+}
 
 /**
  * Full P1 DDL (§4 corrected + D1/B9). Every `CREATE` is `IF NOT EXISTS` so `init()` re-runs as
@@ -37,19 +82,8 @@ export function schema(dialect: Extract<Dialect, 'libsql' | 'sqlite'> = 'libsql'
 CREATE TABLE IF NOT EXISTS node_identity (id TEXT PRIMARY KEY);   -- ULID
 CREATE TABLE IF NOT EXISTS edge_identity (id TEXT PRIMARY KEY);   -- ULID
 
-CREATE TABLE IF NOT EXISTS node_versions (
-  ver          INTEGER PRIMARY KEY AUTOINCREMENT, -- never reused (changeFeed pages by ver)
-  id           TEXT NOT NULL REFERENCES node_identity(id),
-  type         TEXT NOT NULL,
-  body         TEXT,
-  uri          TEXT,
-  content_hash TEXT,
-  content_type TEXT,
-  data        TEXT NOT NULL DEFAULT '{}',
-  valid_from   INTEGER NOT NULL,
-  valid_to     INTEGER NOT NULL DEFAULT 8640000000000000
-);
-CREATE INDEX IF NOT EXISTS nv_asof ON node_versions(id, valid_from, valid_to);
+${sqliteNodeVersionsTable()}
+${NODE_VERSION_INDEXES_SQL}
 CREATE INDEX IF NOT EXISTS nv_type ON node_versions(type);
 
 -- Namespace-level facts: the embedding model + width, and the declared constraints.
@@ -59,27 +93,16 @@ CREATE TABLE IF NOT EXISTS graph_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL
 ${ftsTableDDL(dialect)}
 ${ftsTriggerDDL(dialect)}
 
-CREATE TABLE IF NOT EXISTS edge_versions (
-  ver        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL REFERENCES edge_identity(id),
-  src        TEXT NOT NULL REFERENCES node_identity(id),
-  dst        TEXT NOT NULL REFERENCES node_identity(id),
-  rel        TEXT NOT NULL,
-  weight     REAL NOT NULL DEFAULT 1.0 CHECK (weight >= 0),
-  data      TEXT NOT NULL DEFAULT '{}',
-  source     TEXT,
-  valid_from INTEGER NOT NULL,
-  valid_to   INTEGER NOT NULL DEFAULT 8640000000000000
-);
-CREATE INDEX IF NOT EXISTS ev_src_asof ON edge_versions(src, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS ev_dst_asof ON edge_versions(dst, valid_from, valid_to);
+${sqliteEdgeVersionsTable()}
+${EDGE_VERSION_INDEXES_SQL}
+${ONE_LIVE_INDEXES_SQL}
 
 CREATE VIEW IF NOT EXISTS nodes AS
   SELECT id, type, body, uri, content_hash, content_type, data
-  FROM node_versions WHERE valid_to = 8640000000000000;
+  FROM node_versions WHERE ${LIVE_SQL};
 CREATE VIEW IF NOT EXISTS edges AS
   SELECT id, src, dst, rel, weight, data, source
-  FROM edge_versions WHERE valid_to = 8640000000000000;
+  FROM edge_versions WHERE ${LIVE_SQL};
 
 CREATE TABLE IF NOT EXISTS archival_state (
   table_name TEXT PRIMARY KEY, watermark INTEGER NOT NULL, updated_at INTEGER NOT NULL
@@ -194,25 +217,27 @@ export async function init(client: DbClient, embedder?: Embedder): Promise<void>
 	const dialect = dialectOf(client);
 	// Read before the DDL: afterwards a fresh namespace and a pre-stamp one look alike.
 	const prior = await readSchemaVersion(client);
+	// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). DuckDB: FKs
+	// are not declared, there is no WAL, and the writer is serialized in-process. SQLite: the
+	// platform driver owns journal mode (OPFS may require rollback journaling).
+	if (dialect === 'libsql') await client.execute('PRAGMA journal_mode = WAL');
+	if (dialect === 'libsql' || dialect === 'sqlite') await applyConnPragmas(client);
+	// An existing namespace below this layout is upgraded BEFORE the DDL, so the DDL's new
+	// indexes and views never meet old tables. A fresh one just gets the DDL and a stamp.
+	const upgradeFirst = prior !== null && prior < SCHEMA_VERSION;
+	if (upgradeFirst) await upgradeSchema(client, prior);
 	switch (dialect) {
 		case 'postgres':
-			// Postgres: no per-connection pragmas (FKs always on, MVCC, WAL inherent). The
-			// `vector` extension is expected to exist in `public` (on the search_path).
+			// The `vector` extension is expected to exist in `public` (on the search_path).
 			await client.executeMultiple(postgresSchema());
 			break;
 		case 'duckdb':
-			// No pragmas: FKs are not declared, there is no WAL to set, and there is no
-			// lock-based contention to time out — the writer is serialized in-process.
 			await client.executeMultiple(duckdbSchema());
 			break;
 		case 'libsql':
-			await client.execute('PRAGMA journal_mode = WAL');
-			await applyConnPragmas(client);
 			await client.executeMultiple(schema(dialect));
 			break;
 		case 'sqlite':
-			// The platform driver owns journal mode (OPFS may require rollback journaling).
-			await applyConnPragmas(client);
 			await client.executeMultiple(schema(dialect));
 			// Require a working FTS index even if an executor failed to surface a DDL
 			// error from its script API. Search must never silently become unavailable.
@@ -221,19 +246,21 @@ export async function init(client: DbClient, embedder?: Embedder): Promise<void>
 		default:
 			assertNever(dialect, 'init');
 	}
-	await upgradeSchema(client, prior);
+	if (!upgradeFirst) await upgradeSchema(client, prior);
 	if (embedder) await ensureEmbeddings(client, embedder);
 }
 
 /**
  * A structural change `CREATE ... IF NOT EXISTS` and {@link ensureColumn} cannot express (a
  * rename, a drop, a type change). `STRUCTURE_STEPS[i]` lifts a namespace from v(i+1) to
- * v(i+2), mirroring upcaster steps. Steps run after the DDL, once, in order; one process
- * should run `init` first after an upgrade.
+ * v(i+2), mirroring upcaster steps. On an existing namespace `init` runs them BEFORE the DDL,
+ * once, in order, so each step must bring the tables it changes to its version's shape on its
+ * own, and be idempotent. One process should run `init` first after an upgrade.
  */
 export type StructureStep = (client: DbClient) => Promise<void>;
 
-const STRUCTURE_STEPS: StructureStep[] = [];
+/** v1 → v2: recorded time ({@link upgradeToRecordedTime}). */
+const STRUCTURE_STEPS: StructureStep[] = [(client) => upgradeToRecordedTime(client)];
 
 /** The table layout this build of graphx creates and expects. */
 export const SCHEMA_VERSION: number = STRUCTURE_STEPS.length + 1;

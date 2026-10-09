@@ -177,6 +177,116 @@ fresh process, so the first write after reopening a durable namespace failed on 
 it now restarts both sequences past the manifest's `verHigh`/`seqHigh`, and commit never lowers
 those marks (a purge of the newest rows cannot cause reuse).
 
+### Phase 1 plan (2026-10-08)
+
+- **Columns** `recorded_from` (default 0) and `recorded_to` (default FOREVER) on both version
+  tables, every dialect. Defaults exist so `ALTER ... ADD COLUMN` works and raw SQL inserts keep
+  working; every graphx insert sets `recorded_from` explicitly. Live writes stamp it with the
+  same instant as `valid_from`; bulk loads stamp the load instant; fork copies both columns.
+- **Indexes** `nv_bitemporal` / `ev_src_bitemporal` / `ev_dst_bitemporal` replace `nv_asof` /
+  `ev_src_asof` / `ev_dst_asof` (same leading columns). `nv_recorded` / `ev_recorded` for CDC.
+  `nv_one_live` / `ev_one_live` on SQLite and Postgres; DuckDB has no partial indexes, so the
+  write path holds the invariant there (as it already does for constraints).
+- **Order in `init`:** on an existing namespace below v2, the upgrade step runs **before** the
+  DDL, so v2 indexes and views never meet v1 tables. A fresh namespace gets the DDL and a stamp.
+- **Step v1 → v2** (idempotent, so a re-run or an unstamped v2 namespace is a no-op):
+  1. Add the columns. SQLite/libSQL rebuild both tables with `AUTOINCREMENT` (copy keeps `ver`,
+     so the FTS index stays valid); views and constraint indexes are dropped first and
+     re-declared after from their index names (`ux_*`), which also gives them the v2 predicate.
+     Postgres adds columns and re-declares `ux_*` the same way. DuckDB adds columns (durable
+     snapshots already load into v2 tables).
+  2. Backfill `recorded_from = valid_from WHERE recorded_from = 0`, and record the highest
+     backfilled `ver` in `graph_meta` (`recorded_backfill_ver`) so `doctor` can report it.
+  3. Find ids with more than one current open row. If any, throw `OverlapError` listing them;
+     the namespace stays at v1 (columns present, not stamped).
+- **`graphx doctor`** reports overlaps and backfilled rows. `--repair-overlaps` sets
+  `recorded_to = now` on all but the highest `ver` per damaged id, then finishes `init`.
+  Until phase 3 threads `recordedAsOf` through past reads, a repaired id still shows both
+  rows to an `asOf` read inside the damaged interval (as it did before the repair); live reads
+  are correct immediately.
+
+**Phase 1 status (2026-10-08, done, uncommitted).** As planned above. Code: `core/upgrade.ts`
+(step, `OverlapError`, `findOverlaps`, `repairOverlaps`), `schema.ts` (`init` order, SQLite table
+DDL), `dialect-sql.ts` (`LIVE_SQL` and shared index DDL), constraint predicates, and every live-row
+predicate in the write path and live reads now also requires `recorded_to = FOREVER`. Two things
+beyond the plan: DuckDB's Parquet live/history split is on the full live predicate, and DuckDB
+can't `ADD COLUMN ... NOT NULL`, so an upgraded local DuckDB file has nullable recorded columns
+(fresh and snapshot-loaded tables are `NOT NULL`). Tests: `test/core/schema-v2.test.ts`, doctor in
+`test/cli/cli.test.ts`; green on libSQL, DuckDB, Postgres and bql.sh.
+
+### Phase 2 plan (2026-10-08)
+
+- **Primitive** `core/portion.ts` `supersedePortion(tx, table, id, [from, to), recordedAt)`: every
+  current belief of `id` overlapping the portion gets `recorded_to = recordedAt`, and its parts
+  outside the portion are re-inserted as new current beliefs (same content, `recorded_from =
+recordedAt`). The caller then inserts the new row (assert) or nothing (retract). `recordedAt` is
+  bumped past every superseded row's `recorded_from`, so no recorded interval is empty. Statement
+  order (close, remainders, new row) keeps `nv_one_live` and constraint indexes satisfied.
+- **Write API.** `validFrom` on `addNode`/`addEdge` inputs and on an options argument of
+  `updateNode`/`deleteNode`/`deleteEdge`. New `correctNode(id, patch, { validFrom, validTo? })`,
+  `correctEdge(id, patch, …)`, `retractNode(id, { validFrom, validTo? })`, `retractEdge`; `validTo`
+  defaults to FOREVER. A correction's content is the patch merged onto the belief in force at
+  `validFrom` (else the live row). Corrections emit `node.correct`/`edge.correct`, retractions
+  `node.retract`/`edge.retract`.
+- **D3.** `validFrom ≤ now`, and a finite `validTo ≤ now`, on every write path including bulk.
+  A finite `validTo` in the future would be future dating too: the row would stop being live
+  without a write.
+- **Reads stay correct now, not in phase 3.** Superseded rows exist from this phase on, so every
+  as-of predicate, `history`, `diff`, `timeline`, authz reads and fork's valid cut filter to
+  current beliefs (`recorded_to = FOREVER`). Phase 3 replaces that filter with `recordedAsOf`.
+- **CDC.** An update now inserts a remainder row too, and a delete inserts one, so `changeFeed`
+  surfaces deletes and supersessions for the first time (A.3 no longer holds).
+- **Bulk (D5).** `loadTs` → `validFrom`; `mode: 'refuse' | 'correct'`; `correct` applies the
+  primitive in memory against stored current beliefs inside the same batch.
+- **upcastAll (D9)** corrects each lagging live row over its own interval. **Authz** revocation
+  goes through the primitive. Atomic scope uses the same code paths.
+
+**Phase 2 status (2026-10-08, done, uncommitted).** As planned above (`core/portion.ts`, write
+paths in `graph.ts`, `bulk.ts` `planStoredOverlaps`, `auth/store.ts` `deleteTuple`, `upcastAll`).
+Consequences to know: an update writes 3 rows (superseded original, its closed remainder, the
+successor); a past read's `revision` is the remainder's `ver`, so it changes after a later update
+while the content stays the same; `history` returns current beliefs only until phase 3 adds
+superseded ones with a `current` flag; the HTTP `/bulk` body field is `validFrom` (was `loadTs`),
+not yet gated by `allowValidTime` (phase 4). Tests: `test/core/correction.test.ts` (incl. a
+model-based property test, mutation-checked); green on libSQL, DuckDB, Postgres and bql.sh.
+
+**Phase 3 status (2026-10-08, done, uncommitted).** `temporal.ts` `slicePredicate(alias, { asOf,
+recordedAsOf })` / `isLive` / `resolveSlice` replace `asOfPredicate` and every hand-written filter.
+`recordedAsOf` is on `getNode`, `getNodeVersion`, `getNodeContent`, `neighbors(Page)`, `listNodes`,
+`listNodeVersions`, `listEdges`, `graphSlice`, `match().recordedAsOf()`, every algorithm option and
+`snapshotCSR(raw, slice)`, `journey`, `retrieve` and `hybridRetrieve`. `history` returns every row
+with `current`; `diff` and `timeline` take `{ axis }`. One deviation from D7: the change feed keeps
+the phase-0 `ver` keyset rather than `(recorded_from, ver)`. `ver` is insertion order, which is
+recorded order without the cross-writer clock skew a `recorded_from` keyset could skip over; the
+feed rows now carry `recorded_from`/`recorded_to`. Also fixed: `graphSlice` links had no `ORDER BY`
+(nondeterministic on Postgres). jev helpers (`jev/changes.ts`, `when.ts`, `taxonomy.ts`) still take
+`asOf` only; HTTP, React, MCP and the admin History tab are phase 4 — until then the admin History
+tab lists superseded rows unmarked. Tests: `test/core/recorded-time.test.ts` (correction both
+ways, equivalence over live-only writes, every read path), mutation-checked; green on libSQL,
+DuckDB, Postgres and bql.sh.
+
+**Phase 4 status (2026-10-08, done, uncommitted).** Fork D8: `fork({ asOf, recordedAsOf })`, one
+`cutSql` shared by the copy and the native (bql.sh) trim; `ForkResult.recordedAsOf`; CLI
+`graphx fork --recorded-as-of`. Authz D6: checks and lists read current beliefs (test: a past
+retraction changes past checks, never the current one). HTTP D11: `ServeConfig.allowValidTime`;
+`recordedAsOf` on every read; `validFrom` on create/update/delete/bulk (bulk rows also `id`,
+`validTo`; body `mode`); `POST /nodes|edges/:id/correct|retract`; `/diff` and `/timeline` take
+`axis`; D3/no-version errors map to 400/404. MCP mirrors the new routes (retracts flagged
+destructive, corrections idempotent). React: `recordedAsOf` on read hooks and in their keys,
+`useCorrectNode`/`useRetractNode`/`useCorrectEdge`/`useRetractEdge`, `validFrom` on update/delete,
+`useBulkLoad` fixed (`validFrom`, `mode`). Admin: History shows superseded beliefs struck through
+with recorded/superseded times; a second "Recorded" time bar drives `recordedAsOf` (URL, banner,
+filter chip, read-only), verified in a browser. Not done: event payloads do not carry
+`validFrom`/`validTo`/`recordedAt` (the `ts` field is the valid-time instant). Known flake,
+pre-existing: admin `TimelineBar … stops at the end of the timeline` fails ~1 in 6 runs on the
+committed code too.
+
+**Phase 5 status (2026-10-08, done, uncommitted).** README "Time travel" rewritten around the two
+axes with a worked correction (`examples/correction-demo.ts`, real output); "bitemporal" restored
+at line 5, the "Every write is bitemporal" section and the Jev/portable/MMA mentions; the site card
+now describes both axes and shows the correction demo; admin README updated. All five phases are
+done.
+
 ## 6. Tests (critical paths only)
 
 Phase 0

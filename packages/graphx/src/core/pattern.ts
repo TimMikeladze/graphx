@@ -1,6 +1,7 @@
 import { type DbClient, type Dialect, dialectOf, type SqlRow } from './dialect.ts';
 import { distinctSelect, jsonEqArg, jsonEqExpr } from './dialect-sql.ts';
 import { FOREVER } from './runtime.ts';
+import { isLive, slicePredicate, type TimeSlice } from './temporal.ts';
 import type { GraphSchema } from './graph.ts';
 import type { NodeType, NodeOf } from './define-graph-schema.ts';
 import {
@@ -17,13 +18,13 @@ import { Upcaster, type UpcasterRegistry } from './upcast.ts';
  * P5 — PatternBuilder (§8). A fluent, typed builder that compiles to raw SQL — no
  * Cypher, no DSL (§2.2/§17). Each `.node(alias, type)` extends a type accumulator
  * `Acc` (alias → type); `.out/.in/.both` add edge steps; `.rel(...)` adds the ONE
- * allowed variable-length segment (§17); `.where` adds prop filters; `.asOf` swaps
+ * allowed variable-length segment (§17); `.where` adds prop filters; `.asOf` / `.recordedAsOf` swap
  * the now-views (`nodes`/`edges`) for the version tables with the half-open temporal
- * predicate `valid_from <= ? AND ? < valid_to` (D3).
+ * slice predicate from `slicePredicate` (valid and recorded time, D1).
  *
  * Param order is load-bearing (acceptance §16): args are pushed in the SAME order
  * their `?` placeholders appear in the textual SQL. Per aliased source the order is
- * [rel? (edges only), temporal (asOf only), where conds].
+ * [rel? (edges only), temporal (past slices only), where conds].
  */
 
 /** Edge direction for a fixed-length step. */
@@ -123,7 +124,8 @@ export interface PatternQuery<
 export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, NodeType<S>>> {
 	private readonly steps: Step[] = [];
 	private readonly conds: WhereCond[] = [];
-	private asOfT: number | null = null;
+	/** The read's time slice; empty ⇒ live (the now-views). */
+	private slice: TimeSlice = {};
 	/** P12 read-time upcaster (§15) applied in {@link reshape}; empty registry ⇒ identity. */
 	private readonly upcaster: Upcaster;
 
@@ -184,21 +186,27 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, No
 	}
 
 	/**
-	 * Time-travel: switch sources from the now-views to `node_versions`/`edge_versions`
-	 * and apply the half-open temporal predicate at every aliased source (D3). Pass a
-	 * past `t` (`t < FOREVER`); never bind `FOREVER` here.
+	 * Time-travel in valid time: the world as it stood at `t`. Switches sources from the
+	 * now-views to `node_versions`/`edge_versions` and applies the slice predicate at every
+	 * aliased source (D1).
 	 */
 	asOf(t: number): this {
-		this.asOfT = t;
+		this.slice = { ...this.slice, asOf: t };
+		return this;
+	}
+
+	/** Time-travel in recorded time: what graphx believed at `t`. Combines with {@link asOf}. */
+	recordedAsOf(t: number): this {
+		this.slice = { ...this.slice, recordedAsOf: t };
 		return this;
 	}
 
 	private nodeSrc(): string {
-		return this.asOfT === null ? 'nodes' : 'node_versions';
+		return isLive(this.slice) ? 'nodes' : 'node_versions';
 	}
 
 	private edgeSrc(): string {
-		return this.asOfT === null ? 'edges' : 'edge_versions';
+		return isLive(this.slice) ? 'edges' : 'edge_versions';
 	}
 
 	/** The backend dialect; defaults to libSQL when built without a client (the SQL contract). */
@@ -224,11 +232,12 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, No
 		return sql;
 	}
 
-	/** Temporal predicate for an aliased source (asOf only); pushes its 2 args. */
+	/** Slice predicate for an aliased version-table source (none on the views); pushes its args. */
 	private temporal(alias: string, args: unknown[]): string {
-		if (this.asOfT === null) return '';
-		args.push(this.asOfT, this.asOfT);
-		return ` AND ${alias}.valid_from <= ? AND ? < ${alias}.valid_to`;
+		if (isLive(this.slice)) return '';
+		const pred = slicePredicate(alias, this.slice);
+		args.push(...pred.args);
+		return ` AND ${pred.sql}`;
 	}
 
 	/**
@@ -312,8 +321,7 @@ export class PatternBuilder<S extends GraphSchema, Acc extends Record<string, No
 		const adjConds = (eAlias: string): string => {
 			let s = `${eAlias}.rel = ?`;
 			args.push(v.rel);
-			s += this.asOfT === null ? '' : ` AND ${eAlias}.valid_from <= ? AND ? < ${eAlias}.valid_to`;
-			if (this.asOfT !== null) args.push(this.asOfT, this.asOfT);
+			s += this.temporal(eAlias, args);
 			return s;
 		};
 

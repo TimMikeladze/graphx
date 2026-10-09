@@ -426,13 +426,20 @@ test('parseForkArgs: target namespace, ISO or epoch-ms --as-of', () => {
 		config: './graphx.config.ts',
 		target: 'what-if',
 		asOf: undefined,
+		recordedAsOf: undefined,
 	});
+	expect(parseForkArgs(['fork', 'b', '--recorded-as-of', '1700000000000']).recordedAsOf).toBe(
+		1700000000000,
+	);
 	expect(parseForkArgs(['fork', 'b', '--as-of', '2026-09-30T00:00:00Z']).asOf).toBe(
 		Date.parse('2026-09-30T00:00:00Z'),
 	);
 	expect(parseForkArgs(['fork', 'b', '--as-of', '1700000000000']).asOf).toBe(1700000000000);
 	expect(() => parseForkArgs(['fork'])).toThrow('missing <namespace>');
 	expect(() => parseForkArgs(['fork', 'b', '--as-of', 'soon'])).toThrow('--as-of');
+	expect(() => parseForkArgs(['fork', 'b', '--recorded-as-of', 'soon'])).toThrow(
+		'--recorded-as-of',
+	);
 });
 
 test('run: fork branches the configured namespace into a new one (libSQL)', async () => {
@@ -543,3 +550,53 @@ export default { schema, upcasters, db: { driver: 'libsql' }, namespace: '${ns}'
 		for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
 	}
 });
+
+test.skipIf(NOT_LIBSQL)(
+	'run: doctor refuses overlapping open versions, --repair-overlaps settles them',
+	async () => {
+		const ns = `cli-overlap-${Date.now()}`;
+		const configPath = join(import.meta.dir, `${ns}.config.ts`);
+		await writeFile(
+			configPath,
+			`import { defineGraphSchema } from '../../src/core/index.ts';
+import { z } from 'zod';
+const schema = defineGraphSchema({ nodes: { device: z.object({ name: z.string() }) }, edges: {} });
+export default { schema, db: { driver: 'libsql' }, namespace: '${ns}' };
+`,
+		);
+		const log = spyOn(console, 'log').mockImplementation(() => {});
+		const out = () => log.mock.calls.map((c) => String(c[0])).join('\n');
+		try {
+			const client = openDb(await loadConfig(configPath));
+			await init(client);
+			// v1 damage from the old bulkLoad bug: two open versions of one id, layout not yet v2
+			await client.execute('DROP INDEX nv_one_live');
+			await client.execute("INSERT INTO node_identity (id) VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAA')");
+			for (const name of ['old', 'reloaded']) {
+				await client.execute({
+					sql: 'INSERT INTO node_versions (id, type, data, valid_from) VALUES (?,?,?,?)',
+					args: ['01ARZ3NDEKTSV4RRFFQ69G5FAA', 'device', JSON.stringify({ name }), 1],
+				});
+			}
+			await client.execute("UPDATE graph_meta SET value = '1' WHERE key = 'schema_version'");
+
+			await run(['doctor', '--config', configPath]);
+			expect(out()).toContain('01ARZ3NDEKTSV4RRFFQ69G5FAA');
+			expect(out()).toContain('--repair-overlaps');
+			expect(process.exitCode).toBe(1);
+			process.exitCode = 0;
+
+			log.mockClear();
+			await run(['doctor', '--config', configPath, '--repair-overlaps']);
+			expect(out()).toContain('repaired       1 node and 0 edge version(s) are no longer current');
+			expect(out()).toContain('overlaps       0 node id(s), 0 edge id(s)');
+			const r = await client.execute('SELECT data FROM nodes');
+			expect(r.rows.map((row) => JSON.parse(String(row.data)).name)).toEqual(['reloaded']);
+			client.close();
+		} finally {
+			log.mockRestore();
+			await rm(configPath, { force: true });
+			for (const sfx of ['', '-wal', '-shm']) await rm(`${ns}.db${sfx}`, { force: true });
+		}
+	},
+);

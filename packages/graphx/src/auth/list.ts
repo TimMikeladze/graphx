@@ -55,10 +55,10 @@ async function reachableOfType(
 					SELECT ?
 					UNION
 					SELECT e.dst FROM edge_versions e JOIN reach r ON e.src = r.id
-						WHERE e.valid_from <= ? AND e.valid_to > ?
+						WHERE e.valid_from <= ? AND e.valid_to > ? AND e.recorded_to = 8640000000000000
 				)
 				SELECT n.id AS id FROM reach r JOIN node_versions n ON n.id = r.id
-				WHERE n.type = ? AND n.valid_from <= ? AND n.valid_to > ? AND n.id <> ? AND n.id > ?
+				WHERE n.type = ? AND n.valid_from <= ? AND n.valid_to > ? AND n.recorded_to = 8640000000000000 AND n.id <> ? AND n.id > ?
 				ORDER BY n.id LIMIT ?`;
 	const args =
 		asOf === undefined

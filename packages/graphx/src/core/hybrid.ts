@@ -1,6 +1,7 @@
 import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
 import { embReadExpr, ftsSeedAsOf, ftsSeedLive } from './dialect-sql.ts';
-import { FOREVER, ftsIndexOwner } from './runtime.ts';
+import { ftsIndexOwner } from './runtime.ts';
+import { isLive, slicePredicate, type TimeSlice } from './temporal.ts';
 import type { Embedder } from './embedder.ts';
 import { tokenize } from './fts/tokenize.ts';
 import type { QueryLimits } from './governance.ts';
@@ -70,6 +71,8 @@ export interface HybridRetrieveOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** RRF constant (default 60). */
 	rrfK?: number;
 	/** Optional cross-encoder/LLM rerank of the expanded candidates (§19.4). */
@@ -156,17 +159,17 @@ export async function ftsSeedIds(
 	raw: DbClient,
 	query: string,
 	fetchK: number,
-	asOf: number | undefined,
+	slice: TimeSlice,
 ): Promise<string[]> {
 	const d = dialectOf(raw);
 	const arg = ftsArg(d, query);
 	if (arg === null) return [];
 	await ftsIndexOwner(raw)?.ensureFtsFresh();
-	const isPast = asOf !== undefined && asOf < FOREVER;
-	const r = isPast
+	const pred = slicePredicate('n', slice);
+	const r = !isLive(slice)
 		? await raw.execute({
-				sql: ftsSeedAsOf(d),
-				args: [arg, asOf as number, asOf as number, fetchK],
+				sql: ftsSeedAsOf(d, pred.sql),
+				args: [arg, ...pred.args, fetchK],
 			})
 		: await raw.execute({ sql: ftsSeedLive(d), args: [arg, fetchK] });
 	return r.rows.map((row) => String(row.id));
@@ -178,22 +181,22 @@ export async function hybridSeedLists(
 	embedder: Embedder,
 	query: string,
 	fetchK: number,
-	asOf: number | undefined,
+	slice: TimeSlice,
 ): Promise<{ vec: string[]; fts: string[]; snippets: Map<string, string | null>; qEmb: number[] }> {
 	const qEmb = await embedder.embedOne(query);
-	const isPast = asOf !== undefined && asOf < FOREVER;
+	const isPast = !isLive(slice);
 	let vecRows = await vectorSeedRows(raw, qEmb, isPast ? fetchK * SEED_MULTIPLIER : fetchK);
 	if (isPast) {
 		const keep = new Set(
 			await idsValidAt(
 				raw,
 				vecRows.map((r) => r.id),
-				asOf as number,
+				slice,
 			),
 		);
 		vecRows = vecRows.filter((r) => keep.has(r.id)).slice(0, fetchK);
 	}
-	const fts = await ftsSeedIds(raw, query, fetchK, asOf);
+	const fts = await ftsSeedIds(raw, query, fetchK, slice);
 	return {
 		vec: vecRows.map((r) => r.id),
 		fts,
@@ -322,7 +325,7 @@ export async function hybridRetrieve<S extends GraphSchema = GraphSchema>(
 		embedder,
 		opts.query,
 		fetchK,
-		opts.asOf,
+		opts,
 	);
 	const seeds = fuseSeeds(vec, fts, rrfK, k, snippets);
 	if (seeds.length === 0) return [];
@@ -331,7 +334,7 @@ export async function hybridRetrieve<S extends GraphSchema = GraphSchema>(
 		maxDepth: opts.maxDepth ?? 2,
 		direction: opts.direction ?? 'both',
 		rels: opts.rels && opts.rels.length > 0 ? opts.rels : null,
-		asOf: opts.asOf,
+		slice: { asOf: opts.asOf, recordedAsOf: opts.recordedAsOf },
 		limits: resolveLimits(opts.limits),
 		upcast: opts.upcast,
 	});

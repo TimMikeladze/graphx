@@ -83,6 +83,13 @@ export interface OpenApiOptions {
 export interface ServeConfig<S extends GraphSchema> {
 	/** The shared control-plane client (registry of tenants/projects/memberships). */
 	control: DbClient;
+	/**
+	 * Accept valid time on writes (D11): `validFrom` / `validTo` on create, update, delete and
+	 * bulk bodies, and the `/correct` and `/retract` routes. Off by default — writing about the
+	 * past rewrites what the graph says happened, so it is the operator's call. Reads take
+	 * `asOf` and `recordedAsOf` either way.
+	 */
+	allowValidTime?: boolean;
 	/** The graph schema every project DB in this deployment is served with. */
 	schema: S;
 	/** Authn: verify the request → principal. Throw to reject (mapped to 401). */
@@ -127,7 +134,7 @@ export interface ServeConfig<S extends GraphSchema> {
 	metrics?: MetricsSink;
 	/**
 	 * Eventing. When set, every per-project `Graph` emits typed mutation events (create/update/
-	 * delete/supersede — including the pure closes the CDC feed misses), scoped per request to
+	 * correct/delete/retract/supersede), scoped per request to
 	 * `{tenant, project}`. `sink` is an in-proc consumer (a {@link import('./events.ts').GraphEventBus});
 	 * `outbox: true` also co-writes each event into the durable `graph_outbox` table (tailed by
 	 * {@link import('./temporal.ts').outboxTail}). Omit ⇒ no events, zero overhead (additive).
@@ -266,6 +273,8 @@ const nodeInputSchema = z.object({
 	uri: z.string().optional(),
 	content_hash: z.string().optional(),
 	content_type: z.string().optional(),
+	/** Valid-time start (epoch ms, default now, never later). Needs `ServeConfig.allowValidTime`. */
+	validFrom: z.number().int().optional(),
 });
 
 /** PATCH /nodes/:id body — every field optional; `Graph.updateNode` merges onto the live version. */
@@ -277,6 +286,8 @@ const patchNodeSchema = z.object({
 	uri: z.string().optional(),
 	content_hash: z.string().optional(),
 	content_type: z.string().optional(),
+	/** Valid-time start (epoch ms, default now, never later). Needs `ServeConfig.allowValidTime`. */
+	validFrom: z.number().int().optional(),
 });
 
 /** POST /edges body. `src`/`dst` are ULID node ids; data validated per-rel by `addEdge`. */
@@ -286,6 +297,32 @@ const edgeInputSchema = z.object({
 	dst: z.string(),
 	weight: z.number().nonnegative().optional(), // mirror the DB CHECK(weight >= 0) at the wire layer
 	data: z.record(z.string(), z.unknown()).optional(),
+	/** Valid-time start (epoch ms, default now, never later). Needs `ServeConfig.allowValidTime`. */
+	validFrom: z.number().int().optional(),
+});
+
+/** DELETE /nodes/:id and /edges/:id query — when the delete takes effect. */
+const deleteQuerySchema = z.object({ validFrom: numQuery.optional() });
+
+/** POST /nodes/:id/correct body: the patch, and the valid-time portion it applies to. */
+const correctNodeSchema = patchNodeSchema.omit({ validFrom: true }).extend({
+	validFrom: z.number().int(),
+	validTo: z.number().int().optional(),
+});
+
+/** POST /edges/:id/correct body. Endpoints and rel never change. */
+const correctEdgeSchema = z.object({
+	weight: z.number().nonnegative().optional(),
+	data: z.record(z.string(), z.unknown()).optional(),
+	source: z.string().nullable().optional(),
+	validFrom: z.number().int(),
+	validTo: z.number().int().optional(),
+});
+
+/** POST /nodes/:id/retract and /edges/:id/retract body: the portion to remove. */
+const retractSchema = z.object({
+	validFrom: z.number().int(),
+	validTo: z.number().int().optional(),
 });
 
 /** GET /nodes/:id/neighbors query. */
@@ -293,6 +330,7 @@ const neighborQuerySchema = z.object({
 	direction: directionSchema.optional(),
 	rel: z.string().optional(),
 	asOf: numQuery.optional(),
+	recordedAsOf: numQuery.optional(),
 });
 
 /** GET /nodes/:id/neighborsPage query — neighbor filters + keyset pagination (§19.7). */
@@ -302,7 +340,7 @@ const neighborPageQuerySchema = neighborQuerySchema.extend({
 });
 
 /** GET /nodes/:id and GET /nodes/:id/content query — the as-of read instant. */
-const asOfQuerySchema = z.object({ asOf: numQuery.optional() });
+const asOfQuerySchema = z.object({ asOf: numQuery.optional(), recordedAsOf: numQuery.optional() });
 
 /** GET /retrieve query (§14). `asOf`/`k`/`maxDepth` coerced from strings. */
 const retrieveQuerySchema = z.object({
@@ -311,6 +349,7 @@ const retrieveQuerySchema = z.object({
 	maxDepth: numQuery.optional(),
 	direction: directionSchema.optional(),
 	asOf: numQuery.optional(),
+	recordedAsOf: numQuery.optional(),
 });
 
 /** POST /journey body (§14). `start` = ULID, `from` = epoch ms. */
@@ -320,6 +359,7 @@ const journeyInputSchema = z.object({
 	rels: z.array(z.string()).optional(),
 	direction: directionSchema.optional(),
 	maxDepth: z.number().optional(),
+	recordedAsOf: z.number().int().optional(),
 });
 
 /** GET /nodes query — type/full-text/as-of filters + keyset pagination. */
@@ -327,6 +367,7 @@ const nodeListQuerySchema = z.object({
 	type: z.string().optional(),
 	q: z.string().optional(),
 	asOf: numQuery.optional(),
+	recordedAsOf: numQuery.optional(),
 	limit: numQuery.optional(),
 	cursor: z.string().optional(),
 });
@@ -338,6 +379,7 @@ const edgeListQuerySchema = z.object({
 	dst: z.string().optional(),
 	source: z.string().optional(),
 	asOf: numQuery.optional(),
+	recordedAsOf: numQuery.optional(),
 	limit: numQuery.optional(),
 	cursor: z.string().optional(),
 });
@@ -362,6 +404,7 @@ const graphSliceQuerySchema = z.object({
 	type: z.string().optional(),
 	q: z.string().optional(),
 	asOf: numQuery.optional(),
+	recordedAsOf: numQuery.optional(),
 });
 
 /** POST /algorithms/shortest-path body (§8). `heuristic` is SDK-only (a function, not wire-serializable). */
@@ -373,6 +416,7 @@ const shortestPathSchema = z.object({
 	rels: z.array(z.string()).optional(),
 	maxDepth: z.number().int().nonnegative().optional(),
 	asOf: z.number().optional(),
+	recordedAsOf: z.number().int().optional(),
 	types: z.array(z.string()).optional(),
 });
 
@@ -382,6 +426,7 @@ const analyticsScope = {
 	rels: z.array(z.string()).optional(),
 	types: z.array(z.string()).optional(),
 	asOf: z.number().optional(),
+	recordedAsOf: z.number().int().optional(),
 };
 
 /** POST /algorithms/pagerank body. */
@@ -450,6 +495,7 @@ const matchInputSchema = z.object({
 	),
 	where: z.array(z.object({ alias: z.string(), key: z.string(), value: z.unknown() })).optional(),
 	asOf: z.number().optional(),
+	recordedAsOf: z.number().int().optional(),
 	select: z.array(z.string()).nonempty(),
 	page: z
 		.object({ limit: z.number().int().positive().optional(), cursor: z.string().optional() })
@@ -465,13 +511,20 @@ const bulkRowSchema = z.object({
 	uri: z.string().optional(),
 	content_hash: z.string().optional(),
 	content_type: z.string().optional(),
+	/** Reuse an identity (several rows sharing it are versions of it). With `validFrom`/`validTo`
+	 * these need `ServeConfig.allowValidTime`. */
+	id: z.string().optional(),
+	validFrom: z.number().int().optional(),
+	validTo: z.number().int().optional(),
 });
 
-/** POST /bulk body (§19.8) — batch node ingestion. `loadTs` shares one `valid_from` across rows. */
+/** POST /bulk body (§19.8) — batch node ingestion. `validFrom` shares one valid-time start across rows. */
 const bulkInputSchema = z.object({
 	rows: z.array(bulkRowSchema),
 	chunkSize: z.number().int().positive().optional(),
-	loadTs: z.number().optional(),
+	validFrom: z.number().int().optional(),
+	/** `refuse` (default) or `correct` an overlap with stored versions. `correct` needs `allowValidTime`. */
+	mode: z.enum(['refuse', 'correct']).optional(),
 });
 
 /**
@@ -485,6 +538,7 @@ const hybridInputSchema = z.object({
 	direction: directionSchema.optional(),
 	rels: z.array(z.string()).optional(),
 	asOf: z.number().optional(),
+	recordedAsOf: z.number().int().optional(),
 	rrfK: z.number().positive().optional(),
 	mmr: z.object({ k: z.number().int().positive(), lambda: z.number().optional() }).optional(),
 });
@@ -504,6 +558,8 @@ const changesQuerySchema = z.object({
 const diffQuerySchema = z.object({
 	t1: numQuery.openapi({ param: { required: true } }),
 	t2: numQuery.openapi({ param: { required: true } }),
+	/** `valid` (default): what changed in the world. `recorded`: what graphx learned or corrected. */
+	axis: z.enum(['valid', 'recorded']).optional(),
 });
 
 /** GET /timeline query — the window to bucket and how many slots to bucket it into. */
@@ -511,6 +567,7 @@ const timelineQuerySchema = z.object({
 	from: numQuery.optional(),
 	to: numQuery.optional(),
 	buckets: posIntQuery.optional(),
+	axis: z.enum(['valid', 'recorded']).optional(),
 });
 
 /** GET /timeline response — change-point extent, density histogram, snap ticks. */
@@ -799,6 +856,19 @@ function requireGraph<S extends GraphSchema>(
 	});
 }
 
+/**
+ * D11: valid time on a write is opt-in for the operator. A request that sets it on a server that
+ * has not opted in is refused (400) rather than silently written as "now".
+ */
+function requireValidTime(cfg: { allowValidTime?: boolean }, ...values: unknown[]): void {
+	if (!cfg.allowValidTime && values.some((v) => v !== undefined)) {
+		throw new HTTPException(400, {
+			message:
+				'valid time (validFrom/validTo, correct, retract) requires ServeConfig.allowValidTime',
+		});
+	}
+}
+
 /** Map domain errors to HTTP: HTTPException passthrough, AuthzError→403/404, validation→400. */
 function onError(err: Error, c: Context) {
 	// Normalize HTTPException to the same JSON `{ error }` shape every other branch uses.
@@ -817,6 +887,13 @@ function onError(err: Error, c: Context) {
 	// Graph.updateNode/deleteEdge/deleteNode on a missing id -> the target doesn't exist (404, not 400).
 	if (/^(updateNode|deleteEdge|deleteNode): no live version/.test(err.message)) {
 		return c.json({ error: err.message }, 404);
+	}
+	if (/^(correct|retract)(Node|Edge): '[^']*' has no version/.test(err.message)) {
+		return c.json({ error: err.message }, 404);
+	}
+	// D3 (no future dating) and malformed intervals, from any write path.
+	if (/^\w+(?: '[^']*')?: valid(From|To) /.test(err.message)) {
+		return c.json({ error: err.message }, 400);
 	}
 	// The §19.1 write-retry envelope and the snapshot commit protocol both give up with
 	// this message after exhausting their budget against a contended writer. A 500 would
@@ -972,9 +1049,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 201: json('Created', nodeSchema), ...WRITE_ERRORS },
 			}),
 			async (c) => {
-				const node = await c
-					.get('graph')
-					.addNode(c.req.valid('json') as AddNodeInput<S, NodeType<S>>);
+				const input = c.req.valid('json');
+				requireValidTime(cfg, input.validFrom);
+				const node = await c.get('graph').addNode(input as AddNodeInput<S, NodeType<S>>);
 				return c.json(node as WireNode, 201);
 			},
 		)
@@ -994,7 +1071,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 201: json('Created', edgeSchema), ...WRITE_ERRORS },
 			}),
 			async (c) => {
-				const edge = await c.get('graph').addEdge(c.req.valid('json') as AddEdgeInput<S, Rel<S>>);
+				const input = c.req.valid('json');
+				requireValidTime(cfg, input.validFrom);
+				const edge = await c.get('graph').addEdge(input as AddEdgeInput<S, Rel<S>>);
 				return c.json(edge, 201);
 			},
 		)
@@ -1035,7 +1114,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 			}),
 			async (c) => {
 				const graph = c.get('graph');
-				await graph.updateNode(c.req.param('id'), c.req.valid('json'));
+				const { validFrom, ...patch } = c.req.valid('json');
+				requireValidTime(cfg, validFrom);
+				await graph.updateNode(c.req.param('id'), patch, { validFrom });
 				// updateNode succeeded, so the live version exists — the `| null` is unreachable here.
 				return c.json((await graph.getNode(c.req.param('id'))) as WireNode, 200);
 			},
@@ -1051,30 +1132,125 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				summary: 'Delete an edge',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
-				request: { params: idParams },
+				request: { params: idParams, query: deleteQuerySchema },
 				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
 			}),
 			async (c) => {
-				await c.get('graph').deleteEdge(c.req.param('id'));
+				const { validFrom } = c.req.valid('query');
+				requireValidTime(cfg, validFrom);
+				await c.get('graph').deleteEdge(c.req.param('id'), { validFrom });
 				return c.body(null, 204);
 			},
 		)
-		// Retract a node (bitemporal close, no successor). 204 on success; an unknown id
-		// throws `no live version` -> 404. Mirrors deleteEdge.
+		// Delete a node (it stops existing from now, or `validFrom`). 204 on success; an unknown
+		// id throws `no live version` -> 404. Mirrors deleteEdge.
 		.openapi(
 			createRoute({
 				method: 'delete',
 				path: '/t/{tenant}/p/{project}/nodes/{id}',
 				operationId: 'delete_node',
 				tags: ['write'],
-				summary: 'Retract a node',
+				summary: 'Delete a node',
 				security: SECURITY,
 				middleware: [requireGraph(cfg, 'write')],
-				request: { params: idParams },
+				request: { params: idParams, query: deleteQuerySchema },
 				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
 			}),
 			async (c) => {
-				await c.get('graph').deleteNode(c.req.param('id'));
+				const { validFrom } = c.req.valid('query');
+				requireValidTime(cfg, validFrom);
+				await c.get('graph').deleteNode(c.req.param('id'), { validFrom });
+				return c.body(null, 204);
+			},
+		)
+		// Corrections and retractions over a valid-time portion, the past included (D2). Opt-in
+		// per deployment (D11). An id with nothing to correct or retract -> 404.
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/correct',
+				operationId: 'correct_node',
+				tags: ['write'],
+				summary: 'Correct a node over a valid-time portion',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: idParams,
+					body: { required: true, content: { 'application/json': { schema: correctNodeSchema } } },
+				},
+				responses: { 200: json('OK', nodeSchema), ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				requireValidTime(cfg, true);
+				const graph = c.get('graph');
+				const { validFrom, validTo, ...patch } = c.req.valid('json');
+				await graph.correctNode(c.req.param('id'), patch, { validFrom, validTo });
+				const node = await graph.getNode(c.req.param('id'), { asOf: validFrom });
+				if (!node) throw new HTTPException(404, { message: 'node not found' });
+				return c.json(node as WireNode, 200);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/edges/{id}/correct',
+				operationId: 'correct_edge',
+				tags: ['write'],
+				summary: 'Correct an edge over a valid-time portion',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: idParams,
+					body: { required: true, content: { 'application/json': { schema: correctEdgeSchema } } },
+				},
+				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				requireValidTime(cfg, true);
+				const { validFrom, validTo, ...patch } = c.req.valid('json');
+				await c.get('graph').correctEdge(c.req.param('id'), patch, { validFrom, validTo });
+				return c.body(null, 204);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/nodes/{id}/retract',
+				operationId: 'retract_node',
+				tags: ['write'],
+				summary: 'Retract a node over a valid-time portion',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: idParams,
+					body: { required: true, content: { 'application/json': { schema: retractSchema } } },
+				},
+				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				requireValidTime(cfg, true);
+				await c.get('graph').retractNode(c.req.param('id'), c.req.valid('json'));
+				return c.body(null, 204);
+			},
+		)
+		.openapi(
+			createRoute({
+				method: 'post',
+				path: '/t/{tenant}/p/{project}/edges/{id}/retract',
+				operationId: 'retract_edge',
+				tags: ['write'],
+				summary: 'Retract an edge over a valid-time portion',
+				security: SECURITY,
+				middleware: [requireGraph(cfg, 'write')],
+				request: {
+					params: idParams,
+					body: { required: true, content: { 'application/json': { schema: retractSchema } } },
+				},
+				responses: { 204: { description: 'No Content' }, ...WRITE_ERRORS },
+			}),
+			async (c) => {
+				requireValidTime(cfg, true);
+				await c.get('graph').retractEdge(c.req.param('id'), c.req.valid('json'));
 				return c.body(null, 204);
 			},
 		)
@@ -1091,11 +1267,12 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', z.array(nodeSchema)), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { direction, rel, asOf } = c.req.valid('query');
+				const { direction, rel, asOf, recordedAsOf } = c.req.valid('query');
 				const list = await c.get('graph').neighbors(c.req.param('id'), {
 					direction,
 					rels: rel ? [rel] : undefined,
 					asOf,
+					recordedAsOf,
 					limits: cfg.limits,
 				});
 				return c.json(list as WireNode[], 200);
@@ -1116,11 +1293,12 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', neighborPageSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { direction, rel, asOf, limit, cursor } = c.req.valid('query');
+				const { direction, rel, asOf, recordedAsOf, limit, cursor } = c.req.valid('query');
 				const page = await c.get('graph').neighborsPage(c.req.param('id'), {
 					direction,
 					rels: rel ? [rel] : undefined,
 					asOf,
+					recordedAsOf,
 					limit,
 					cursor,
 					limits: cfg.limits,
@@ -1141,10 +1319,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', nodeListPageSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { type, q, asOf, limit, cursor } = c.req.valid('query');
+				const { type, q, asOf, recordedAsOf, limit, cursor } = c.req.valid('query');
 				const page = await c
 					.get('graph')
-					.listNodes({ type, q, asOf, limit, cursor, limits: cfg.limits });
+					.listNodes({ type, q, asOf, recordedAsOf, limit, cursor, limits: cfg.limits });
 				return c.json(page as z.infer<typeof nodeListPageSchema>, 200);
 			},
 		)
@@ -1180,8 +1358,10 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', graphSliceSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { type, q, asOf } = c.req.valid('query');
-				const slice = await c.get('graph').graphSlice({ type, q, asOf, limits: cfg.limits });
+				const { type, q, asOf, recordedAsOf } = c.req.valid('query');
+				const slice = await c
+					.get('graph')
+					.graphSlice({ type, q, asOf, recordedAsOf, limits: cfg.limits });
 				return c.json(slice, 200);
 			},
 		)
@@ -1425,8 +1605,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				});
 			},
 		)
-		// Snapshot delta over (t1, t2] — the close-aware companion to /changes (reconciles
-		// supersession/delete closes that the valid_from-only feed omits, per decision A.3).
+		// Snapshot delta over (t1, t2] in valid time — what opened or closed in that window.
 		.openapi(
 			createRoute({
 				method: 'get',
@@ -1440,12 +1619,12 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', temporalDiffSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { t1, t2 } = c.req.valid('query');
-				return c.json(await diff(c.get('graph').raw, t1, t2), 200);
+				const { t1, t2, axis } = c.req.valid('query');
+				return c.json(await diff(c.get('graph').raw, t1, t2, { axis }), 200);
 			},
 		)
 		// The change-point timeline behind the admin scrubber. Sibling of /diff and /changes, but
-		// keyed on BOTH valid_from and non-FOREVER valid_to, so retractions are visible (A.3).
+		// keyed on BOTH valid_from and non-FOREVER valid_to, so retractions are visible.
 		.openapi(
 			createRoute({
 				method: 'get',
@@ -1459,8 +1638,14 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', timelineSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { from, to, buckets } = c.req.valid('query');
-				const t = await timeline(c.get('graph').raw, { from, to, buckets, limits: cfg.limits });
+				const { from, to, buckets, axis } = c.req.valid('query');
+				const t = await timeline(c.get('graph').raw, {
+					from,
+					to,
+					buckets,
+					axis,
+					limits: cfg.limits,
+				});
 				return c.json(t, 200);
 			},
 		)
@@ -1519,10 +1704,17 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 201: json('Created', bulkResultSchema), ...WRITE_ERRORS },
 			}),
 			async (c) => {
-				const { rows, chunkSize, loadTs } = c.req.valid('json');
+				const { rows, chunkSize, validFrom, mode } = c.req.valid('json');
+				requireValidTime(
+					cfg,
+					validFrom,
+					mode === 'correct' ? mode : undefined,
+					...rows.flatMap((r) => [r.validFrom, r.validTo]),
+				);
 				const result = await bulkLoad(c.get('graph').raw, cfg.schema, rows as BulkRow<S>[], {
 					chunkSize,
-					loadTs,
+					validFrom,
+					mode,
 					upcasters: cfg.upcasters,
 					embedder: cfg.embedding === 'off' ? undefined : cfg.embedder,
 				});
@@ -1548,7 +1740,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				responses: { 200: json('OK', patternPageSchema), ...READ_ERRORS },
 			}),
 			async (c) => {
-				const { steps, where, asOf, select, page } = c.req.valid('json');
+				const { steps, where, asOf, recordedAsOf, select, page } = c.req.valid('json');
 				// Guard select against undeclared aliases up front — otherwise the compiled SQL
 				// references a non-existent `sub.<alias>__id` column and fails as a 500.
 				const nodeAliases = new Set(steps.flatMap((s) => ('node' in s ? [s.node.alias] : [])));
@@ -1580,6 +1772,7 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				}
 				for (const cond of where ?? []) builder.where(cond.alias, cond.key, cond.value);
 				if (asOf !== undefined) builder.asOf(asOf);
+				if (recordedAsOf !== undefined) builder.recordedAsOf(recordedAsOf);
 				const query = await builder.select(...select);
 				const result = page
 					? await query.page({ ...page, limits: cfg.limits })

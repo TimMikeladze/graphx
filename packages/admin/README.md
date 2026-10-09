@@ -17,7 +17,7 @@ Nodes are colored by type: a stable hash into an 8-color palette, the same in th
 
 Nodes are created, edited and retracted from the toolbar, the detail panel, and the flow canvas's right-click menu; edges are drawn by dragging one card's handle onto another's and removed from that same menu. Forms are generated from the project's declared schema (see `GET /schema` below) — scalars and enums become inputs, anything richer degrades to a JSON field, and the server's validation error renders inline.
 
-Writes are bitemporal: an edit opens a successor version and a delete closes the live one, so History and as-of queries still see what was there. A node's type is fixed after creation, and edges have no edit (the server has no `PATCH /edges`) — remove and redraw instead.
+Writes are bitemporal and never erase: an edit opens a successor version and a delete closes the live one, so History and as-of queries still see what was there. History also lists beliefs a correction superseded, struck through, with when each was recorded and superseded. The time bar has two scrubbers: World (`asOf`, the graph as it stood) and Recorded (`recordedAsOf`, the graph as it was believed then — before a later correction, say). Either puts the explorer in read-only mode. A node's type is fixed after creation, and edges have no edit (the server has no `PATCH /edges`) — remove and redraw instead.
 
 ## Prerequisites
 

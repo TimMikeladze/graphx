@@ -79,6 +79,8 @@ export interface RetrieveParams {
 	maxDepth?: number;
 	direction?: Direction;
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 }
 export interface HybridParams {
 	query: string;
@@ -87,6 +89,8 @@ export interface HybridParams {
 	direction?: Direction;
 	rels?: string[];
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	rrfK?: number;
 	mmr?: { k: number; lambda?: number };
 }
@@ -96,13 +100,19 @@ export interface JourneyParams {
 	rels?: string[];
 	direction?: Direction;
 	maxDepth?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 }
-export interface NodeFilter {
+/** A read's time slice (D1): `asOf` is valid time, `recordedAsOf` recorded time; omitted ⇒ now. */
+export interface TimeSliceParams {
+	asOf?: number;
+	recordedAsOf?: number;
+}
+export interface NodeFilter extends TimeSliceParams {
 	type?: string;
 	q?: string;
-	asOf?: number;
 }
-export interface NeighborFilter {
+export interface NeighborFilter extends TimeSliceParams {
 	direction?: Direction;
 	rel?: string;
 }
@@ -115,6 +125,8 @@ export interface ShortestPathParams {
 	maxDepth?: number;
 	/** Route over the graph as of this instant (epoch ms). */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Route through nodes of these types only. */
 	types?: string[];
 }
@@ -134,18 +146,41 @@ export interface UpdateNodePatch {
 	content_hash?: string;
 	embed_hash?: string;
 	content_type?: string;
+	/** Valid-time instant the update holds from (needs the server's `allowValidTime`). */
+	validFrom?: number;
+}
+/** The valid-time portion a correction or retraction applies to (needs `allowValidTime`). */
+export interface PortionParams {
+	validFrom: number;
+	validTo?: number;
+}
+/** `useCorrectNode` input. */
+export interface CorrectNodeInput extends PortionParams {
+	id: string;
+	patch: Omit<UpdateNodePatch, 'validFrom'>;
+}
+/** `useCorrectEdge` input; pass the endpoints so neighbor caches can be invalidated. */
+export interface CorrectEdgeInput extends PortionParams {
+	id: string;
+	patch: { weight?: number; data?: Record<string, unknown>; source?: string | null };
+	src?: string;
+	dst?: string;
 }
 /** `useDeleteEdge` input: the edge id, plus its endpoints so neighbor caches can be invalidated (the feed omits closes, §7). */
 export interface DeleteEdgeInput {
 	id: string;
 	src?: string;
 	dst?: string;
+	/** When the delete takes effect (needs the server's `allowValidTime`). */
+	validFrom?: number;
 }
 /** Shared analytics fields: some rels only, or the graph as of an instant (returned, not persisted). */
 export interface AnalyticsScope {
 	rels?: string[];
 	types?: string[];
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 }
 export interface PageRankParams extends AnalyticsScope {
 	damping?: number;
@@ -177,6 +212,7 @@ export interface MatchSpec {
 	steps: MatchStep[];
 	where?: Array<{ alias: string; key: string; value: unknown }>;
 	asOf?: number;
+	recordedAsOf?: number;
 	select: string[];
 	page?: { limit?: number; cursor?: string };
 }
@@ -200,6 +236,7 @@ export interface MatchSpecInput<S extends GraphSchema> {
 	steps: readonly MatchStepInput<S>[];
 	where?: ReadonlyArray<{ alias: string; key: string; value: unknown }>;
 	asOf?: number;
+	recordedAsOf?: number;
 	select: readonly string[];
 	page?: { limit?: number; cursor?: string };
 }
@@ -236,6 +273,7 @@ export interface BuiltMatchSpec<
 	select: Sel;
 	where?: ReadonlyArray<{ alias: string; key: string; value: unknown }>;
 	asOf?: number;
+	recordedAsOf?: number;
 	page?: { limit?: number; cursor?: string };
 }
 
@@ -260,6 +298,7 @@ export class MatchBuilder<
 	private readonly _steps: MatchStepInput<S>[] = [];
 	private readonly _where: Array<{ alias: string; key: string; value: unknown }> = [];
 	private _asOf?: number;
+	private _recordedAsOf?: number;
 	private _page?: { limit?: number; cursor?: string };
 
 	/** Add an aliased node bound to `type`; extends the alias→type accumulator. */
@@ -326,9 +365,15 @@ export class MatchBuilder<
 		return this;
 	}
 
-	/** Time-travel the whole pattern to epoch-ms `t`. */
+	/** Time-travel the whole pattern to epoch-ms `t` (valid time). */
 	asOf(t: number): this {
 		this._asOf = t;
+		return this;
+	}
+
+	/** Read the pattern as graphx believed it at epoch-ms `t` (recorded time). */
+	recordedAsOf(t: number): this {
+		this._recordedAsOf = t;
 		return this;
 	}
 
@@ -345,6 +390,7 @@ export class MatchBuilder<
 			select: sel,
 			...(this._where.length ? { where: this._where } : {}),
 			...(this._asOf !== undefined ? { asOf: this._asOf } : {}),
+			...(this._recordedAsOf !== undefined ? { recordedAsOf: this._recordedAsOf } : {}),
 			...(this._page ? { page: this._page } : {}),
 		};
 	}
@@ -420,12 +466,25 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 	 * narrowed type is honest, not an unchecked cast). Both forms share one cached fetch — the type
 	 * filter runs per-observer via `select`.
 	 */
-	function useNode<K extends NodeType<S>>(id: string, type: K): UseQueryResult<NodeOf<S, K> | null>;
-	function useNode(id: string): UseQueryResult<AnyNode<S> | null>;
-	function useNode(id: string, type?: NodeType<S>) {
+	function useNode<K extends NodeType<S>>(
+		id: string,
+		type: K,
+		at?: TimeSliceParams,
+	): UseQueryResult<NodeOf<S, K> | null>;
+	function useNode(id: string, at?: TimeSliceParams): UseQueryResult<AnyNode<S> | null>;
+	function useNode(
+		id: string,
+		typeOrAt?: NodeType<S> | TimeSliceParams,
+		maybeAt?: TimeSliceParams,
+	) {
 		const t = useGraphTransport();
+		const type = typeof typeOrAt === 'string' ? typeOrAt : undefined;
+		const at = (typeof typeOrAt === 'string' ? maybeAt : typeOrAt) ?? {};
+		const sliced = at.asOf !== undefined || at.recordedAsOf !== undefined;
+		const key = graphKeys(t.project).node(id);
 		return useQuery({
-			queryKey: graphKeys(t.project).node(id),
+			// a past slice is its own cache entry under the node's key, so node(id) invalidates both
+			queryKey: sliced ? [...key, at] : key,
 			enabled: id.length > 0,
 			queryFn: async (): Promise<AnyNode<S> | null> => {
 				try {
@@ -433,6 +492,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 						await request<AnyNode<S>>(t, {
 							method: 'GET',
 							path: `/nodes/${encodeURIComponent(id)}`,
+							query: { asOf: at.asOf, recordedAsOf: at.recordedAsOf },
 						}),
 					);
 				} catch (e) {
@@ -489,7 +549,14 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 				const page = await request<NeighborPage<S>>(t, {
 					method: 'GET',
 					path: `/nodes/${encodeURIComponent(id)}/neighborsPage`,
-					query: { direction: opts.direction, rel: opts.rel, limit: opts.limit, cursor: pageParam },
+					query: {
+						direction: opts.direction,
+						rel: opts.rel,
+						asOf: opts.asOf,
+						recordedAsOf: opts.recordedAsOf,
+						limit: opts.limit,
+						cursor: pageParam,
+					},
 				});
 				for (const n of page.rows) validateNode(n as { type: string; data: unknown });
 				return page;
@@ -521,6 +588,7 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 						type: opts.type,
 						q: opts.q,
 						asOf: opts.asOf,
+						recordedAsOf: opts.recordedAsOf,
 						limit: opts.limit,
 						cursor: pageParam,
 					},
@@ -541,7 +609,12 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 				request<GraphSlice>(t, {
 					method: 'GET',
 					path: '/graph',
-					query: { type: opts.type, q: opts.q, asOf: opts.asOf },
+					query: {
+						type: opts.type,
+						q: opts.q,
+						asOf: opts.asOf,
+						recordedAsOf: opts.recordedAsOf,
+					},
 				}),
 		});
 	}
@@ -617,12 +690,17 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 		});
 	}
 
-	/** Snapshot delta over the half-open window `(t1, t2]`. */
-	function useDiff(t1: number, t2: number) {
+	/** Snapshot delta over the half-open window `(t1, t2]`, on the valid (default) or recorded axis. */
+	function useDiff(t1: number, t2: number, opts: { axis?: 'valid' | 'recorded' } = {}) {
 		const t = useGraphTransport();
 		return useQuery({
-			queryKey: graphKeys(t.project).diff(t1, t2),
-			queryFn: () => request<TemporalDiff>(t, { method: 'GET', path: '/diff', query: { t1, t2 } }),
+			queryKey: [...graphKeys(t.project).diff(t1, t2), opts.axis ?? 'valid'],
+			queryFn: () =>
+				request<TemporalDiff>(t, {
+					method: 'GET',
+					path: '/diff',
+					query: { t1, t2, axis: opts.axis },
+				}),
 		});
 	}
 
@@ -709,15 +787,19 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 	}
 
 	/**
-	 * Remove an edge. The CDC feed omits closes (decision A.3), so neighbor caches are reconciled
-	 * here from the endpoints the caller passes (`src`/`dst`).
+	 * Remove an edge. Neighbor caches are reconciled here from the endpoints the caller passes
+	 * (`src`/`dst`), so the caller's own view updates without waiting for a feed poll.
 	 */
 	function useDeleteEdge() {
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		return useMutation({
-			mutationFn: ({ id }: DeleteEdgeInput) =>
-				request<void>(t, { method: 'DELETE', path: `/edges/${encodeURIComponent(id)}` }),
+			mutationFn: ({ id, validFrom }: DeleteEdgeInput) =>
+				request<void>(t, {
+					method: 'DELETE',
+					path: `/edges/${encodeURIComponent(id)}`,
+					query: { validFrom },
+				}),
 			onSettled: (_d, _e, vars) => {
 				const k = graphKeys(t.project);
 				if (vars.src) qc.invalidateQueries({ queryKey: k.neighbors(vars.src) });
@@ -727,13 +809,17 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 		});
 	}
 
-	/** Retract a node. Invalidates node(id) + history(id) + the node-list/canvas-slice queries. */
+	/** Delete a node. Invalidates node(id) + history(id) + the node-list/canvas-slice queries. */
 	function useDeleteNode() {
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		return useMutation({
-			mutationFn: ({ id }: { id: string }) =>
-				request<void>(t, { method: 'DELETE', path: `/nodes/${encodeURIComponent(id)}` }),
+			mutationFn: ({ id, validFrom }: { id: string; validFrom?: number }) =>
+				request<void>(t, {
+					method: 'DELETE',
+					path: `/nodes/${encodeURIComponent(id)}`,
+					query: { validFrom },
+				}),
 			onSettled: (_d, _e, vars) => {
 				const k = graphKeys(t.project);
 				qc.invalidateQueries({ queryKey: k.node(vars.id) });
@@ -747,13 +833,101 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 		});
 	}
 
+	/** Everything a node's past or present can show up in: invalidated after a correction or retraction. */
+	function invalidateNodeEverywhere(
+		qc: ReturnType<typeof useQueryClient>,
+		project: string,
+		id: string,
+	) {
+		const k = graphKeys(project);
+		qc.invalidateQueries({ queryKey: k.node(id) });
+		qc.invalidateQueries({ queryKey: k.history(id) });
+		qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
+		qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+		qc.invalidateQueries({ queryKey: [...k.all, 'neighbors'] });
+	}
+
+	/** Correct a node over `[validFrom, validTo)`, past included. Needs the server's `allowValidTime`. */
+	function useCorrectNode() {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		return useMutation({
+			mutationFn: ({ id, patch, validFrom, validTo }: CorrectNodeInput) =>
+				request<AnyNode<S>>(t, {
+					method: 'POST',
+					path: `/nodes/${encodeURIComponent(id)}/correct`,
+					body: { ...patch, validFrom, validTo },
+				}),
+			onSettled: (_d, _e, vars) => invalidateNodeEverywhere(qc, t.project, vars.id),
+		});
+	}
+
+	/** Remove a node over `[validFrom, validTo)`, past included. Needs `allowValidTime`. */
+	function useRetractNode() {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		return useMutation({
+			mutationFn: ({ id, validFrom, validTo }: PortionParams & { id: string }) =>
+				request<void>(t, {
+					method: 'POST',
+					path: `/nodes/${encodeURIComponent(id)}/retract`,
+					body: { validFrom, validTo },
+				}),
+			onSettled: (_d, _e, vars) => invalidateNodeEverywhere(qc, t.project, vars.id),
+		});
+	}
+
+	/** Correct an edge's weight/data/source over a valid-time portion. Needs `allowValidTime`. */
+	function useCorrectEdge() {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		return useMutation({
+			mutationFn: ({ id, patch, validFrom, validTo }: CorrectEdgeInput) =>
+				request<void>(t, {
+					method: 'POST',
+					path: `/edges/${encodeURIComponent(id)}/correct`,
+					body: { ...patch, validFrom, validTo },
+				}),
+			onSettled: (_d, _e, vars) => {
+				const k = graphKeys(t.project);
+				if (vars.src) qc.invalidateQueries({ queryKey: k.neighbors(vars.src) });
+				if (vars.dst) qc.invalidateQueries({ queryKey: k.neighbors(vars.dst) });
+				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+			},
+		});
+	}
+
+	/** Remove an edge over a valid-time portion. Needs `allowValidTime`. */
+	function useRetractEdge() {
+		const t = useGraphTransport();
+		const qc = useQueryClient();
+		return useMutation({
+			mutationFn: ({ id, validFrom, validTo }: PortionParams & DeleteEdgeInput) =>
+				request<void>(t, {
+					method: 'POST',
+					path: `/edges/${encodeURIComponent(id)}/retract`,
+					body: { validFrom, validTo },
+				}),
+			onSettled: (_d, _e, vars) => {
+				const k = graphKeys(t.project);
+				if (vars.src) qc.invalidateQueries({ queryKey: k.neighbors(vars.src) });
+				if (vars.dst) qc.invalidateQueries({ queryKey: k.neighbors(vars.dst) });
+				qc.invalidateQueries({ queryKey: [...k.all, 'graphSlice'] });
+			},
+		});
+	}
+
 	/** Batch node ingestion. Invalidates the node-list + canvas-slice queries. */
 	function useBulkLoad() {
 		const t = useGraphTransport();
 		const qc = useQueryClient();
 		return useMutation({
-			mutationFn: (input: { rows: BulkRow<S>[]; chunkSize?: number; loadTs?: number }) =>
-				request<BulkResult>(t, { method: 'POST', path: '/bulk', body: input }),
+			mutationFn: (input: {
+				rows: BulkRow<S>[];
+				chunkSize?: number;
+				validFrom?: number;
+				mode?: 'refuse' | 'correct';
+			}) => request<BulkResult>(t, { method: 'POST', path: '/bulk', body: input }),
 			onSettled: () => {
 				const k = graphKeys(t.project);
 				qc.invalidateQueries({ queryKey: [...k.all, 'listNodes'] });
@@ -789,9 +963,8 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 	 * Cursor advance: the feed reports `nextCursor: null` whenever a page isn't full (the common
 	 * steady state), so we advance to the LAST ROW SEEN ourselves — re-deriving the `ver` cursor — to keep polling incremental rather than re-scanning from the last full page.
 	 *
-	 * Close caveat (decision A.3): the feed is `valid_from`-only — it carries INSERTs and
-	 * UPDATE-successors, NOT pure closes (`deleteEdge`, single-valued supersession). Edge REMOVALS
-	 * are therefore reconciled by the mutation hooks' `onSettled`, not here.
+	 * Closes arrive too: a delete or supersession inserts the closed remainder of the edge, whose
+	 * `src`/`dst` invalidate the right neighbor caches like any other edge row.
 	 */
 	function useChangeFeedSync(
 		opts: { intervalMs?: number; enabled?: boolean; fromNow?: boolean } = {},
@@ -887,9 +1060,10 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 			const apply = (ev: GraphEvent): void => {
 				if (ev.entity === 'node') {
 					qc.invalidateQueries({ queryKey: k.node(ev.id) });
-					// A retracted node drops from EVERY neighbor result, but node events carry no src/dst,
-					// so (like useDeleteNode) invalidate neighbor caches broadly on a delete.
-					if (ev.op === 'node.delete') qc.invalidateQueries({ queryKey: [...k.all, 'neighbors'] });
+					// A deleted, retracted or corrected node changes neighbor results (as-of ones too), but
+					// node events carry no src/dst, so (like useDeleteNode) invalidate them broadly.
+					if (ev.op === 'node.delete' || ev.op === 'node.retract' || ev.op === 'node.correct')
+						qc.invalidateQueries({ queryKey: [...k.all, 'neighbors'] });
 				} else {
 					if (ev.src) qc.invalidateQueries({ queryKey: k.neighbors(ev.src) });
 					if (ev.dst) qc.invalidateQueries({ queryKey: k.neighbors(ev.dst) });
@@ -990,6 +1164,10 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 		useUpdateNode,
 		useDeleteEdge,
 		useDeleteNode,
+		useCorrectNode,
+		useRetractNode,
+		useCorrectEdge,
+		useRetractEdge,
 		useBulkLoad,
 		usePagerank,
 		useCommunity,

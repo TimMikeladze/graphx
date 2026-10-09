@@ -42,7 +42,7 @@ interface Interval {
 /** All version intervals for `id`, ascending by valid_from. */
 async function intervals(client: DbClient, id: string): Promise<Interval[]> {
 	const r = await client.execute({
-		sql: 'SELECT valid_from, valid_to FROM node_versions WHERE id = ? ORDER BY valid_from, valid_to',
+		sql: 'SELECT valid_from, valid_to FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? ORDER BY valid_from, valid_to',
 		args: [id],
 	});
 	return r.rows.map((x) => ({ valid_from: Number(x.valid_from), valid_to: Number(x.valid_to) }));
@@ -169,7 +169,7 @@ sharedWriterOnly(
 		for (const r of results) expect(r.status).toBe('fulfilled');
 
 		const rows = await setup.execute({
-			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
+			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ?',
 			args: [src.id, 'best_friend'],
 		});
 		// every version (live + every closed predecessor) must be a real, non-zero interval
@@ -207,12 +207,12 @@ sharedWriterOnly(
 		// exactly one live best_friend edge from src; total versions = N (one per addEdge,
 		// closes don't add rows), so N-1 are closed.
 		const live = await setup.execute({
-			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ? AND valid_to = ?',
 			args: [src.id, 'best_friend', FOREVER],
 		});
 		expect(Number(live.rows[0]?.c)).toBe(1);
 		const total = await setup.execute({
-			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ?',
+			sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ?',
 			args: [src.id, 'best_friend'],
 		});
 		expect(Number(total.rows[0]?.c)).toBe(N);
@@ -263,7 +263,7 @@ duckdbOnly(
 		for (const r of results) expect(r.status).toBe('fulfilled');
 
 		const rows = await c.execute({
-			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE src = ? AND rel = ?',
+			sql: 'SELECT valid_from, valid_to FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ?',
 			args: [src.id, 'best_friend'],
 		});
 		// Every version is a real, non-zero interval, and exactly one is still open — the same

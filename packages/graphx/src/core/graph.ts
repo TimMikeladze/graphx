@@ -43,7 +43,9 @@ import {
 	type GraphEventSink,
 	NOOP_EVENTS,
 } from './events.ts';
-import { asOfPredicate } from './temporal.ts';
+import { isLive, slicePredicate, type TimeSlice } from './temporal.ts';
+import { assertWriteTime, CONTENT_COLS, supersedePortion, versionInsert } from './portion.ts';
+import { LIVE_SQL } from './dialect-sql.ts';
 import type { AnyNode, NodeType, NodeOf, Rel } from './define-graph-schema.ts';
 import {
 	applyLimit,
@@ -108,6 +110,31 @@ export interface AddNodeInput<S extends GraphSchema, K extends NodeType<S>> {
 	uri?: string;
 	content_hash?: string;
 	content_type?: string;
+	/**
+	 * When the node starts to exist in the world (epoch ms; default now). May be in the past,
+	 * never the future (D3). Recorded time is always now, whatever this says.
+	 */
+	validFrom?: number;
+}
+
+/** When an {@link Graph.updateNode} / {@link Graph.deleteNode} / {@link Graph.deleteEdge} takes effect. */
+export interface WriteTimeOpts {
+	/** Valid-time instant the change holds from (epoch ms; default now, never later than now). */
+	validFrom?: number;
+}
+
+/** The valid-time portion a correction or retraction applies to: `[validFrom, validTo)`. */
+export interface PortionOpts {
+	validFrom: number;
+	/** Exclusive end (epoch ms). Default FOREVER, i.e. from `validFrom` on. Never after now. */
+	validTo?: number;
+}
+
+/** Patch for {@link Graph.correctEdge}. Omitted fields carry forward from the corrected belief. */
+export interface EdgePatch {
+	weight?: number;
+	data?: Record<string, unknown>;
+	source?: string | null;
 }
 
 /** Patch for {@link Graph.updateNode}. Omitted fields carry forward; null clears content. */
@@ -203,6 +230,13 @@ class NeedEmbed extends Error {
 	}
 }
 
+/** Which write {@link Graph.writeNodeOnce} performs, and over what valid-time portion. */
+interface NodeWrite {
+	mode: 'update' | 'correct';
+	from?: number;
+	to?: number;
+}
+
 /** Input to {@link Graph.addEdge}. `src`/`dst` are ULID node ids. */
 export interface AddEdgeInput<S extends GraphSchema, R extends Rel<S>> {
 	rel: R;
@@ -216,6 +250,8 @@ export interface AddEdgeInput<S extends GraphSchema, R extends Rel<S>> {
 	 * it authored and leave edges added by other writers (admin UI, enrichment) untouched.
 	 */
 	source?: string;
+	/** When the edge starts to hold (epoch ms; default now, never later than now). */
+	validFrom?: number;
 }
 
 /** Result of {@link Graph.getNodeContent} — the live version's content payload + provenance. */
@@ -288,8 +324,10 @@ export interface EdgeRef {
 export interface NeighborOpts {
 	direction?: 'forward' | 'reverse' | 'both';
 	rels?: string[];
-	/** As-of epoch ms (D3 half-open read). Omit ⇒ current (live) edges and nodes. */
+	/** Valid-time instant (epoch ms) (D3 half-open read). Omit ⇒ current (live) edges and nodes. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** §19.2 per-call governance caps; `maxRows` bounds the result (default 10k). */
 	limits?: Partial<QueryLimits>;
 }
@@ -315,8 +353,10 @@ export interface NodeListOpts {
 	type?: string;
 	/** Full-text query over `body` (FTS5). No usable tokens ⇒ empty page. */
 	q?: string;
-	/** As-of epoch ms (D3 half-open read). Omit ⇒ current (live) nodes. */
+	/** Valid-time instant (epoch ms) (D3 half-open read). Omit ⇒ current (live) nodes. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Page size; clamped to `maxRows`. Defaults to `maxRows`. */
 	limit?: number;
 	/** Opaque keyset cursor from a prior page's `nextCursor`; omit for the first page. */
@@ -346,8 +386,10 @@ export interface EdgeListOpts {
 	dst?: string;
 	/** Only edges written with this provenance tag (e.g. `jev`, `ingest:<source>:`). */
 	source?: string;
-	/** As-of epoch ms. Omit ⇒ live edges. */
+	/** Valid-time instant (epoch ms). Omit ⇒ live edges. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Page size; clamped to `maxRows`. */
 	limit?: number;
 	/** Opaque cursor from a prior page's `nextCursor`. */
@@ -378,7 +420,10 @@ export interface EdgeListPage {
 export interface GraphSliceOpts {
 	type?: string;
 	q?: string;
+	/** Valid-time instant (epoch ms). Omit ⇒ live. */
 	asOf?: number;
+	/** What graphx believed at this instant (recorded time, epoch ms). Omit ⇒ current beliefs. */
+	recordedAsOf?: number;
 	limits?: Partial<QueryLimits>;
 }
 
@@ -555,11 +600,17 @@ async function latestInstant(raw: DbClient): Promise<number> {
 	let latest = 0;
 	for (const table of ['node_versions', 'edge_versions']) {
 		const r = await raw.execute({
-			sql: `SELECT MAX(valid_from) AS opened, MAX(CASE WHEN valid_to < ? THEN valid_to END) AS closed FROM ${table}`,
+			sql: `SELECT MAX(valid_from) AS opened, MAX(CASE WHEN valid_to < ? THEN valid_to END) AS closed,
+				MAX(recorded_from) AS recorded FROM ${table}`,
 			args: [FOREVER],
 		});
-		const row = r.rows[0] as { opened?: unknown; closed?: unknown } | undefined;
-		latest = Math.max(latest, Number(row?.opened ?? 0), Number(row?.closed ?? 0));
+		const row = r.rows[0] as { opened?: unknown; closed?: unknown; recorded?: unknown } | undefined;
+		latest = Math.max(
+			latest,
+			Number(row?.opened ?? 0),
+			Number(row?.closed ?? 0),
+			Number(row?.recorded ?? 0),
+		);
 	}
 	return latest;
 }
@@ -698,7 +749,7 @@ export class Graph<S extends GraphSchema> {
 				graphSlice: (opts) => session.run(() => inner.graphSlice(opts)),
 				listEdges: (opts = {}) =>
 					session.run(async () => {
-						const where = ['valid_to = ?'];
+						const where = ['valid_to = ?', `recorded_to = ${FOREVER}`];
 						const args: SqlValue[] = [FOREVER];
 						for (const key of ['src', 'dst', 'rel', 'source'] as const) {
 							if (opts[key] !== undefined) {
@@ -736,10 +787,16 @@ export class Graph<S extends GraphSchema> {
 								? (patch.data ?? {})
 								: { ...(current.data as Record<string, unknown>), ...patch.data },
 						) as Record<string, unknown>;
-						await inner.updateNodeOnce(id, { ...patch, data }, undefined, {
-							...options,
-							replaceData: true,
-						});
+						await inner.writeNodeOnce(
+							id,
+							{ ...patch, data },
+							undefined,
+							{ mode: 'update' },
+							{
+								...options,
+								replaceData: true,
+							},
+						);
 						inner.typeCache.delete(id);
 						return (await inner.getNodeVersion(id))!;
 					}),
@@ -876,7 +933,7 @@ export class Graph<S extends GraphSchema> {
 		// Start the branch's write clock past every instant it holds. Under a burst of writes the
 		// monotonic clock (M6) runs ahead of wall time, so a fork point can lie in the future;
 		// a branch clocked from Date.now() would then write versions that land before the cut.
-		branch.lastTs = Math.max(opts.asOf ?? 0, await latestInstant(target));
+		branch.lastTs = Math.max(opts.asOf ?? 0, opts.recordedAsOf ?? 0, await latestInstant(target));
 		if (this.embedder && this.embeddingMode !== 'off') {
 			for (const id of result.needsEmbedding) await branch.embedNode(id);
 		}
@@ -1194,13 +1251,16 @@ export class Graph<S extends GraphSchema> {
 	private async *liveNodePages(
 		types: string[],
 		pageSize: number,
-	): AsyncGenerator<Array<{ id: string; type: string; data: Record<string, unknown> }>> {
+	): AsyncGenerator<
+		Array<{ id: string; type: string; data: Record<string, unknown>; validFrom: number }>
+	> {
 		if (types.length === 0) return;
 		const marks = types.map(() => '?').join(', ');
 		let after = '';
 		for (;;) {
 			const page = await this.raw.execute({
-				sql: `SELECT id, type, data FROM nodes WHERE type IN (${marks}) AND id > ? ORDER BY id LIMIT ?`,
+				sql: `SELECT id, type, data, valid_from FROM node_versions
+					WHERE ${LIVE_SQL} AND type IN (${marks}) AND id > ? ORDER BY id LIMIT ?`,
 				args: [...types, after, pageSize],
 			});
 			if (page.rows.length === 0) return;
@@ -1208,6 +1268,7 @@ export class Graph<S extends GraphSchema> {
 				id: String(r.id),
 				type: String(r.type),
 				data: parseData(r.data),
+				validFrom: Number(r.valid_from),
 			}));
 			after = String(page.rows[page.rows.length - 1]?.id);
 			if (page.rows.length < pageSize) return;
@@ -1235,10 +1296,12 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Rewrite every live node stored below its upcaster's `current` as a new version in the
-	 * latest shape, so SQL filters see the same data reads do. Each rewrite is an ordinary
-	 * {@link updateNode}: history keeps the old version, an outbox event is written, and the
-	 * node is re-embedded only if its embedding input changed. Idempotent; resumable.
+	 * Rewrite every live node stored below its upcaster's `current` in the latest shape, so SQL
+	 * filters see the same data reads do. A change of representation is not a change in the
+	 * world, so each rewrite is a {@link correctNode} over the live version's own valid interval
+	 * (D9): the fact's dates stay as they were and only recorded time moves; the old bytes stay
+	 * stored as a superseded belief. An outbox event is written, and the node is re-embedded only
+	 * if its embedding input changed. Idempotent; resumable.
 	 */
 	async upcastAll(
 		opts: {
@@ -1257,8 +1320,8 @@ export class Graph<S extends GraphSchema> {
 			for (const n of page) {
 				result.scanned++;
 				if (!this.upcaster.isBehind(n.type, n.data)) continue;
-				// An empty patch: updateNode upcasts the live data and stamps `current`.
-				if (!opts.dryRun) await this.updateNode(n.id, { data: {} });
+				// An empty patch: the correction upcasts the live data and stamps `current`.
+				if (!opts.dryRun) await this.correctNode(n.id, { data: {} }, { validFrom: n.validFrom });
 				result.upcast++;
 			}
 			opts.onProgress?.({ ...result });
@@ -1349,6 +1412,8 @@ export class Graph<S extends GraphSchema> {
 		);
 		const id = newId();
 		const ts = this.now();
+		const validFrom = n.validFrom ?? ts;
+		assertWriteTime('addNode', validFrom, FOREVER, ts);
 
 		// P12: stamp the type's current `_v` into the STORED data (so future readers
 		// know which upcasters to run). The in-memory return stays the clean parsed
@@ -1357,8 +1422,8 @@ export class Graph<S extends GraphSchema> {
 		const storedData = this.upcaster.stamp(n.type, parsed as Record<string, unknown>);
 
 		const versionStmt: SqlStatement = {
-			sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from)
-				VALUES (?,?,?,?,?,?,?,?)`,
+			sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from, recorded_from)
+				VALUES (?,?,?,?,?,?,?,?,?)`,
 			args: [
 				id,
 				n.type,
@@ -1367,7 +1432,8 @@ export class Graph<S extends GraphSchema> {
 				n.content_hash ?? null,
 				n.content_type ?? null,
 				JSON.stringify(storedData),
-				ts,
+				validFrom,
+				ts, // recorded now, whenever it holds from
 			],
 		};
 
@@ -1382,7 +1448,7 @@ export class Graph<S extends GraphSchema> {
 			id,
 			label: n.type,
 			shape: 'insert',
-			ts,
+			ts: validFrom,
 		};
 		const stmts: SqlStatement[] = [
 			{ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] },
@@ -1442,12 +1508,12 @@ export class Graph<S extends GraphSchema> {
 		const id = newId();
 		const data = JSON.stringify(parsedData);
 		const weight = e.weight ?? 1.0;
-		const insertEdge = (ts: number): SqlStatement[] => [
+		const insertEdge = (validFrom: number, recordedAt: number): SqlStatement[] => [
 			{ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [id] },
 			{
-				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from)
-						VALUES (?,?,?,?,?,?,?,?)`,
-				args: [id, e.src, e.dst, e.rel, weight, data, e.source ?? null, ts],
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, source, valid_from, recorded_from)
+						VALUES (?,?,?,?,?,?,?,?,?)`,
+				args: [id, e.src, e.dst, e.rel, weight, data, e.source ?? null, validFrom, recordedAt],
 			},
 		];
 
@@ -1469,41 +1535,47 @@ export class Graph<S extends GraphSchema> {
 				// the index was not materialized (or a race left >1 live edge) every close is still reported.
 				const liveRows = (
 					await tx.execute({
-						sql: 'SELECT id, dst, valid_from AS vf FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
-						args: [e.src, e.rel, FOREVER],
+						sql: `SELECT id, dst, valid_from AS vf, recorded_from AS rf FROM edge_versions WHERE src = ? AND rel = ? AND ${LIVE_SQL}`,
+						args: [e.src, e.rel],
 					})
 				).rows;
-				let maxVf = 0;
-				for (const r of liveRows) {
-					const v = Number(r.vf);
-					if (v > maxVf) maxVf = v;
+				let ts = rawNow;
+				if (e.validFrom === undefined) {
+					for (const r of liveRows) ts = Math.max(ts, Number(r.vf) + 1, Number(r.rf) + 1);
+				} else {
+					assertWriteTime('addEdge', e.validFrom, FOREVER, rawNow);
 				}
-				const ts = liveRows.length > 0 ? Math.max(rawNow, maxVf + 1) : rawNow;
-				const closed = await tx.execute({
-					sql: 'UPDATE edge_versions SET valid_to = ? WHERE src = ? AND rel = ? AND valid_to = ?',
-					args: [ts, e.src, e.rel, FOREVER],
-				});
-				for (const stmt of insertEdge(ts)) await tx.execute(stmt);
+				const validFrom = e.validFrom ?? ts;
+				// Each prior live (src, rel) edge stops holding from `validFrom`: a retraction over
+				// [validFrom, FOREVER), which keeps its earlier part as history. The read and the
+				// retractions share ONE write tx, so a racing close aborts this attempt, which retries.
+				let recordedAt = ts;
+				for (const r of liveRows) {
+					const portion = await supersedePortion(
+						tx,
+						'edge_versions',
+						String(r.id),
+						validFrom,
+						FOREVER,
+						recordedAt,
+					);
+					if (portion.status !== 'ok') return 'superseded';
+					recordedAt = portion.recordedAt;
+				}
+				for (const stmt of insertEdge(validFrom, recordedAt)) await tx.execute(stmt);
 				const evs: GraphEvent[] = [];
-				// A prior live (src, rel) edge was closed => an explicit supersede/close event the
-				// valid_from CDC feed is structurally blind to. One event per row actually closed.
-				// rowsAffected === liveRows.length always holds here: the read and the close share ONE
-				// SERIALIZABLE / BEGIN IMMEDIATE tx, so the live set can't shift under us (a racing close
-				// aborts this attempt, which retries). The equality guard states that invariant and can
-				// never over-emit; length 0 (no prior live edge) emits nothing.
-				if (closed.rowsAffected === liveRows.length) {
-					for (const r of liveRows) {
-						evs.push({
-							op: 'edge.supersede',
-							entity: 'edge',
-							id: String(r.id),
-							label: e.rel,
-							shape: 'close',
-							ts,
-							src: e.src,
-							dst: r.dst != null ? String(r.dst) : undefined,
-						});
-					}
+				// One explicit supersede event per prior live edge, so consumers drop it.
+				for (const r of liveRows) {
+					evs.push({
+						op: 'edge.supersede',
+						entity: 'edge',
+						id: String(r.id),
+						label: e.rel,
+						shape: 'close',
+						ts: validFrom,
+						src: e.src,
+						dst: r.dst != null ? String(r.dst) : undefined,
+					});
 				}
 				evs.push({
 					op: 'edge.create',
@@ -1511,7 +1583,7 @@ export class Graph<S extends GraphSchema> {
 					id,
 					label: e.rel,
 					shape: 'insert',
-					ts,
+					ts: validFrom,
 					src: e.src,
 					dst: e.dst,
 				});
@@ -1532,17 +1604,19 @@ export class Graph<S extends GraphSchema> {
 		// envelope (an interactive transaction() elsewhere on this client drops busy_timeout
 		// to 0, so a later batch BEGIN IMMEDIATE can fail fast and must be retried, not lost).
 		const ts = this.now();
+		const validFrom = e.validFrom ?? ts;
+		assertWriteTime('addEdge', validFrom, FOREVER, ts);
 		const event: GraphEvent = {
 			op: 'edge.create',
 			entity: 'edge',
 			id,
 			label: e.rel,
 			shape: 'insert',
-			ts,
+			ts: validFrom,
 			src: e.src,
 			dst: e.dst,
 		};
-		const stmts = insertEdge(ts);
+		const stmts = insertEdge(validFrom, ts);
 		const ob = this.outboxStmt(event);
 		if (ob) stmts.push(ob);
 		await this.runWriteBatch('addEdge', () => this.raw.batch(stmts, 'write'));
@@ -1552,36 +1626,34 @@ export class Graph<S extends GraphSchema> {
 	}
 
 	/**
-	 * Read a node's version through the live `nodes` view (D3), or — when `asOf` names a past
-	 * instant — the single `node_versions` row whose half-open interval contains it. Returns the
-	 * typed `{ id, type, data }` shape with data parsed back to an object, or `null` when no
-	 * version was live then.
+	 * Read a node: through the live `nodes` view, or — when `asOf` (valid time) or `recordedAsOf`
+	 * (recorded time) names a past instant — the single `node_versions` row in that slice (D1).
+	 * Returns the typed `{ id, type, data }` shape with data parsed back to an object, or `null`
+	 * when no version was in force then.
 	 */
-	async getNode(id: string, opts: { asOf?: number } = {}): Promise<AnyNode<S> | null> {
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const r = await this.raw.execute(
-			past
-				? {
-						sql: `SELECT id, type, data FROM node_versions nv WHERE nv.id = ? AND ${asOfPredicate('nv')}`,
-						args: [id, opts.asOf as number, opts.asOf as number],
-					}
-				: { sql: 'SELECT id, type, data FROM nodes WHERE id = ?', args: [id] },
-		);
-		const row = r.rows[0];
-		if (!row) return null;
-		return this.rowToNode(row, !past);
+	async getNode(id: string, opts: TimeSlice = {}): Promise<AnyNode<S> | null> {
+		const row = await this.nodeRow(id, 'id, type, data', opts);
+		return row ? this.rowToNode(row, isLive(opts)) : null;
 	}
 
 	/** Read metadata, content, and revision from the same temporal row. */
-	async getNodeVersion(id: string, opts: { asOf?: number } = {}): Promise<NodeVersion<S> | null> {
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const result = await this.raw.execute({
-			sql: `SELECT ver, id, type, data, body, uri, content_hash, content_type FROM node_versions nv
-WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
-			args: past ? [id, opts.asOf!, opts.asOf!] : [id, FOREVER],
+	async getNodeVersion(id: string, opts: TimeSlice = {}): Promise<NodeVersion<S> | null> {
+		const row = await this.nodeRow(
+			id,
+			'ver, id, type, data, body, uri, content_hash, content_type',
+			opts,
+		);
+		return row ? this.rowToVersion(row, isLive(opts)) : null;
+	}
+
+	/** One node's row in a slice: the live view when live, else the version table. */
+	private async nodeRow(id: string, cols: string, s: TimeSlice): Promise<SqlRow | undefined> {
+		const pred = slicePredicate('nv', s);
+		const r = await this.raw.execute({
+			sql: `SELECT ${cols} FROM node_versions nv WHERE nv.id = ? AND ${pred.sql}`,
+			args: [id, ...pred.args],
 		});
-		const row = result.rows[0];
-		return row ? this.rowToVersion(row, !past) : null;
+		return r.rows[0];
 	}
 
 	/** A `node_versions` row with its content columns → a complete {@link NodeVersion}. */
@@ -1600,20 +1672,10 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	 * The live version's content columns — the markdown/text `body` and its provenance. Separate
 	 * from {@link getNode} because `AnyNode` is the *typed* projection (`id`/`type`/`data`) that
 	 * SDK consumers destructure; content is a bulkier, rarely-needed payload fetched on demand.
-	 * Accepts the same `asOf` as {@link getNode} to read a past instant's body/provenance.
+	 * Accepts the same `asOf` / `recordedAsOf` as {@link getNode}.
 	 */
-	async getNodeContent(id: string, opts: { asOf?: number } = {}): Promise<NodeContent | null> {
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const cols = 'body, uri, content_type, content_hash';
-		const r = await this.raw.execute(
-			past
-				? {
-						sql: `SELECT ${cols} FROM node_versions nv WHERE nv.id = ? AND ${asOfPredicate('nv')}`,
-						args: [id, opts.asOf as number, opts.asOf as number],
-					}
-				: { sql: `SELECT ${cols} FROM nodes WHERE id = ?`, args: [id] },
-		);
-		const row = r.rows[0];
+	async getNodeContent(id: string, opts: TimeSlice = {}): Promise<NodeContent | null> {
+		const row = await this.nodeRow(id, 'body, uri, content_type, content_hash', opts);
 		if (!row) return null;
 		return {
 			body: (row.body as string | null) ?? null,
@@ -1624,9 +1686,9 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	}
 
 	/**
-	 * Build the directional neighbor-id subquery (live `edges` view) + its args.
-	 * forward: src=id→dst; reverse: dst=id→src; both: UNION (dedups nids). Shared by
-	 * {@link neighbors} and {@link neighborsPage}.
+	 * Build the directional neighbor-id subquery + its args, over the live `edges` view or, for
+	 * a past slice, the version table. forward: src=id→dst; reverse: dst=id→src; both: UNION
+	 * (dedups nids). Shared by {@link neighbors} and {@link neighborsPage}.
 	 */
 	private neighborSubquery(
 		id: string,
@@ -1635,52 +1697,52 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		const direction = opts.direction ?? 'forward';
 		const rels = opts.rels && opts.rels.length > 0 ? opts.rels : null;
 		const relClause = rels ? ` AND e.rel IN (${rels.map(() => '?').join(',')})` : '';
-		// Past reads walk the version table under the half-open predicate; live reads keep the
-		// `edges` view (D3). The predicate's two binds follow that side's rel binds.
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const from = past ? 'edge_versions e' : 'edges e';
-		const temporal = past ? ` AND ${asOfPredicate('e')}` : '';
-		const side = (t: number | undefined) =>
-			past ? [...(rels ?? []), t as number, t as number] : [...(rels ?? [])];
+		const live = isLive(opts);
+		const pred = slicePredicate('e', opts);
+		const from = live ? 'edges e' : 'edge_versions e';
+		const temporal = live ? '' : ` AND ${pred.sql}`;
+		const side = () => (live ? [...(rels ?? [])] : [...(rels ?? []), ...pred.args]);
 		const args: (string | number)[] = [];
 		let sql: string;
 		if (direction === 'forward') {
 			sql = `SELECT e.dst AS nid FROM ${from} WHERE e.src = ?${relClause}${temporal}`;
-			args.push(id, ...side(opts.asOf));
+			args.push(id, ...side());
 		} else if (direction === 'reverse') {
 			sql = `SELECT e.src AS nid FROM ${from} WHERE e.dst = ?${relClause}${temporal}`;
-			args.push(id, ...side(opts.asOf));
+			args.push(id, ...side());
 		} else {
 			sql =
 				`SELECT e.dst AS nid FROM ${from} WHERE e.src = ?${relClause}${temporal} ` +
 				`UNION SELECT e.src AS nid FROM ${from} WHERE e.dst = ?${relClause}${temporal}`;
-			args.push(id, ...side(opts.asOf), id, ...side(opts.asOf));
+			args.push(id, ...side(), id, ...side());
 		}
 		return { sql, args };
 	}
 
+	/** The neighbor-node join for a slice: the live `nodes` view, or the version table. */
+	private neighborJoin(s: TimeSlice): { sql: string; args: number[] } {
+		if (isLive(s)) return { sql: 'JOIN nodes n ON n.id = nb.nid', args: [] };
+		const pred = slicePredicate('n', s);
+		return { sql: `JOIN node_versions n ON n.id = nb.nid AND ${pred.sql}`, args: pred.args };
+	}
+
 	/**
-	 * Neighbor nodes reached over the live `edges` view in the given direction
-	 * (forward: src=id→dst; reverse: dst=id→src; both: union), optionally filtered
-	 * to `rels`. Returns the neighbor nodes (live shape, AnyNode[]). The §19.2 row cap
+	 * Neighbor nodes reached in the given direction (forward: src=id→dst; reverse: dst=id→src;
+	 * both: union), optionally filtered to `rels`, live or in a past slice. The §19.2 row cap
 	 * (`opts.limits.maxRows`, default 10k) bounds the result so a supernode can't OOM.
 	 */
 	async neighbors(id: string, opts: NeighborOpts = {}): Promise<AnyNode<S>[]> {
 		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const join = past
-			? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
-			: 'JOIN nodes n ON n.id = nb.nid';
-		const joinArgs = past ? [opts.asOf as number, opts.asOf as number] : [];
+		const join = this.neighborJoin(opts);
 		const sql = applyLimit(
 			`SELECT n.id AS id, n.type AS type, n.data AS data
 			FROM (${neighborSql}) nb
-			${join}
+			${join.sql}
 			ORDER BY n.id`,
 			resolveLimits(opts.limits).maxRows,
 		);
-		const r = await this.raw.execute({ sql, args: [...args, ...joinArgs] });
-		return r.rows.map((row) => this.rowToNode(row, !past));
+		const r = await this.raw.execute({ sql, args: [...args, ...join.args] });
+		return r.rows.map((row) => this.rowToNode(row, isLive(opts)));
 	}
 
 	/**
@@ -1697,12 +1759,8 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		const { sql: neighborSql, args } = this.neighborSubquery(id, opts);
 		const maxRows = resolveLimits(opts.limits).maxRows;
 		const pageSize = Math.min(opts.limit ?? maxRows, maxRows);
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const join = past
-			? `JOIN node_versions n ON n.id = nb.nid AND ${asOfPredicate('n')}`
-			: 'JOIN nodes n ON n.id = nb.nid';
-		const pageArgs: (string | number)[] = [...args];
-		if (past) pageArgs.push(opts.asOf as number, opts.asOf as number);
+		const join = this.neighborJoin(opts);
+		const pageArgs: (string | number)[] = [...args, ...join.args];
 		let cursorClause = '';
 		if (opts.cursor) {
 			const [lastId] = decodeCursor(opts.cursor);
@@ -1718,13 +1776,13 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		);
 		const sql = `${select}
 			FROM (${neighborSql}) nb
-			${join}${cursorClause}
+			${join.sql}${cursorClause}
 			${group}
 			ORDER BY n.id
 			LIMIT ?`;
 		pageArgs.push(pageSize + 1); // over-fetch one to detect a next page
 		const r = await this.raw.execute({ sql, args: pageArgs });
-		const rows = r.rows.map((row) => this.rowToNode(row, !past));
+		const rows = r.rows.map((row) => this.rowToNode(row, isLive(opts)));
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return { rows: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
@@ -1734,24 +1792,16 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 
 	/**
 	 * Build the node-filter WHERE for {@link listNodes}/{@link graphSlice} over `node_versions`
-	 * aliased `nv`: a temporal predicate (live via the FOREVER sentinel, or as-of half-open),
-	 * an optional `type`, and an optional FTS `q` (joined by `ver` into `nodes_fts`). Returns
-	 * `null` when `q` is present but yields no tokens (⇒ caller returns an empty result).
+	 * aliased `nv`: the slice predicate, an optional `type`, and an optional FTS `q` (joined by
+	 * `ver` into `nodes_fts`). Returns `null` when `q` is present but yields no tokens (⇒ caller
+	 * returns an empty result).
 	 */
-	private nodeFilter(opts: {
-		type?: string;
-		q?: string;
-		asOf?: number;
-	}): { where: string; args: (string | number)[] } | null {
-		const where: string[] = [];
-		const args: (string | number)[] = [];
-		if (opts.asOf !== undefined) {
-			where.push('nv.valid_from <= ? AND ? < nv.valid_to');
-			args.push(opts.asOf, opts.asOf);
-		} else {
-			where.push('nv.valid_to = ?');
-			args.push(FOREVER);
-		}
+	private nodeFilter(
+		opts: { type?: string; q?: string } & TimeSlice,
+	): { where: string; args: (string | number)[] } | null {
+		const pred = slicePredicate('nv', opts);
+		const where: string[] = [pred.sql];
+		const args: (string | number)[] = [...pred.args];
 		if (opts.type) {
 			where.push('nv.type = ?');
 			args.push(opts.type);
@@ -1768,9 +1818,9 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 
 	/**
 	 * List nodes with optional `type`/full-text/as-of filters, keyset-paginated by id (§19.7)
-	 * and bounded by the §19.2 row cap. Each id has exactly one matching version (live, or the
-	 * single as-of version), so the id keyset is a strict total order — no skip, no overlap.
-	 * Props are upcast + parsed via the same path as `getNode`/`neighbors` (P12).
+	 * and bounded by the §19.2 row cap. Each id has exactly one matching version in a slice, so
+	 * the id keyset is a strict total order — no skip, no overlap. Props are upcast + parsed via
+	 * the same path as `getNode`/`neighbors` (P12).
 	 */
 	async listNodes(opts: NodeListOpts = {}): Promise<NodeListPage<S>> {
 		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
@@ -1795,8 +1845,7 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			LIMIT ?`;
 		args.push(pageSize + 1); // over-fetch one to detect a next page
 		const r = await this.raw.execute({ sql, args });
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const rows = r.rows.map((row) => this.rowToNode(row, !past));
+		const rows = r.rows.map((row) => this.rowToNode(row, isLive(opts)));
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return { nodes: page, nextCursor: encodeCursor([(page[page.length - 1] as AnyNode<S>).id]) };
@@ -1812,15 +1861,9 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
 			throw new Error(`listEdges: limit must be a positive integer, got ${opts.limit}`);
 		}
-		const where: string[] = [];
-		const args: SqlValue[] = [];
-		if (opts.asOf !== undefined) {
-			where.push('ev.valid_from <= ? AND ? < ev.valid_to');
-			args.push(opts.asOf, opts.asOf);
-		} else {
-			where.push('ev.valid_to = ?');
-			args.push(FOREVER);
-		}
+		const pred = slicePredicate('ev', opts);
+		const where: string[] = [pred.sql];
+		const args: SqlValue[] = [...pred.args];
 		for (const key of ['rel', 'src', 'dst', 'source'] as const) {
 			if (opts[key] !== undefined) {
 				where.push(`ev.${key} = ?`);
@@ -1859,7 +1902,7 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	/**
 	 * {@link listNodes}, but each row is the complete version — data, body, content metadata and
 	 * revision — read from the same temporal row in one query, so content always matches the data
-	 * beside it (live, or as of `asOf`).
+	 * beside it (live, or in the requested slice).
 	 */
 	async listNodeVersions(opts: NodeListOpts = {}): Promise<NodeVersionPage<S>> {
 		if (opts.limit !== undefined && (!Number.isInteger(opts.limit) || opts.limit < 1)) {
@@ -1887,8 +1930,7 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 				LIMIT ?`,
 			args,
 		});
-		const past = opts.asOf !== undefined && opts.asOf < FOREVER;
-		const rows = r.rows.map((row) => this.rowToVersion(row, !past));
+		const rows = r.rows.map((row) => this.rowToVersion(row, isLive(opts)));
 		if (rows.length > pageSize) {
 			const page = rows.slice(0, pageSize);
 			return {
@@ -1902,9 +1944,9 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	/**
 	 * A governed graph slice for the canvas (D-UI-3): the filtered node set (capped at the §19.2
 	 * row cap) plus every edge whose BOTH endpoints are in that set. The node set is the same
-	 * filter as {@link listNodes} (live or as-of), evaluated as an SQL subquery so the edge
-	 * endpoint membership tests never materialize a giant `IN (...)` parameter list. `truncated`
-	 * signals the node set hit the cap so the UI can prompt to narrow filters.
+	 * filter as {@link listNodes} (live or in a past slice), evaluated as an SQL subquery so the
+	 * edge endpoint membership tests never materialize a giant `IN (...)` parameter list.
+	 * `truncated` signals the node set hit the cap so the UI can prompt to narrow filters.
 	 */
 	async graphSlice(opts: GraphSliceOpts = {}): Promise<GraphSlice> {
 		if (opts.q !== undefined) await this.fts?.ensureFtsFresh();
@@ -1934,22 +1976,14 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 
 		if (nodes.length === 0) return { nodes, links: [], truncated };
 
-		// 2) Edges among the node set. Live edges via the `edges` view; as-of via edge_versions.
+		// 2) Edges among the node set, in the same slice.
 		const idSub = `SELECT id FROM (${nodeSub})`;
-		let edgeSql: string;
-		const edgeArgs: (string | number)[] = [];
-		if (opts.asOf !== undefined) {
-			edgeSql = `SELECT ev.id AS id, ev.src AS source, ev.dst AS target, ev.rel AS rel, ev.weight AS weight
-				FROM edge_versions ev
-				WHERE (ev.valid_from <= ? AND ? < ev.valid_to)
-					AND ev.src IN (${idSub}) AND ev.dst IN (${idSub})`;
-			edgeArgs.push(opts.asOf, opts.asOf, ...filter.args, ...filter.args);
-		} else {
-			edgeSql = `SELECT e.id AS id, e.src AS source, e.dst AS target, e.rel AS rel, e.weight AS weight
-				FROM edges e
-				WHERE e.src IN (${idSub}) AND e.dst IN (${idSub})`;
-			edgeArgs.push(...filter.args, ...filter.args);
-		}
+		const pred = slicePredicate('ev', opts);
+		const edgeSql = `SELECT ev.id AS id, ev.src AS source, ev.dst AS target, ev.rel AS rel, ev.weight AS weight
+			FROM edge_versions ev
+			WHERE (${pred.sql}) AND ev.src IN (${idSub}) AND ev.dst IN (${idSub})
+			ORDER BY ev.id`;
+		const edgeArgs = [...pred.args, ...filter.args, ...filter.args];
 		const edgesRes = await this.raw.execute({ sql: edgeSql, args: edgeArgs });
 		const links: GraphSliceLink[] = edgesRes.rows.map((r) => ({
 			id: String(r.id),
@@ -2027,11 +2061,11 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	}
 
 	/**
-	 * Update a node via close-and-insert with the §19.1 conditional-close + retry
-	 * protocol ({@link runConditionalClose}). The whole read-merge-write runs in one
-	 * `write` transaction; the close is conditional (`WHERE valid_to = FOREVER`) so a
-	 * concurrent writer that already superseded this row leaves `rowsAffected = 0` and we
-	 * retry instead of creating overlapping intervals.
+	 * Update a node: from `opts.validFrom` (default now) on, its content is the live version's
+	 * with `patch` applied. A write over `[validFrom, FOREVER)` through the portion primitive
+	 * ({@link supersedePortion}), under the §19.1 conditional-close + retry protocol
+	 * ({@link runConditionalClose}): the live row stops being a current belief, its earlier part
+	 * is re-recorded as closed history, and the successor is inserted — all in one transaction.
 	 *
 	 * Carry-forward (B4): every column the patch omits is copied from the current live
 	 * version — undefined content fields carry forward while null explicitly clears
@@ -2044,11 +2078,26 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 	 * holds the write lock. `emb` / `embedding` on the patch override this; `embedding: false`
 	 * leaves the stored vectors untouched.
 	 */
-	async updateNode(id: string, patch: UpdateNodePatch): Promise<void> {
+	async updateNode(id: string, patch: UpdateNodePatch, opts: WriteTimeOpts = {}): Promise<void> {
+		await this.writeNode(id, patch, { mode: 'update', from: opts.validFrom });
+	}
+
+	/**
+	 * Correct what the graph says about a node over `[validFrom, validTo)` (default to FOREVER),
+	 * including the past: the content in force there becomes the belief in force at `validFrom`
+	 * (else the live version) with `patch` applied. Earlier beliefs over that portion stop being
+	 * current but stay stored; parts of them outside it are kept as they were.
+	 */
+	async correctNode(id: string, patch: UpdateNodePatch, opts: PortionOpts): Promise<void> {
+		await this.writeNode(id, patch, { mode: 'correct', from: opts.validFrom, to: opts.validTo });
+	}
+
+	/** Runs {@link writeNodeOnce}, embedding outside the transaction when it asks to. */
+	private async writeNode(id: string, patch: UpdateNodePatch, w: NodeWrite): Promise<void> {
 		let pre: PreparedEmbedding | undefined;
 		for (;;) {
 			try {
-				await this.updateNodeOnce(id, patch, pre);
+				await this.writeNodeOnce(id, patch, pre, w);
 				return;
 			} catch (e) {
 				if (!(e instanceof NeedEmbed)) throw e;
@@ -2057,12 +2106,14 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 		}
 	}
 
-	private async updateNodeOnce(
+	private async writeNodeOnce(
 		id: string,
 		patch: UpdateNodePatch,
 		pre: PreparedEmbedding | undefined,
+		w: NodeWrite,
 		options?: AtomicUpdateOptions,
 	): Promise<void> {
+		const label = w.mode === 'update' ? 'updateNode' : 'correctNode';
 		let event: GraphEvent | undefined;
 		let embeddingTouched = false;
 		// Warm the meta cache and validate any caller-supplied vector BEFORE the lock is taken, so
@@ -2073,32 +2124,57 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			for (const c of patch.embedding.chunks) assertVector(c.emb, dim, 'embedding');
 		}
 		if (patch.emb) assertVector(patch.emb, await this.requireDim('emb'), 'emb');
-		await this.runConditionalClose('updateNode', async (tx, rawNow) => {
-			const cur = (
+		await this.runConditionalClose(label, async (tx, rawNow) => {
+			const live = (
 				await tx.execute({
-					sql: `SELECT ver, type, body, uri, content_hash, content_type, data, valid_from
-						FROM node_versions WHERE id = ? AND valid_to = ?`,
-					args: [id, FOREVER],
+					sql: `SELECT ver, ${CONTENT_COLS.node_versions.join(', ')}, valid_from, recorded_from
+						FROM node_versions WHERE id = ? AND ${LIVE_SQL}`,
+					args: [id],
 				})
 			).rows[0];
-			if (options && (!cur || String(cur.ver) !== options.expectedRevision))
-				throw new RevisionConflict(id, options.expectedRevision, cur ? String(cur.ver) : null);
-			if (!cur) throw new Error(`updateNode: no live version for '${id}'`);
+			if (options && (!live || String(live.ver) !== options.expectedRevision))
+				throw new RevisionConflict(id, options.expectedRevision, live ? String(live.ver) : null);
 
-			// M6 data-derived bump: the successor opens (and the predecessor closes) strictly
-			// AFTER the predecessor's valid_from, so [valid_from, now) is never zero-width —
-			// even when a cross-instance writer's clock ran ahead of this instance's now()
-			// (the per-instance high-water mark alone can't see other instances' writes).
-			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
-			const closed = await tx.execute({
-				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ? AND ver = ?',
-				args: [now, id, FOREVER, cur.ver as SqlValue],
-			});
-			// Superseded between SELECT and UPDATE -> nothing closed -> retry.
-			if (closed.rowsAffected !== 1) {
+			let from: number;
+			let to: number = FOREVER;
+			let recordedAt = rawNow;
+			let cur: SqlRow | undefined;
+			if (w.mode === 'update') {
+				if (!live) throw new Error(`updateNode: no live version for '${id}'`);
+				cur = live;
+				if (w.from === undefined) {
+					// M6 data-derived bump: the successor opens strictly after the predecessor's
+					// valid_from and recorded_from, so no interval is zero-width — even when another
+					// instance's clock ran ahead of this one's now().
+					from = Math.max(rawNow, Number(live.valid_from) + 1, Number(live.recorded_from) + 1);
+					recordedAt = from; // a write about now is recorded now: the two axes agree
+				} else {
+					from = w.from;
+					assertWriteTime(label, from, to, rawNow);
+				}
+			} else {
+				from = w.from as number;
+				to = w.to ?? FOREVER;
+				assertWriteTime(label, from, to, rawNow);
+				cur =
+					(
+						await tx.execute({
+							sql: `SELECT ver, ${CONTENT_COLS.node_versions.join(', ')}, valid_from, recorded_from
+								FROM node_versions WHERE id = ? AND recorded_to = ${FOREVER} AND valid_from <= ? AND ? < valid_to AND recorded_to = 8640000000000000`,
+							args: [id, from, from],
+						})
+					).rows[0] ?? live;
+				if (!cur) throw new Error(`correctNode: '${id}' has no version to correct`);
+			}
+			const portion = await supersedePortion(tx, 'node_versions', id, from, to, recordedAt);
+			if (portion.status !== 'ok') {
 				if (options) throw new RevisionConflict(id, options.expectedRevision, null);
 				return 'superseded';
 			}
+			// The new row is live only when it runs to FOREVER; a correction of a closed portion
+			// leaves the live row (and its vectors) as they were.
+			const live_ = to === FOREVER;
+			const now = from;
 
 			// P12: produce a successor that is genuinely current-shaped and honestly `_v`-stamped
 			// (never "v2-tagged but v1-shaped"). The OLD version row is untouched (closed above) —
@@ -2133,15 +2209,15 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			// `tx`, not `this.raw`: this callback already holds a pooled connection, and
 			// reaching for a second one here deadlocks the pool once enough writers are
 			// concurrently mid-transaction (reproduced at the default poolMax of 4).
-			if (dialectOf(this.raw) === 'duckdb') {
+			if (live_ && dialectOf(this.raw) === 'duckdb') {
 				await assertUniqueProps(tx, successorType, data, id);
 			}
 			const body = patch.body === undefined ? ((cur.body as string | null) ?? null) : patch.body;
 			// B4: carry every metadata column forward unless explicitly patched.
 			// `?? null` keeps `undefined` out of the bound args (InValue rejects it).
 			const successor: SqlStatement = {
-				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from)
-					VALUES (?,?,?,?,?,?,?,?)`,
+				sql: `INSERT INTO node_versions (id, type, body, uri, content_hash, content_type, data, valid_from, valid_to, recorded_from)
+					VALUES (?,?,?,?,?,?,?,?,?,?)`,
 				args: [
 					id,
 					successorType,
@@ -2154,14 +2230,16 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 						? ((cur.content_type as SqlValue) ?? null)
 						: patch.content_type,
 					JSON.stringify(data),
-					now,
+					from,
+					to,
+					portion.recordedAt,
 				],
 			};
 			await tx.execute(successor);
 
 			// Vectors for the successor. `undefined` = leave the stored rows as they are.
 			let rows: PreparedEmbedding | null | undefined;
-			if (patch.embedding === false) rows = undefined;
+			if (patch.embedding === false || !live_) rows = undefined;
 			else if (patch.embedding) rows = patch.embedding;
 			else if (patch.emb) {
 				const model = this.embedder?.id ?? meta?.model ?? 'unknown';
@@ -2191,7 +2269,7 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 				embeddingTouched = true;
 			}
 			const ev: GraphEvent = {
-				op: 'node.update',
+				op: w.mode === 'update' ? 'node.update' : 'node.correct',
 				entity: 'node',
 				id,
 				label: successorType,
@@ -2209,106 +2287,184 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			'graph_outbox',
 			...(embeddingTouched ? ['node_embeddings'] : []),
 		);
-		if (event) this.emit(event); // post-commit
-	}
-
-	/**
-	 * Retract a node via the §19.1 conditional-close protocol ({@link runConditionalClose}):
-	 * close the live version (`valid_to = now`) with NO successor — the bitemporal mirror of
-	 * {@link deleteEdge}. The `nodes` view drops it (`getNode` returns null) while
-	 * `history`/as-of reads still return the closed version. Conditional on
-	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we retry
-	 * rather than racing.
-	 *
-	 * Scope: closes only the node version. The node's still-live incident edges are NOT
-	 * cascade-closed — node-identity rows are never deleted, so the edge FKs stay valid, but
-	 * the `edges` view and {@link neighbors} can still surface edges into a node `getNode` now
-	 * returns null for. Callers needing referential cleanup retract those edges first (ingest
-	 * reconciles outbound edges via {@link deleteEdge}).
-	 */
-	async deleteNode(id: string): Promise<void> {
-		let event: GraphEvent | undefined;
-		const hasVectors = (await this.embeddingMeta()) !== null;
-		await this.runConditionalClose('deleteNode', async (tx, rawNow) => {
-			// Widened to also read `type` so the delete event carries the node's label.
-			const cur = (
-				await tx.execute({
-					sql: 'SELECT type, valid_from FROM node_versions WHERE id = ? AND valid_to = ?',
-					args: [id, FOREVER],
-				})
-			).rows[0];
-			if (!cur) throw new Error(`deleteNode: no live version for '${id}'`);
-
-			// M6 data-derived bump: close strictly after the node's valid_from (no zero-width).
-			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
-			const closed = await tx.execute({
-				sql: 'UPDATE node_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
-				args: [now, id, FOREVER],
-			});
-			if (closed.rowsAffected !== 1) return 'superseded';
-			// Vectors are derived from the live version; there is none now. History keeps the
-			// version rows, so nothing about the node's past is lost.
-			if (hasVectors) {
-				await tx.execute({ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] });
-			}
-			// Pure close (no successor) — the delete the valid_from CDC feed can't see.
-			const ev: GraphEvent = {
-				op: 'node.delete',
-				entity: 'node',
-				id,
-				label: String(cur.type),
-				shape: 'close',
-				ts: now,
-			};
-			const stmt = this.outboxStmt(ev);
-			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
-			await this.commitMutation(tx);
-			event = ev;
-			return 'committed';
-		});
-		await this.touched('node_versions', 'graph_outbox', 'node_embeddings');
-		// A retracted id no longer resolves to a live type; drop any cached entry so a later
-		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
 		this.typeCache.delete(id);
 		if (event) this.emit(event); // post-commit
 	}
 
 	/**
-	 * Delete an edge via the §19.1 conditional-close protocol ({@link runConditionalClose}):
-	 * close the live version (`valid_to = now`) with NO successor. Conditional on
-	 * `valid_to = FOREVER` so a concurrent close leaves `rowsAffected = 0` and we retry
-	 * rather than racing.
+	 * Delete a node: it stops existing from `opts.validFrom` (default now). A retraction over
+	 * `[validFrom, FOREVER)` ({@link retractNode}): the `nodes` view drops it (`getNode` returns
+	 * null) while as-of reads before `validFrom` still return it. Runs under the §19.1
+	 * conditional-close protocol, so a concurrent write makes this attempt retry.
+	 *
+	 * Scope: only the node's versions. Its still-live incident edges are NOT cascade-closed —
+	 * node-identity rows are never deleted, so the edge FKs stay valid, but the `edges` view and
+	 * {@link neighbors} can still surface edges into a node `getNode` now returns null for.
+	 * Callers needing referential cleanup retract those edges first (ingest reconciles outbound
+	 * edges via {@link deleteEdge}).
 	 */
-	async deleteEdge(id: string): Promise<void> {
-		let event: GraphEvent | undefined;
-		await this.runConditionalClose('deleteEdge', async (tx, rawNow) => {
-			// Widened to read the endpoints/rel so the delete event carries src/dst/label — a
-			// consumer invalidates the neighbor caches exactly as the React useDeleteEdge does.
-			const cur = (
-				await tx.execute({
-					sql: 'SELECT src, dst, rel, valid_from FROM edge_versions WHERE id = ? AND valid_to = ?',
-					args: [id, FOREVER],
-				})
-			).rows[0];
-			if (!cur) throw new Error(`deleteEdge: no live version for '${id}'`);
+	async deleteNode(id: string, opts: WriteTimeOpts = {}): Promise<void> {
+		await this.retractVersions('node_versions', id, { mode: 'delete', from: opts.validFrom });
+	}
 
-			// M6 data-derived bump: close strictly after the edge's valid_from (no zero-width).
-			const now = Math.max(rawNow, Number(cur.valid_from) + 1);
-			const closed = await tx.execute({
-				sql: 'UPDATE edge_versions SET valid_to = ? WHERE id = ? AND valid_to = ?',
-				args: [now, id, FOREVER],
-			});
-			if (closed.rowsAffected !== 1) return 'superseded';
-			// Pure close (no successor) — the delete the valid_from CDC feed can't see.
+	/**
+	 * Remove what the graph says about a node over `[validFrom, validTo)` (default to FOREVER),
+	 * past included — "it did not exist then". Earlier beliefs stay stored but stop being current.
+	 */
+	async retractNode(id: string, opts: PortionOpts): Promise<void> {
+		await this.retractVersions('node_versions', id, {
+			mode: 'retract',
+			from: opts.validFrom,
+			to: opts.validTo,
+		});
+	}
+
+	/** Delete an edge from `opts.validFrom` (default now). See {@link deleteNode}. */
+	async deleteEdge(id: string, opts: WriteTimeOpts = {}): Promise<void> {
+		await this.retractVersions('edge_versions', id, { mode: 'delete', from: opts.validFrom });
+	}
+
+	/** Remove an edge over `[validFrom, validTo)`, past included. See {@link retractNode}. */
+	async retractEdge(id: string, opts: PortionOpts): Promise<void> {
+		await this.retractVersions('edge_versions', id, {
+			mode: 'retract',
+			from: opts.validFrom,
+			to: opts.validTo,
+		});
+	}
+
+	/**
+	 * Correct an edge's weight, data or provenance over `[validFrom, validTo)` (default to
+	 * FOREVER). Endpoints and rel are the edge's identity and never change. See {@link correctNode}.
+	 */
+	async correctEdge(id: string, patch: EdgePatch, opts: PortionOpts): Promise<void> {
+		let event: GraphEvent | undefined;
+		await this.runConditionalClose('correctEdge', async (tx, rawNow) => {
+			const from = opts.validFrom;
+			const to = opts.validTo ?? FOREVER;
+			assertWriteTime('correctEdge', from, to, rawNow);
+			const cols = `${CONTENT_COLS.edge_versions.join(', ')}, valid_from, recorded_from`;
+			const cur =
+				(
+					await tx.execute({
+						sql: `SELECT ${cols} FROM edge_versions
+							WHERE id = ? AND recorded_to = ${FOREVER} AND valid_from <= ? AND ? < valid_to AND recorded_to = 8640000000000000`,
+						args: [id, from, from],
+					})
+				).rows[0] ??
+				(
+					await tx.execute({
+						sql: `SELECT ${cols} FROM edge_versions WHERE id = ? AND ${LIVE_SQL}`,
+						args: [id],
+					})
+				).rows[0];
+			if (!cur) throw new Error(`correctEdge: '${id}' has no version to correct`);
+			const rel = String(cur.rel);
+			const def = (this.schema.edges as Record<string, RawEdgeDef | undefined>)[rel];
+			const merged = {
+				...(JSON.parse(String(cur.data)) as Record<string, unknown>),
+				...patch.data,
+			};
+			const data = def?.data ? def.data.parse(merged) : merged;
+			const weight = patch.weight ?? Number(cur.weight);
+			if (!(weight >= 0)) throw new Error(`correctEdge: weight must be >= 0, got ${weight}`);
+			const portion = await supersedePortion(tx, 'edge_versions', id, from, to, rawNow);
+			if (portion.status !== 'ok') return 'superseded';
+			await tx.execute(
+				versionInsert(
+					'edge_versions',
+					id,
+					{
+						...cur,
+						weight,
+						data: JSON.stringify(data),
+						source: patch.source === undefined ? cur.source : patch.source,
+					},
+					from,
+					to,
+					portion.recordedAt,
+				),
+			);
 			const ev: GraphEvent = {
-				op: 'edge.delete',
+				op: 'edge.correct',
 				entity: 'edge',
 				id,
-				label: String(cur.rel),
-				shape: 'close',
-				ts: now,
+				label: rel,
+				shape: 'insert',
+				ts: from,
 				src: String(cur.src),
 				dst: String(cur.dst),
+			};
+			const stmt = this.outboxStmt(ev);
+			if (stmt) await tx.execute(stmt);
+			await this.commitMutation(tx);
+			event = ev;
+			return 'committed';
+		});
+		await this.touched('edge_versions', 'graph_outbox');
+		if (event) this.emit(event);
+	}
+
+	/**
+	 * Shared body of delete* and retract*: a portion write with no new row. A delete needs a live
+	 * version and ends it at `from` (default now); a retraction needs at least one current
+	 * belief in its portion. Removing the live node row drops its vectors too.
+	 */
+	private async retractVersions(
+		table: 'node_versions' | 'edge_versions',
+		id: string,
+		w: { mode: 'delete' | 'retract'; from?: number; to?: number },
+	): Promise<void> {
+		const entity = table === 'node_versions' ? 'node' : 'edge';
+		const label = `${w.mode}${entity === 'node' ? 'Node' : 'Edge'}`;
+		let event: GraphEvent | undefined;
+		const hasVectors = entity === 'node' && (await this.embeddingMeta()) !== null;
+		let removedLive = false;
+		await this.runConditionalClose(label, async (tx, rawNow) => {
+			const live = (
+				await tx.execute({
+					sql: `SELECT ${CONTENT_COLS[table].join(', ')}, valid_from, recorded_from
+						FROM ${table} WHERE id = ? AND ${LIVE_SQL}`,
+					args: [id],
+				})
+			).rows[0];
+			let from: number;
+			let to: number = FOREVER;
+			let recordedAt = rawNow;
+			if (w.mode === 'delete') {
+				if (!live) throw new Error(`${label}: no live version for '${id}'`);
+				if (w.from === undefined) {
+					// M6 data-derived bump: close strictly after the live row began (no zero-width).
+					from = Math.max(rawNow, Number(live.valid_from) + 1, Number(live.recorded_from) + 1);
+					recordedAt = from;
+				} else {
+					from = w.from;
+					assertWriteTime(label, from, to, rawNow);
+				}
+			} else {
+				from = w.from as number;
+				to = w.to ?? FOREVER;
+				assertWriteTime(label, from, to, rawNow);
+			}
+			const portion = await supersedePortion(tx, table, id, from, to, recordedAt);
+			if (portion.status !== 'ok') return 'superseded';
+			if (portion.overlapped.length === 0) {
+				throw new Error(`${label}: '${id}' has no version in [${from}, ${to})`);
+			}
+			removedLive = to === FOREVER && live !== undefined;
+			// Vectors belong to the live version; there is none now.
+			if (removedLive && hasVectors) {
+				await tx.execute({ sql: 'DELETE FROM node_embeddings WHERE id = ?', args: [id] });
+			}
+			const row = live ?? (portion.overlapped[0] as SqlRow);
+			const ev: GraphEvent = {
+				op: `${entity}.${w.mode}` as GraphEvent['op'],
+				entity,
+				id,
+				label: String(entity === 'node' ? row.type : row.rel),
+				shape: 'close',
+				ts: from,
+				...(entity === 'edge' ? { src: String(row.src), dst: String(row.dst) } : {}),
 			};
 			const stmt = this.outboxStmt(ev);
 			if (stmt) await tx.execute(stmt); // co-write in the same tx (Layer 2)
@@ -2316,7 +2472,10 @@ WHERE nv.id = ? AND ${past ? asOfPredicate('nv') : 'nv.valid_to = ?'}`,
 			event = ev;
 			return 'committed';
 		});
-		await this.touched('edge_versions', 'graph_outbox');
+		await this.touched(table, 'graph_outbox', ...(hasVectors ? ['node_embeddings'] : []));
+		// A retracted id no longer resolves to a live type; drop any cached entry so a later
+		// endpoint-type check (or re-add of the same id) re-queries instead of trusting a stale type.
+		if (removedLive) this.typeCache.delete(id);
 		if (event) this.emit(event); // post-commit
 	}
 

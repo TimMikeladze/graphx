@@ -1,15 +1,15 @@
 import { FOREVER } from './runtime.ts';
 import type { DbClient, SqlResult } from './dialect.ts';
 import { type QueryLimits, resolveLimits } from './governance.ts';
+import type { TimeAxis } from './temporal.ts';
 
 /**
  * The change-point timeline — the aggregate behind the admin explorer's scrubber.
  *
- * A change point is any instant at which the live graph changed: every `valid_from`, and every
- * `valid_to` that is not the FOREVER sentinel. The `valid_to` half is not optional. A retraction
- * (`deleteNode`/`deleteEdge`) and a single-valued edge supersession both move a `valid_to`
- * WITHOUT writing a new `valid_from` row, so a `valid_from`-only timeline — which is exactly what
- * {@link changeFeed} emits, by decision A.3 — would silently hide every delete.
+ * A change point is any instant at which the graph as currently believed changed: every
+ * `valid_from`, and every `valid_to` that is not the FOREVER sentinel, of current beliefs. The
+ * `valid_to` half is not optional: a delete ends a fact at its `valid_to`, and a `valid_from`-only
+ * timeline would silently hide every delete.
  */
 
 /** Histogram slots when the caller does not ask for a count. */
@@ -27,6 +27,8 @@ export interface TimelineOpts {
 	buckets?: number;
 	/** §19.2 governance caps; `maxRows` bounds the tick list (default 10k). */
 	limits?: Partial<QueryLimits>;
+	/** `'valid'` (default): world history. `'recorded'`: when graphx learned and revised it. */
+	axis?: TimeAxis;
 }
 
 /** The change-point extent, a density histogram over a window, and the instants to snap to. */
@@ -56,12 +58,21 @@ export interface Timeline {
 	ticksTruncated: boolean;
 }
 
-/** Every change point in the graph, as a single `t` column. */
-const CHANGE_POINTS = `
-	SELECT valid_from AS t FROM node_versions
-	UNION ALL SELECT valid_to AS t FROM node_versions WHERE valid_to < ${FOREVER}
-	UNION ALL SELECT valid_from AS t FROM edge_versions
-	UNION ALL SELECT valid_to AS t FROM edge_versions WHERE valid_to < ${FOREVER}`;
+/**
+ * Every change point on one axis, as a single `t` column. Valid time: where current beliefs
+ * open and close. Recorded time: every instant graphx recorded or superseded a row.
+ */
+function changePoints(axis: TimeAxis): string {
+	const [from, to, cur] =
+		axis === 'valid'
+			? ['valid_from', 'valid_to', ` AND recorded_to = ${FOREVER}`]
+			: ['recorded_from', 'recorded_to', ''];
+	return `
+	SELECT ${from} AS t FROM node_versions WHERE 1 = 1${cur}
+	UNION ALL SELECT ${to} AS t FROM node_versions WHERE ${to} < ${FOREVER}${cur}
+	UNION ALL SELECT ${from} AS t FROM edge_versions WHERE 1 = 1${cur}
+	UNION ALL SELECT ${to} AS t FROM edge_versions WHERE ${to} < ${FOREVER}${cur}`;
+}
 
 /** Read one numeric column off the first row, treating a missing row or NULL as `null`. */
 function num(row: Record<string, unknown> | undefined, key: string): number | null {
@@ -82,9 +93,10 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		MAX_TIMELINE_BUCKETS,
 	);
 	const cap = resolveLimits(opts.limits).maxRows;
+	const points = changePoints(opts.axis ?? 'valid');
 
 	const extent = await raw.execute({
-		sql: `SELECT MIN(t) AS lo, MAX(t) AS hi, COUNT(*) AS n FROM (${CHANGE_POINTS}) cp`,
+		sql: `SELECT MIN(t) AS lo, MAX(t) AS hi, COUNT(*) AS n FROM (${points}) cp`,
 		args: [],
 	});
 	const head = extent.rows[0] as unknown as Record<string, unknown> | undefined;
@@ -110,7 +122,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	// instant by rank so the tick list stays spread across the whole window instead of bunching
 	// at one end, always keeping rn=0 and rn=count-1 so both ends stay exact.
 	const countRow = await raw.execute({
-		sql: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d`,
+		sql: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT t FROM (${points}) cp WHERE t >= ? AND t <= ?) d`,
 		args: [from, to],
 	});
 	const distinctCount = num(countRow.rows[0] as unknown as Record<string, unknown>, 'n') ?? 0;
@@ -119,7 +131,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	let tickRows: SqlResult;
 	if (!ticksTruncated) {
 		tickRows = await raw.execute({
-			sql: `SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? ORDER BY t`,
+			sql: `SELECT DISTINCT t FROM (${points}) cp WHERE t >= ? AND t <= ? ORDER BY t`,
 			args: [from, to],
 		});
 	} else if (cap <= 1) {
@@ -131,7 +143,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		tickRows = await raw.execute({
 			sql: `SELECT t FROM (
 				SELECT t, row_number() OVER (ORDER BY t) - 1 AS rn
-				FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d
+				FROM (SELECT DISTINCT t FROM (${points}) cp WHERE t >= ? AND t <= ?) d
 			) r
 			WHERE rn = ?
 			ORDER BY t`,
@@ -151,7 +163,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		tickRows = await raw.execute({
 			sql: `SELECT t FROM (
 				SELECT t, row_number() OVER (ORDER BY t) - 1 AS rn
-				FROM (SELECT DISTINCT t FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?) d
+				FROM (SELECT DISTINCT t FROM (${points}) cp WHERE t >= ? AND t <= ?) d
 			) r
 			WHERE rn % ? = 0 OR rn = ?
 			ORDER BY t`,
@@ -168,7 +180,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 		// Every change point in the window shares one instant — there is nothing to spread, and
 		// dividing by the span would be a divide-by-zero. One slot holds them all.
 		const one = await raw.execute({
-			sql: `SELECT COUNT(*) AS n FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ?`,
+			sql: `SELECT COUNT(*) AS n FROM (${points}) cp WHERE t >= ? AND t <= ?`,
 			args: [from, to],
 		});
 		counts[0] = num(one.rows[0] as unknown as Record<string, unknown>, 'n') ?? 0;
@@ -182,7 +194,7 @@ export async function timeline(raw: DbClient, opts: TimelineOpts = {}): Promise<
 	// it is the one spelling valid on both dialects (native on Postgres, INTEGER affinity on SQLite).
 	const bucketRows = await raw.execute({
 		sql: `SELECT CAST((t - ?) * ? / ? AS BIGINT) AS b, COUNT(*) AS n
-			FROM (${CHANGE_POINTS}) cp WHERE t >= ? AND t <= ? GROUP BY b ORDER BY b`,
+			FROM (${points}) cp WHERE t >= ? AND t <= ? GROUP BY b ORDER BY b`,
 		args: [from, buckets, span, from, to],
 	});
 	for (const r of bucketRows.rows as unknown as Array<Record<string, unknown>>) {

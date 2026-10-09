@@ -23,6 +23,8 @@ import { type TimeWindow, zoomWindow } from '@/lib/timeline-window';
 export function TimelineBar({
 	tenant,
 	project,
+	axis = 'valid',
+	label,
 	asOf,
 	onChange,
 	onPlayingChange,
@@ -30,7 +32,11 @@ export function TimelineBar({
 }: {
 	tenant: string;
 	project: string;
-	/** The current as-of instant; `undefined` ⇒ live. */
+	/** Which time the bar scrubs: the world (`valid`) or what the graph believed (`recorded`). */
+	axis?: 'valid' | 'recorded';
+	/** Names the bar when more than one is docked. */
+	label?: string;
+	/** The current instant on this bar's axis; `undefined` ⇒ now. */
 	asOf?: number;
 	onChange: (asOf: number | undefined) => void;
 	/** Reports playback so the canvas can hold its simulation still while the slice churns. */
@@ -45,7 +51,7 @@ export function TimelineBar({
 	// The scrub window. `{}` is the full extent. Narrowing it makes the server return exact ticks
 	// for that span instead of a sample, which is the only way to snap precisely on a dense graph.
 	const [zoom, setZoom] = useState<TimeWindow>({});
-	const timeline = useTimeline(tenant, project, zoom);
+	const timeline = useTimeline(tenant, project, zoom, axis);
 	const isMobile = useIsMobile();
 	const [preview, setPreview] = useState<number | undefined>(undefined);
 
@@ -121,6 +127,7 @@ export function TimelineBar({
 	if (isMobile) {
 		return (
 			<div className="flex items-center gap-2 border-t bg-background px-3 py-1.5 text-xs">
+				{label && <span className="w-16 shrink-0 font-medium text-muted-foreground">{label}</span>}
 				<span className="tabular-nums text-muted-foreground">
 					{empty ? 'No history' : asOf === undefined ? 'Now' : fmtTime(asOf)}
 				</span>
@@ -139,6 +146,9 @@ export function TimelineBar({
 
 	return (
 		<div className="flex items-center gap-3 border-t bg-background px-3 py-1.5">
+			{label && (
+				<span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+			)}
 			<div className="flex items-center gap-0.5">
 				<Button
 					variant="ghost"

@@ -2,8 +2,8 @@
 
 [graphx.sh](https://graphx.sh) · [npm](https://www.npmjs.com/package/graphx) · [GitHub](https://github.com/TimMikeladze/graphx)
 
-Temporal GraphRAG for TypeScript. Define a graph once with Zod and get typed mutations, versioned
-history with as-of reads, vector + full-text retrieval, pattern matching, traversal, graph algorithms, an HTTP API
+Temporal GraphRAG for TypeScript. Define a graph once with Zod and get typed mutations, bitemporal
+history, vector + full-text retrieval, pattern matching, traversal, graph algorithms, an HTTP API
 with a generated OpenAPI contract, React Query hooks and an MCP server — running on libSQL/SQLite,
 Postgres, DuckDB, the browser or Expo, with no codegen anywhere.
 
@@ -54,10 +54,12 @@ Nodes and edges are Zod objects. Typed mutations, pattern matching, HTTP routes,
 contract, React Query hooks and MCP tools are all inferred from that one `Schema` type — there is no
 generate step to run and nothing to keep in sync.
 
-### Versioned history with as-of reads
+### Every write is bitemporal
 
-Every write opens a new version carrying `valid_from` / `valid_to`, so nothing is erased — a delete
-closes a version. An `asOf` read reconstructs the graph exactly as it stood at any instant.
+Every version carries two intervals: when the fact held in the world (valid time) and when graphx
+held the belief (recorded time). Nothing is erased — a delete closes a version, a correction
+supersedes one. `asOf` reads the world at any instant, `recordedAsOf` reads what the graph believed
+at any instant, and the two combine.
 
 ### One contract, everywhere it runs
 
@@ -222,13 +224,21 @@ await g.upcastReport(); // { gateway: { current: 2, live: 1200, behind: 340 } }
 await g.upcastAll(); // { scanned: 1200, upcast: 340 } — `type`, `dryRun`, `pageSize`, `onProgress`
 ```
 
-`upcastAll` writes each lagging node as a new version through `updateNode`: the old bytes stay in
-history, an outbox event is written, and the node is re-embedded only if its embedding input
-changed. Running it again is a no-op. `graphx doctor` reports lagging nodes and `graphx upcast` runs
+`upcastAll` rewrites each lagging node with `correctNode` over the node's own valid interval: a new
+shape is not a change in the world, so the dates stay put, the old bytes stay stored as a superseded
+belief, an outbox event is written, and the node is re-embedded only if its embedding input changed. Running it again is a no-op. `graphx doctor` reports lagging nodes and `graphx upcast` runs
 the rewrite.
 
 The table layout is versioned separately: `init` stamps `schema_version` into `graph_meta`, brings
 an older namespace forward, and refuses one written by a newer graphx rather than misreading it.
+
+Layout v2 gives every version row a recorded time (`recorded_from` / `recorded_to`, set by graphx
+from its write clock, never by a caller) and lets the database hold at most one live row per id on
+libSQL/SQLite and Postgres. Upgrading a v1 namespace records each existing row at its valid time.
+An id with two open versions — left by a `bulkLoad` of an id that already existed, before that
+was refused — stops the upgrade with an `OverlapError` naming the ids; `graphx doctor
+--repair-overlaps` (or `repairOverlaps(db)`) keeps the version written last and takes the others
+out of the current state without deleting them.
 
 ## Writing
 
@@ -249,19 +259,44 @@ await g.deleteNode(gw.id); // closes the version and drops its vectors; the hist
 `addNode` also accepts `uri`, `content_type` and `content_hash` for content-addressed bodies, and
 `emb` / `embedding` to bind precomputed vectors. `updateNode` takes `null` to clear a content field.
 
+**Writing about the past.** Every write says when its change holds in the world. `addNode` and
+`addEdge` take `validFrom`, and `updateNode`, `deleteNode` and `deleteEdge` take `{ validFrom }`;
+the default is now. Corrections and retractions apply to any period, past included:
+
+```ts
+const y2023 = Date.UTC(2023, 0, 1);
+const y2024 = Date.UTC(2024, 0, 1);
+const old = await g.addNode({
+	type: 'gateway',
+	data: { name: 'gw-0', firmware: '1.0.0' },
+	validFrom: y2023, // it has been in service since 2023
+});
+await g.correctNode(old.id, { data: { firmware: '1.0.1' } }, { validFrom: y2023 }); // it was 1.0.1 all along
+await g.correctNode(old.id, { data: { firmware: '1.1.0' } }, { validFrom: y2024, validTo: t1 }); // only then
+await g.retractNode(old.id, { validFrom: t1, validTo: t2 }); // it was out of service in between
+await g.correctEdge(edgeId, { weight: 3 }, { validFrom: lastWeek }); // and retractEdge
+```
+
+A write never edits a stored row. What it replaces stops being a current belief but stays stored,
+and the parts of it outside the period are kept as they were. Nothing is future-dated: `validFrom`,
+and a finite `validTo`, must be no later than now. Corrections emit `node.correct` / `edge.correct`
+events and retractions `node.retract` / `edge.retract`.
+
 **Optimistic concurrency.** Node versions carry a `revision`. Pass `expectedRevision` and a
 concurrent writer's win surfaces as `RevisionConflict` instead of a silent overwrite.
 
 **Bulk loading.** `bulkLoad` and `bulkEdges` insert history-shaped rows directly — multi-row inserts,
-a shared `loadTs`, batched embedding, and (on libSQL) the ANN index and FTS trigger deferred across
+a shared `validFrom`, batched embedding, and (on libSQL) the ANN index and FTS trigger deferred across
 the load and rebuilt after. A row may carry its own `id` with `validFrom` / `validTo` to import
-history; a load that would overlap a version already stored for that id throws before writing
-anything, so a load can extend a timeline but never rewrite one.
+history. A load that would overlap a version already stored for that id throws before writing
+anything; with `mode: 'correct'` it replaces what it covers instead, like `correctNode`. Rows are
+recorded at load time, whatever valid time they carry.
 
 ```ts
 import { bulkLoad, bulkEdges } from 'graphx';
 
 await bulkLoad(db, schema, rows, { embedder, chunkSize: 500 });
+await bulkLoad(db, schema, rows, { mode: 'correct' }); // replace the periods these rows cover
 await bulkEdges(db, schema, edgeRows);
 ```
 
@@ -327,6 +362,7 @@ live nodes     3
 embedded       3  (3 vector rows)
 unembedded     0
 stale          0
+overlaps       0 node id(s), 0 edge id(s) with more than one open version
 ```
 
 ## Reading and retrieval
@@ -343,7 +379,8 @@ await g.listEdges({ rel: 'raised', source: 'jev' }); // { edges: [{ id, src, dst
 await g.graphSlice({ type: 'gateway' }); // canvas projection: ids, labels, links
 ```
 
-Every read accepts `asOf` (epoch ms) for a point-in-time view, `limits` (row cap, fan-out guard,
+Every read accepts `asOf` (epoch ms) for the world as it stood then and `recordedAsOf` for what graphx
+believed then — a correction made later is invisible to a read recorded before it — plus `limits` (row cap, fan-out guard,
 timeout) and `metrics`. Governance caps are the operator's, not the caller's: served over HTTP they
 are set by `ServeConfig.limits` and cannot be raised by a client.
 
@@ -391,20 +428,57 @@ const page = await q.page({ limit: 100 }); // keyset pagination over the same pa
 
 ## Time travel
 
-Every write is versioned: versions carry `valid_from` / `valid_to` (`FOREVER` = live), so a delete
-closes an interval rather than erasing a row, and an `asOf` read sees the graph as it stood then.
+Every write is bitemporal. Each version row carries two half-open intervals:
+
+- **valid time** `[valid_from, valid_to)` — when the fact holds in the world. A write may set it
+  (`validFrom`, past or present, never future); it defaults to now.
+- **recorded time** `[recorded_from, recorded_to)` — when graphx held the belief. Always set by
+  graphx from its write clock; no caller, import or HTTP request can set it.
+
+A row whose `recorded_to` is open is a current belief. A write never edits a row: what it replaces
+stops being current and stays stored. So two questions have exact answers at any instant —
+`asOf: t`, the world at `t` as the graph knows it now, and `recordedAsOf: t`, what the graph
+believed at `t`. Every read takes both: nodes, edges, neighbors, lists, the canvas slice, `match`,
+the algorithms, `journey`, retrieval, forks and every HTTP read route. For a graph written only
+with live writes the two axes agree, and `asOf` alone behaves as before.
+
+`examples/correction-demo.ts` records a yield for 1992, then corrects it:
+
+```ts
+const field = await g.addNode({
+	type: 'field',
+	data: { name: 'North', yield: 0.9 },
+	validFrom: y1992,
+});
+// … later, the 1992 survey turns out to be miscalibrated
+await g.correctNode(field.id, { data: { yield: 0.88 } }, { validFrom: y1992 });
+
+await g.getNode(field.id, { asOf: y1995 }); // 0.88 — 1995, as we know it now
+await g.getNode(field.id, { asOf: y1995, recordedAsOf: beforeFix }); // 0.9 — as we knew it then
+```
+
+```sh
+$ bun run examples/correction-demo.ts
+in 1995, as we know it now      0.88
+in 1995, as we knew it then     0.9
+today                           0.88
+history  yield=0.9  valid 1992-01-01 → open  superseded
+history  yield=0.88  valid 1992-01-01 → open  current
+```
+
+The rest of the temporal surface:
 
 ```ts
 import { history, diff, changeFeed, timeline } from 'graphx';
 
-await history(db, id); // every version of a node, oldest first
+await history(db, id); // every row of a node, oldest first; superseded ones have current: false
 await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants
+await diff(db, t1, t2, { axis: 'recorded' }); // what graphx learned or corrected in that window
 await changeFeed(db, cursor, { limit: 500 }); // CDC: node + edge versions in write order
-await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks
+await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks (axis too)
 ```
 
-Run against the scenario above, `examples/basic-demo.ts` writes a gateway at firmware `2.1.0`, then
-updates it. The read taken at the earlier instant still sees the old firmware (an excerpt of the real
+`examples/basic-demo.ts` writes a gateway at firmware `2.1.0`, then updates it. The read taken at the earlier instant still sees the old firmware (an excerpt of the real
 output — the ids and timestamps between these lines are dropped):
 
 ```sh
@@ -424,15 +498,18 @@ asOf t0    [
 ```
 
 `changeFeed` pages by write order (`ver`), so a `bulkLoad` row backdated before a consumer's cursor
-still reaches it. It is what `graphx/react`'s `useChangeFeedSync` tails to invalidate exactly the
+still reaches it. Every write inserts rows — a delete inserts the closed part of what it ended — so
+deletes and corrections reach the feed too. It is what `graphx/react`'s `useChangeFeedSync` tails to invalidate exactly the
 query keys that moved; `timeline` is what drives the admin UI's as-of scrubber.
 
 ### Branching
 
 `fork` branches a namespace into another, empty one — the same nodes, edges, history and vectors
 under the same ids — and from then on the two diverge: a write to either is invisible to the other.
-With `asOf` the branch is the graph as it stood at that instant: later versions stay behind and the
-versions live then are live again, so a what-if can replay from any point in the past.
+With `asOf` the branch is the world as it stood at that instant, as the source believes it now:
+later versions stay behind and the versions live then are live again, so a what-if can replay from
+any point in the past. With `recordedAsOf` the branch is the database as it was recorded at that
+instant: corrections made since never happened in it. The two combine.
 
 ```ts
 import { fork } from 'graphx';
@@ -441,6 +518,7 @@ const whatIf = await g.fork(getDb('acme__what-if')); // a Graph over the branch,
 await whatIf.updateNode(id, { data: { firmware: '3.0.0' } }); // g never sees this
 
 const replay = await g.fork(getDb('acme__replay'), { asOf: lastWeek }); // the graph as of last week
+const audit = await g.fork(getDb('acme__audit'), { recordedAsOf: lastWeek }); // before this week's fixes
 
 // The raw form takes two clients — on any backend, so a fork can also move a graph between them.
 const { nodes, edges, needsEmbedding } = await fork(db, getDb('acme__copy'), { asOf: t1 });
@@ -461,7 +539,8 @@ can today is bql.sh, for two databases on one server — see [bql.sh](#bqlsh). A
 in the history copied, works between any two backends, and re-mints each version's `revision`;
 `method: 'copy'` forces one. `asOf` gives a consistent cut even while the source keeps writing; a full
 copy of a namespace under live writes can see one write half-copied, so pass `asOf: Date.now()` for a
-live namespace. `graphx fork <namespace> [--as-of <ms|ISO>]` does the same from the CLI.
+live namespace. `graphx fork <namespace> [--as-of <ms|ISO>] [--recorded-as-of <ms|ISO>]` does the
+same from the CLI.
 
 ## Traversal and algorithms
 
@@ -583,6 +662,11 @@ neighbors, list and slice, schema, content and history, `retrieve` and `hybrid`,
 `bulk`, the `changes` CDC feed, an SSE `events` stream, and the algorithm routes. `/health` and
 `/ready` sit outside it.
 
+Every read route takes `asOf` and `recordedAsOf`. Writing about the past is the operator's call:
+with `allowValidTime: true`, write bodies accept `validFrom` (and `validTo` on bulk rows), `DELETE`
+takes `?validFrom=`, and `POST /nodes/:id/correct`, `/edges/:id/correct`, `/nodes/:id/retract` and
+`/edges/:id/retract` are open. Without it, any of those is refused with a 400.
+
 The OpenAPI document is generated from the route definitions — not hand-written — and served at
 `GET /openapi.json`, with an interactive reference at `GET /docs` (`docs: false` disables it). The
 typed client is `hc<AppType>`, with no codegen step. Mount `createAdminApp` under `/admin` for
@@ -606,6 +690,8 @@ g.useListNodes({ type: 'alert' }); // alert[]
 g.useMatch((q) => q.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
 g.useRetrieve({ query: 'overheating sensor', k: 10 });
 g.useAddNode(); // mutations: add/update/delete node, add/delete edge, bulk load
+g.useNode(id, { recordedAsOf: lastWeek }); // what the graph believed then
+g.useCorrectNode(); // and useRetractNode, useCorrectEdge, useRetractEdge (server needs allowValidTime)
 g.useChangeFeedSync(); // tails /changes and invalidates exact keys
 g.useGraphEvents(); // subscribes to the SSE stream
 ```
@@ -838,7 +924,7 @@ await judgePairs(g, [[srcId, dstId]], { fields: ['name', 'pantheon'] });
 
 A written edge's `weight` is the probability of "same", and with `sameEntityData` on the rel its
 data keeps the whole judgment: score, confidence, per-field agreement and the model that answered.
-The write is versioned like any other, so a link a curator rejects is closed, not lost — and the
+The write is bitemporal like any other, so a link a curator rejects is closed, not lost — and the
 history of what Jev decided, and what people overturned, stays queryable.
 
 A second run skips pairs already linked by either rel. Pairs judged different are not recorded, so
@@ -1005,7 +1091,7 @@ best?.path; // [{ label: 'life' }, { label: 'animals' }, { label: 'mammals' }, {
 ### Checking calibration
 
 Every edge Jev writes carries its probability as `weight` and `source: 'jev'`, and the write is
-versioned — so history already records what Jev decided and what people later closed.
+bitemporal — so history already records what Jev decided and what people later closed.
 `jevCalibration` buckets those edges by weight and reads off each bucket's overturn rate: the number
 to set `minConfidence` and review thresholds against, measured on your own data.
 
@@ -1184,7 +1270,7 @@ is why bql.sh is opt-in rather than the default. In this repo, `bun run bql:buil
 
 `graphx/core` is the same graph engine with the drivers and the HTTP/control-plane layer removed: no
 Node built-ins, no `TextEncoder`, no `atob`. Give it a `DbClient` and it runs wherever you are —
-schema init, typed writes, as-of reads, FTS, pattern matching, traversal and algorithms all
+schema init, typed writes, bitemporal reads, FTS, pattern matching, traversal and algorithms all
 included. Hosts need standard timers and `crypto.getRandomValues` for ULID creation.
 
 ```ts
@@ -1230,8 +1316,8 @@ graphx triggers [-c config]               Run declarative triggers over the even
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
 graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
-graphx doctor   [-c config]               Embedding model, width and health of the namespace
-graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
+graphx doctor   [-c config]               Embedding model, width and health of the namespace (--repair-overlaps)
+graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of, --recorded-as-of)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
 graphx ask      "<question>" [-c config]  Plan a plain-language question as a graph call, and run it
 ```
@@ -1248,6 +1334,8 @@ The CLI runs on Node >= 22.18 (`npx graphx`), which loads the TypeScript config 
 Every example in this repo runs against a real graph — two of them against corpora large enough that
 the as-of scrubber has something to say.
 
+- [`examples/correction-demo.ts`](./examples/correction-demo.ts) — a correction read along both
+  time axes: what was true, and what the graph believed before the fix.
 - [`examples/basic-demo.ts`](./examples/basic-demo.ts) — the whole API in one file: schema, init,
   write, read, query, retrieve, time travel. `bun run examples/basic-demo.ts`.
 - [`examples/seaport-traffic.ts`](./examples/seaport-traffic.ts) — a traffic-engineering what-if on
@@ -1279,7 +1367,7 @@ the as-of scrubber has something to say.
   with `graphx/ingest`, and served by a Next.js app — server-component dashboard, temporal API
   (records as of any date, championship reigns rebuilt from title fights) and graphx's generated
   routes side by side — plus `scrape.ts tail` to keep it minutes-fresh or watch a card land
-  live as versioned history. `bun run dev:mma` after `bun scrape.ts full` in the example dir.
+  live as bitemporal history. `bun run dev:mma` after `bun scrape.ts full` in the example dir.
 - [`examples/file-upload-ingest.ts`](./examples/file-upload-ingest.ts) — blob-backed ingestion.
 - [`examples/pantheon-graph`](./examples/pantheon-graph) — a real graph from a real corpus: ~10k
   deities across 109 pantheons, with contradictory sources kept unmerged. `bun run dev:pantheon`

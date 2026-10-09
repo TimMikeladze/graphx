@@ -1,4 +1,9 @@
-import { declareSingleValuedRel, declareUniqueNodeProp } from './constraints.ts';
+import {
+	type Constraint,
+	declareSingleValuedRel,
+	declareUniqueNodeProp,
+	parseIndexName,
+} from './constraints.ts';
 import {
 	type DbClient,
 	type Dialect,
@@ -43,9 +48,18 @@ export interface ForkOpts {
 	 * Fork the graph as it stood at this instant (epoch ms). Versions that began after it are
 	 * left behind; versions live at it are reopened, so they are live in the fork. History
 	 * before it is copied intact, so the fork's own `asOf` reads of the past still answer.
+	 * A valid-time cut keeps current beliefs only: what the source believes now about then.
 	 * Omit to copy every version verbatim.
 	 */
 	asOf?: number;
+	/**
+	 * Fork the database as it was recorded at this instant (epoch ms): rows recorded after it are
+	 * left behind, and beliefs current at it are current again, so the branch believes what the
+	 * source believed then — corrections made later never happened in it. History recorded before
+	 * it travels intact. Combines with `asOf` (D8): the world at `asOf` as believed at
+	 * `recordedAsOf`.
+	 */
+	recordedAsOf?: number;
 	/** Rows read and written per round trip (default 500). */
 	pageSize?: number;
 	/**
@@ -78,8 +92,10 @@ function nativeForkOf(client: DbClient): NativeFork | null {
 
 /** What {@link fork} copied. */
 export interface ForkResult {
-	/** The cut, or `null` for a full fork. */
+	/** The valid-time cut, or `null`. */
 	asOf: number | null;
+	/** The recorded-time cut, or `null`. Both `null` is a full fork. */
+	recordedAsOf: number | null;
 	/** `'native'` when the backend branched the database itself, `'copy'` when rows were copied. */
 	method: 'native' | 'copy';
 	nodes: number;
@@ -108,8 +124,10 @@ export class ForkError extends Error {
 	}
 }
 
-const NODE_COLS = 'id, type, body, uri, content_hash, content_type, data, valid_from, valid_to';
-const EDGE_COLS = 'id, src, dst, rel, weight, data, source, valid_from, valid_to';
+const NODE_COLS =
+	'id, type, body, uri, content_hash, content_type, data, valid_from, valid_to, recorded_from, recorded_to';
+const EDGE_COLS =
+	'id, src, dst, rel, weight, data, source, valid_from, valid_to, recorded_from, recorded_to';
 const EMB_KEYS = new Set(['emb_model', 'emb_dim']);
 /** DuckDB records constraints in `graph_meta`; they are re-declared, not copied, so a fork
  *  onto another backend gets real indexes instead of inert keys. */
@@ -149,20 +167,6 @@ async function isEmpty(client: DbClient): Promise<boolean> {
 	return true;
 }
 
-/** A declared constraint, independent of how a backend stores it. */
-type Constraint = { kind: 'unique'; type: string; prop: string } | { kind: 'single'; rel: string };
-
-/** Parse a libSQL/Postgres constraint index name back into its declaration. */
-function parseIndexName(name: string): Constraint | null {
-	if (name.startsWith('ux_single_')) return { kind: 'single', rel: name.slice(10) };
-	const m = /^ux_(\d+)_(.+)$/.exec(name);
-	if (!m) return null;
-	const n = Number(m[1]);
-	const rest = m[2]!;
-	if (rest[n] !== '_') return null;
-	return { kind: 'unique', type: rest.slice(0, n), prop: rest.slice(n + 1) };
-}
-
 async function readConstraints(client: DbClient, meta: SqlRow[]): Promise<Constraint[]> {
 	const d: Dialect = dialectOf(client);
 	if (d === 'duckdb') {
@@ -196,9 +200,9 @@ async function readConstraints(client: DbClient, meta: SqlRow[]): Promise<Constr
  * branch. Otherwise rows are copied into `target`, which must be a different, empty namespace
  * (initialised here if it is not already).
  *
- * With `asOf`, the cut is consistent even while the source keeps taking writes: anything
- * written later either starts after the cut (left behind) or closes a version after it (which
- * the fork reopens anyway). A full fork of a namespace under concurrent writes can observe a
+ * With `asOf` or `recordedAsOf`, the cut is consistent even while the source keeps taking
+ * writes: anything written later either starts after the cut (left behind) or closes a version
+ * after it (which the fork reopens anyway). A full fork of a namespace under concurrent writes can observe a
  * write half-copied; pass `asOf: Date.now()` for a clean cut of a live namespace.
  */
 export async function fork(
@@ -207,8 +211,15 @@ export async function fork(
 	opts: ForkOpts = {},
 ): Promise<ForkResult> {
 	if (source === target) throw new ForkError('fork: source and target are the same client');
-	const cut = opts.asOf ?? null;
-	if (cut !== null && !Number.isFinite(cut)) throw new ForkError('fork: asOf must be epoch ms');
+	const instant = (t: number | undefined, name: string): number | null => {
+		if (t === undefined) return null;
+		if (!Number.isInteger(t)) throw new ForkError(`fork: ${name} must be an integer epoch ms`);
+		return t;
+	};
+	const cut: Cut = {
+		asOf: instant(opts.asOf, 'asOf'),
+		recordedAsOf: instant(opts.recordedAsOf, 'recordedAsOf'),
+	};
 	const pageSize = Math.max(1, opts.pageSize ?? 500);
 	const sd = dialectOf(source);
 	const td = dialectOf(target);
@@ -320,8 +331,43 @@ async function undoCopy(target: DbClient, undo: CopyUndo): Promise<void> {
 	ftsIndexOwner(target)?.markFtsStale();
 }
 
+/** A fork's two cuts (D8); both `null` is a full fork. */
+interface Cut {
+	asOf: number | null;
+	recordedAsOf: number | null;
+}
+
+const isFull = (c: Cut) => c.asOf === null && c.recordedAsOf === null;
+
+/**
+ * The cut as SQL over a version table (the instants are checked integers, so they are inlined).
+ * `keep`: rows the branch holds — recorded by `recordedAsOf`, and with `asOf` only the beliefs
+ * current then that began by `asOf`. `branchLive`: rows that are live in the branch once each
+ * cut reopens what was open at it.
+ */
+function cutSql(c: Cut): { keep: string; branchLive: string } {
+	const keep: string[] = [];
+	if (c.recordedAsOf !== null) keep.push(`recorded_from <= ${c.recordedAsOf}`);
+	if (c.asOf !== null) {
+		keep.push(
+			c.recordedAsOf === null ? `recorded_to = ${FOREVER}` : `recorded_to > ${c.recordedAsOf}`,
+			`valid_from <= ${c.asOf}`,
+		);
+	}
+	const branchLive = [
+		c.asOf === null ? `valid_to = ${FOREVER}` : `valid_to > ${c.asOf}`,
+		c.recordedAsOf === null ? `recorded_to = ${FOREVER}` : `recorded_to > ${c.recordedAsOf}`,
+	].join(' AND ');
+	return { keep: keep.length === 0 ? '1 = 1' : keep.join(' AND '), branchLive };
+}
+
+/** A row's interval end in the branch: open again if it was open at the cut. */
+function reopened(to: number, at: number | null): number {
+	return at !== null && to > at ? FOREVER : to;
+}
+
 interface CopyPlan {
-	cut: number | null;
+	cut: Cut;
 	pageSize: number;
 	emb: EmbeddingMeta | null;
 	sourceBlobs: boolean;
@@ -350,13 +396,15 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 		undo.metaKeys.push(key);
 	}
 
-	const cutArgs = cut === null ? [] : [cut];
-	const cutWhere = cut === null ? '' : ' AND valid_from <= ?';
-	/** A version open at the cut is live in the fork. */
-	const validTo = (v: unknown): number => {
-		const to = num(v);
-		return cut !== null && to > cut ? FOREVER : to;
-	};
+	const { keep } = cutSql(cut);
+	const cutWhere = isFull(cut) ? '' : ` AND ${keep}`;
+	const validTo = (v: unknown): number => reopened(num(v), cut.asOf);
+	const recordedTo = (v: unknown): number => reopened(num(v), cut.recordedAsOf);
+	/** Live in the branch but not in the source: its stored vector belongs to another row. */
+	const newlyLive = (r: SqlRow): boolean =>
+		validTo(r.valid_to) === FOREVER &&
+		recordedTo(r.recorded_to) === FOREVER &&
+		!(num(r.valid_to) === FOREVER && num(r.recorded_to) === FOREVER);
 
 	// Node versions, in `ver` order so each id's versions keep their order in the target.
 	const needsEmbedding: string[] = [];
@@ -366,7 +414,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 		const rows = (
 			await source.execute({
 				sql: `SELECT ver, ${NODE_COLS} FROM node_versions WHERE ver > ?${cutWhere} ORDER BY ver LIMIT ?`,
-				args: [after, ...cutArgs, pageSize],
+				args: [after, pageSize],
 			})
 		).rows;
 		if (rows.length === 0) break;
@@ -375,8 +423,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 		const args = rows.flatMap((r) => {
 			const uri = str(r.uri);
 			if (uri?.startsWith(BLOB_PREFIX)) blobHashes.add(uri.slice(BLOB_PREFIX.length));
-			const to = num(r.valid_to);
-			if (emb && cut !== null && to > cut && to !== FOREVER) needsEmbedding.push(String(r.id));
+			if (emb && newlyLive(r)) needsEmbedding.push(String(r.id));
 			return [
 				String(r.id),
 				String(r.type),
@@ -387,13 +434,15 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 				String(r.data),
 				num(r.valid_from),
 				validTo(r.valid_to),
+				num(r.recorded_from),
+				recordedTo(r.recorded_to),
 			];
 		});
 		await target.batch(
 			[
 				{ sql: insertOrIgnore(td, 'node_identity', 'id', placeholders(ids.length, 1)), args: ids },
 				{
-					sql: `INSERT INTO node_versions (${NODE_COLS}) VALUES ${placeholders(rows.length, 9)}`,
+					sql: `INSERT INTO node_versions (${NODE_COLS}) VALUES ${placeholders(rows.length, 11)}`,
 					args,
 				},
 			],
@@ -409,7 +458,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 		const rows = (
 			await source.execute({
 				sql: `SELECT ver, ${EDGE_COLS} FROM edge_versions WHERE ver > ?${cutWhere} ORDER BY ver LIMIT ?`,
-				args: [after, ...cutArgs, pageSize],
+				args: [after, pageSize],
 			})
 		).rows;
 		if (rows.length === 0) break;
@@ -426,6 +475,8 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 			str(r.source),
 			num(r.valid_from),
 			validTo(r.valid_to),
+			num(r.recorded_from),
+			recordedTo(r.recorded_to),
 		]);
 		await target.batch(
 			[
@@ -435,7 +486,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 				},
 				{ sql: insertOrIgnore(td, 'edge_identity', 'id', placeholders(ids.length, 1)), args: ids },
 				{
-					sql: `INSERT INTO edge_versions (${EDGE_COLS}) VALUES ${placeholders(rows.length, 9)}`,
+					sql: `INSERT INTO edge_versions (${EDGE_COLS}) VALUES ${placeholders(rows.length, 11)}`,
 					args,
 				},
 			],
@@ -445,20 +496,20 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 	}
 
 	// Vectors. The side table holds vectors for live versions only, so on a cut fork only the
-	// nodes whose cut-time version is STILL the live one carry a vector that is true for it.
+	// nodes whose source live version survives the cut (and so is live in the branch too) carry
+	// a vector that is true for it.
 	let vectors = 0;
 	if (emb) {
-		const stillLive =
-			cut === null
-				? ''
-				: ` AND id IN (SELECT id FROM node_versions WHERE valid_to = ${FOREVER} AND valid_from <= ?)`;
+		const stillLive = isFull(cut)
+			? ''
+			: ` AND id IN (SELECT id FROM node_versions WHERE valid_to = ${FOREVER} AND recorded_to = ${FOREVER} AND ${keep})`;
 		const value = embValueExpr(td);
 		for (let id = '', chunk = -1; ; ) {
 			const rows = (
 				await source.execute({
 					sql: `SELECT id, chunk, text, ${embReadExpr(sd)} AS emb, embed_hash FROM node_embeddings
 					      WHERE (id > ? OR (id = ? AND chunk > ?))${stillLive} ORDER BY id, chunk LIMIT ?`,
-					args: [id, id, chunk, ...cutArgs, pageSize],
+					args: [id, id, chunk, pageSize],
 				})
 			).rows;
 			if (rows.length === 0) break;
@@ -501,7 +552,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 
 	// Analytics describe the graph as it is NOW, so only a full fork carries them.
 	const tables = new Set(['node_identity', 'node_versions', 'edge_identity', 'edge_versions']);
-	if (cut === null) {
+	if (isFull(cut)) {
 		await copyAll(
 			source,
 			target,
@@ -535,7 +586,8 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 	const count = async (t: string) =>
 		num((await target.execute(`SELECT count(*) AS n FROM ${t}`)).rows[0]?.n ?? 0);
 	return {
-		asOf: cut,
+		asOf: cut.asOf,
+		recordedAsOf: cut.recordedAsOf,
 		method: 'copy',
 		nodes: await count('node_identity'),
 		nodeVersions,
@@ -555,7 +607,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
  * One write batch, so a failure changes nothing and {@link fork} discards the branch. SQLite
  * dialects only — the only native fork is bql.sh's.
  */
-async function trimNative(target: DbClient, cut: number | null): Promise<ForkResult> {
+async function trimNative(target: DbClient, cut: Cut): Promise<ForkResult> {
 	const d = dialectOf(target);
 	if (d !== 'libsql' && d !== 'sqlite') {
 		throw new ForkError(`fork: a native fork onto a ${d} target is not supported`);
@@ -568,35 +620,43 @@ async function trimNative(target: DbClient, cut: number | null): Promise<ForkRes
 		'DELETE FROM archival_state',
 	].map((sql) => ({ sql, args: [] }));
 	let needsEmbedding: string[] = [];
-	if (cut !== null) {
+	if (!isFull(cut)) {
+		const { keep, branchLive } = cutSql(cut);
+		const sourceLive = `valid_to = ${FOREVER} AND recorded_to = ${FOREVER}`;
 		if (emb) {
-			// Read before the trim: a version open at the cut that closed later is the one the
-			// branch reopens, and the stored vector belongs to its successor.
+			// Read before the trim: rows the cut makes live again, whose node's stored vector
+			// belongs to the source's live row.
 			needsEmbedding = (
-				await target.execute({
-					sql: `SELECT DISTINCT id FROM node_versions WHERE valid_from <= ? AND valid_to > ? AND valid_to <> ${FOREVER} ORDER BY id`,
-					args: [cut, cut],
-				})
+				await target.execute(
+					`SELECT DISTINCT id FROM node_versions WHERE ${keep} AND ${branchLive} AND NOT (${sourceLive}) ORDER BY id`,
+				)
 			).rows.map((r) => String(r.id));
 		}
+		const reopen = (col: 'valid_to' | 'recorded_to', at: number | null): SqlStatement[] =>
+			at === null
+				? []
+				: ['edge_versions', 'node_versions'].map((t) => ({
+						sql: `UPDATE ${t} SET ${col} = ${FOREVER} WHERE ${col} > ?`,
+						args: [at],
+					}));
 		stmts.push(
 			{ sql: 'DELETE FROM node_analytics', args: [] },
 			{ sql: 'DELETE FROM node_scores', args: [] },
 			...(emb
 				? [
 						{
-							// Kept only where the cut-time version is still the live one.
-							sql: `DELETE FROM node_embeddings WHERE id NOT IN (SELECT id FROM node_versions WHERE valid_to = ${FOREVER} AND valid_from <= ?)`,
-							args: [cut],
+							// Kept only where the source's live version survives the cut.
+							sql: `DELETE FROM node_embeddings WHERE id NOT IN (SELECT id FROM node_versions WHERE ${sourceLive} AND ${keep})`,
+							args: [],
 						},
 					]
 				: []),
-			// Delete what began after the cut BEFORE reopening, so a reopened version never
+			// Delete what the cut leaves behind BEFORE reopening, so a reopened version never
 			// meets its own successor in a live-only unique index.
-			{ sql: 'DELETE FROM edge_versions WHERE valid_from > ?', args: [cut] },
-			{ sql: 'DELETE FROM node_versions WHERE valid_from > ?', args: [cut] },
-			{ sql: `UPDATE edge_versions SET valid_to = ${FOREVER} WHERE valid_to > ?`, args: [cut] },
-			{ sql: `UPDATE node_versions SET valid_to = ${FOREVER} WHERE valid_to > ?`, args: [cut] },
+			{ sql: `DELETE FROM edge_versions WHERE NOT (${keep})`, args: [] },
+			{ sql: `DELETE FROM node_versions WHERE NOT (${keep})`, args: [] },
+			...reopen('recorded_to', cut.recordedAsOf),
+			...reopen('valid_to', cut.asOf),
 			{ sql: 'DELETE FROM edge_identity WHERE id NOT IN (SELECT id FROM edge_versions)', args: [] },
 			{
 				sql: `DELETE FROM node_identity WHERE id NOT IN (SELECT id FROM node_versions)
@@ -621,7 +681,8 @@ async function trimNative(target: DbClient, cut: number | null): Promise<ForkRes
 		num((await target.execute(`SELECT count(*) AS n FROM ${t}`)).rows[0]?.n ?? 0);
 	const meta = (await target.execute('SELECT key, value FROM graph_meta')).rows;
 	return {
-		asOf: cut,
+		asOf: cut.asOf,
+		recordedAsOf: cut.recordedAsOf,
 		method: 'native',
 		nodes: await count('node_identity'),
 		nodeVersions: await count('node_versions'),

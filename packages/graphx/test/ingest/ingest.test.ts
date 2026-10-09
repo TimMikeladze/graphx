@@ -85,7 +85,7 @@ test('ingestDir: editing a file creates a new version (history preserved)', asyn
 	const res = await ingestDir({ dir, graph: g });
 	expect(res).toMatchObject({ added: 0, updated: 1, unchanged: 0 });
 	const versions = await client.execute({
-		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE uri = ?',
+		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE recorded_to = 8640000000000000 AND uri = ?',
 		args: ['ingest:default:file:a.md'],
 	});
 	expect(Number(versions.rows[0]!.c)).toBe(2);
@@ -397,7 +397,7 @@ test('ingestDir: renaming a file with a stable id preserves the node + history (
 	expect(after.rows.length).toBe(1);
 	expect(String(after.rows[0]!.id)).toBe(nodeId); // SAME node id
 	const versions = await client.execute({
-		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE id = ?',
+		sql: 'SELECT COUNT(*) AS c FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ?',
 		args: [nodeId],
 	});
 	expect(Number(versions.rows[0]!.c)).toBe(2); // history preserved

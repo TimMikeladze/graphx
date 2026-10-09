@@ -58,6 +58,7 @@ export function ContentTab({
 	nodeId,
 	active,
 	asOf,
+	recordedAsOf,
 	readOnly,
 }: {
 	tenant: string;
@@ -67,10 +68,12 @@ export function ContentTab({
 	active: boolean;
 	/** Viewing instant; absent ⇒ live. */
 	asOf?: number;
+	/** Viewing what the graph believed then; absent ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Viewing the past — a save would land on the live version, so editing is closed off. */
 	readOnly?: boolean;
 }) {
-	const content = useNodeContent(tenant, project, nodeId, active, asOf);
+	const content = useNodeContent(tenant, project, nodeId, active, { asOf, recordedAsOf });
 	const save = useUpdateNodeBody(tenant, project, nodeId);
 	// `null` ⇒ viewing; a string ⇒ editing, holding the working source.
 	const [draft, setDraft] = useState<string | null>(() => drafts.get(nodeId) ?? null);

@@ -1,10 +1,9 @@
 /**
  * Graph eventing (§ eventing) — the reactive seam over the temporal store. graphx mutations
- * write version rows silently; the CDC {@link import('./temporal.ts').changeFeed} is a
- * `valid_from`-only poll that is structurally BLIND to pure closes (decision A.3). This module
- * is the fix: a typed event emitted from the public `Graph` mutation methods (`graph.ts`), the
- * one altitude that knows op + id + type + close-vs-insert. A pure close/supersede/delete emits
- * an explicit `shape:'close'` event the feed can never see.
+ * write version rows silently; the CDC {@link import('./temporal.ts').changeFeed} reports the
+ * rows, not what the write meant. This module adds that: a typed event emitted from the public
+ * `Graph` mutation methods (`graph.ts`), the one altitude that knows op + id + type +
+ * close-vs-insert. A delete, retraction or supersession emits an explicit `shape:'close'` event.
  *
  * The sink is a pluggable, dependency-free interface threaded per-`Graph` (like {@link
  * import('./governance.ts').MetricsSink} — never a module global, so multi-tenant safe). Layer 1
@@ -20,13 +19,21 @@
  * rather than relying on the in-proc bus alone.
  */
 
-/** The mutation an event describes. `*.supersede`/`*.delete` are the pure closes the CDC feed misses. */
+/**
+ * The mutation an event describes. `*.correct` replaces content over a valid-time portion (the
+ * past included); `*.retract` removes it over one; `*.delete` is a retraction from now (or a given
+ * instant) on.
+ */
 export type GraphEventOp =
 	| 'node.create'
 	| 'node.update'
+	| 'node.correct'
 	| 'node.delete'
+	| 'node.retract'
 	| 'edge.create'
+	| 'edge.correct'
 	| 'edge.delete'
+	| 'edge.retract'
 	| 'edge.supersede';
 
 /** A single graph mutation event. `src`/`dst` are set for edges only; `seq`/`tenant`/`project` are stamped downstream. */
@@ -39,9 +46,9 @@ export interface GraphEvent {
 	id: string;
 	/** Node type OR edge rel. */
 	label: string;
-	/** `'insert'` wrote a new `valid_from` row; `'close'` only moved an existing row's `valid_to` (the feed-blind case). */
+	/** `'insert'` wrote a new current row for the entity; `'close'` ended or removed one with no new content. */
 	shape: 'insert' | 'close';
-	/** `valid_from` for inserts, `valid_to` for closes (epoch ms, the monotonic write clock). */
+	/** The valid-time instant the change holds from (epoch ms): `validFrom`, default now. */
 	ts: number;
 	/** Edge source node id (edges only; carried on closes too so consumers can invalidate the endpoint). */
 	src?: string;

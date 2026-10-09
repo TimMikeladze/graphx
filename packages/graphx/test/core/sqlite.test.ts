@@ -88,7 +88,7 @@ test('ordinary SQLite persists graph content and temporal history on reopen', as
 	const b = await graph.addNode({ type: 'note', data: { path: 'B.md' }, body: 'second' });
 	await graph.addEdge({ rel: 'links', src: a.id, dst: b.id });
 	await graph.updateNode(a.id, { body: 'edited' });
-	expect(await history(client, a.id)).toHaveLength(2);
+	expect((await history(client, a.id)).filter((v) => v.current)).toHaveLength(2);
 	expect((await graph.neighbors(a.id))[0]?.id).toBe(b.id);
 	await client.close();
 	client = open(join(dir, 'vault.db'));
@@ -98,7 +98,7 @@ test('ordinary SQLite persists graph content and temporal history on reopen', as
 	expect((await reopened.retrieve({ query: 'edited', k: 1, maxDepth: 0 }))[0]?.id).toBe(a.id);
 	expect((await reopened.listNodes({ q: 'edited' })).nodes.map((n) => n.id)).toEqual([a.id]);
 	expect((await reopened.neighbors(a.id)).map((n) => n.id)).toEqual([b.id]);
-	expect(await history(client, a.id)).toHaveLength(2);
+	expect((await history(client, a.id)).filter((v) => v.current)).toHaveLength(2);
 	expect((await client.execute('PRAGMA journal_mode')).rows[0]?.journal_mode).toBe('delete');
 	expect((await outboxTail(client)).events.length).toBeGreaterThanOrEqual(4);
 });
@@ -139,7 +139,7 @@ test('SQLite stores and ranks vectors locally and supports FTS and model checks'
 	await expect(init(client, hashEmbed(32))).rejects.toThrow();
 	await graph.updateNode(peach.id, { body: 'peach harvest' });
 	expect((await graph.retrieve({ query: 'peach harvest', k: 1 }))[0]?.id).toBe(peach.id);
-	expect(await history(client, peach.id)).toHaveLength(2);
+	expect((await history(client, peach.id)).filter((v) => v.current)).toHaveLength(2);
 });
 
 test('SQLite exact vectors deduplicate all chunks, order ties, and preserve best snippets', async () => {
@@ -235,7 +235,7 @@ test('SQLite bulk ingestion keeps lexical search, temporal boundaries, and pagin
 			{ id: 'ac', src: 'a', dst: 'c', rel: 'links', weight: 5 },
 			{ id: 'bc', src: 'b', dst: 'c', rel: 'links', weight: 1 },
 		],
-		{ loadTs: 20 },
+		{ validFrom: 20 },
 	);
 	const graph = new Graph(client, schema, { embedder: hashEmbed(8) });
 	expect((await graph.listNodes({ q: 'ancient', asOf: 19 })).nodes.map((n) => n.id)).toEqual(['a']);
@@ -309,7 +309,7 @@ test('SQLite graph rollback leaves content, vectors, history, FTS and outbox unc
 		graph.updateNode(a.id, { data: { path: 'B.md' }, body: 'forbidden' }),
 	).rejects.toThrow();
 	expect((await graph.getNodeContent(a.id))?.body).toBe('before');
-	expect(await history(client, a.id)).toHaveLength(1);
+	expect((await history(client, a.id)).filter((v) => v.current)).toHaveLength(1);
 	expect((await graph.listNodes({ q: 'forbidden' })).nodes).toEqual([]);
 	expect((await client.execute('SELECT * FROM node_embeddings ORDER BY id, chunk')).rows).toEqual(
 		before.rows,

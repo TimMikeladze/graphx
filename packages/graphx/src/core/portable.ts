@@ -49,6 +49,7 @@ export {
 	SCHEMA_VERSION,
 	type StructureStep,
 } from './schema.ts';
+export { findOverlaps, OverlapError, repairOverlaps } from './upgrade.ts';
 
 // Embedders — the one object a graph needs to know about a model
 export {
@@ -238,19 +239,23 @@ export {
 
 // P6 — temporal reads + P15 change feed / CDC (§19.10) + eventing outbox tail (Layer 2)
 export {
-	asOfPredicate,
 	changeFeed,
 	type ChangeFeedCursor,
 	type ChangeFeedOpts,
 	type ChangeFeedPage,
 	diff,
+	type DiffOpts,
 	history,
+	isLive,
 	type OutboxCursor,
 	type OutboxPage,
 	outboxTail,
 	type OutboxTailOpts,
 	pruneOutbox,
+	slicePredicate,
 	type TemporalDiff,
+	type TimeAxis,
+	type TimeSlice,
 } from './temporal.ts';
 
 // Change-point timeline — extent + density histogram + snap ticks (admin scrubber)

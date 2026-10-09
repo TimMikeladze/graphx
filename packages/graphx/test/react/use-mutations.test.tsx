@@ -215,3 +215,31 @@ test('useCentrality: returns degree scores', async () => {
 	expect(out.scores[b]).toBe(0);
 	h.cleanup();
 });
+
+test('useCorrectNode: a correction shows live; a recordedAsOf useNode still sees the old belief', async () => {
+	const h = await setup({ allowValidTime: true });
+	const id = await mkNode(h, h.editor, 'device', { type: 'router' });
+	await new Promise((r) => setTimeout(r, 5));
+	const before = Date.now();
+	await new Promise((r) => setTimeout(r, 5));
+	const { Wrapper } = makeWrapper(h, h.editor);
+	const live = renderHook(() => hooks.useNode(id), { wrapper: Wrapper });
+	const then = renderHook(() => hooks.useNode(id, { recordedAsOf: before }), { wrapper: Wrapper });
+	const fix = renderHook(() => hooks.useCorrectNode(), { wrapper: Wrapper });
+	await waitFor(() =>
+		expect(live.result.current.isSuccess && then.result.current.isSuccess).toBe(true),
+	);
+	expect(live.result.current.data!.data).toEqual({ type: 'router', crit: 1 });
+	expect(then.result.current.data!.data).toEqual({ type: 'router', crit: 1 });
+
+	await act(async () => {
+		await fix.result.current.mutateAsync({
+			id,
+			patch: { data: { crit: 4 } },
+			validFrom: before - 1,
+		});
+	});
+	await waitFor(() => expect(live.result.current.data!.data).toEqual({ type: 'router', crit: 4 }));
+	expect(then.result.current.data!.data).toEqual({ type: 'router', crit: 1 });
+	h.cleanup();
+});

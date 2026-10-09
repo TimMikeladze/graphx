@@ -97,7 +97,7 @@ console.log('path      ', await shortestPath(db, gw.id, alert.id));
 console.log('pagerank  ', [...(await pagerank(db))]);
 
 // 9 — time travel: every version, and what changed between two instants
-console.log('history   ', (await history(db, gw.id)).length, 'versions');
+console.log('history   ', (await history(db, gw.id)).filter((v) => v.current).length, 'versions');
 const past = await g.listNodes({ type: 'gateway', asOf: t0 });
 console.log(
 	'asOf t0   ',

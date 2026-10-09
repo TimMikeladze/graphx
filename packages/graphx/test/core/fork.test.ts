@@ -8,7 +8,6 @@ import { fork, ForkError } from '../../src/core/fork.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { createLocalBlobStore } from '../../src/core/local-blobs.ts';
 import { init, readEmbeddingMeta } from '../../src/core/schema.ts';
-import { history } from '../../src/core/temporal.ts';
 import {
 	indexBackedConstraints,
 	libsqlOnly,
@@ -93,29 +92,24 @@ test('asOf forks the world as it stood: later versions stay behind, open ones re
 	expect((await branch.getNode(a.id))?.data).toEqual({ name: 'A', green: 45 });
 });
 
-// Graph.atomic (the many-writes-one-transaction scope that drives the clock ahead) is SQLite/libSQL only.
-libsqlOnly(
-	'a branch writes after its fork point even when the write clock ran ahead of wall time',
-	async () => {
-		const { raw, g, a } = await seeded();
-		// One transaction of many writes: the monotonic clock steps 1 ms per write, past Date.now().
-		await g.atomic(async (tx) => {
-			for (let green = 0; green < 300; green++) {
-				const cur = await tx.getNodeVersion(a.id);
-				await tx.updateNode(a.id, { data: { green } }, { expectedRevision: cur!.revision });
-			}
-		});
-		const versions = await history(raw, a.id);
-		const cut = Number(versions.at(-1)!.valid_from);
-		expect(cut).toBeGreaterThan(Date.now());
+test('a branch writes after its fork point even when the write clock ran ahead of wall time', async () => {
+	const { raw, g, a } = await seeded();
+	// Another writer whose clock runs a minute ahead (a burst of writes, or a fast clock) leaves a
+	// row dated after wall time — planted directly, so the test does not depend on machine speed.
+	const ahead = Date.now() + 60_000;
+	await raw.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: ['ahead'] });
+	await raw.execute({
+		sql: 'INSERT INTO node_versions (id, type, data, valid_from, recorded_from) VALUES (?, ?, ?, ?, ?)',
+		args: ['ahead', 'light', JSON.stringify({ name: 'D', green: 0 }), ahead, ahead],
+	});
+	const cut = ahead;
 
-		const branch = await g.fork(db(), { asOf: cut });
-		const c = await branch.addNode({ type: 'light', data: { name: 'C', green: 1 } });
-		expect(await branch.getNode(c.id, { asOf: cut })).toBeNull();
-		await branch.updateNode(a.id, { data: { green: -1 } });
-		expect((await branch.getNode(a.id, { asOf: cut }))?.data.green).toBe(299);
-	},
-);
+	const branch = await g.fork(db(), { asOf: cut });
+	const c = await branch.addNode({ type: 'light', data: { name: 'C', green: 1 } });
+	expect(await branch.getNode(c.id, { asOf: cut })).toBeNull();
+	await branch.updateNode(a.id, { data: { name: 'A', green: -1 } });
+	expect((await branch.getNode(a.id, { asOf: cut }))?.data.green).toBe(30);
+});
 
 test('vectors travel; a cut re-embeds the nodes whose stored vector is from a later version', async () => {
 	const { raw, g, a, b } = await seeded({ embed: true });
@@ -201,4 +195,40 @@ indexBackedConstraints('a copy that fails part-way leaves the target empty again
 	const keys = (await target.execute('SELECT key FROM graph_meta')).rows.map((r) => String(r.key));
 	expect(keys).not.toContain('team');
 	expect(await readEmbeddingMeta(target)).toBeNull();
+});
+
+test('D8: a valid cut and a recorded cut of a correction give different, correct branches', async () => {
+	const { raw, g, a } = await seeded();
+	const y1995 = Date.UTC(1995, 0, 1);
+	const h = await g.addNode({
+		type: 'light',
+		data: { name: 'H', green: 90 },
+		validFrom: Date.UTC(1992, 0, 1),
+	});
+	await tick();
+	const beforeFix = Date.now();
+	await tick();
+	await g.correctNode(h.id, { data: { green: 88 } }, { validFrom: Date.UTC(1992, 0, 1) });
+	await g.updateNode(a.id, { data: { name: 'A', green: 31 } });
+	const green = async (b: Graph<typeof SCHEMA>, asOf?: number) =>
+		(await b.getNode(h.id, asOf === undefined ? {} : { asOf }))?.data.green;
+
+	// valid cut: the world in 1995 as believed now — the fix applies
+	const valid = await g.fork(db(), { asOf: y1995 });
+	expect(await green(valid)).toBe(88);
+	expect(await valid.getNode(a.id)).toBeNull(); // A did not exist yet in 1995
+
+	// recorded cut: the database as it stood before the fix — the fix never happened
+	const recorded = await g.fork(db(), { recordedAsOf: beforeFix });
+	expect(await green(recorded)).toBe(90);
+	expect(await green(recorded, y1995)).toBe(90);
+	expect((await recorded.getNode(a.id))?.data).toEqual({ name: 'A', green: 30 });
+
+	// both: the world in 1995 as believed before the fix
+	const both = await fork(raw, db(), { asOf: y1995, recordedAsOf: beforeFix });
+	expect(both).toMatchObject({ asOf: y1995, recordedAsOf: beforeFix, nodes: 1 });
+
+	// each branch keeps taking writes, recorded after everything it holds
+	await recorded.correctNode(h.id, { data: { green: 70 } }, { validFrom: Date.UTC(1992, 0, 1) });
+	expect(await green(recorded)).toBe(70);
 });

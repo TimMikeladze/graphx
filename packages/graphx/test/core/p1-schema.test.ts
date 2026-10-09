@@ -57,46 +57,49 @@ libsqlOnly('P1: all tables and views exist after init()', async () => {
 	c.close();
 });
 
-libsqlOnly('P1: edge adjacency indexes used — src => ev_src_asof, dst => ev_dst_asof', async () => {
-	const c = mem();
-	await init(c);
-	// Insert a handful of rows + ANALYZE so the planner prefers the index over a
-	// scan of a tiny table (identity rows first to satisfy the FKs).
-	for (let i = 0; i < 20; i++) {
-		const id = String(i).padStart(26, '0');
-		await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
-	}
-	for (let i = 0; i < 19; i++) {
-		const eid = `E${String(i).padStart(25, '0')}`;
-		await c.execute({ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [eid] });
-		await c.execute({
-			sql: 'INSERT INTO edge_versions (id, src, dst, rel, valid_from) VALUES (?,?,?,?,?)',
-			args: [eid, String(i).padStart(26, '0'), String(i + 1).padStart(26, '0'), 'rel', 1],
+libsqlOnly(
+	'P1: edge adjacency indexes used — src => ev_src_bitemporal, dst => ev_dst_bitemporal',
+	async () => {
+		const c = mem();
+		await init(c);
+		// Insert a handful of rows + ANALYZE so the planner prefers the index over a
+		// scan of a tiny table (identity rows first to satisfy the FKs).
+		for (let i = 0; i < 20; i++) {
+			const id = String(i).padStart(26, '0');
+			await c.execute({ sql: 'INSERT INTO node_identity (id) VALUES (?)', args: [id] });
+		}
+		for (let i = 0; i < 19; i++) {
+			const eid = `E${String(i).padStart(25, '0')}`;
+			await c.execute({ sql: 'INSERT INTO edge_identity (id) VALUES (?)', args: [eid] });
+			await c.execute({
+				sql: 'INSERT INTO edge_versions (id, src, dst, rel, valid_from) VALUES (?,?,?,?,?)',
+				args: [eid, String(i).padStart(26, '0'), String(i + 1).padStart(26, '0'), 'rel', 1],
+			});
+		}
+		await c.execute('ANALYZE');
+
+		const fwd = await c.execute({
+			sql: 'EXPLAIN QUERY PLAN SELECT * FROM edge_versions WHERE src = ?',
+			args: [ULID_A],
 		});
-	}
-	await c.execute('ANALYZE');
+		const fwdPlan = fwd.rows
+			.map((x) => String(x.detail))
+			.join(' ')
+			.toLowerCase();
+		expect(fwdPlan).toContain('ev_src_bitemporal');
 
-	const fwd = await c.execute({
-		sql: 'EXPLAIN QUERY PLAN SELECT * FROM edge_versions WHERE src = ?',
-		args: [ULID_A],
-	});
-	const fwdPlan = fwd.rows
-		.map((x) => String(x.detail))
-		.join(' ')
-		.toLowerCase();
-	expect(fwdPlan).toContain('ev_src_asof');
-
-	const rev = await c.execute({
-		sql: 'EXPLAIN QUERY PLAN SELECT * FROM edge_versions WHERE dst = ?',
-		args: [ULID_B],
-	});
-	const revPlan = rev.rows
-		.map((x) => String(x.detail))
-		.join(' ')
-		.toLowerCase();
-	expect(revPlan).toContain('ev_dst_asof');
-	c.close();
-});
+		const rev = await c.execute({
+			sql: 'EXPLAIN QUERY PLAN SELECT * FROM edge_versions WHERE dst = ?',
+			args: [ULID_B],
+		});
+		const revPlan = rev.rows
+			.map((x) => String(x.detail))
+			.join(' ')
+			.toLowerCase();
+		expect(revPlan).toContain('ev_dst_bitemporal');
+		c.close();
+	},
+);
 
 test('P1: weight CHECK(weight >= 0) rejects a negative-weight edge_version', async () => {
 	const c = mem();

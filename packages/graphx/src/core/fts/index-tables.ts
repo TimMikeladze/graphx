@@ -112,13 +112,13 @@ export type IndexRebuildTarget = Pick<DbClient, 'execute' | 'transaction'>;
  */
 export async function rebuildIndex(client: IndexRebuildTarget): Promise<void> {
 	const r = await client.execute(
-		`SELECT ver, body, valid_to FROM node_versions WHERE body IS NOT NULL`,
+		`SELECT ver, body, valid_to, recorded_to FROM node_versions WHERE body IS NOT NULL`,
 	);
 	const ix = buildIndex(
 		r.rows.map((row) => ({
 			ver: Number(row.ver),
 			body: row.body === null ? null : String(row.body),
-			live: Number(row.valid_to) === FOREVER,
+			live: Number(row.valid_to) === FOREVER && Number(row.recorded_to) === FOREVER,
 		})),
 	);
 

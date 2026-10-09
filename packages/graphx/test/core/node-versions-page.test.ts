@@ -45,7 +45,7 @@ test('pages complete versions in one query and retains metadata/content pairing'
 	expect((await graph.listNodeVersions({ type: 'unknown' })).nodes).toEqual([]);
 	await expect(graph.listNodeVersions({ limit: 0 })).rejects.toThrow();
 });
-test('historical bulk reads retain the matching body and revision after a later update', async () => {
+test('historical bulk reads retain the matching body after a later update', async () => {
 	const { graph, db } = await setup();
 	const a = await graph.atomic((scope) =>
 		scope.addNode({ type: 'note', data: { name: 'A' }, body: 'old' }),
@@ -54,10 +54,16 @@ test('historical bulk reads retain the matching body and revision after a later 
 	await graph.atomic((scope) =>
 		scope.updateNode(a.id, { body: 'new', data: { name: 'B' } }, { expectedRevision: a.revision }),
 	);
-	expect((await graph.listNodeVersions({ asOf: at })).nodes).toEqual([a]);
+	// The update re-recorded the earlier part of a's row as its own row (D2), so a past read
+	// returns the same content under that row's revision.
+	const { revision: _, ...content } = a;
+	expect((await graph.listNodeVersions({ asOf: at })).nodes).toEqual([
+		{ ...content, revision: expect.any(String) },
+	]);
+	// ver 2 is the re-recorded past part; the successor is ver 3
 	expect((await graph.listNodeVersions()).nodes[0]).toMatchObject({
 		body: 'new',
-		revision: '2',
+		revision: '3',
 		data: { name: 'B' },
 	});
 });

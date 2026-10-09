@@ -58,6 +58,7 @@ await g.deleteNode(gw.id); // closes the version and drops its vectors; the hist
 import { bulkLoad, bulkEdges } from 'graphx';
 
 await bulkLoad(db, schema, rows, { embedder, chunkSize: 500 });
+await bulkLoad(db, schema, rows, { mode: 'correct' }); // replace the periods these rows cover
 await bulkEdges(db, schema, edgeRows);
 ```
 
@@ -76,22 +77,15 @@ const note = await g.atomic((scope) => scope.addNode({ type: 'note', data: { pat
 
 ## Every write is bitemporal
 
-Versions carry `valid_from` and `valid_to`, so a delete closes an interval instead of erasing a row. Pass `asOf` to any read to see the graph as it stood at that instant.
+Every version carries valid time (when it held in the world) and recorded time (when the graph believed it). Nothing is overwritten: pass `asOf` to read the world at an instant, `recordedAsOf` to read what the graph believed then, or both.
 
 ```sh
-$ bun run examples/basic-demo.ts
-listNodes  1 alerts
-match      [
-  [ "gw-1", "high" ]
-]
-…
-history    2 versions
-asOf t0    [
-  {
-    name: "gw-1",
-    firmware: "2.1.0",
-  }
-]
+$ bun run examples/correction-demo.ts
+in 1995, as we know it now      0.88
+in 1995, as we knew it then     0.9
+today                           0.88
+history  yield=0.9  valid 1992-01-01 → open  superseded
+history  yield=0.88  valid 1992-01-01 → open  current
 ```
 
 Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` from `graphx/react`.
@@ -103,10 +97,11 @@ Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` 
 ```ts
 import { history, diff, changeFeed, timeline } from 'graphx';
 
-await history(db, id); // every version of a node, oldest first
+await history(db, id); // every row of a node, oldest first; superseded ones have current: false
 await diff(db, t1, t2); // nodes and edges added, changed and removed between two instants
+await diff(db, t1, t2, { axis: 'recorded' }); // what graphx learned or corrected in that window
 await changeFeed(db, cursor, { limit: 500 }); // CDC: node + edge versions in write order
-await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks
+await timeline(db, { buckets: 120 }); // change-point extent + density histogram + snap ticks (axis too)
 ```
 
 ## Vector, text and graph together
@@ -203,6 +198,7 @@ live nodes     3
 embedded       3  (3 vector rows)
 unembedded     0
 stale          0
+overlaps       0 node id(s), 0 edge id(s) with more than one open version
 ```
 
 ## Any embedder, one fetch
@@ -350,6 +346,8 @@ g.useListNodes({ type: 'alert' }); // alert[]
 g.useMatch((q) => q.node('d', 'device').in('raised').node('a', 'alert').select('d', 'a'));
 g.useRetrieve({ query: 'overheating sensor', k: 10 });
 g.useAddNode(); // mutations: add/update/delete node, add/delete edge, bulk load
+g.useNode(id, { recordedAsOf: lastWeek }); // what the graph believed then
+g.useCorrectNode(); // and useRetractNode, useCorrectEdge, useRetractEdge (server needs allowValidTime)
 g.useChangeFeedSync(); // tails /changes and invalidates exact keys
 g.useGraphEvents(); // subscribes to the SSE stream
 ```
@@ -529,8 +527,8 @@ graphx triggers [-c config]               Run declarative triggers over the even
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
 graphx reembed  [-c config] [--dry-run]   Re-embed every live node (also switches models)
 graphx upcast   [-c config] [--type t]    Rewrite lagging node data to the upcasters' versions (--dry-run)
-graphx doctor   [-c config]               Embedding model, width and health of the namespace
-graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of <ms|ISO>)
+graphx doctor   [-c config]               Embedding model, width and health of the namespace (--repair-overlaps)
+graphx fork     <namespace> [-c config]   Branch the namespace into an empty one (--as-of, --recorded-as-of)
 graphx dedupe   <type> [-c config] [...]  Find duplicate nodes of a type and judge them with Jev
 graphx ask      "<question>" [-c config]  Plan a plain-language question as a graph call, and run it
 ```

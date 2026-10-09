@@ -14,6 +14,7 @@ export function NodeDetailSheet({
 	onEdit,
 	onDelete,
 	asOf,
+	recordedAsOf,
 	readOnly,
 }: {
 	tenant: string;
@@ -25,6 +26,8 @@ export function NodeDetailSheet({
 	onDelete?: (id: string) => void;
 	/** Viewing instant; absent ⇒ live. */
 	asOf?: number;
+	/** Viewing what the graph believed then; absent ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Viewing the past — a write would land on the live version, so editing is closed off. */
 	readOnly?: boolean;
 }) {
@@ -48,6 +51,7 @@ export function NodeDetailSheet({
 						onEdit={onEdit}
 						onDelete={onDelete}
 						asOf={asOf}
+						recordedAsOf={recordedAsOf}
 						readOnly={readOnly}
 					/>
 				)}

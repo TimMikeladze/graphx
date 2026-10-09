@@ -110,7 +110,7 @@ export async function syncPlan(
 			db,
 			podcastSchema,
 			inserts.map((n) => ({ type: n.type, data: n.data, body: n.body, validFrom: n.validFrom })),
-			{ embedder: opts.embedder, chunkSize: 200, loadTs: startedAt },
+			{ embedder: opts.embedder, chunkSize: 200, validFrom: startedAt },
 		);
 		inserts.forEach((n, i) => idOf.set(n.key, ids[i] as string));
 		log(`  bulkLoad ${inserts.length} nodes in ${((performance.now() - t) / 1000).toFixed(1)}s`);
@@ -159,7 +159,7 @@ export async function syncPlan(
 				data: e.data,
 				validFrom: reopened.has(e.key) ? Date.now() : e.validFrom,
 			})),
-			{ types, chunkSize: 200, loadTs: startedAt },
+			{ types, chunkSize: 200, validFrom: startedAt },
 		);
 	}
 

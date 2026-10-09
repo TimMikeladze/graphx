@@ -1,4 +1,4 @@
-import { FOREVER } from './runtime.ts';
+import { LIVE_SQL } from './dialect-sql.ts';
 import type { DbClient, SqlResult, SqlStatement } from './dialect.ts';
 
 /**
@@ -56,7 +56,7 @@ export async function declareDuckUniqueProp(
 	const dupes = await client.execute({
 		sql: `SELECT json_extract_string(data, '$.${safeProp}') AS v, count(*) AS n
 		      FROM node_versions
-		      WHERE valid_to = ${FOREVER} AND type = ? AND json_extract_string(data, '$.${safeProp}') IS NOT NULL
+		      WHERE ${LIVE_SQL} AND type = ? AND json_extract_string(data, '$.${safeProp}') IS NOT NULL
 		      GROUP BY 1 HAVING count(*) > 1 LIMIT 1`,
 		args: [type],
 	});
@@ -102,7 +102,7 @@ export async function assertUniqueProps(
 		const safeProp = safeIdent(prop, 'prop');
 		const r = await exec.execute({
 			sql: `SELECT id FROM node_versions
-			      WHERE type = ? AND valid_to = ${FOREVER} AND json_extract_string(data, '$.${safeProp}') = ?
+			      WHERE type = ? AND ${LIVE_SQL} AND json_extract_string(data, '$.${safeProp}') = ?
 			        ${excludeId ? 'AND id <> ?' : ''}
 			      LIMIT 1`,
 			args: excludeId ? [type, String(value), excludeId] : [type, String(value)],

@@ -45,7 +45,7 @@ test('native memory opener retains Graphx state across commits on one RAM-only c
 		scope.updateNode(first.id, { body: 'retained orchard' }, { expectedRevision: first.revision }),
 	);
 	expect((await graph.getNodeVersion(first.id))?.body).toBe('retained orchard');
-	expect(await history(client, first.id)).toHaveLength(2);
+	expect((await history(client, first.id)).filter((v) => v.current)).toHaveLength(2);
 	expect((await graph.listNodes({ q: 'orchard' })).nodes[0]?.id).toBe(first.id);
 	await expect(
 		graph.atomic(async (scope) => {
@@ -136,7 +136,7 @@ test('native local opener persists content, history, FTS and native vectors afte
 	const read = new Graph(reopened, schema, { embedder });
 	expect((await read.retrieve({ query: 'peach harvest', k: 1 }))[0]?.id).toBe(note.id);
 	expect((await read.listNodes({ q: 'harvest' })).nodes[0]?.id).toBe(note.id);
-	expect(await history(reopened, note.id)).toHaveLength(2);
+	expect((await history(reopened, note.id)).filter((v) => v.current)).toHaveLength(2);
 	expect(
 		(await reopened.execute("SELECT vector_extract(vector('[1,2]')) AS vector")).rows[0]?.vector,
 	).toBe('[1,2]');
@@ -293,7 +293,7 @@ test('two native local clients compete for one revision without blocking JavaScr
 	expect(saves.find((result) => result.status === 'rejected')).toMatchObject({
 		reason: { name: 'RevisionConflict' },
 	});
-	expect(await history(a, node.id)).toHaveLength(2);
+	expect((await history(a, node.id)).filter((v) => v.current)).toHaveLength(2);
 });
 
 test('connection pragmas retain their default, honor driver timeout, and reject invalid values', async () => {

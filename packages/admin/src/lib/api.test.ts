@@ -94,18 +94,22 @@ describe('api transport', () => {
 
 	it('passes asOf to the single-node reads', async () => {
 		fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: {} }));
-		await api.getNode('tA', 'pA', 'n1', 1234);
+		await api.getNode('tA', 'pA', 'n1', { asOf: 1234 });
 		expect(fetchMock.mock.calls[0][0]).toBe('/t/tA/p/pA/nodes/n1?asOf=1234');
 
 		fetchMock.mockResolvedValue(
 			ok({ body: null, uri: null, contentType: null, contentHash: null }),
 		);
-		await api.getNodeContent('tA', 'pA', 'n1', 1234);
+		await api.getNodeContent('tA', 'pA', 'n1', { asOf: 1234 });
 		expect(fetchMock.mock.calls[1][0]).toBe('/t/tA/p/pA/nodes/n1/content?asOf=1234');
 
 		fetchMock.mockResolvedValue(ok([]));
-		await api.neighbors('tA', 'pA', 'n1', 1234);
+		await api.neighbors('tA', 'pA', 'n1', { asOf: 1234 });
 		expect(fetchMock.mock.calls[2][0]).toBe('/t/tA/p/pA/nodes/n1/neighbors?asOf=1234');
+
+		fetchMock.mockResolvedValue(ok({ id: 'n1', type: 'device', data: {} }));
+		await api.getNode('tA', 'pA', 'n1', { recordedAsOf: 99 });
+		expect(fetchMock.mock.calls[3][0]).toBe('/t/tA/p/pA/nodes/n1?recordedAsOf=99');
 	});
 
 	it('omits asOf from the single-node reads when live', async () => {

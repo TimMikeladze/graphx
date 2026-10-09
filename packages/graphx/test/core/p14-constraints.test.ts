@@ -43,7 +43,7 @@ afterAll(async () => {
 
 async function liveEdgeCount(client: DbClient, src: string, rel: string): Promise<number> {
 	const r = await client.execute({
-		sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+		sql: 'SELECT COUNT(*) AS c FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ? AND valid_to = ?',
 		args: [src, rel, FOREVER],
 	});
 	return Number(r.rows[0]?.c);
@@ -58,7 +58,7 @@ test('P14 unique: a duplicate LIVE unique prop value is rejected', async () => {
 	await expect(g.addNode({ type: 'device', data: { serial: 'SN-1' } })).rejects.toThrow();
 	// the first one survives (exactly one live device with that serial)
 	const r = await client.execute({
-		sql: `SELECT COUNT(*) AS c FROM node_versions WHERE type='device' AND valid_to=? AND ${jsonFieldSql(client, 'data', 'serial')}='SN-1'`,
+		sql: `SELECT COUNT(*) AS c FROM node_versions WHERE recorded_to = 8640000000000000 AND type='device' AND valid_to=? AND ${jsonFieldSql(client, 'data', 'serial')}='SN-1'`,
 		args: [FOREVER],
 	});
 	expect(Number(r.rows[0]?.c)).toBe(1);
@@ -73,7 +73,7 @@ test('P14 unique: historical versions with the same value do NOT collide', async
 	// partial index is live-only, so the closed v1 (still serial SN-2) does not clash.
 	await g.updateNode(d.id, { body: 'v2' });
 	const rows = await client.execute({
-		sql: 'SELECT valid_to FROM node_versions WHERE id = ? ORDER BY valid_from',
+		sql: 'SELECT valid_to FROM node_versions WHERE recorded_to = 8640000000000000 AND id = ? ORDER BY valid_from',
 		args: [d.id],
 	});
 	expect(rows.rows.length).toBe(2);
@@ -128,7 +128,7 @@ test('P14 cardinality: a second single-valued edge closes the first (exactly one
 	expect(await liveEdgeCount(client, gad.id, 'attached_to')).toBe(1);
 	// and the surviving live edge points at d2 (last write wins)
 	const live = await client.execute({
-		sql: 'SELECT dst FROM edge_versions WHERE src = ? AND rel = ? AND valid_to = ?',
+		sql: 'SELECT dst FROM edge_versions WHERE recorded_to = 8640000000000000 AND src = ? AND rel = ? AND valid_to = ?',
 		args: [gad.id, 'attached_to', FOREVER],
 	});
 	expect(String(live.rows[0]?.dst)).toBe(d2.id);

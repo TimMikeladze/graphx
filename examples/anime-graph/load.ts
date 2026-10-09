@@ -152,7 +152,7 @@ export async function syncPlan(
 			db,
 			animeSchema,
 			inserts.map((n) => ({ type: n.type, data: n.data, body: n.body })),
-			{ embedder: opts.embedder, chunkSize: opts.chunkSize ?? 500, loadTs: startedAt },
+			{ embedder: opts.embedder, chunkSize: opts.chunkSize ?? 500, validFrom: startedAt },
 		);
 		inserts.forEach((n, i) => idOf.set(n.key, ids[i] as string));
 		log(`  bulkLoad ${inserts.length} nodes in ${((performance.now() - t) / 1000).toFixed(1)}s`);
@@ -186,7 +186,7 @@ export async function syncPlan(
 		await bulkEdges(db, animeSchema, newEdges, {
 			types,
 			chunkSize: opts.chunkSize ?? 500,
-			loadTs: startedAt,
+			validFrom: startedAt,
 		});
 		log(`  bulkEdges ${newEdges.length} edges in ${((performance.now() - t) / 1000).toFixed(1)}s`);
 	}

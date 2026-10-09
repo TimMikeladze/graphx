@@ -19,16 +19,17 @@ import { typeOf } from './types.ts';
 export async function ensureObject(raw: DbClient, ref: string): Promise<void> {
 	const type = typeOf(ref);
 	const d = dialectOf(raw);
+	const now = Date.now();
 	// Idempotent: the NOT EXISTS guard runs inside the single write batch (Postgres ON
 	// CONFLICT / SQLite OR IGNORE on the identity row; the version insert guards on NOT EXISTS).
 	await raw.batch(
 		[
 			{ sql: insertOrIgnore(d, 'node_identity', 'id', '(?)'), args: [ref] },
 			{
-				sql: `INSERT INTO node_versions (id, type, data, valid_from)
-					SELECT ?, ?, '{}', ?
-					WHERE NOT EXISTS (SELECT 1 FROM node_versions WHERE id = ? AND valid_to = ?)`,
-				args: [ref, type, Date.now(), ref, FOREVER],
+				sql: `INSERT INTO node_versions (id, type, data, valid_from, recorded_from)
+					SELECT ?, ?, '{}', ?, ?
+					WHERE NOT EXISTS (SELECT 1 FROM node_versions WHERE id = ? AND valid_to = ? AND recorded_to = ?)`,
+				args: [ref, type, now, now, ref, FOREVER, FOREVER],
 			},
 		],
 		'write',
@@ -62,6 +63,7 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 
 	const id = ulid();
 	const d = dialectOf(g.raw);
+	const now = Date.now();
 	const dataJson =
 		tuple.subjectRelation !== undefined
 			? JSON.stringify({ subjectRelation: tuple.subjectRelation })
@@ -78,15 +80,16 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 				args: [id, tuple.subject, tuple.relation, tuple.object, ...srArgs],
 			},
 			{
-				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, valid_from)
-					SELECT ?, ?, ?, ?, 1.0, ?, ? WHERE ${guard}`,
+				sql: `INSERT INTO edge_versions (id, src, dst, rel, weight, data, valid_from, recorded_from)
+					SELECT ?, ?, ?, ?, 1.0, ?, ?, ? WHERE ${guard}`,
 				args: [
 					id,
 					tuple.subject,
 					tuple.object,
 					tuple.relation,
 					dataJson,
-					Date.now(),
+					now,
+					now,
 					tuple.subject,
 					tuple.relation,
 					tuple.object,
@@ -99,10 +102,11 @@ export async function writeTuple(g: Graph<GraphSchema>, tuple: Tuple): Promise<v
 }
 
 /**
- * Revoke a tuple: close the live edge version (`valid_to = ts`), matched on
- * `subjectRelation` so a userset tuple and a same-endpoint direct tuple are revoked
- * independently. History is retained (`asOf` past still sees the grant). `ts` is bumped
- * past `valid_from` to keep the interval non-empty (M6). No-op if nothing live matches.
+ * Revoke a tuple: the live edge stops holding from now (a retraction over `[now, FOREVER)`,
+ * the portion primitive's semantics), matched on `subjectRelation` so a userset tuple and a
+ * same-endpoint direct tuple are revoked independently. History is retained (`asOf` past
+ * still sees the grant). `now` is bumped past the edge's start to keep the interval non-empty
+ * (M6). No-op if nothing live matches.
  */
 export async function deleteTuple(
 	raw: DbClient,
@@ -114,20 +118,32 @@ export async function deleteTuple(
 	const srField = jsonField(dialectOf(raw), 'data', 'subjectRelation');
 	const srPred = subjectRelation === undefined ? `${srField} IS NULL` : `${srField} = ?`;
 	const srArgs: string[] = subjectRelation === undefined ? [] : [subjectRelation];
-
 	const live = (
 		await raw.execute({
-			sql: `SELECT MAX(valid_from) AS vf FROM edge_versions
-				WHERE src = ? AND rel = ? AND dst = ? AND valid_to = ? AND ${srPred}`,
-			args: [src, rel, dst, FOREVER, ...srArgs],
+			sql: `SELECT ver, valid_from, recorded_from FROM edge_versions
+				WHERE src = ? AND rel = ? AND dst = ? AND valid_to = ? AND recorded_to = ? AND ${srPred}`,
+			args: [src, rel, dst, FOREVER, FOREVER, ...srArgs],
 		})
-	).rows[0];
-	const vf = live?.vf;
-	if (vf == null) return;
-	const ts = Math.max(Date.now(), Number(vf) + 1);
-	await raw.execute({
-		sql: `UPDATE edge_versions SET valid_to = ?
-			WHERE src = ? AND rel = ? AND dst = ? AND valid_to = ? AND ${srPred}`,
-		args: [ts, src, rel, dst, FOREVER, ...srArgs],
-	});
+	).rows;
+	if (live.length === 0) return;
+	let ts = Date.now();
+	for (const r of live) ts = Math.max(ts, Number(r.valid_from) + 1, Number(r.recorded_from) + 1);
+	// One atomic batch per row: supersede the open row, then record its part before `ts` as
+	// history, copied from the row just superseded — so if a concurrent revoke got there first,
+	// the close matches nothing and neither does the copy.
+	const cols = 'id, src, dst, rel, weight, data, source';
+	await raw.batch(
+		live.flatMap((r) => [
+			{
+				sql: `UPDATE edge_versions SET recorded_to = ? WHERE ver = ? AND recorded_to = ?`,
+				args: [ts, r.ver as number, FOREVER],
+			},
+			{
+				sql: `INSERT INTO edge_versions (${cols}, valid_from, valid_to, recorded_from)
+					SELECT ${cols}, valid_from, ?, ? FROM edge_versions WHERE ver = ? AND recorded_to = ?`,
+				args: [ts, ts, r.ver as number, ts],
+			},
+		]),
+		'write',
+	);
 }

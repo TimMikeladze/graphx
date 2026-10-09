@@ -87,6 +87,7 @@ test('openapi: required query params are marked required (GET /diff -> t1, t2)',
 		.filter((p) => p.in === 'query')
 		.map((p) => [p.name, p.required]);
 	expect(query.sort()).toEqual([
+		['axis', false],
 		['t1', true],
 		['t2', true],
 	]);

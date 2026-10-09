@@ -134,7 +134,8 @@ bqlTest(
 		expect(native.method).toBe('native');
 		expect(copy.method).toBe('copy');
 		expect(shape(native)).toEqual(shape(copy));
-		expect(native).toMatchObject({ nodes: 2, nodeVersions: 3, edges: 2, constraints: 1 });
+		// a's update superseded its first row and recorded the closed part: 4 rows for 2 nodes
+		expect(native).toMatchObject({ nodes: 2, nodeVersions: 4, edges: 2, constraints: 1 });
 
 		const branch = new Graph(nativeTarget, SCHEMA);
 		expect((await branch.getNode(a.id))?.data).toEqual({ name: 'A', green: 35 });
@@ -268,3 +269,27 @@ bqlTest('the target client decides foreign keys, whatever the source had', async
 	expect((await fork(source, target)).method).toBe('native');
 	expect((await serverStat(target)).foreignKeys).toBe(true);
 });
+
+bqlTest(
+	'a recorded-time cut on one bql.sh server is native, and builds the branch a copy would',
+	async () => {
+		const { raw, g, a } = await seeded();
+		await tick();
+		const before = Date.now();
+		await tick();
+		await g.correctNode(
+			a.id,
+			{ data: { name: 'A', green: 31 } },
+			{ validFrom: Date.UTC(2000, 0, 1) },
+		);
+		for (const cut of [{ recordedAsOf: before }, { asOf: Date.now(), recordedAsOf: before }]) {
+			const nativeTarget = bqlDb();
+			const native = await fork(raw, nativeTarget, cut);
+			const copy = await fork(raw, bqlDb(), { ...cut, method: 'copy' });
+			expect(native.method).toBe('native');
+			expect(shape(native)).toEqual(shape(copy));
+			const branch = new Graph(nativeTarget, SCHEMA);
+			expect((await branch.getNode(a.id))?.data).toEqual({ name: 'A', green: 30 });
+		}
+	},
+);

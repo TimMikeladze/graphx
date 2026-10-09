@@ -359,8 +359,8 @@ export const capabilities: Capability[] = [
 	{
 		id: 'bitemporal',
 		title: 'Every write is bitemporal',
-		body: 'Versions carry `valid_from` and `valid_to`, so a delete closes an interval instead of erasing a row. Pass `asOf` to any read to see the graph as it stood at that instant.',
-		demo: { kind: 'code', ref: terminal('bun run examples/basic-demo.ts') },
+		body: 'Every version carries valid time (when it held in the world) and recorded time (when the graph believed it). Nothing is overwritten: pass `asOf` to read the world at an instant, `recordedAsOf` to read what the graph believed then, or both.',
+		demo: { kind: 'code', ref: terminal('bun run examples/correction-demo.ts') },
 		aside:
 			'Want the change stream instead? Tail `changeFeed`, or mount `useChangeFeedSync` from `graphx/react`.',
 	},

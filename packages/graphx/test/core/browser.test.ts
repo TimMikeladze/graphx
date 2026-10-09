@@ -95,7 +95,7 @@ test('WASM graph supports FTS, history and transaction ownership', async () => {
 	expect(note.id).toBeTruthy();
 	expect((await graph.listNodes({ q: 'orchard' })).nodes.map((n) => n.id)).toEqual([note.id]);
 	await graph.updateNode(note.id, { body: 'peach harvest' });
-	expect(await history(client, note.id)).toHaveLength(2);
+	expect((await history(client, note.id)).filter((v) => v.current)).toHaveLength(2);
 	const tx = await client.transaction();
 	await tx.execute('CREATE TABLE rolled_back(id)');
 	let outsideDone = false;

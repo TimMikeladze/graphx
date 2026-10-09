@@ -1,3 +1,4 @@
+import type { Slice } from './api';
 import type { ExplorerFilters } from './types';
 
 /** Query-key factories — one stable shape per server resource (TanStack Query cache + invalidation). */
@@ -18,12 +19,12 @@ export const qk = {
 	 * last. A write must evict the live entry AND every as-of entry it may have cached, so the
 	 * mutations below invalidate the `all*` prefix rather than one of these leaves.
 	 */
-	node: (tenant: string, project: string, id: string, asOf?: number) =>
-		['node', tenant, project, id, asOf ?? null] as const,
-	nodeContent: (tenant: string, project: string, id: string, asOf?: number) =>
-		['node-content', tenant, project, id, asOf ?? null] as const,
-	neighbors: (tenant: string, project: string, id: string, asOf?: number) =>
-		['neighbors', tenant, project, id, asOf ?? null] as const,
+	node: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		['node', tenant, project, id, at.asOf ?? null, at.recordedAsOf ?? null] as const,
+	nodeContent: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		['node-content', tenant, project, id, at.asOf ?? null, at.recordedAsOf ?? null] as const,
+	neighbors: (tenant: string, project: string, id: string, at: Slice = {}) =>
+		['neighbors', tenant, project, id, at.asOf ?? null, at.recordedAsOf ?? null] as const,
 	/** As-of-agnostic prefixes — what a write invalidates. Mirrors `allNodes`/`allGraph` above. */
 	allNode: (tenant: string, project: string, id: string) => ['node', tenant, project, id] as const,
 	allNodeContent: (tenant: string, project: string, id: string) =>
@@ -39,6 +40,10 @@ export const qk = {
 	/** A review queue: the live edges of one rel. */
 	edges: (tenant: string, project: string, rel: string) => ['edges', tenant, project, rel] as const,
 	allEdges: (tenant: string, project: string) => ['edges', tenant, project] as const,
-	timeline: (tenant: string, project: string, window: { from?: number; to?: number } = {}) =>
-		['timeline', tenant, project, window.from ?? null, window.to ?? null] as const,
+	timeline: (
+		tenant: string,
+		project: string,
+		window: { from?: number; to?: number } = {},
+		axis: 'valid' | 'recorded' = 'valid',
+	) => ['timeline', tenant, project, window.from ?? null, window.to ?? null, axis] as const,
 };

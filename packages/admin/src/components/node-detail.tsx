@@ -176,7 +176,15 @@ function History({
 	isLoading,
 	isError,
 }: {
-	versions?: { ver: number; type: string; valid_from: number; valid_to: number }[];
+	versions?: {
+		ver: number;
+		type: string;
+		valid_from: number;
+		valid_to: number;
+		recorded_from: number;
+		recorded_to: number;
+		current: boolean;
+	}[];
 	isLoading: boolean;
 	isError: boolean;
 }) {
@@ -192,13 +200,17 @@ function History({
 		return <EmptyState icon={AlertCircleIcon} tone="destructive" title="Failed to load history" />;
 	if (!versions || versions.length === 0) return <EmptyState icon={InboxIcon} title="No history" />;
 
-	const ordered = [...versions].sort((a, b) => b.ver - a.ver);
+	// Newest world time first; within one stretch of world time, the latest belief first, so a
+	// correction sits directly above the belief it superseded.
+	const ordered = [...versions].sort(
+		(a, b) => b.valid_from - a.valid_from || b.recorded_from - a.recorded_from || b.ver - a.ver,
+	);
 	return (
 		<ol className="relative ml-2 flex flex-col gap-4 border-l border-border pl-4">
 			{ordered.map((v) => {
-				const live = v.valid_to >= FOREVER;
+				const live = v.current && v.valid_to >= FOREVER;
 				return (
-					<li key={v.ver} className="relative">
+					<li key={v.ver} className={cn('relative', !v.current && 'opacity-60')}>
 						<span
 							className={cn(
 								'absolute top-1 -left-[1.3rem] size-2.5 rounded-full ring-4 ring-background',
@@ -214,9 +226,19 @@ function History({
 									live
 								</Badge>
 							)}
+							{!v.current && <Badge variant="secondary">superseded</Badge>}
 						</div>
-						<div className="mt-1 text-xs text-muted-foreground tabular-nums">
+						<div
+							className={cn(
+								'mt-1 text-xs text-muted-foreground tabular-nums',
+								!v.current && 'line-through',
+							)}
+						>
 							{fmtTime(v.valid_from)} → {fmtTime(v.valid_to)}
+						</div>
+						<div className="text-[0.7rem] text-muted-foreground/80 tabular-nums">
+							recorded {fmtTime(v.recorded_from)}
+							{!v.current && <> · superseded {fmtTime(v.recorded_to)}</>}
 						</div>
 					</li>
 				);
@@ -238,6 +260,7 @@ export function NodeDetail({
 	onEdit,
 	onDelete,
 	asOf,
+	recordedAsOf,
 	readOnly,
 }: {
 	tenant: string;
@@ -250,13 +273,15 @@ export function NodeDetail({
 	onDelete?: (id: string) => void;
 	/** Viewing instant; absent ⇒ live. */
 	asOf?: number;
+	/** Viewing what the graph believed then; absent ⇒ current beliefs. */
+	recordedAsOf?: number;
 	/** Viewing the past — a write would land on the live version, so editing is closed off. */
 	readOnly?: boolean;
 }) {
 	// Controlled so the Content tab knows when it is on screen (it gates its own fetch on that).
 	const [tab, setTab] = useState('data');
-	const node = useNode(tenant, project, nodeId, asOf);
-	const neighbors = useNeighbors(tenant, project, nodeId, asOf);
+	const node = useNode(tenant, project, nodeId, { asOf, recordedAsOf });
+	const neighbors = useNeighbors(tenant, project, nodeId, { asOf, recordedAsOf });
 	const history = useHistory(tenant, project, nodeId);
 
 	const label = node.data ? bestLabel(node.data.data) : undefined;
@@ -372,6 +397,7 @@ export function NodeDetail({
 						nodeId={nodeId}
 						active={tab === 'content'}
 						asOf={asOf}
+						recordedAsOf={recordedAsOf}
 						readOnly={readOnly}
 					/>
 				</TabsContent>
