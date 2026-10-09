@@ -97,7 +97,7 @@ One App Router app serves everything (`next dev`, port 8793):
 
 - **`app/[...gx]/route.ts`** — the graphx-generated surface mounted as the root catch-all (static
   routes and pages take precedence): `/t/{tenant}/p/{project}/…` (nodes, edges, retrieval, match,
-  algorithms, CDC…), OpenAPI at `/openapi.json`, interactive docs at `/docs`, `/health`, `/ready`,
+  algorithms, CDC…), OpenAPI at `/openapi.json`, interactive docs at `/docs`, GraphQL at `/graphql`, `/health`, `/ready`,
   the `GET /demo` bootstrap payload, and `/admin/…` (the control-plane app). Dev auth is
   graphx's header mode (`x-user`/`x-tenant` via `/demo`) — the old static bearer token is gone.
 

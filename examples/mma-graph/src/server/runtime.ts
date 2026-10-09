@@ -41,6 +41,7 @@ function createMmaApp() {
 		cors: true,
 		db: NAMESPACE,
 		limits: { maxRows: 5_000 },
+		graphql: true,
 		openapi: { title: 'mma-graph', servers: [{ url: `http://localhost:${PORT}` }] },
 	});
 }
@@ -49,7 +50,7 @@ type MmaApp = Awaited<ReturnType<typeof createMmaApp>>['app'];
 type MmaGraph = Awaited<ReturnType<typeof createMmaApp>>['graph'];
 
 export interface MmaServer {
-	/** The graphx-generated HTTP app — `/t/…`, `/openapi.json`, `/docs`, `/admin/…`. */
+	/** The graphx-generated HTTP app — `/t/…`, `/openapi.json`, `/docs`, `/graphql`, `/admin/…`. */
 	app: MmaApp;
 	/** The same graph handle the generated routes serve — read directly by the domain queries. */
 	graph: MmaGraph;

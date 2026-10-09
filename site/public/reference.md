@@ -665,6 +665,66 @@ The OpenAPI document is generated from the route definitions — not hand-writte
 typed client is `hc<AppType>`, with no codegen step. Mount `createAdminApp` under `/admin` for
 operator-gated control-plane CRUD.
 
+### GraphQL
+
+Turn on `graphql` and the same API answers GraphQL at `/graphql`. It needs one optional package:
+
+```bash
+bun add openapi-x-graphql
+```
+
+```ts
+import { createApp } from 'graphx';
+import { schema } from './graphx.config.ts';
+
+const { app, tenant, project } = await createApp({
+	schema,
+	graphql: true,
+	seed: async (g) => {
+		await g.addNode({ type: 'site', data: { name: 'us-east-1', region: 'us' } });
+	},
+});
+
+Bun.serve({ port: 8899, fetch: app.fetch });
+
+const res = await fetch('http://localhost:8899/graphql', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: JSON.stringify({
+		query: `query ($tenant: String!, $project: String!) {
+			listNodes(tenant: $tenant, project: $project, type: "site") { nodes { id data } }
+		}`,
+		variables: { tenant, project },
+	}),
+});
+console.log(await res.json()); // { data: { listNodes: { nodes: [{ id, data: { name: 'us-east-1', … } }] } } }
+```
+
+Open `http://localhost:8899/graphql` in a browser for GraphiQL, with docs and autocomplete. From the
+CLI, `graphx serve --graphql` does the same.
+
+Every route becomes a field named after its `operationId` — `list_nodes` is `listNodes`,
+`create_node` is `createNode`. Reads are queries, writes are mutations:
+
+```graphql
+mutation ($tenant: String!, $project: String!) {
+	createNode(
+		tenant: $tenant
+		project: $project
+		input: { type: "site", data: { name: "eu-west-1", region: "eu" } }
+	) {
+		id
+	}
+}
+```
+
+There is no second API behind it. The schema is generated from `/openapi.json` by
+[openapi-x-graphql](https://github.com/TimMikeladze/openapi-x-graphql), and each field runs its REST
+route in-process with the caller's headers, so auth, permissions, validation and limits are the
+route's own. A failed route returns a GraphQL error carrying `extensions.status` and
+`extensions.body`. Pass `graphql: { path: '/gql', graphiql: false }` to move the endpoint or drop
+GraphiQL. The SSE `/events` stream has no GraphQL counterpart.
+
 ## React
 
 Hooks are typed from the schema _type_ alone, so the browser bundle carries no SDK runtime and no
@@ -1303,7 +1363,7 @@ transaction primitive on these runtimes, and it requires a namespace without emb
 
 ```
 graphx new      <dir>                     Scaffold a starter project
-graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs
+graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs (--graphql)
 graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio
@@ -1318,6 +1378,8 @@ graphx ask      "<question>" [-c config]  Plan a plain-language question as a gr
 Every command except `new` loads `graphx.config.ts` (`--config`, `-c`; default `./graphx.config.ts`).
 The CLI runs on Node >= 22.18 (`npx graphx`), which loads the TypeScript config natively, or on Bun
 (`bunx --bun graphx`).
+
+`serve --graphql` also mounts `/graphql` (needs `openapi-x-graphql`).
 
 `ingest` options: `--source <id>`, `--id-field <name>`, `--prune`, `--watch`, `--assets-type <type>`,
 `--edge-field <field=rel>` (repeatable), `--dangling-type <type>`, `--tags-type <type>`.

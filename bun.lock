@@ -112,6 +112,7 @@
         "@libsql/client": "^0.17.3",
         "graphx": "workspace:*",
         "next": "^16.3.5",
+        "openapi-x-graphql": "^1.0.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "zod": "^4.4.3",
@@ -267,6 +268,7 @@
         "ajv": "^8.20.0",
         "bql.sh": "^0.4.0",
         "happy-dom": "^16.5.3",
+        "openapi-x-graphql": "^1.0.0",
         "pg": "^8.13.1",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
@@ -279,6 +281,7 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
         "@tanstack/react-query": "^5.0.0",
+        "openapi-x-graphql": "^1.0.0",
         "pg": "^8.11.0",
         "react": "^18 || ^19",
         "typescript": ">=4.5.0",
@@ -291,6 +294,7 @@
         "@modelcontextprotocol/sdk",
         "@sqlite.org/sqlite-wasm",
         "@tanstack/react-query",
+        "openapi-x-graphql",
         "pg",
         "react",
         "typescript",
@@ -1698,7 +1702,7 @@
 
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 
-    "graphql": ["graphql@16.14.1", "", {}, "sha512-cQOsSMS/IrDz82PVyRDvf/Q1F/bRbBVjJlh+xYOkI1qw2bWRvWGiWc+m2O0d6l4Bt1fyY+8kzJ8JFWGJqNeDBg=="],
+    "graphql": ["graphql@17.0.2", "", {}, "sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ=="],
 
     "graphx": ["graphx@workspace:packages/graphx"],
 
@@ -2067,6 +2071,8 @@
     "onetime": ["onetime@5.1.2", "", { "dependencies": { "mimic-fn": "^2.1.0" } }, "sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg=="],
 
     "open": ["open@11.0.0", "", { "dependencies": { "default-browser": "^5.4.0", "define-lazy-prop": "^3.0.0", "is-in-ssh": "^1.0.0", "is-inside-container": "^1.0.0", "powershell-utils": "^0.1.0", "wsl-utils": "^0.3.0" } }, "sha512-smsWv2LzFjP03xmvFoJ331ss6h+jixfA4UUV/Bsiyuu4YJPfN+FIQGOIiv4w9/+MoHkfkJ22UIaQWRVFRfH6Vw=="],
+
+    "openapi-x-graphql": ["openapi-x-graphql@1.0.0", "", { "dependencies": { "graphql": "^17.0.2" }, "peerDependencies": { "typescript": ">=4.5.0", "yaml": ">=2.0.0" }, "optionalPeers": ["typescript", "yaml"], "bin": { "openapi-x-graphql": "dist/cli.js" } }, "sha512-/iux2NCugRkLsqkyyoKJr6ZtR46SRz4WsNZx2a5WzSlZwjhK3yalkkW/bq44tYALjSvX/FY4OxHVUx6mTYjGcA=="],
 
     "openapi3-ts": ["openapi3-ts@4.6.0", "", { "dependencies": { "yaml": "^2.9.0" } }, "sha512-a4sfn6L2sIShhtzJqmjGrARvxAW/3F2BJDdyRVvNF9VhAsZSh5hSyI3a9TNvmzBxXmq66nY5LNT5bQcBxYAZZg=="],
 
@@ -2595,6 +2601,8 @@
     "micromatch/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
 
     "msw/cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
+
+    "msw/graphql": ["graphql@16.14.1", "", {}, "sha512-cQOsSMS/IrDz82PVyRDvf/Q1F/bRbBVjJlh+xYOkI1qw2bWRvWGiWc+m2O0d6l4Bt1fyY+8kzJ8JFWGJqNeDBg=="],
 
     "next/postcss": ["postcss@8.5.23", "", { "dependencies": { "nanoid": "^3.3.16", "picocolors": "^1.1.1", "source-map-js": "^1.2.1" } }, "sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg=="],
 

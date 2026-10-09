@@ -6,6 +6,7 @@ import { mma } from '@/src/server/runtime';
  *
  *   /t/{tenant}/p/{project}/…   the generated graph routes (nodes, edges, retrieval, match, …)
  *   /openapi.json, /docs        the generated OpenAPI document + interactive reference
+ *   /graphql                    GraphQL over the same routes (GraphiQL on a browser GET)
  *   /health, /ready, /demo      liveness/readiness + the GraphProvider bootstrap payload
  *   /admin/…                    the operator control-plane app (createAdminApp)
  *

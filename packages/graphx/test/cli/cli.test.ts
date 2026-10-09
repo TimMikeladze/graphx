@@ -100,6 +100,11 @@ test('parseServeArgs: defaults', () => {
 	const args = parseServeArgs(['serve']);
 	expect(args.config).toBe('./graphx.config.ts');
 	expect(args.port).toBe(8899);
+	expect(args.graphql).toBe(false);
+});
+
+test('parseServeArgs: --graphql turns the GraphQL endpoint on', () => {
+	expect(parseServeArgs(['serve', '--graphql']).graphql).toBe(true);
 });
 
 test('parseServeArgs: parses --port and --config', () => {

@@ -62,3 +62,4 @@ export {
 	type ServeConfig,
 	type ServeEnv,
 } from './serve.ts';
+export type { GraphQLOptions } from './graphql.ts';

@@ -521,7 +521,7 @@ Every command except `new` loads `graphx.config.ts`. `serve`, `mcp` and `trigger
 
 ```
 graphx new      <dir>                     Scaffold a starter project
-graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs
+graphx serve    [-c config] [-p 8899]     Typed HTTP routes + /openapi.json + /docs (--graphql)
 graphx ingest   <dir> [options]           Ingest a vault into the graph
 graphx triggers [-c config]               Run declarative triggers over the event outbox
 graphx mcp      [-c config] [--read-only] Serve the graph to an MCP client over stdio

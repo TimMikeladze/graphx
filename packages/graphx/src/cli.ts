@@ -95,6 +95,7 @@ export function parseIngestArgs(argv: string[]): ParsedIngestArgs {
 export interface ParsedServeArgs {
 	config: string;
 	port: number;
+	graphql: boolean;
 }
 
 export function parseServeArgs(argv: string[]): ParsedServeArgs {
@@ -104,11 +105,13 @@ export function parseServeArgs(argv: string[]): ParsedServeArgs {
 		options: {
 			config: { type: 'string', short: 'c', default: './graphx.config.ts' },
 			port: { type: 'string', short: 'p', default: '8899' },
+			graphql: { type: 'boolean', default: false },
 		},
 	});
 	return {
 		config: (values.config as string | undefined) ?? './graphx.config.ts',
 		port: Number(values.port ?? 8899),
+		graphql: values.graphql === true,
 	};
 }
 
@@ -390,6 +393,7 @@ ingest options:
 serve options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
   --port, -p <port>       Port to listen on (default: 8899)
+  --graphql               Also serve GraphQL at /graphql (needs openapi-x-graphql)
 
 triggers options:
   --config, -c <path>     Path to config file (default: ./graphx.config.ts)
@@ -537,7 +541,10 @@ async function runIngest(argv: string[]): Promise<void> {
  * Load a config and build the serving app (no listener) — the testable core of `graphx serve`.
  * Returns the dev `createApp` result ({@link https://hono.dev} app + bootstrapped ids + control DB).
  */
-export async function buildServeApp(configPath: string): Promise<CreateAppResult<GraphSchema>> {
+export async function buildServeApp(
+	configPath: string,
+	opts: { graphql?: boolean } = {},
+): Promise<CreateAppResult<GraphSchema>> {
 	const cfg = await loadConfig(configPath);
 	// The dev `createApp` opens project DBs via a bare `getDb(namespace)`. Opening the client HERE,
 	// with the config's backend settings, caches it under that namespace first — so the bootstrap
@@ -551,12 +558,15 @@ export async function buildServeApp(configPath: string): Promise<CreateAppResult
 		rerank: cfg.rerank,
 		guard: cfg.guard,
 		db: namespaceOf(cfg),
+		graphql: opts.graphql,
 	});
 }
 
 async function runServe(argv: string[]): Promise<void> {
 	const args = parseServeArgs(argv);
-	const { app, tenant, project, user } = await buildServeApp(args.config);
+	const { app, tenant, project, user } = await buildServeApp(args.config, {
+		graphql: args.graphql,
+	});
 	// Bun's native server when the CLI runs under Bun; Node's http module otherwise.
 	const bun = (globalThis as { Bun?: { serve(o: { port: number; fetch: unknown }): unknown } }).Bun;
 	if (bun) {
@@ -570,6 +580,7 @@ async function runServe(argv: string[]): Promise<void> {
 			`  GET /demo          → { tenant, project, user }\n` +
 			`  GET /docs          → API reference (Scalar)\n` +
 			`  GET /openapi.json  → HTTP contract\n` +
+			(args.graphql ? `  POST /graphql      → GraphQL (GraphiQL on GET)\n` : '') +
 			`  tenant=${tenant} project=${project} user=${user}`,
 	);
 	// Keep the process alive until interrupted.

@@ -46,6 +46,7 @@ import { match, type PatternBuilder } from './pattern.ts';
 import { changeFeed, diff, history, outboxHead, outboxTail } from './temporal.ts';
 import { timeline } from './timeline.ts';
 import { Upcaster, type UpcasterRegistry } from './upcast.ts';
+import { createGraphQLEndpoint, type GraphQLOptions } from './graphql.ts';
 
 /**
  * P11 — Serving (§14, D2). The SDK is a library; this exposes it over HTTP as a
@@ -167,6 +168,12 @@ export interface ServeConfig<S extends GraphSchema> {
 	 * air-gapped deployment set `docs: false` and self-host the reference. `/openapi.json` works offline.
 	 */
 	docs?: boolean;
+	/**
+	 * GraphQL at `/graphql` (docs/graphql.md): a schema generated from this app's own OpenAPI
+	 * document, whose resolvers dispatch each field to its REST route in-process — same authn,
+	 * authz, validation and errors. Needs the optional `openapi-x-graphql` package. Off by default.
+	 */
+	graphql?: boolean | GraphQLOptions;
 }
 
 /** Keep the rows the guard returns, in their original order. No guard ⇒ every row. */
@@ -961,6 +968,23 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 	base.get('/docs', (c) =>
 		cfg.docs === false ? c.notFound() : c.html(docsHtml(cfg.openapi?.title ?? 'graphx API')),
 	);
+	// GraphQL, generated from the finished contract below and dispatched back into this app. Off
+	// the chain and off the contract, like /docs. `app` is read lazily, on the first request.
+	if (cfg.graphql) {
+		const gql = cfg.graphql === true ? {} : cfg.graphql;
+		const endpoint = createGraphQLEndpoint(
+			{
+				fetch: (req) => app.fetch(req),
+				getOpenAPI31Document: (doc) => app.getOpenAPI31Document(doc),
+			},
+			{
+				...gql,
+				title: cfg.openapi?.title ?? 'graphx',
+				version: cfg.openapi?.version ?? '0.1.0',
+			},
+		);
+		base.on(['GET', 'POST'], gql.path ?? '/graphql', (c) => endpoint(c.req.raw));
+	}
 	const app = base
 		// §19.6 ops endpoints — UNAUTHENTICATED + tenant-agnostic by construction: mounted
 		// OUTSIDE the `/t/:tenant/p/:project/*` authn group, so they never touch the
@@ -1961,6 +1985,8 @@ export interface DevServeConfig<S extends GraphSchema> {
 	logger?: boolean;
 	/** See {@link ServeConfig.docs}. Interactive API reference at `/docs` — on by default. */
 	docs?: boolean;
+	/** See {@link ServeConfig.graphql}. GraphQL at `/graphql` — off by default. */
+	graphql?: boolean | GraphQLOptions;
 	/** Project DB namespace (libSQL file / PG schema). Default `'graphx_dev'`. */
 	db?: string;
 	/** Seed the graph before serving; runs with an operator principal. */
