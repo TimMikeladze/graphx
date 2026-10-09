@@ -29,13 +29,25 @@ function open(): { db: DbClient; g: Graph<typeof animeSchema> } {
 	return { db, g: graph! };
 }
 
+/**
+ * The sharpest cover the release points at. `thumbnail` is tiny (MAL's is 41×62), so it is never
+ * shown; MAL's `picture` is 225×338 and the same path with an `l` suffix is 400×600.
+ */
+const cover = (picture: unknown): string | null =>
+	typeof picture === 'string'
+		? picture.replace(
+				/^(https:\/\/cdn\.myanimelist\.net\/images\/anime\/\d+\/\d+)\.jpg$/,
+				'$1l.jpg',
+			)
+		: null;
+
 const card = (id: string, d: Anime) => ({
 	id,
 	title: d.title,
 	type: d.type,
 	year: d.year ?? null,
 	score: d.score ?? null,
-	thumbnail: d.thumbnail ?? null,
+	cover: cover(d.picture),
 	tags: d.tags.slice(0, 6),
 });
 
@@ -94,7 +106,7 @@ export async function handle(req: Request): Promise<Response> {
 			return json({
 				anime: {
 					...card(id, d),
-					picture: d.picture ?? null,
+					picture: cover(d.picture),
 					synonyms: d.synonyms.slice(0, 8),
 					tags: d.tags,
 					sources: d.sources,
@@ -131,7 +143,7 @@ interface GraphNode {
 	id: string;
 	type: string;
 	label: string;
-	thumbnail: string | null;
+	cover: string | null;
 	score: number | null;
 	year: number | null;
 }
@@ -142,7 +154,7 @@ const toGraphNode = (n: { id: string; type: string; data: unknown }): GraphNode 
 		id: n.id,
 		type: n.type,
 		label: String(d.title ?? d.name ?? n.type),
-		thumbnail: (d.thumbnail as string) ?? null,
+		cover: cover(d.picture),
 		score: (d.score as number) ?? null,
 		year: (d.year as number) ?? null,
 	};

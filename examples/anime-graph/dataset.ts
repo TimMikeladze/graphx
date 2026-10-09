@@ -102,9 +102,26 @@ export interface Plan {
 	unresolved: { urls: number; distinct: number };
 }
 
+/**
+ * Tags that mark an entry as hentai or pornography. Entries carrying any of them are left out of
+ * the graph entirely; a reload retracts any that an earlier load wrote.
+ */
+export const EXCLUDED_TAGS: ReadonlySet<string> = new Set([
+	'hentai',
+	'pornography',
+	'borderline porn',
+	'plot with porn',
+	'erotica',
+	'18 restricted',
+]);
+
+export const isExcluded = (entry: Pick<AnimeEntry, 'tags'>) =>
+	entry.tags.some((t) => EXCLUDED_TAGS.has(t));
+
 const named = (type: 'studio' | 'producer' | 'tag', name: string) => `${type}:${name}`;
 
-export function planRelease(release: Release): Plan {
+export function planRelease(full: Release): Plan {
+	const release = { ...full, data: full.data.filter((e) => !isExcluded(e)) };
 	const nodes: PlanNode[] = [];
 	const edges: PlanEdge[] = [];
 	const edgeSeen = new Set<string>();
@@ -129,6 +146,7 @@ export function planRelease(release: Release): Plan {
 
 	// Every source url → the entry's key, so relatedAnime (which lists urls, not ids) resolves.
 	const byUrl = new Map<string, string>();
+	const excludedUrls = new Set(full.data.filter(isExcluded).flatMap((e) => e.sources));
 	const keys = release.data.map((entry) => {
 		const key = `anime:${identityOf(entry)}`;
 		for (const s of entry.sources) byUrl.set(s, key);
@@ -185,6 +203,7 @@ export function planRelease(release: Release): Plan {
 		// One relation usually arrives as several urls (MAL, AniList, Kitsu… for the same target);
 		// `edge` keeps the first.
 		for (const url of entry.relatedAnime) {
+			if (excludedUrls.has(url)) continue;
 			const dst = byUrl.get(url);
 			if (dst) edge('relatedTo', key, dst);
 			else {

@@ -5,7 +5,7 @@
 import { expect, test } from 'bun:test';
 import { diff, Graph, hashEmbed, init, match } from 'graphx';
 import { openMemoryDb } from 'graphx/local';
-import { identityOf, parseSource, planRelease, type Release } from './dataset.ts';
+import { identityOf, isExcluded, parseSource, planRelease, type Release } from './dataset.ts';
 import { lastUpdateOf } from './download.ts';
 import { animeSchema } from './graphx.config.ts';
 import { readRelease, syncPlan } from './load.ts';
@@ -46,9 +46,22 @@ test('reads lastUpdate from the head of a release file', () => {
 	expect(lastUpdateOf('{"data":[')).toBeNull();
 });
 
+test('leaves hentai and porn entries, and relations to them, out of the plan', () => {
+	const [a, b] = release.data as [Release['data'][0], Release['data'][0]];
+	const nsfw = { ...b, tags: [...b.tags, 'hentai'] };
+	const kept = { ...a, relatedAnime: [nsfw.sources[0] as string] };
+	const plan = planRelease({ ...release, data: [kept, nsfw] });
+	expect(plan.nodes.filter((n) => n.type === 'anime').map((n) => n.data.title)).toEqual([a.title]);
+	expect(plan.nodes.some((n) => n.key === 'tag:hentai')).toBe(false);
+	expect(plan.edges.some((e) => e.rel === 'relatedTo')).toBe(false);
+	expect(plan.unresolved.urls).toBe(0);
+});
+
 test('plans one node per entry, deduped relations, and counts unresolved urls', () => {
 	const plan = planRelease(release);
-	expect(plan.nodes.filter((n) => n.type === 'anime')).toHaveLength(release.data.length);
+	expect(plan.nodes.filter((n) => n.type === 'anime')).toHaveLength(
+		release.data.filter((e) => !isExcluded(e)).length,
+	);
 	expect(plan.nodes.filter((n) => n.type === 'dataset')).toHaveLength(1);
 	const keys = plan.edges.map((e) => `${e.rel}|${e.src}|${e.dst}`);
 	expect(new Set(keys).size).toBe(keys.length);

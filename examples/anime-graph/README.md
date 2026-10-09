@@ -1,7 +1,7 @@
 # anime-graph
 
 Every anime in [manami-project's anime-offline-database](https://github.com/manami-project/anime-offline-database)
-as a graphx graph: ~41.5k titles, the studios, producers and tags that link them, and the
+as a graphx graph: ~39.2k titles, the studios, producers and tags that link them, and the
 franchise relations between them. The loader is idempotent, so it can run on every weekly release.
 Each release becomes a new set of versions, and `diff` shows what the release changed.
 
@@ -47,18 +47,23 @@ the namespace.
 
 | Node type  | Count  | Data                                                                                                                                                                                                                                                                                      |
 | ---------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `anime`    | 41,537 | `title`, `type`, `episodes`, `status`, `season`, `year`, `durationSec`, `score` (median), `picture`, `thumbnail`, `synonyms`, `tags`, `sources`, `malId`, `anilistId`, `kitsuId`, `anidbId`, `animePlanetId`, `anisearchId`, `animeCountdownId`, `simklId`, `annId`, `livechartId`, `key` |
-| `producer` | 5,232  | `name`                                                                                                                                                                                                                                                                                    |
-| `tag`      | 3,115  | `name`                                                                                                                                                                                                                                                                                    |
-| `studio`   | 2,962  | `name`                                                                                                                                                                                                                                                                                    |
+| `anime`    | 39,211 | `title`, `type`, `episodes`, `status`, `season`, `year`, `durationSec`, `score` (median), `picture`, `thumbnail`, `synonyms`, `tags`, `sources`, `malId`, `anilistId`, `kitsuId`, `anidbId`, `animePlanetId`, `anisearchId`, `animeCountdownId`, `simklId`, `annId`, `livechartId`, `key` |
+| `producer` | 4,923  | `name`                                                                                                                                                                                                                                                                                    |
+| `tag`      | 2,915  | `name`                                                                                                                                                                                                                                                                                    |
+| `studio`   | 2,735  | `name`                                                                                                                                                                                                                                                                                    |
 | `dataset`  | 1      | `lastUpdate`, `license`, `licenseUrl`, `repository`                                                                                                                                                                                                                                       |
 
 | Relation     | Count   | From → to        |
 | ------------ | ------- | ---------------- |
-| `taggedWith` | 583,371 | anime → tag      |
-| `relatedTo`  | 143,829 | anime → anime    |
-| `producedBy` | 67,192  | anime → producer |
-| `animatedBy` | 32,319  | anime → studio   |
+| `taggedWith` | 539,242 | anime → tag      |
+| `relatedTo`  | 139,385 | anime → anime    |
+| `producedBy` | 62,222  | anime → producer |
+| `animatedBy` | 29,514  | anime → studio   |
+
+Hentai and porn are left out: any entry tagged `hentai`, `pornography`, `borderline porn`,
+`plot with porn`, `erotica` or `18 restricted` (`EXCLUDED_TAGS` in `dataset.ts`) is dropped before
+planning, along with relations that point at it, so the counts above exclude them. A reload
+retracts any such node an earlier load wrote.
 
 An anime is embedded and full-text indexed on its title, synonyms and tags.
 

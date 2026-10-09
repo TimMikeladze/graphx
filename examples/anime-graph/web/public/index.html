@@ -248,7 +248,7 @@
 			const meta = (a) =>
 				[a.type, a.year, a.score ? '★ ' + a.score.toFixed(2) : null].filter(Boolean).join(' · ');
 			const card = (a, matchLabel) => `<a class="card" href="#/anime/${a.id}">
-	<img loading="lazy" src="${esc(a.thumbnail)}" alt="" onerror="this.style.visibility='hidden'">
+	<img loading="lazy" src="${esc(a.cover)}" alt="" onerror="this.style.visibility='hidden'">
 	<div class="b"><div class="t">${esc(a.title)}</div><div class="m">${esc(meta(a))}</div>
 	${a.match != null && matchLabel ? `<span class="pill">${matchLabel} ${Math.round(a.match * 100)}%</span>` : ''}</div></a>`;
 

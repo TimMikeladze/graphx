@@ -251,7 +251,7 @@
 				.nodeLabel((n) => esc(n.label) + (n.year ? ` (${n.year})` : ''))
 				.nodeCanvasObject((n, ctx, scale) => {
 					const r = n.type === 'anime' ? 9 : 6;
-					const pic = n.type === 'anime' && img(n.thumbnail);
+					const pic = n.type === 'anime' && img(n.cover);
 					ctx.save();
 					ctx.beginPath();
 					ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
@@ -336,7 +336,7 @@
 			function showPanel(n) {
 				const p = $('#panel');
 				p.style.display = 'block';
-				p.innerHTML = `${n.thumbnail ? `<img src="${esc(n.thumbnail)}" alt="">` : ''}<h3>${esc(n.label)}</h3>
+				p.innerHTML = `${n.cover ? `<img src="${esc(n.cover)}" alt="">` : ''}<h3>${esc(n.label)}</h3>
 		<div class="m">${esc(n.type)}${n.year ? ' · ' + n.year : ''}${n.score ? ' · ★ ' + n.score.toFixed(2) : ''}</div>
 		<div class="acts">${n.type === 'anime' ? `<a href="/#/anime/${n.id}">Details &amp; similar →</a>` : ''}
 		<a href="#" id="focus">Center</a></div>`;
