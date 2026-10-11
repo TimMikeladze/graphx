@@ -36,6 +36,8 @@ export function GraphShell({
 	timeline,
 	pinSimulation,
 	onRendererBusyChange,
+	initialLabels = DEFAULT_LABEL_SETTINGS,
+	showLegend = true,
 }: {
 	slice?: GraphSlice;
 	isLoading?: boolean;
@@ -76,11 +78,15 @@ export function GraphShell({
 	 * renderer draws synchronously and never reports, which reads as "never busy".
 	 */
 	onRendererBusyChange?: (busy: boolean) => void;
+	/** The caption settings the canvas starts with (e.g. a smaller label budget on a phone). */
+	initialLabels?: LabelSettings;
+	/** Draw the legend / type filter. A caller with its own (collapsible) legend turns it off. */
+	showLegend?: boolean;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	// Only one renderer is mounted at a time, so one handle is enough — React clears it on unmount.
 	const rendererRef = useRef<RendererHandle | null>(null);
-	const [labels, setLabels] = useState<LabelSettings>(DEFAULT_LABEL_SETTINGS);
+	const [labels, setLabels] = useState<LabelSettings>(initialLabels);
 	const [paused, setPaused] = useState(false);
 
 	const isCosmograph = renderer === 'cosmograph';
@@ -210,7 +216,7 @@ export function GraphShell({
 				/>
 
 				{/* legend / quick type filter */}
-				{legend.length > 0 && (
+				{showLegend && legend.length > 0 && (
 					<div className="hud absolute bottom-3 left-3 flex max-w-[60%] flex-wrap items-center gap-0.5 p-1.5 text-xs">
 						{legend.map((l) => {
 							const active = activeType === l.type;
