@@ -1,4 +1,4 @@
-# graphx — Temporal GraphRAG for TypeScript
+# graphx: Temporal GraphRAG for TypeScript
 
 Define your graph once with [Zod](https://zod.dev). Retrieve with vector search, full-text search and typed traversal. Use `asOf` to [query any point in its history](/reference#time-travel).
 
@@ -437,7 +437,7 @@ g.useChangeFeedSync(); // tails /changes and invalidates exact keys
 g.useGraphEvents(); // subscribes to the SSE stream
 ```
 
-## An MCP server for free
+## Every route as an MCP tool
 
 Run `graphx mcp` and every serving route becomes a tool over stdio, validated against your `graphx.config.ts`. Add `--read-only` to expose only the read tools.
 
@@ -620,7 +620,7 @@ graphx ask      "<question>" [-c config]  Plan a plain-language question as a gr
 
 ## Boundaries
 
-Three lists, counted. The first is exercised by the test suite, the second is opinion, and the third is what you should not assume.
+The first list is exercised by the test suite, the second is opinion, and the third is what you should not assume.
 
 ### What holds (4)
 
@@ -632,8 +632,8 @@ Three lists, counted. The first is exercised by the test suite, the second is op
 ### What is a judgement (3)
 
 - `hashEmbed` is lexical and model-free. It suits tests and demos; retrieval quality in production is your embedder’s.
-- Delivery of triggers is at-least-once, so actions must be idempotent. That is a design choice, not a bug to be fixed.
-- Calling it “temporal GraphRAG” is our description of retrieve-then-walk, not a benchmarked claim.
+- Triggers deliver at least once by design, so actions must be idempotent.
+- “Temporal GraphRAG” is our name for retrieve-then-walk. No benchmark backs it.
 
 ### What is not here yet (4)
 

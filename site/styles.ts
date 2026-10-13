@@ -83,7 +83,7 @@ code { font-family: var(--mono); }
 :root[data-mode="dark"] .theme svg, :root[data-mode="light"] .theme svg { display: none; }
 :root[data-mode="dark"] .theme .i-dark, :root[data-mode="light"] .theme .i-light { display: block; }
 
-/* hero — centred; the hero breathes, the rest of the page is dense */
+/* hero: centred with room around it; the rest of the page is dense */
 .hero { padding-block: clamp(4rem, 9vw, 7rem) 2.5rem; text-align: center; }
 .hero .shell > * { margin-inline: auto; }
 .mark { display: inline-grid; place-items: center; width: var(--mark); height: var(--mark); border-radius: 22%; background: var(--raise); border: 1px solid var(--line); color: var(--ink); }

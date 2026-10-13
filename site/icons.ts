@@ -66,7 +66,7 @@ export function glyph(name: GlyphName, size = 16, extra = ''): string {
 	return `<svg class="glyph${extra ? ` ${extra}` : ''}" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${GLYPH_PATHS[name]}</svg>`;
 }
 
-/** The product mark: a closed triad, three nodes and three edges — the smallest drawing that reads as a graph. */
+/** The product mark: a closed triad, three nodes and three edges, the smallest drawing that reads as a graph. */
 const MARK_BODY =
 	'<path d="M3.4 10.8 9 3.6l3.6 8Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="3.4" cy="10.8" r="2.1" fill="currentColor"/><circle cx="9" cy="3.6" r="1.6" fill="currentColor"/><circle cx="12.6" cy="11.6" r="1.6" fill="currentColor"/>';
 

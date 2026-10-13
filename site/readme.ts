@@ -1,7 +1,7 @@
 /**
  * Reads the README the way the page needs it: fenced blocks (to resolve references against),
  * `##` sections (for the reference page and llms.txt) and the tables. Nothing here has copy.
- * A reference that matches zero blocks, or two, throws — that is the anti-drift guarantee.
+ * A reference that matches zero blocks, or two, throws. That is what keeps the page from drifting.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';

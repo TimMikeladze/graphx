@@ -130,7 +130,7 @@ test('markup in the source is escaped, never executed', async () => {
 
 test('committed output equals a fresh render', () => {
 	for (const [name, text] of Object.entries(fresh))
-		expect(read(name), `${name} is stale — run bun run build in site/`).toBe(text);
+		expect(read(name), `${name} is stale: run bun run build in site/`).toBe(text);
 });
 
 test('every README section reaches the reference page; every cross-page anchor exists', () => {

@@ -1,6 +1,6 @@
 /**
  * The page model: composition, copy, section order, which captured example each section shows, and
- * the link table. No markup — render.ts owns that. Copy is authored here; examples are not. Every
+ * the link table. No markup; render.ts owns that. Copy is authored here; examples are not. Every
  * `terminal()` / `snippet()` / `table()` below is resolved against the README's fenced blocks at
  * build time, and a reference that resolves to zero or two blocks fails the build.
  */
@@ -16,7 +16,7 @@ export function url(pagePath = '/'): string {
 }
 
 export type Ref =
-	/** A fenced block whose first line is `$ <command>` — a captured run. */
+	/** A fenced block whose first line is `$ <command>`: a captured run. */
 	| { kind: 'terminal'; command: string }
 	/** A fenced block containing exactly this line, for blocks with no command. */
 	| { kind: 'snippet'; line: string; label: string };
@@ -130,7 +130,7 @@ export const split = {
 };
 
 /**
- * Figures, each counted from the repository at build time — never typed here. graphx is pre-launch
+ * Figures, each counted from the repository at build time, never typed here. graphx is pre-launch
  * (npm still serves the 2017 package under this name), so there are no download or star figures.
  */
 export type FigureSource =
@@ -178,7 +178,7 @@ export const ecosystem = {
 	] satisfies { name: EcoName; label: string; href: string }[],
 };
 
-/** The three claims the design rests on — each one enforced by code or the test suite. */
+/** The three claims the design rests on, each one enforced by code or the test suite. */
 export const principles = [
 	{
 		title: 'One schema, no codegen',
@@ -508,7 +508,7 @@ export const capabilities: Capability[] = [
 	},
 	{
 		id: 'mcp',
-		title: 'An MCP server for free',
+		title: 'Every route as an MCP tool',
 		body: 'Run `graphx mcp` and every serving route becomes a tool over stdio, validated against your `graphx.config.ts`. Add `--read-only` to expose only the read tools.',
 		demo: { kind: 'code', ref: snippet('"mcpServers": {', 'mcp.json') },
 	},
@@ -603,7 +603,7 @@ export const capabilities: Capability[] = [
 export const boundaries = {
 	title: 'Boundaries',
 	intro:
-		'Three lists, counted. The first is exercised by the test suite, the second is opinion, and the third is what you should not assume.',
+		'The first list is exercised by the test suite, the second is opinion, and the third is what you should not assume.',
 	titles: {
 		holds: 'What holds',
 		judgements: 'What is a judgement',
@@ -617,8 +617,8 @@ export const boundaries = {
 	],
 	judgements: [
 		'`hashEmbed` is lexical and model-free. It suits tests and demos; retrieval quality in production is your embedder’s.',
-		'Delivery of triggers is at-least-once, so actions must be idempotent. That is a design choice, not a bug to be fixed.',
-		'Calling it “temporal GraphRAG” is our description of retrieve-then-walk, not a benchmarked claim.',
+		'Triggers deliver at least once by design, so actions must be idempotent.',
+		'“Temporal GraphRAG” is our name for retrieve-then-walk. No benchmark backs it.',
 	],
 	missing: [
 		'No storage or latency benchmarks on this page. `bun run bench` exists, but the README holds no captured run to reference.',
@@ -638,7 +638,7 @@ export const start = {
 /** Sections of the README are the reference page; this is only its intro line. */
 export const reference = {
 	title: 'Reference',
-	intro: 'The whole README, in full. It is the documentation, and this page is generated from it.',
+	intro: 'The README, rendered in full. It is the documentation; this page is generated from it.',
 	description:
 		'The complete graphx documentation: install, schema, writing, retrieval, time travel, serving, backends and the CLI.',
 };

@@ -1,5 +1,5 @@
 /**
- * The renderer: resolves the content model against the README and emits every artefact — both pages,
+ * The renderer: resolves the content model against the README and emits every artefact: both pages,
  * llms.txt, AGENTS.md, per-page Markdown, sitemap.xml, robots.txt and the favicon. It has no copy;
  * the words are in content.ts and the examples are in the README.
  */
@@ -75,8 +75,8 @@ async function makeHighlighter() {
 		themes: [vitesseDark, vitesseLight],
 		langs: [typescript, tsx, bash, json, sql],
 		// Oniguruma (WASM), not the JavaScript engine: the JS engine compiles grammars to the host's
-		// RegExp and, when forgiving, skips what it cannot compile — so the highlighting, and with it
-		// the committed output, changed with the Bun version. WASM depends only on the lockfile.
+		// RegExp and, when forgiving, skips what it cannot compile, so the highlighting (and the
+		// committed output) changed with the Bun version. WASM depends only on the lockfile.
 		engine: createOnigurumaEngine(import('shiki/wasm')),
 	});
 }
@@ -239,7 +239,7 @@ function head(
 ): string {
 	const canonical = url(opts.path);
 	const image = url('/og.png');
-	const alt = `${page.name} — ${page.h1.toLowerCase()}`;
+	const alt = `${page.name}: ${page.h1.toLowerCase()}`;
 	const t = escapeHtml(opts.title);
 	const d = escapeHtml(opts.description);
 	const favicon = `data:image/svg+xml,${encodeURIComponent(FAVICON_SVG)}`;
@@ -522,7 +522,7 @@ function landing(m: Model): string {
 		buildTodayBand(),
 	].join('\n');
 	return shell(m, {
-		title: `${page.name} — ${page.tagline}`,
+		title: `${page.name}: ${page.tagline}`,
 		description: page.description,
 		path: '/',
 		body,
@@ -537,7 +537,7 @@ function referencePage(m: Model): string {
 		.join('')}</ul></nav>`;
 	const body = `<div class="shell ref">${toc}<article class="reference"><h1>${reference.title}</h1><p>${inline(m, reference.intro)}</p>${m.md.parse(referenceBody(m.readme))}</article></div>`;
 	return shell(m, {
-		title: `${reference.title} — ${page.name}`,
+		title: `${reference.title} | ${page.name}`,
 		description: reference.description,
 		path: '/reference',
 		body,
@@ -577,7 +577,7 @@ function boundariesMd(): string {
 }
 
 function indexMd(m: Model): string {
-	return `# ${page.name} — ${page.h1}
+	return `# ${page.name}: ${page.h1}
 
 ${page.lede}
 
@@ -637,7 +637,7 @@ ${capabilities.map((c) => capabilityMd(m, c)).join('\n\n')}
 }
 
 function agentsMd(m: Model): string {
-	return `# AGENTS.md — using ${page.name}
+	return `# Using ${page.name}
 
 ${agents.summary}
 

@@ -1,4 +1,4 @@
-# AGENTS.md — using graphx
+# Using graphx
 
 Use graphx to store, query and serve a temporal graph from TypeScript. Import from the `graphx` package and its subpaths.
 

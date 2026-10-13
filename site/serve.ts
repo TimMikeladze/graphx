@@ -1,4 +1,4 @@
-/** Serves public/ with clean URLs, on the first free port from 4173 — never fights for a taken one. */
+/** Serves public/ with clean URLs, on the first free port from 4173. A taken port is skipped, not killed. */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { siteDir } from './readme.ts';

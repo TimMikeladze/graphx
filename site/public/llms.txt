@@ -352,7 +352,7 @@ g.useChangeFeedSync(); // tails /changes and invalidates exact keys
 g.useGraphEvents(); // subscribes to the SSE stream
 ```
 
-## An MCP server for free
+## Every route as an MCP tool
 
 Run `graphx mcp` and every serving route becomes a tool over stdio, validated against your `graphx.config.ts`. Add `--read-only` to expose only the read tools.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>graphx — temporal GraphRAG for TypeScript</title>
+<title>graphx: temporal GraphRAG for TypeScript</title>
 <meta name="description" content="graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.">
 <link rel="canonical" href="https://graphx.sh/">
 <script>(function () {
@@ -26,16 +26,16 @@
 <meta name="theme-color" content="#fcfcfc" media="(prefers-color-scheme: light)">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="graphx">
-<meta property="og:title" content="graphx — temporal GraphRAG for TypeScript">
+<meta property="og:title" content="graphx: temporal GraphRAG for TypeScript">
 <meta property="og:description" content="graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.">
 <meta property="og:url" content="https://graphx.sh/">
 <meta property="og:image" content="https://graphx.sh/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:type" content="image/png">
-<meta property="og:image:alt" content="graphx — temporal graphrag for typescript">
+<meta property="og:image:alt" content="graphx: temporal graphrag for typescript">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="graphx — temporal GraphRAG for TypeScript">
+<meta name="twitter:title" content="graphx: temporal GraphRAG for TypeScript">
 <meta name="twitter:description" content="graphx is an open source temporal graph for TypeScript. Define it once with Zod and get typed writes, history, retrieval, an HTTP API and MCP.">
 <meta name="twitter:image" content="https://graphx.sh/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%3Cstyle%3Eg%7Bcolor%3A%23171717%7D%40media(prefers-color-scheme%3Adark)%7Bg%7Bcolor%3A%23fff%7D%7D%3C%2Fstyle%3E%3Cg%3E%3Cpath%20d%3D%22M3.4%2010.8%209%203.6l3.6%208Z%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.3%22%20stroke-linejoin%3D%22round%22%2F%3E%3Ccircle%20cx%3D%223.4%22%20cy%3D%2210.8%22%20r%3D%222.1%22%20fill%3D%22currentColor%22%2F%3E%3Ccircle%20cx%3D%229%22%20cy%3D%223.6%22%20r%3D%221.6%22%20fill%3D%22currentColor%22%2F%3E%3Ccircle%20cx%3D%2212.6%22%20cy%3D%2211.6%22%20r%3D%221.6%22%20fill%3D%22currentColor%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E">
@@ -130,7 +130,7 @@ code { font-family: var(--mono); }
 :root[data-mode="dark"] .theme svg, :root[data-mode="light"] .theme svg { display: none; }
 :root[data-mode="dark"] .theme .i-dark, :root[data-mode="light"] .theme .i-light { display: block; }
 
-/* hero — centred; the hero breathes, the rest of the page is dense */
+/* hero: centred with room around it; the rest of the page is dense */
 .hero { padding-block: clamp(4rem, 9vw, 7rem) 2.5rem; text-align: center; }
 .hero .shell > * { margin-inline: auto; }
 .mark { display: inline-grid; place-items: center; width: var(--mark); height: var(--mark); border-radius: 22%; background: var(--raise); border: 1px solid var(--line); color: var(--ink); }
@@ -922,7 +922,7 @@ overlaps       0 node id(s), 0 edge id(s) with more than one open version</code>
 <section class="section" id="mcp" aria-labelledby="mcp-title">
 <div class="shell cap-split">
 <div class="cap-text">
-<h2 id="mcp-title">An MCP server for free</h2>
+<h2 id="mcp-title">Every route as an MCP tool</h2>
 <p class="prose">Run <code>graphx mcp</code> and every serving route becomes a tool over stdio, validated against your <code>graphx.config.ts</code>. Add <code>--read-only</code> to expose only the read tools.</p>
 
 </div>
@@ -1107,8 +1107,8 @@ graphx ask      &quot;&lt;question&gt;&quot; [-c config]  Plan a plain-language 
 <section class="section" id="boundaries" aria-labelledby="boundaries-title">
 <div class="shell">
 <h2 id="boundaries-title">Boundaries</h2>
-<p class="prose">Three lists, counted. The first is exercised by the test suite, the second is opinion, and the third is what you should not assume.</p>
-<div class="cols"><div class="holds"><h3>What holds <span class="count">4</span></h3><ul><li>Every TypeScript block in the README is compiled against the built package by the test suite.</li><li>History is append-only: a delete closes a version, and <code>asOf</code> reads reconstruct the graph exactly.</li><li>Tenant isolation is by route construction, not by a <code>WHERE</code> clause.</li><li>A namespace refuses a different embedding model until <code>graphx reembed</code> switches it.</li></ul></div><div class="judgements"><h3>What is a judgement <span class="count">3</span></h3><ul><li><code>hashEmbed</code> is lexical and model-free. It suits tests and demos; retrieval quality in production is your embedder’s.</li><li>Delivery of triggers is at-least-once, so actions must be idempotent. That is a design choice, not a bug to be fixed.</li><li>Calling it “temporal GraphRAG” is our description of retrieve-then-walk, not a benchmarked claim.</li></ul></div><div class="missing"><h3>What is not here yet <span class="count">4</span></h3><ul><li>No storage or latency benchmarks on this page. <code>bun run bench</code> exists, but the README holds no captured run to reference.</li><li>DuckDB allows one writer process per namespace; two rewriting the same table raise <code>SnapshotConflictError</code>.</li><li><code>Graph.atomic</code> needs a namespace with no embeddings, and browser writers can still hit <code>SQLITE_BUSY</code>.</li><li>The admin SPA is not published. It runs from the repository.</li></ul></div></div>
+<p class="prose">The first list is exercised by the test suite, the second is opinion, and the third is what you should not assume.</p>
+<div class="cols"><div class="holds"><h3>What holds <span class="count">4</span></h3><ul><li>Every TypeScript block in the README is compiled against the built package by the test suite.</li><li>History is append-only: a delete closes a version, and <code>asOf</code> reads reconstruct the graph exactly.</li><li>Tenant isolation is by route construction, not by a <code>WHERE</code> clause.</li><li>A namespace refuses a different embedding model until <code>graphx reembed</code> switches it.</li></ul></div><div class="judgements"><h3>What is a judgement <span class="count">3</span></h3><ul><li><code>hashEmbed</code> is lexical and model-free. It suits tests and demos; retrieval quality in production is your embedder’s.</li><li>Triggers deliver at least once by design, so actions must be idempotent.</li><li>“Temporal GraphRAG” is our name for retrieve-then-walk. No benchmark backs it.</li></ul></div><div class="missing"><h3>What is not here yet <span class="count">4</span></h3><ul><li>No storage or latency benchmarks on this page. <code>bun run bench</code> exists, but the README holds no captured run to reference.</li><li>DuckDB allows one writer process per namespace; two rewriting the same table raise <code>SnapshotConflictError</code>.</li><li><code>Graph.atomic</code> needs a namespace with no embeddings, and browser writers can still hit <code>SQLITE_BUSY</code>.</li><li>The admin SPA is not published. It runs from the repository.</li></ul></div></div>
 </div>
 </section>
 <section class="section" id="start" aria-labelledby="start-title">

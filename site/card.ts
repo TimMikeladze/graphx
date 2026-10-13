@@ -1,6 +1,6 @@
 /**
  * The social card: a real 1200x630 opaque PNG drawn from the page's own tokens and its own claim.
- * Satori lays it out and resvg rasterises it — both plain JavaScript, so the build needs no browser.
+ * Satori lays it out and resvg rasterises it. Both are plain JavaScript, so the build needs no browser.
  * Content is the model's: mark, H1, lede, then install chip · tagline · domain. No screenshot, no
  * gradient, no shadow, nothing below 20px.
  */
