@@ -15,6 +15,8 @@ export interface GraphTransport {
 	headers?: () => Record<string, string> | Promise<Record<string, string>>;
 	/** Transport impl; defaults to `globalThis.fetch`. */
 	fetch?: typeof fetch;
+	/** Use `include` to send Better Auth cookies to an API on another origin. */
+	credentials?: RequestCredentials;
 }
 
 /** One HTTP call against the project's route surface. */
@@ -75,7 +77,7 @@ export async function request<T>(t: GraphTransport, opts: RequestOpts): Promise<
 	const doFetch = t.fetch ?? globalThis.fetch;
 	let res: Response;
 	try {
-		res = await doFetch(url, { method: opts.method, headers, body });
+		res = await doFetch(url, { method: opts.method, headers, body, credentials: t.credentials });
 	} catch (e) {
 		// The server was unreachable / the request never completed (DNS, offline, CORS-blocked).
 		// Surface it as a GraphError with status 0 (`code: 'network'`) so hooks classify it the same

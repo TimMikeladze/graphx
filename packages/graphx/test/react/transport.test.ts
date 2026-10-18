@@ -50,6 +50,13 @@ test('request: merges auth headers from the headers getter', async () => {
 	expect(new Headers(cap.init?.headers).get('authorization')).toBe('Bearer z');
 });
 
+test('request: forwards credential mode for cross-origin session cookies', async () => {
+	const cap: { url?: string; init?: RequestInit } = {};
+	const f = fakeFetch(new Response('{}'), cap);
+	await request({ ...t(f), credentials: 'include' }, { method: 'GET', path: '/nodes' });
+	expect(cap.init?.credentials).toBe('include');
+});
+
 test('request: non-2xx throws GraphError with status, message, issues', async () => {
 	const f = fakeFetch(
 		new Response(JSON.stringify({ error: 'validation', issues: [{ path: ['k'] }] }), {

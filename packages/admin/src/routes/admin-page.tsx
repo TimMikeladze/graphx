@@ -1,3 +1,5 @@
+import { useAuth } from '@/components/auth-provider';
+import { OrganizationAdmin } from '@/components/admin/organization-admin';
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -74,6 +76,11 @@ function IdRow({
 
 /** Control-plane management: tenants, projects, users, memberships, API keys. */
 export function AdminPage() {
+	const { config } = useAuth();
+	return config.mode === 'better-auth' ? <OrganizationAdmin /> : <LegacyAdminPage />;
+}
+
+function LegacyAdminPage() {
 	const tenants = useTenants();
 	const users = useUsers();
 	const [selectedTenant, setSelectedTenant] = useState<string | undefined>();

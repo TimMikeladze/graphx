@@ -39,6 +39,8 @@ export {
 	type Principal,
 	resolveProjectDb,
 	type Role,
+	type TenantAuthorizer,
+	type ProjectAuthorizer,
 } from './authz.ts';
 
 // `graphx.config.ts` — the contract every CLI command and `graphx mcp` loads

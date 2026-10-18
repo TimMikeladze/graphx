@@ -18,7 +18,14 @@ import { TimelineBar } from '@/components/timeline/timeline-bar';
 import { Button } from '@/components/ui/button';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useGraphSlice, useNode, useProjects, useSchema, useTenants } from '@/hooks/use-graph';
+import {
+	useGraphSlice,
+	useNode,
+	useProjects,
+	useSchema,
+	useTenants,
+	useProjectPermissions,
+} from '@/hooks/use-graph';
 import { bestLabel } from '@/lib/format';
 import { filtersOf, flowLayoutOf, rendererOf } from '@/lib/explorer-search';
 import type { ExplorerFilters, FlowLayout, Renderer } from '@/lib/types';
@@ -30,6 +37,7 @@ export const explorerRoute = getRouteApi('/t/$tenant/p/$project');
 export function ExplorerPage() {
 	const { tenant, project } = explorerRoute.useParams();
 	const search = explorerRoute.useSearch();
+	const permissions = useProjectPermissions(tenant, project);
 	const navigate = explorerRoute.useNavigate();
 	const filters = filtersOf(search);
 	const isMobile = useIsMobile();
@@ -92,13 +100,28 @@ export function ExplorerPage() {
 	const detailOpen = Boolean(search.node) && !isMobile;
 	// A write issued from a historical view lands on the LIVE version, not the one on screen. That
 	// is a silent footgun, so the past is read-only rather than merely discouraged.
-	const readOnly = filters.asOf !== undefined || filters.recordedAsOf !== undefined;
+	const historical = filters.asOf !== undefined || filters.recordedAsOf !== undefined;
+	const readOnly = historical || !permissions.canWrite;
 	// Playback churns the slice every step; the canvas holds its layout still for the duration.
 	const [playing, setPlaying] = useState(false);
 	// Whether the canvas is still ingesting the current slice. Playback waits on it so it advances
 	// at the speed the graph can actually be drawn.
 	const [rendererBusy, setRendererBusy] = useState(false);
 
+	if (permissions.authMode && (permissions.isError || permissions.data?.read === false)) {
+		return (
+			<main className="mx-auto grid max-w-lg gap-4 p-8">
+				<h1 className="text-xl font-semibold">Project unavailable</h1>
+				<p role="alert">
+					{permissions.error?.message ?? 'You do not have access to this project.'}
+				</p>
+				<Button onClick={() => void permissions.refetch()}>Retry</Button>
+				<a href="/" className="text-sm underline">
+					Choose another project
+				</a>
+			</main>
+		);
+	}
 	return (
 		<SidebarProvider style={{ '--sidebar-width': '21rem' } as React.CSSProperties}>
 			<AppSidebar
@@ -140,7 +163,7 @@ export function ExplorerPage() {
 				</header>
 
 				{slice.data?.truncated && <ResultsBanner />}
-				{readOnly && (
+				{historical && (
 					<TimeTravelBanner
 						asOf={filters.asOf}
 						recordedAsOf={filters.recordedAsOf}
@@ -163,7 +186,9 @@ export function ExplorerPage() {
 							onRendererChange={(r) => setSearch({ renderer: r === 'flow' ? 'flow' : undefined })}
 							flowLayout={flowLayoutOf(search)}
 							onFlowLayoutChange={(l) =>
-								setSearch({ flowLayout: l === 'organic' ? 'organic' : undefined })
+								setSearch({
+									flowLayout: l === 'organic' ? 'organic' : undefined,
+								})
 							}
 							// GraphShell already treats absent write handlers as a read-only explorer, so the
 							// canvas half of read-only mode is subtractive rather than a new branch.

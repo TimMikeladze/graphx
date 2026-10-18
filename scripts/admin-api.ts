@@ -1,10 +1,7 @@
 /**
- * Dev API server for graphx-admin — seeds an in-memory control plane + a generated demo graph
- * across three tenants and five projects, mounts the tenant-scoped graph routes (createApp) and
- * the operator sub-app (createAdminApp), and serves on :8787. Auth is a single dev bearer token
- * (ADMIN_TOKEN, default "dev") that the operator presents; the `authenticate` impl turns it into
- * an operator principal so it can browse any tenant. NOT for production — the control plane is
- * :memory: and the project DBs are local files.
+ * Development API for graphx-admin. Better Auth persists identities and organizations;
+ * Graphx stores project metadata and demo graph databases under .graphx-data/admin.
+ * Existing operator-mode databases are not migrated. Not a production server.
  *
  * The graph itself comes from `scripts/seed/` (deterministic generator + bulk load). Building it
  * costs seconds, so the databases are kept between runs and rebuilt only when the seed config
@@ -16,27 +13,35 @@
  *   SEED_FRESH=1       force a rebuild
  */
 import process from 'node:process';
+import { Database } from 'bun:sqlite';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createClient } from '@libsql/client';
 import {
-	addMembership,
-	createAdminApp,
-	createApp,
 	createProject,
-	createTenant,
-	createUser,
 	graphForProject,
 	hashEmbed,
-	initControl,
 	type Principal,
 } from '../packages/graphx/src/core/index.ts';
+import {
+	createBetterAuthApp,
+	initBetterAuthControl,
+} from '../packages/graphx/src/better-auth/index.ts';
+import { setupAdminAuth } from './admin-auth.ts';
 import { applyPlan } from './seed/apply.ts';
 import { fingerprint, isCached, wipe, writeCache } from './seed/cache.ts';
 import { generate } from './seed/generate.ts';
 import { DEMO_SCHEMA_VERSION, demoSchema } from './seed/schema.ts';
 import { withHistory } from './seed/temporal.ts';
 
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? 'dev';
 const PORT = Number(process.env.PORT ?? 8787);
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@example.test';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'graphx-development';
+const DATA_DIR = resolve(
+	process.env.ADMIN_DATA_DIR ?? resolve(import.meta.dir, '../.graphx-data/admin'),
+);
+mkdirSync(DATA_DIR, { recursive: true });
+process.chdir(DATA_DIR);
 const SEED_NODES = Number(process.env.SEED_NODES ?? 25_000);
 const SEED_SEED = Number(process.env.SEED_SEED ?? 7);
 const SEED_EMBED = Number(process.env.SEED_EMBED ?? 5_000);
@@ -62,49 +67,36 @@ const FIXTURES = [
 	{ tenant: 'Initech', project: 'Empty', namespace: 'dev_admin_empty', nodes: 0 },
 ];
 
-function bearer(c: { req: { header: (n: string) => string | undefined } }): string | undefined {
-	const h = c.req.header('authorization') ?? '';
-	return h.startsWith('Bearer ') ? h.slice(7) : undefined;
-}
-
-/** Tenant-scoped authn: the dev token ⇒ an operator principal scoped to the route tenant. */
-function authenticate(c: {
-	req: { header: (n: string) => string | undefined; param: (n: string) => string };
-}): Principal {
-	if (bearer(c) !== ADMIN_TOKEN) throw new Error('unauthorized');
-	return { userId: 'operator', tenantId: c.req.param('tenant'), operator: true };
-}
-
-/** Operator authn for /admin/*: same dev token. */
-function adminAuthenticate(c: { req: { header: (n: string) => string | undefined } }): void {
-	if (bearer(c) !== ADMIN_TOKEN) throw new Error('unauthorized');
-}
-
 // --- decide whether to rebuild -------------------------------------------------------------
 
 const namespaces = FIXTURES.map((f) => f.namespace);
 const fp = fingerprint({
 	schemaVersion: DEMO_SCHEMA_VERSION,
 	seed: SEED_SEED,
-	embedder: embedder.id,
+	dim: DIM,
 	embedded: SEED_EMBED,
 	fixtures: FIXTURES.map((f) => ({ namespace: f.namespace, nodes: f.nodes })),
 });
 const rebuild = process.env.SEED_FRESH === '1' || !isCached(fp, namespaces);
 if (rebuild) wipe(namespaces);
 
-// --- control plane (always fresh; it is :memory:) -------------------------------------------
+// --- persistent Better Auth identities and the Graphx project registry ----------------------
 
-const control = createClient({ url: ':memory:' });
-await initControl(control);
+const identity = await setupAdminAuth({
+	database: new Database('dev_admin_auth.db'),
+	baseURL: process.env.BETTER_AUTH_URL ?? `http://localhost:${PORT}`,
+	email: ADMIN_EMAIL,
+	password: ADMIN_PASSWORD,
+	secret: process.env.BETTER_AUTH_SECRET,
+	onInvitation: (email, url) => console.log(`[admin-api] invitation for ${email}: ${url}`),
+});
+const control = createClient({ url: 'file:dev_admin_registry.db' });
+await initBetterAuthControl(control);
 
 const tenants = new Map<string, string>();
 for (const { tenant } of FIXTURES) {
-	if (!tenants.has(tenant)) tenants.set(tenant, await createTenant(control, { name: tenant }));
-}
-const ada = await createUser(control, { email: 'ada@acme.test' });
-for (const tenantId of tenants.values()) {
-	await addMembership(control, { userId: ada, tenantId, role: 'owner' });
+	if (!tenants.has(tenant))
+		tenants.set(tenant, await identity.ensureOrganization(tenant, tenant.toLowerCase()));
 }
 
 // --- build (or reuse) each project's graph ---------------------------------------------------
@@ -115,11 +107,21 @@ const summary: string[] = [];
 
 for (const [i, fixture] of FIXTURES.entries()) {
 	const tenantId = tenants.get(fixture.tenant) as string;
-	const projectId = await createProject(control, {
-		tenantId,
-		name: fixture.project,
-		dbNamespace: fixture.namespace,
+	const existing = await control.execute({
+		sql: 'SELECT id, tenant_id FROM projects WHERE db_namespace = ?',
+		args: [fixture.namespace],
 	});
+	if (existing.rows[0] && String(existing.rows[0].tenant_id) !== tenantId)
+		throw new Error(
+			`Demo project ${fixture.namespace} belongs to another organization; use a fresh ADMIN_DATA_DIR`,
+		);
+	const projectId = existing.rows[0]
+		? String(existing.rows[0].id)
+		: await createProject(control, {
+				tenantId,
+				name: fixture.project,
+				dbNamespace: fixture.namespace,
+			});
 
 	if (!rebuild) {
 		summary.push(`${fixture.tenant}/${fixture.project}: cached`);
@@ -148,12 +150,18 @@ for (const [i, fixture] of FIXTURES.entries()) {
 
 if (rebuild) writeCache(fp, namespaces);
 
-const app = createApp({ control, schema: demoSchema, authenticate, embedder });
-app.route('/admin', createAdminApp({ control, authenticate: adminAuthenticate }));
+const app = await createBetterAuthApp({
+	auth: identity.auth,
+	control,
+	schema: demoSchema,
+	embedder,
+	development: true,
+	projectAccess: true,
+});
 
 Bun.serve({ port: PORT, fetch: app.fetch });
 console.log(
-	`[admin-api] http://localhost:${PORT}  token="${ADMIN_TOKEN}"  ${
+	`[admin-api] http://localhost:${PORT}  account="${ADMIN_EMAIL}"  ${
 		rebuild ? `built in ${((Date.now() - started) / 1000).toFixed(1)}s` : 'reused cached databases'
 	}`,
 );

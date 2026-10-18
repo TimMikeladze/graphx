@@ -1086,7 +1086,12 @@ export function createGraphHooks<S extends GraphSchema>(_schema?: S, opts?: Crea
 						if (cursor !== undefined) params.set('cursor', String(cursor));
 						else params.set('since', since);
 						const url = `${t.baseUrl}/t/${t.tenant}/p/${t.project}/events?${params.toString()}`;
-						const res = await doFetch(url, { method: 'GET', headers, signal: controller.signal });
+						const res = await doFetch(url, {
+							method: 'GET',
+							headers,
+							signal: controller.signal,
+							credentials: t.credentials,
+						});
 						if (!res.ok || !res.body) throw new GraphError(res.status, 'event stream unavailable');
 						backoffMs = 1000; // connected -- reset the reconnect backoff
 						const reader = res.body.getReader();

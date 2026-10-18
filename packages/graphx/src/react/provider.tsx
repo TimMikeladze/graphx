@@ -35,6 +35,8 @@ export interface GraphProviderProps {
 	headers?: GraphTransport['headers'];
 	/** Transport impl; defaults to `globalThis.fetch`. Use {@link appFetch} for an in-process app. */
 	fetch?: typeof fetch;
+	/** Use `include` for cross-origin session cookies. */
+	credentials?: RequestCredentials;
 	children: ReactNode;
 }
 
@@ -69,6 +71,7 @@ export function GraphProvider({
 	fallback = null,
 	headers,
 	fetch: fetchProp,
+	credentials,
 }: GraphProviderProps) {
 	if (bootstrap) {
 		return createElement(BootstrapGate, {
@@ -77,13 +80,14 @@ export function GraphProvider({
 			fallback,
 			headers,
 			fetch: fetchProp,
+			credentials,
 			children,
 		});
 	}
 	if (!tenant || !project) {
 		throw new Error('GraphProvider requires `tenant` + `project` (or a `bootstrap` URL)');
 	}
-	return provide({ baseUrl, tenant, project, headers, fetch: fetchProp }, children);
+	return provide({ baseUrl, tenant, project, headers, fetch: fetchProp, credentials }, children);
 }
 
 interface BootstrapGateProps {
@@ -92,6 +96,7 @@ interface BootstrapGateProps {
 	fallback: ReactNode;
 	headers?: GraphTransport['headers'];
 	fetch?: typeof fetch;
+	credentials?: RequestCredentials;
 	children: ReactNode;
 }
 
@@ -108,6 +113,7 @@ function BootstrapGate({
 	fallback,
 	headers,
 	fetch: fetchProp,
+	credentials,
 	children,
 }: BootstrapGateProps) {
 	const [session, setSession] = useState<Session | null>(null);
@@ -123,7 +129,7 @@ function BootstrapGate({
 		const f = fetchRef.current ?? globalThis.fetch;
 		(async () => {
 			try {
-				const res = await f(`${baseUrl}${bootstrap}`);
+				const res = await f(`${baseUrl}${bootstrap}`, { credentials });
 				if (!res.ok) throw new Error(`bootstrap ${bootstrap} → ${res.status}`);
 				const s = (await res.json()) as Session;
 				if (!cancelled) setSession(s);
@@ -134,7 +140,7 @@ function BootstrapGate({
 		return () => {
 			cancelled = true;
 		};
-	}, [baseUrl, bootstrap]);
+	}, [baseUrl, bootstrap, credentials]);
 
 	if (error) throw error; // surface a misconfigured bootstrap URL to an error boundary
 	if (!session) return createElement(Fragment, null, fallback);
@@ -152,6 +158,7 @@ function BootstrapGate({
 			project: session.project,
 			headers: mergedHeaders,
 			fetch: fetchProp,
+			credentials,
 		},
 		children,
 	);

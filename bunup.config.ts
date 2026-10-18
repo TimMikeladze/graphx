@@ -36,6 +36,7 @@ export default defineWorkspace([
 				'src/ingest/index.ts',
 				'src/ingest/s3.ts',
 				'src/auth/index.ts',
+				'src/better-auth/index.ts',
 			],
 			sourceBase: './src',
 			// One build shares public classes across core, native and adapter entries.

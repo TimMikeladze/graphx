@@ -1,3 +1,5 @@
+import { useAuth } from '@/components/auth-provider';
+import { OrganizationHome } from '@/components/admin/organization-admin';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -21,6 +23,11 @@ import { cn } from '@/lib/utils';
  * tenant with exactly one project, the picker is pointless — jump straight in (once).
  */
 export function IndexPage() {
+	const { config } = useAuth();
+	return config.mode === 'better-auth' ? <OrganizationHome /> : <LegacyIndexPage />;
+}
+
+function LegacyIndexPage() {
 	const navigate = useNavigate();
 	const tenants = useTenants();
 	const soleTenant = tenants.data?.length === 1 ? tenants.data[0].id : undefined;

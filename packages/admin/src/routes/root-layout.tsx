@@ -1,3 +1,4 @@
+import { AuthProvider, useAuth } from '@/components/auth-provider';
 import { Outlet } from '@tanstack/react-router';
 import { TokenDialog } from '@/components/token-dialog';
 import { Toaster } from '@/components/ui/sonner';
@@ -5,9 +6,18 @@ import { Toaster } from '@/components/ui/sonner';
 /** App shell: the routed outlet plus global UI (toasts + the operator-token dialog). */
 export function RootLayout() {
 	return (
+		<AuthProvider>
+			<AuthenticatedLayout />
+		</AuthProvider>
+	);
+}
+
+function AuthenticatedLayout() {
+	const { config } = useAuth();
+	return (
 		<>
 			<Outlet />
-			<TokenDialog />
+			{config.mode === 'legacy' && <TokenDialog />}
 			<Toaster richColors position="top-right" />
 		</>
 	);

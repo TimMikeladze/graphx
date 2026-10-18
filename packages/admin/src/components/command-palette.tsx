@@ -1,3 +1,4 @@
+import { useAuth } from '@/components/auth-provider';
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -36,6 +37,7 @@ export function CommandPalette({
 	project: string;
 	onSelectNode: (id: string) => void;
 }) {
+	const { config } = useAuth();
 	const [query, setQuery] = useState('');
 	const navigate = useNavigate();
 	const projects = useProjects(tenant);
@@ -101,10 +103,12 @@ export function CommandPalette({
 							<HugeiconsIcon icon={Key01Icon} strokeWidth={2} />
 							Administration
 						</CommandItem>
-						<CommandItem value="token" onSelect={() => run(() => requestToken())}>
-							<HugeiconsIcon icon={Key01Icon} strokeWidth={2} />
-							Set operator token
-						</CommandItem>
+						{config.mode === 'legacy' && (
+							<CommandItem value="token" onSelect={() => run(() => requestToken())}>
+								<HugeiconsIcon icon={Key01Icon} strokeWidth={2} />
+								Set operator token
+							</CommandItem>
+						)}
 						<CommandItem
 							value="theme"
 							onSelect={() => run(() => setTheme(theme === 'dark' ? 'light' : 'dark'))}

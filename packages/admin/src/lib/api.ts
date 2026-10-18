@@ -1,3 +1,4 @@
+import { getAuthConfig, organizations } from './auth-client';
 import type {
 	EdgeListPage,
 	ExplorerFilters,
@@ -81,11 +82,16 @@ export function qs(params: Record<string, string | number | undefined>): string 
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	const headers = new Headers(init?.headers);
-	const token = getToken();
+	const auth = getAuthConfig();
+	const token = auth.mode === 'legacy' ? getToken() : null;
 	if (token) headers.set('Authorization', `Bearer ${token}`);
 	if (init?.body) headers.set('Content-Type', 'application/json');
 
-	const res = await fetch(path, { ...init, headers });
+	const res = await fetch(path, {
+		...init,
+		headers,
+		...(auth.mode === 'better-auth' ? { credentials: 'include' as const } : {}),
+	});
 	if (res.status === 401) {
 		onUnauthorized?.();
 		throw new ApiError(401, 'unauthenticated');
@@ -156,25 +162,74 @@ export interface Slice {
 
 const tp = (tenant: string, project: string) => `/t/${tenant}/p/${project}`;
 
+export interface ProjectGrant {
+	subjectType: 'user' | 'team';
+	subjectId: string;
+	role: 'reader' | 'editor';
+}
+export interface ProjectPermissions {
+	read: boolean;
+	write: boolean;
+	manage: boolean;
+}
+
 export const api = {
-	// --- admin realm (operator) ---
-	listTenants: () => request<{ tenants: Tenant[] }>('/admin/tenants').then((r) => r.tenants),
-	createTenant: (name: string) =>
-		request<{ id: string }>('/admin/tenants', { method: 'POST', body: JSON.stringify({ name }) }),
-	listProjects: (tenantId: string) =>
-		request<{ projects: Project[] }>(`/admin/tenants/${tenantId}/projects`).then((r) => r.projects),
-	createProject: (tenantId: string, body: { name: string; dbNamespace: string }) =>
-		request<{ id: string }>(`/admin/tenants/${tenantId}/projects`, {
+	projectPermissions: (tenant: string, project: string) =>
+		request<ProjectPermissions>(`${tp(tenant, project)}/permissions`),
+	projectAccess: (tenant: string, project: string) =>
+		request<{ grants: ProjectGrant[] }>(`${tp(tenant, project)}/access`).then((r) => r.grants),
+	grantProject: (tenant: string, project: string, body: ProjectGrant) =>
+		request<void>(`${tp(tenant, project)}/access`, {
 			method: 'POST',
 			body: JSON.stringify(body),
 		}),
+	revokeProject: (tenant: string, project: string, subjectType: string, subjectId: string) =>
+		request<void>(
+			`${tp(tenant, project)}/access/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}`,
+			{ method: 'DELETE' },
+		),
+	// --- admin realm (operator) ---
+	listTenants: () =>
+		getAuthConfig().mode === 'better-auth'
+			? organizations.list()
+			: request<{ tenants: Tenant[] }>('/admin/tenants').then((r) => r.tenants),
+	createTenant: (name: string) =>
+		request<{ id: string }>('/admin/tenants', {
+			method: 'POST',
+			body: JSON.stringify({ name }),
+		}),
+	listProjects: (tenantId: string) =>
+		request<{ projects: Project[] }>(
+			getAuthConfig().mode === 'better-auth'
+				? `/t/${tenantId}/projects`
+				: `/admin/tenants/${tenantId}/projects`,
+		).then((r) => r.projects),
+	createProject: (tenantId: string, body: { name: string; dbNamespace: string }) =>
+		request<{ id: string }>(
+			getAuthConfig().mode === 'better-auth'
+				? `/t/${tenantId}/projects`
+				: `/admin/tenants/${tenantId}/projects`,
+			{
+				method: 'POST',
+				body: JSON.stringify(getAuthConfig().mode === 'better-auth' ? { name: body.name } : body),
+			},
+		),
 	listUsers: () => request<{ users: User[] }>('/admin/users').then((r) => r.users),
 	createUser: (email: string) =>
-		request<{ id: string }>('/admin/users', { method: 'POST', body: JSON.stringify({ email }) }),
+		request<{ id: string }>('/admin/users', {
+			method: 'POST',
+			body: JSON.stringify({ email }),
+		}),
 	addMembership: (body: { userId: string; tenantId: string; role: Role }) =>
-		request<void>('/admin/memberships', { method: 'POST', body: JSON.stringify(body) }),
+		request<void>('/admin/memberships', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
 	createApiKey: (body: { tenantId: string; scopes: string[] }) =>
-		request<{ key: string }>('/admin/api-keys', { method: 'POST', body: JSON.stringify(body) }),
+		request<{ key: string }>('/admin/api-keys', {
+			method: 'POST',
+			body: JSON.stringify(body),
+		}),
 
 	// --- tenant realm (graph reads) ---
 	listNodes: (tenant: string, project: string, opts: ListNodesOpts = {}) =>
@@ -206,7 +261,12 @@ export const api = {
 	timeline: (
 		tenant: string,
 		project: string,
-		opts: { from?: number; to?: number; buckets?: number; axis?: 'valid' | 'recorded' } = {},
+		opts: {
+			from?: number;
+			to?: number;
+			buckets?: number;
+			axis?: 'valid' | 'recorded';
+		} = {},
 	) =>
 		request<Timeline>(
 			`${tp(tenant, project)}/timeline${qs({ from: opts.from, to: opts.to, buckets: opts.buckets, axis: opts.axis })}`,
@@ -231,7 +291,12 @@ export const api = {
 	listEdges: (
 		tenant: string,
 		project: string,
-		opts: { rel?: string; source?: string; limit?: number; cursor?: string } = {},
+		opts: {
+			rel?: string;
+			source?: string;
+			limit?: number;
+			cursor?: string;
+		} = {},
 	) =>
 		request<EdgeListPage>(
 			`${tp(tenant, project)}/edges${qs({ rel: opts.rel, source: opts.source, limit: opts.limit, cursor: opts.cursor })}`,

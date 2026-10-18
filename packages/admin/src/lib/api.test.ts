@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { ApiError, api, qs, setToken } from './api';
+import { configureAuth, discoverAuth } from './auth-client';
 
 describe('qs', () => {
 	it('joins defined params and drops undefined/empty', () => {
@@ -15,6 +16,7 @@ describe('api transport', () => {
 	let originalFetch: typeof globalThis.fetch;
 
 	beforeEach(() => {
+		configureAuth({ mode: 'legacy' });
 		setToken(null);
 		fetchMock = mock();
 		originalFetch = globalThis.fetch;
@@ -22,11 +24,81 @@ describe('api transport', () => {
 	});
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		configureAuth({ mode: 'legacy' });
 	});
 
 	function ok(body: unknown) {
 		return { ok: true, status: 200, json: async () => body } as Response;
 	}
+
+	it('uses cookie credentials and ignores a saved operator token in Better Auth mode', async () => {
+		setToken('stale-operator-secret');
+		configureAuth({
+			mode: 'better-auth',
+			basePath: '/custom/auth',
+			projectAccess: true,
+		});
+		fetchMock.mockResolvedValue(ok({ nodes: [], nextCursor: null }));
+		await api.listNodes('tA', 'pA');
+		const [, init] = fetchMock.mock.calls[0];
+		expect(init.credentials).toBe('include');
+		expect((init.headers as Headers).get('Authorization')).toBeNull();
+	});
+
+	it('lists organizations through Better Auth instead of the legacy admin realm', async () => {
+		configureAuth({ mode: 'better-auth', basePath: '/custom/auth', projectAccess: true });
+		fetchMock.mockResolvedValue(
+			Response.json([{ id: 'org1', name: 'Research', slug: 'research' }]),
+		);
+		expect(await api.listTenants()).toEqual([{ id: 'org1', name: 'Research', slug: 'research' }]);
+		expect(String(fetchMock.mock.calls[0][0])).toContain('/custom/auth/organization/list');
+		expect(fetchMock.mock.calls[0][1].credentials).toBe('include');
+	});
+
+	it('lists projects through the tenant route in Better Auth mode', async () => {
+		configureAuth({
+			mode: 'better-auth',
+			basePath: '/api/auth',
+			projectAccess: true,
+		});
+		fetchMock.mockResolvedValue(ok({ projects: [] }));
+		await api.listProjects('org1');
+		expect(fetchMock.mock.calls[0][0]).toBe('/t/org1/projects');
+	});
+
+	it('creates a project without the legacy namespace in Better Auth mode', async () => {
+		configureAuth({
+			mode: 'better-auth',
+			basePath: '/api/auth',
+			projectAccess: true,
+		});
+		fetchMock.mockResolvedValue(ok({ id: 'p1' }));
+		await api.createProject('org1', { name: 'Research', dbNamespace: 'legacy' });
+		expect(fetchMock.mock.calls[0][0]).toBe('/t/org1/projects');
+		expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+			name: 'Research',
+		});
+	});
+
+	it('only chooses legacy mode when discovery returns 404', async () => {
+		fetchMock.mockResolvedValue({ status: 404, ok: false } as Response);
+		expect(await discoverAuth()).toEqual({ mode: 'legacy' });
+		fetchMock.mockResolvedValue({ status: 503, ok: false } as Response);
+		await expect(discoverAuth()).rejects.toThrow('Authentication discovery failed (503)');
+		fetchMock.mockRejectedValue(new Error('offline'));
+		await expect(discoverAuth()).rejects.toThrow('offline');
+	});
+
+	it('discovers a custom authentication path', async () => {
+		const value = {
+			mode: 'better-auth',
+			basePath: '/custom/auth',
+			projectAccess: true,
+		};
+		fetchMock.mockResolvedValue(ok(value));
+		expect(await discoverAuth()).toEqual(value);
+		expect(fetchMock.mock.calls[0][1].credentials).toBe('include');
+	});
 
 	it('builds the nodes URL with filters and unwraps the page', async () => {
 		fetchMock.mockResolvedValue(ok({ nodes: [], nextCursor: null }));

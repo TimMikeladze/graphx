@@ -1,3 +1,4 @@
+import { AccountControl } from '@/components/auth-provider';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { HugeiconsIcon } from '@hugeicons/react';
@@ -132,7 +133,10 @@ export function AppSidebar({
 					<SidebarGroupContent className="flex gap-2 px-2 pt-1">
 						<Field label="Tenant" className="min-w-0 flex-1">
 							<Combobox
-								items={(tenants.data ?? []).map((t) => ({ value: t.id, label: t.name }))}
+								items={(tenants.data ?? []).map((t) => ({
+									value: t.id,
+									label: t.name,
+								}))}
 								value={tenant}
 								onChange={(tid) => {
 									if (tid !== tenant) setDesiredTenant(tid);
@@ -142,7 +146,10 @@ export function AppSidebar({
 						</Field>
 						<Field label="Project" className="min-w-0 flex-1">
 							<Combobox
-								items={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
+								items={(projects.data ?? []).map((p) => ({
+									value: p.id,
+									label: p.name,
+								}))}
 								value={project}
 								onChange={(pid) => {
 									if (pid !== project) {
@@ -235,6 +242,7 @@ export function AppSidebar({
 			</SidebarContent>
 
 			<SidebarFooter className="border-t">
+				<AccountControl />
 				<Link to="/t/$tenant/p/$project/review" params={{ tenant, project }} search={{}}>
 					<Button variant="ghost" size="sm" className="w-full justify-start">
 						<HugeiconsIcon icon={CheckListIcon} strokeWidth={2} />

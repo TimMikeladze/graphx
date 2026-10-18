@@ -1,3 +1,4 @@
+import { useAuth } from '@/components/auth-provider';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type EdgeInput, type NodeInput, type NodePatch, type Slice } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
@@ -149,8 +150,12 @@ export function useUpdateNodeBody(tenant?: string, project?: string, id?: string
 		mutationFn: (body: string) =>
 			api.updateNodeBody(tenant as string, project as string, id as string, body),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? '') });
-			qc.invalidateQueries({ queryKey: qk.history(tenant ?? '', project ?? '', id ?? '') });
+			qc.invalidateQueries({
+				queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? ''),
+			});
+			qc.invalidateQueries({
+				queryKey: qk.history(tenant ?? '', project ?? '', id ?? ''),
+			});
 		},
 	});
 }
@@ -189,9 +194,15 @@ export function useUpdateNode(tenant?: string, project?: string, id?: string) {
 			api.updateNode(tenant as string, project as string, id as string, patch),
 		onSuccess: () => {
 			invalidateGraphViews(qc, tenant, project);
-			qc.invalidateQueries({ queryKey: qk.allNode(tenant ?? '', project ?? '', id ?? '') });
-			qc.invalidateQueries({ queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? '') });
-			qc.invalidateQueries({ queryKey: qk.history(tenant ?? '', project ?? '', id ?? '') });
+			qc.invalidateQueries({
+				queryKey: qk.allNode(tenant ?? '', project ?? '', id ?? ''),
+			});
+			qc.invalidateQueries({
+				queryKey: qk.allNodeContent(tenant ?? '', project ?? '', id ?? ''),
+			});
+			qc.invalidateQueries({
+				queryKey: qk.history(tenant ?? '', project ?? '', id ?? ''),
+			});
 		},
 	});
 }
@@ -223,7 +234,9 @@ export function useCreateEdge(tenant?: string, project?: string) {
 		onSuccess: (_result, input) => {
 			invalidateGraphViews(qc, tenant, project);
 			for (const id of [input.src, input.dst]) {
-				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+				qc.invalidateQueries({
+					queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id),
+				});
 			}
 		},
 	});
@@ -238,7 +251,9 @@ export function useDeleteEdge(tenant?: string, project?: string) {
 		onSuccess: (_result, edge) => {
 			invalidateGraphViews(qc, tenant, project);
 			for (const id of [edge.source, edge.target]) {
-				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+				qc.invalidateQueries({
+					queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id),
+				});
 			}
 		},
 	});
@@ -327,7 +342,11 @@ export function useEdges(tenant?: string, project?: string, rel?: string) {
 		enabled: Boolean(tenant && project && rel),
 		initialPageParam: undefined as string | undefined,
 		queryFn: ({ pageParam }) =>
-			api.listEdges(tenant as string, project as string, { rel, cursor: pageParam, limit: 25 }),
+			api.listEdges(tenant as string, project as string, {
+				rel,
+				cursor: pageParam,
+				limit: 25,
+			}),
 		getNextPageParam: (last) => last.nextCursor ?? undefined,
 	});
 }
@@ -356,11 +375,30 @@ export function useSettleReview(tenant?: string, project?: string) {
 			await api.deleteEdge(t, p, v.edge.id);
 		},
 		onSuccess: (_d, v) => {
-			qc.invalidateQueries({ queryKey: qk.allEdges(tenant ?? '', project ?? '') });
+			qc.invalidateQueries({
+				queryKey: qk.allEdges(tenant ?? '', project ?? ''),
+			});
 			invalidateGraphViews(qc, tenant, project);
 			for (const id of [v.edge.src, v.edge.dst]) {
-				qc.invalidateQueries({ queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id) });
+				qc.invalidateQueries({
+					queryKey: qk.allNeighbors(tenant ?? '', project ?? '', id),
+				});
 			}
 		},
 	});
+}
+
+/** Better Auth projects expose write permission separately from readable graph data. */
+export function useProjectPermissions(tenant: string, project: string) {
+	const { config } = useAuth();
+	const query = useQuery({
+		queryKey: ['project-permissions', tenant, project],
+		queryFn: () => api.projectPermissions(tenant, project),
+		enabled: config.mode === 'better-auth',
+	});
+	return {
+		...query,
+		canWrite: config.mode === 'legacy' || query.data?.write === true,
+		authMode: config.mode === 'better-auth',
+	};
 }

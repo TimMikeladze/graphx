@@ -21,7 +21,18 @@ Writes are bitemporal and never erase: an edit opens a successor version and a d
 
 ## Prerequisites
 
-A running graphx Hono server (from `graphx`) that:
+From the repository root, `bun run dev:admin` starts the Better Auth demo API and
+this UI. Sign in with `admin@example.test` / `graphx-development`. Identities and
+graphs persist under `.graphx-data/admin`; set `ADMIN_DATA_DIR` to choose another
+directory. `ADMIN_EMAIL` and `ADMIN_PASSWORD` configure the account on first launch.
+
+For your own server, mount `createBetterAuthApp` from `graphx/better-auth`; see
+[the setup guide](../../docs/better-auth.md). Its `/auth-config` endpoint selects
+cookie sessions automatically.
+
+### Legacy operator servers
+
+The token workflow also supports a graphx Hono server (from `graphx`) that:
 
 - mounts `createApp(cfg)` (serves `/t/:tenant/p/:project/*` — the `/nodes`, `/graph`, `/schema`, `/nodes/:id/history` reads, and the `POST /nodes`, `PATCH /nodes/:id`, `DELETE /nodes/:id`, `POST /edges`, `DELETE /edges/:id` writes the editor uses), and
 - mounts the operator sub-app: `app.route('/admin', createAdminApp({ control, authenticate }))`.
@@ -44,7 +55,9 @@ bun run dev            # Vite dev server (proxies /t and /admin to the API)
 VITE_API_TARGET=http://localhost:8787 bun run dev   # override the API origin (default :8787)
 ```
 
-Open the app, click **Set token**, and paste the operator token (stored in `localStorage`, sent as `Authorization: Bearer`). A `401` reopens the dialog automatically.
+For a legacy server, click **Set token** and paste the operator token (stored in
+`localStorage`, sent as `Authorization: Bearer`). A `401` reopens the dialog
+automatically. Better Auth servers show the sign-in form instead.
 
 ## Scripts
 
@@ -58,3 +71,23 @@ bun run lint        # eslint
 ## Deferred (not in v1)
 
 Lazy canvas expansion (double-click → merge neighbors), DOM/component tests, match/hybrid/algorithm viz, CDC live-sync.
+
+## Better Auth sessions
+
+The app checks `GET /auth-config` before mounting protected routes. A Better Auth
+server returns `{ mode: 'better-auth', basePath: '/api/auth', projectAccess: true }`.
+The app then uses cookie sessions for signup, login, organizations, invitations,
+teams, and graph requests. A saved operator token is ignored in this mode.
+Signing out or changing accounts clears cached graph data. Expired sessions return
+to the sign-in form; discovery and session server failures show a retry screen.
+
+Choose an organization on the home page, then open or create a project. Organization
+administration manages Better Auth memberships and teams. Copy an invitation link
+and open it as the invited account to accept it. With project access enabled,
+owners and admins can grant a user or team reader/editor access to a project.
+Readers can browse graph data; editing controls require project write permission.
+
+The Vite development proxy includes `/auth-config` and `/api/auth`. For a custom
+Better Auth path, start Vite with `VITE_AUTH_BASE_PATH=/custom/auth`; the client uses
+the path returned by discovery. A server returning 404 for `/auth-config` retains
+the operator-token workflow described above.

@@ -149,6 +149,12 @@
 				"default": "./dist/auth/index.js"
 			}
 		},
+		"./better-auth": {
+			"import": {
+				"types": "./dist/better-auth/index.d.ts",
+				"default": "./dist/better-auth/index.js"
+			}
+		},
 		"./package.json": "./package.json",
 		"./local": {
 			"import": {
@@ -180,6 +186,8 @@
 	"devDependencies": {
 		"@aws-sdk/client-s3": "^3.0.0",
 		"@aws-sdk/s3-request-presigner": "^3.0.0",
+		"@better-auth/api-key": "^1.7.7",
+		"@better-auth/core": "^1.7.7",
 		"@duckdb/node-api": "1.5.5-r.2",
 		"@happy-dom/global-registrator": "^16.5.3",
 		"@hono/mcp": "^0.3.1",
@@ -193,6 +201,7 @@
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
 		"ajv": "^8.20.0",
+		"better-auth": "^1.7.7",
 		"bql.sh": "^0.4.0",
 		"happy-dom": "^16.5.3",
 		"openapi-x-graphql": "^1.0.0",
@@ -203,17 +212,29 @@
 	"peerDependencies": {
 		"@aws-sdk/client-s3": "^3.0.0",
 		"@aws-sdk/s3-request-presigner": "^3.0.0",
+		"@better-auth/api-key": "^1.7.7",
+		"@better-auth/core": "^1.7.7",
 		"@duckdb/node-api": "^1.5.5-r.2",
 		"@hono/mcp": "^0.3.1",
 		"@modelcontextprotocol/sdk": "^1.29.0",
 		"@sqlite.org/sqlite-wasm": "^3.53.0-build1",
 		"@tanstack/react-query": "^5.0.0",
+		"better-auth": "^1.7.7",
 		"openapi-x-graphql": "^1.0.0",
 		"pg": "^8.11.0",
 		"react": "^18 || ^19",
 		"typescript": ">=4.5.0"
 	},
 	"peerDependenciesMeta": {
+		"@better-auth/core": {
+			"optional": true
+		},
+		"better-auth": {
+			"optional": true
+		},
+		"@better-auth/api-key": {
+			"optional": true
+		},
 		"@sqlite.org/sqlite-wasm": {
 			"optional": true
 		},

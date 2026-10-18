@@ -30,6 +30,11 @@ export default defineConfig({
 	server: {
 		// Proxy both API realms to the Hono server so there is no CORS in dev (spec §3).
 		proxy: {
+			'/auth-config': { target: API_TARGET, changeOrigin: true },
+			[process.env.VITE_AUTH_BASE_PATH ?? '/api/auth']: {
+				target: API_TARGET,
+				changeOrigin: true,
+			},
 			'/t': { target: API_TARGET, changeOrigin: true, bypass: spaFallback },
 			'/admin': { target: API_TARGET, changeOrigin: true, bypass: spaFallback },
 		},

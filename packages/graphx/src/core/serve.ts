@@ -19,7 +19,16 @@ import {
 	shortestPath,
 	topNodes,
 } from './algorithms.ts';
-import { AuthzError, type Op, type Principal, resolveProjectDb } from './authz.ts';
+import {
+	AuthzError,
+	authorize,
+	authorizeTenantAccess,
+	type Op,
+	type Principal,
+	type ProjectAuthorizer,
+	resolveProjectDb,
+	type TenantAuthorizer,
+} from './authz.ts';
 import { type BulkRow, bulkLoad } from './bulk.ts';
 import {
 	addMembership,
@@ -95,6 +104,12 @@ export interface ServeConfig<S extends GraphSchema> {
 	schema: S;
 	/** Authn: verify the request → principal. Throw to reject (mapped to 401). */
 	authenticate: (c: Context) => Principal | Promise<Principal>;
+	/** Refresh a live stream credential without charging for another HTTP request. Defaults to authenticate. */
+	reauthenticate?: (c: Context, previous: Principal) => Principal | Promise<Principal>;
+	/** External tenant permissions; replaces the local membership lookup. Project ownership is always checked. */
+	authorizeTenant?: TenantAuthorizer;
+	/** Additional project restrictions; also filters the project list. Runs before opening the project DB. */
+	authorizeProject?: ProjectAuthorizer;
 	/**
 	 * The deployment's embedder. Every project namespace is initialised at its width on first
 	 * touch, every write embeds through it, and `/retrieve` + `/hybrid` query with it. Omit to
@@ -243,9 +258,20 @@ export async function graphForProject<S extends GraphSchema>(
 	projectId: string,
 	op: Op,
 	schema: S,
-	opts: GraphOptions = {},
+	opts: GraphOptions & {
+		authorizeTenant?: TenantAuthorizer;
+		authorizeProject?: ProjectAuthorizer;
+	} = {},
 ): Promise<Graph<S>> {
-	const { client } = await resolveProjectDb(control, principal, projectId, op, opts.embedder);
+	const { client } = await resolveProjectDb(
+		control,
+		principal,
+		projectId,
+		op,
+		opts.embedder,
+		opts.authorizeTenant,
+		opts.authorizeProject,
+	);
 	return new Graph(client, schema, opts);
 }
 
@@ -850,6 +876,8 @@ function requireGraph<S extends GraphSchema>(
 				}
 			: undefined;
 		const graph = await graphForProject(cfg.control, principal, project, op, cfg.schema, {
+			authorizeTenant: cfg.authorizeTenant,
+			authorizeProject: cfg.authorizeProject,
 			upcasters: cfg.upcasters,
 			events,
 			embedder: cfg.embedder,
@@ -1044,15 +1072,22 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 				if (c.req.param('tenant') !== principal.tenantId) {
 					throw new AuthzError(404, 'tenant not found');
 				}
-				// Operators have no memberships row (see authorize's operator bypass).
-				if (!principal.operator) {
-					const mem = await cfg.control.execute({
-						sql: 'SELECT 1 FROM memberships WHERE user_id = ? AND tenant_id = ?',
-						args: [principal.userId, principal.tenantId],
-					});
-					if (!mem.rows[0]) throw new AuthzError(403, 'no membership in tenant');
+				await authorizeTenantAccess(cfg.control, principal, 'read', cfg.authorizeTenant);
+				let rows = await listProjects(cfg.control, principal.tenantId);
+				if (cfg.authorizeProject) {
+					const visible = await Promise.all(
+						rows.map(async (row) => {
+							try {
+								await cfg.authorizeProject!(principal, row.id, 'read');
+								return true;
+							} catch (error) {
+								if (error instanceof AuthzError && error.status === 403) return false;
+								throw error;
+							}
+						}),
+					);
+					rows = rows.filter((_, index) => visible[index]);
 				}
-				const rows = await listProjects(cfg.control, principal.tenantId);
 				// §2.9: strip db_namespace — end users never receive a DB-level identifier.
 				return c.json({ projects: rows.map(({ id, name }) => ({ id, name })) }, 200);
 			},
@@ -1581,6 +1616,9 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 						message: 'event stream not configured (set events.outbox)',
 					});
 				}
+				let streamPrincipal = cfg.reauthenticate
+					? await cfg.reauthenticate(c, c.get('principal'))
+					: c.get('principal');
 				const raw = c.get('graph').raw;
 				const q = c.req.valid('query');
 				const pollMs = q.poll ?? 1000;
@@ -1606,6 +1644,24 @@ function buildApp<S extends GraphSchema>(cfg: ServeConfig<S>) {
 					await stream.writeSSE({ data: '', event: 'ping', id: String(cursor ?? 0) });
 					let idle = 0;
 					while (!stream.aborted) {
+						// A live connection must lose access when its credential, membership, or grant is revoked.
+						try {
+							const principal = cfg.reauthenticate
+								? await cfg.reauthenticate(c, streamPrincipal)
+								: await cfg.authenticate(c);
+							streamPrincipal = principal;
+							if (principal.tenantId !== c.req.param('tenant')) return;
+							await authorize(
+								cfg.control,
+								principal,
+								c.req.param('project'),
+								'read',
+								cfg.authorizeTenant,
+								cfg.authorizeProject,
+							);
+						} catch {
+							return;
+						}
 						const page = await outboxTail(raw, cursor === undefined ? {} : { seq: cursor }, {
 							limit,
 						});

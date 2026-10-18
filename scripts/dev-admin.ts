@@ -45,6 +45,7 @@ if (Number(apiPort) !== wanted)
 	console.log(`[dev-admin] port ${wanted} is taken; API on ${apiPort}`);
 // Every API script reads PORT.
 process.env.PORT = apiPort;
+process.env.NODE_ENV ??= 'development';
 const procs: Bun.Subprocess[] = [];
 
 function run(cmd: string[], cwd: string): Bun.Subprocess {

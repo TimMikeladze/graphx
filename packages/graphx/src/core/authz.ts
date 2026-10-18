@@ -19,6 +19,16 @@ export interface Principal {
 	operator?: boolean;
 }
 
+/** Verify tenant permissions using an external identity provider. Throw to deny. */
+export type TenantAuthorizer = (principal: Principal, op: Op) => void | Promise<void>;
+
+/** Additional project policy, evaluated after ownership and tenant permissions and before opening its DB. */
+export type ProjectAuthorizer = (
+	principal: Principal,
+	projectId: string,
+	op: Op,
+) => void | Promise<void>;
+
 /** Typed authz failure carrying an HTTP status (403 forbidden / 404 not found). */
 export class AuthzError extends Error {
 	readonly status: 403 | 404;
@@ -51,6 +61,8 @@ export async function authorize(
 	principal: Principal,
 	projectId: string,
 	op: Op,
+	authorizeTenant?: TenantAuthorizer,
+	authorizeProject?: ProjectAuthorizer,
 ): Promise<{ dbNamespace: string }> {
 	const proj = await control.execute({
 		sql: 'SELECT tenant_id, db_namespace FROM projects WHERE id = ?',
@@ -62,11 +74,28 @@ export async function authorize(
 		throw new AuthzError(404, 'project not found');
 	}
 
+	await authorizeTenantAccess(control, principal, op, authorizeTenant);
+	await authorizeProject?.(principal, projectId, op);
+	return { dbNamespace: String(row.db_namespace) };
+}
+
+/** Tenant authorization shared by project resolution and project listing. */
+export async function authorizeTenantAccess(
+	control: DbClient,
+	principal: Principal,
+	op: Op,
+	authorizeTenant?: TenantAuthorizer,
+): Promise<void> {
+	if (authorizeTenant) {
+		await authorizeTenant(principal, op);
+		return;
+	}
+
 	// Operator bypass: the project-tenant guard above already ran (no cross-tenant leak), so an
 	// operator is authorized for any op without a membership row. End users fall through to the
 	// membership/role check below.
 	if (principal.operator) {
-		return { dbNamespace: String(row.db_namespace) };
+		return;
 	}
 
 	const mem = await control.execute({
@@ -79,8 +108,6 @@ export async function authorize(
 	if (!roleAllows(role, op)) {
 		throw new AuthzError(403, `role ${role} insufficient for ${op}`);
 	}
-
-	return { dbNamespace: String(row.db_namespace) };
 }
 
 /**
@@ -116,8 +143,17 @@ export async function resolveProjectDb(
 	projectId: string,
 	op: Op,
 	embedder?: Embedder,
+	authorizeTenant?: TenantAuthorizer,
+	authorizeProject?: ProjectAuthorizer,
 ): Promise<{ namespace: string; client: DbClient }> {
-	const { dbNamespace } = await authorize(control, principal, projectId, op);
+	const { dbNamespace } = await authorize(
+		control,
+		principal,
+		projectId,
+		op,
+		authorizeTenant,
+		authorizeProject,
+	);
 	const client = getDb(dbNamespace);
 	// The embedder sizes the vector table on the namespace's first touch — the production path
 	// used to bake a default width here and break every real model.

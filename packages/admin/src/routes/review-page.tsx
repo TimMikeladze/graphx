@@ -17,7 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useEdges, useNode, useSchema, useSettleReview } from '@/hooks/use-graph';
+import {
+	useEdges,
+	useNode,
+	useSchema,
+	useSettleReview,
+	useProjectPermissions,
+} from '@/hooks/use-graph';
 import { bestLabel } from '@/lib/format';
 import { judgmentOf, outcomeOf, promoteRels, reviewRels } from '@/lib/review';
 import type { EdgeRecord } from '@/lib/types';
@@ -137,6 +143,7 @@ export function ReviewPage() {
 	const into = search.into && promotes.includes(search.into) ? search.into : promotes[0];
 	const edges = useEdges(tenant, project, rel);
 	const settle = useSettleReview(tenant, project);
+	const permissions = useProjectPermissions(tenant, project);
 	const [busy, setBusy] = useState<string | null>(null);
 	const rows = edges.data?.pages.flatMap((p) => p.edges) ?? [];
 
@@ -241,7 +248,7 @@ export function ReviewPage() {
 										<Button
 											size="sm"
 											className="flex-1"
-											disabled={!into || busy !== null}
+											disabled={!permissions.canWrite || !into || busy !== null}
 											onClick={() => decide(edge, true)}
 										>
 											<HugeiconsIcon icon={GitMergeIcon} strokeWidth={2} />
@@ -251,7 +258,7 @@ export function ReviewPage() {
 											size="sm"
 											variant="outline"
 											className="flex-1"
-											disabled={busy !== null}
+											disabled={!permissions.canWrite || busy !== null}
 											onClick={() => decide(edge, false)}
 										>
 											<HugeiconsIcon icon={Unlink01Icon} strokeWidth={2} />
