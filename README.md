@@ -157,6 +157,14 @@ const { app } = await createApp({
 Bun.serve({ port: 8899, fetch: app.fetch });
 ```
 
+## MTG workspace
+
+```sh
+bun run dev:mtg
+```
+
+[Card search, deck editing and analysis over MTGJSON](examples/mtg-graph/README.md), backed by GraphX. Includes a collapsible sidebar, a mobile navigation sheet and a versioned API.
+
 ## Schema
 
 `defineGraphSchema` is identity at runtime — its job is to capture the node and edge types precisely
