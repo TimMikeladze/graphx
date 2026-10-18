@@ -662,7 +662,7 @@ bun run clean:db  # sweep stray scratch databases (also runs on install and pre-
 GRAPHX_TEST_DRIVER=bql bun test  # the suite on bql.sh, with `bun run bql:serve`'s two variables set
 bun run type-check
 bun run build     # bunup, every entry point
-bun run dev:admin # the operator SPA against a dev server
+bun run dev:admin # Better Auth admin SPA and persistent demo API
 bun run bench     # the benchmark suites
 bun run bench:benchable --latest --out bench/benchable.json  # newest result as a Benchable run
 bunx benchable submit --metrics bench/benchable.json           # send it (BENCHABLE_KEY, or benchable login)

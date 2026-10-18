@@ -8,7 +8,7 @@ import { ulid } from 'ulidx';
 import { z } from 'zod';
 import { authorize, AuthzError, type Principal } from '../core/authz.ts';
 import { createProject } from '../core/control-plane.ts';
-import type { DbClient } from '../core/dialect.ts';
+import { dialectOf, type DbClient } from '../core/dialect.ts';
 import type { GraphSchema } from '../core/graph.ts';
 import { applyConnPragmas } from '../core/runtime.ts';
 import { createApp, type ServeConfig } from '../core/serve.ts';
@@ -76,12 +76,14 @@ export interface BetterAuthServeConfig<S extends GraphSchema> extends Omit<
 /** Creates only Graphx's registry. Better Auth organizations supply tenant IDs. */
 export async function initBetterAuthControl(control: DbClient): Promise<void> {
 	await applyConnPragmas(control);
+	// DuckDB enforces foreign keys but does not support cascading deletes.
+	const cascade = dialectOf(control) === 'duckdb' ? '' : ' ON DELETE CASCADE';
 	await control.executeMultiple(`CREATE TABLE IF NOT EXISTS projects (
 		id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
 		name TEXT NOT NULL, db_namespace TEXT NOT NULL UNIQUE
 	);
 	CREATE TABLE IF NOT EXISTS project_grants (
-		project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+		project_id TEXT NOT NULL REFERENCES projects(id)${cascade},
 		subject_type TEXT NOT NULL CHECK(subject_type IN ('user', 'team')),
 		subject_id TEXT NOT NULL,
 		role TEXT NOT NULL CHECK(role IN ('reader', 'editor')),

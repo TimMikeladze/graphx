@@ -643,7 +643,43 @@ const { app, tenant, project, user } = await createApp({
 Bun.serve({ port: 8899, fetch: app.fetch });
 ```
 
-Production takes the control-plane client and an authn function instead:
+### Better Auth
+
+Use `graphx/better-auth` to let Better Auth own users, sessions, organizations, memberships,
+invitations, teams, roles, administrator accounts, and API keys. Graphx stores projects and graph
+data. Organization IDs are Graphx tenant IDs; identity records are not copied into Graphx.
+
+```bash
+bun add better-auth @better-auth/api-key @better-auth/core
+```
+
+```ts
+import { Pool } from 'pg';
+import { createBetterAuthApp, createGraphxAuth } from 'graphx/better-auth';
+
+const auth = createGraphxAuth({
+	database: new Pool({ connectionString: process.env.DATABASE_URL }),
+	baseURL: 'http://localhost:8899',
+	emailAndPassword: { enabled: true },
+	trustedOrigins: ['http://localhost:3000'],
+});
+
+const app = await createBetterAuthApp({ auth, control, schema });
+Bun.serve({ port: 8899, fetch: app.fetch });
+```
+
+Set `BETTER_AUTH_SECRET` and apply Better Auth's schema before starting. Pass a fresh Graphx
+registry as `control`; the integration initializes project and grant tables. Owners and organization
+admins can create projects, members can read/write graph data, and viewers can read. Permission
+checks use Better Auth on each request. `NODE_ENV=development` accepts any request origin for
+local development; production uses Better Auth's trusted origins.
+
+See [Better Auth setup](https://github.com/TimMikeladze/graphx/blob/main/docs/better-auth.md) for the database setup, React client, project
+creation, API keys, additional login providers, and existing-data considerations.
+
+### Custom authentication
+
+To supply your own authentication provider, pass the control-plane client and an authn function:
 
 ```ts
 const app = createApp({
@@ -1460,13 +1496,19 @@ bun run clean:db  # sweep stray scratch databases (also runs on install and pre-
 GRAPHX_TEST_DRIVER=bql bun test  # the suite on bql.sh, with `bun run bql:serve`'s two variables set
 bun run type-check
 bun run build     # bunup, every entry point
-bun run dev:admin # the operator SPA against a dev server
+bun run dev:admin # Better Auth admin SPA and persistent demo API
 bun run bench     # the benchmark suites
 bun run bench:benchable --latest --out bench/benchable.json  # newest result as a Benchable run
 bunx benchable submit --metrics bench/benchable.json           # send it (BENCHABLE_KEY, or benchable login)
 bun run release                            # bump, rebuild site + package README, commit, tag, push
 npm publish                                # build and publish `graphx` (root .npmrc targets it; prompts for OTP)
 ```
+
+The admin demo signs in with `admin@example.test` / `graphx-development`. Override the
+seeded account with `ADMIN_EMAIL` and `ADMIN_PASSWORD` before its first launch. It keeps
+Better Auth identities, the project registry, and demo graphs under `.graphx-data/admin`
+(`ADMIN_DATA_DIR` overrides this directory), enables project grants, and prints development
+invitation links locally. Existing operator-mode databases are left intact.
 
 This file is the documentation. Two things are generated from it and checked by the suite, so
 neither can drift: `packages/graphx/README.md`, the copy npm shows on the package page
