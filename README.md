@@ -1459,6 +1459,13 @@ the as-of scrubber has something to say.
   who drives through a light, critical intersections (`betweenness`) and crash risk, and its
   scenario lab forks the city, replays the day with an edit, and shows who wins and who pays.
   `bun run download && bun run prepare-data && bun run load && bun run dev` in the example dir.
+- [`examples/metro-graph`](./examples/metro-graph): King County Metro (Seattle) from its GTFS
+  feed. 142 routes, 6,265 stops, 423 stop patterns and 31.5k scheduled trips for a weekday,
+  Saturday and Sunday, plus live bus positions from GTFS-realtime. The map animates every
+  scheduled bus through the day; a scenario forks the network, and headway changes, shifted
+  trips, removed routes and drawn routes are writes in the branch, compared against the baseline.
+  Runs on bql.sh, so a scenario fork is a database branch on the server.
+  `bun run download && bun run load && bun run dev` in the example dir.
 - [`examples/iot-fleet`](./examples/iot-fleet) — end-to-end Vite + Bun + SQLite + React app. Run
   `bun run server.ts` and `bun run dev` in two shells, or `bun test` for an in-process run with no
   server and no port.

@@ -105,6 +105,35 @@
         "vite": "^8",
       },
     },
+    "examples/metro-graph": {
+      "name": "graphx-example-metro-graph",
+      "version": "0.1.0",
+      "dependencies": {
+        "@deck.gl/core": "^9.4.0",
+        "@deck.gl/layers": "^9.4.0",
+        "@deck.gl/mapbox": "^9.4.0",
+        "@tanstack/charts": "^0.18.0",
+        "@tanstack/react-query": "^5.104.0",
+        "bql.sh": "^0.4.0",
+        "d3-scale": "^4.0.2",
+        "graphx": "workspace:*",
+        "hono": "^4.12.23",
+        "maplibre-gl": "^6.11.2",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
+        "ulidx": "^2.4.1",
+        "zod": "^4.4.3",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+        "@types/d3-scale": "^4.0.8",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "@vitejs/plugin-react": "^6",
+        "typescript": "^6.0.3",
+        "vite": "^8.3.1",
+      },
+    },
     "examples/mma-graph": {
       "name": "graphx-example-mma-graph",
       "version": "0.3.0",
@@ -1775,6 +1804,8 @@
     "graphx-example-iot-fleet": ["graphx-example-iot-fleet@workspace:examples/iot-fleet"],
 
     "graphx-example-lex-graph": ["graphx-example-lex-graph@workspace:examples/lex-graph"],
+
+    "graphx-example-metro-graph": ["graphx-example-metro-graph@workspace:examples/metro-graph"],
 
     "graphx-example-mma-graph": ["graphx-example-mma-graph@workspace:examples/mma-graph"],
 

@@ -1,0 +1,104 @@
+stop_id,stop_code,stop_name,tts_stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station,stop_timezone,wheelchair_boarding
+1250,1250,Seneca St & 4th Ave,Seneca Street and Fourth Avenue,,47.6074219,-122.33461,21,,0,,America/Los_Angeles,1
+1260,1260,Seneca St & 6th Ave,Seneca Street and Sixth Avenue,,47.6087418,-122.331482,1,,0,,America/Los_Angeles,1
+12880,12880,Jefferson St & 9th Ave,Jefferson Street and 9th Avenue,,47.6050072,-122.323914,1,,0,,America/Los_Angeles,1
+12890,12890,James St & 8th Ave,James Street and Eighth Avenue,,47.6051865,-122.325813,1,,0,,America/Los_Angeles,1
+1471,1471,S Jackson St & 5th Ave S,South Jackson Street and Fifth Avenue South,,47.5991249,-122.328041,71,,0,,America/Los_Angeles,1
+1500,1500,S Jackson St & 8th Ave S,South Jackson Street and Eighth Avenue South,,47.5992661,-122.322327,21,,0,,America/Los_Angeles,1
+1510,1510,S Jackson St & Maynard Ave S,South Jackson Street and Maynard Avenue South,,47.5992622,-122.32547,21,,0,,America/Los_Angeles,1
+1530,1530,S Jackson St & 5th Ave S,South Jackson Street and Fifth Avenue South,,47.5992661,-122.328384,1,,0,,America/Los_Angeles,1
+1540,1540,James St & 5th Ave,James Street and Fifth Avenue,,47.6038017,-122.329094,21,,0,,America/Los_Angeles,1
+1610,1610,Prefontaine Pl S & Yesler Way,Prefontaine Place South and Yesler Way,,47.6016579,-122.329941,21,,0,,America/Los_Angeles,1
+1619,1619,Westlake And 7th,Westlake And 7th,,47.6148643,-122.33786,1,,0,,America/Los_Angeles,1
+1690,1690,3rd Ave & Vine St,3rd Avenue and Vine Street,,47.6169586,-122.34845,1,,0,,America/Los_Angeles,1
+18220,18220,W Nickerson St & 3rd Ave W,West Nickerson Street and Third Avenue West,,47.6506805,-122.36055,1,,0,,America/Los_Angeles,1
+2010,2010,10th Ave W & W Armour St,10th Avenue West and West Armour Street,,47.6451111,-122.370277,1,,0,,America/Los_Angeles,1
+2020,2020,10th Ave W & W Bothwell St,10th Avenue West and West Bothwell Street,,47.643486,-122.370308,1,,0,,America/Los_Angeles,1
+2030,2030,10th Ave W & W Halladay St,10th Avenue West and West Halladay Street,,47.6417923,-122.370171,1,,0,,America/Los_Angeles,1
+2050,2050,10th Ave W & W Mcgraw St,10th Avenue West and West Mcgraw Street,,47.6393661,-122.370415,1,,0,,America/Los_Angeles,1
+2060,2060,10th Ave W & W Crockett St,10th Avenue West and West Crockett Street,,47.6375847,-122.370438,1,,0,,America/Los_Angeles,1
+2070,2070,10th Ave W & W Howe St,10th Avenue West and West Howe Street,,47.6357689,-122.370468,1,,0,,America/Los_Angeles,1
+2080,2080,10th Ave W & W Blaine St,10th Avenue West and West Blaine Street,,47.6345634,-122.370483,1,,0,,America/Los_Angeles,1
+20829,20829,Denny Way & 2nd Ave N,Denny Way and Second Avenue North,,47.61866,-122.352615,1,,0,,America/Los_Angeles,1
+2090,2090,10th Ave W & W Galer St,10th Avenue West and West Galer Street,,47.6323662,-122.370506,1,,0,,America/Los_Angeles,1
+2100,2100,Olympic Way W & W Lee St,Olympic Way West and West Lee Street,,47.6310806,-122.370155,1,,0,,America/Los_Angeles,1
+2110,2110,Olympic Way W & 9th Ave W,Olympic Way West and 9th Avenue West,,47.6293373,-122.368477,1,,0,,America/Los_Angeles,1
+2120,2120,Olympic Way W & 7th Ave W,Olympic Way West and Seventh Avenue West,,47.6275978,-122.366112,1,,0,,America/Los_Angeles,2
+2130,2130,Olympic Way W & 5th Ave W,Olympic Way West and Fifth Avenue West,,47.6266708,-122.363335,1,,0,,America/Los_Angeles,1
+2140,2140,W Olympic Pl & 3rd Ave W,West Olympic Place and Third Avenue West,,47.6266556,-122.360306,1,,0,,America/Los_Angeles,1
+2150,2150,W Roy St & 2nd Ave W,West Roy Street and Second Avenue West,,47.6256561,-122.358765,1,,0,,America/Los_Angeles,1
+2180,2180,Queen Anne Ave N & W Harrison St,Queen Anne Avenue North and West Harrison Street,,47.6218338,-122.356819,1,,0,,America/Los_Angeles,1
+2200,2200,Queen Anne Ave N & W John St,Queen Anne Avenue North and West John Street,,47.6192665,-122.35685,1,,0,,America/Los_Angeles,1
+2220,2220,3rd Ave & Cedar St,3rd Avenue and Cedar Street,,47.6167755,-122.34845,1,,0,,America/Los_Angeles,1
+2244,2244,Denny Way & 2nd Ave N,Denny Way and Second Avenue North,,47.618515,-122.351715,1,,0,,America/Los_Angeles,1
+2320,2320,1st Ave & Broad St,1st Avenue and Broad Street,,47.6172066,-122.352859,1,,0,,America/Los_Angeles,1
+2330,2330,1st Ave N & Denny Way,1st Avenue North and Denny Way,,47.6191177,-122.355362,1,,0,,America/Los_Angeles,1
+2360,2360,1st Ave N & Republican St,1st Avenue North and Republican Street,,47.6231232,-122.355309,1,,0,,America/Los_Angeles,1
+2370,2370,Mercer St & Queen Anne Ave N,Mercer Street and Queen Anne Avenue North,,47.624649,-122.356552,1,,0,,America/Los_Angeles,1
+2390,2390,2nd Ave W & W Roy St,2nd Avenue West and West Roy Street,,47.6259918,-122.359215,1,,0,,America/Los_Angeles,1
+2400,2400,W Olympic Pl & 3rd Ave W,West Olympic Place and Third Avenue West,,47.6267929,-122.360535,1,,0,,America/Los_Angeles,1
+2410,2410,W Olympic Pl & 5th Ave W,West Olympic Place and Fifth Avenue West,,47.6267967,-122.363159,1,,0,,America/Los_Angeles,1
+2420,2420,Olympic Way W & 7th Ave W,Olympic Way West and Seventh Avenue West,,47.6278458,-122.366371,1,,0,,America/Los_Angeles,1
+2430,2430,Olympic Way W & W Prospect St,Olympic Way West and West Prospect Street,,47.6290665,-122.367966,1,,0,,America/Los_Angeles,1
+2440,2440,Olympic Way W & W Lee St,Olympic Way West and West Lee Street,,47.631279,-122.37011,1,,0,,America/Los_Angeles,1
+2450,2450,10th Ave W & W Galer St,10th Avenue West and West Galer Street,,47.6325035,-122.370308,1,,0,,America/Los_Angeles,1
+2460,2460,10th Ave W & W Blaine St,10th Avenue West and West Blaine Street,,47.6349564,-122.370262,1,,0,,America/Los_Angeles,1
+2470,2470,10th Ave W & W Howe St,10th Avenue West and West Howe Street,,47.636158,-122.370247,1,,0,,America/Los_Angeles,1
+2480,2480,10th Ave W & W Crockett St,10th Avenue West and West Crockett Street,,47.6379738,-122.370224,1,,0,,America/Los_Angeles,1
+2490,2490,10th Ave W & W Mcgraw St,10th Avenue West and West Mcgraw Street,,47.6397667,-122.370087,1,,0,,America/Los_Angeles,1
+2500,2500,10th Ave W & W Halladay St,10th Avenue West and West Halladay Street,,47.6421928,-122.369965,1,,0,,America/Los_Angeles,1
+2510,2510,10th Ave W & W Newell St,10th Avenue West and West Newell Street,,47.644455,-122.370087,1,,0,,America/Los_Angeles,1
+2520,2520,9th Ave W & W Armour St,9th Avenue West and West Armour Street,,47.6453171,-122.369278,1,,0,,America/Los_Angeles,1
+2640,2640,Queen Anne Ave N & W Galer St,Queen Anne Avenue North and West Galer Street,,47.6318359,-122.356697,1,,0,,America/Los_Angeles,1
+2660,2660,Queen Anne Ave N & W Highland Dr,Queen Anne Avenue North and West Highland Dr,,47.629612,-122.356728,1,,0,,America/Los_Angeles,1
+26641,26641,Westlake & Mercer,Westlake and Mercer,,47.6241531,-122.338547,1,,0,,America/Los_Angeles,1
+26645,26645,Westlake & Thomas,Westlake and Thomas,,47.6213799,-122.33857,1,,0,,America/Los_Angeles,1
+26665,26665,Westlake & 9th-Denny,Westlake and 9th-Denny,,47.617794,-122.338463,1,,0,,America/Los_Angeles,1
+26680,26680,Westlake Hub,Westlake Hub,,47.613121,-122.337318,21,,0,,America/Los_Angeles,1
+26689,26689,Westlake And 7th,Westlake And 7th,,47.6156235,-122.337807,1,,0,,America/Los_Angeles,1
+26690,26690,Westlake & 9th-Denny,Westlake and 9th-Denny,,47.6182671,-122.338341,1,,0,,America/Los_Angeles,1
+26693,26693,Terry & Thomas,Terry and Thomas,,47.6215019,-122.337051,1,,0,,America/Los_Angeles,1
+26698,26698,Terry & Mercer,Terry and Mercer,,47.6234169,-122.337044,1,,0,,America/Los_Angeles,1
+2670,2670,Queen Anne Ave N & W Prospect St,Queen Anne Avenue North and West Prospect Street,,47.6285133,-122.356781,1,,0,,America/Los_Angeles,1
+26700,26700,Fairview & Campus Drive,Fairview and Campus Drive,,47.6276665,-122.332367,1,,0,,America/Los_Angeles,1
+26701,26701,Lake Union Park,Lake Union Park,,47.6258316,-122.336372,1,,0,,America/Los_Angeles,1
+26702,26702,Lake Union Park,Lake Union Park,,47.6259689,-122.336533,1,,0,,America/Los_Angeles,1
+26705,26705,Fairview & Campus Drive,Fairview and Campus Drive,,47.6275864,-122.332207,1,,0,,America/Los_Angeles,1
+2672,2672,Queen Anne Ave N & W Mercer St,Queen Anne Avenue North and West Mercer Street,,47.6240616,-122.356812,1,,0,,America/Los_Angeles,1
+2680,2680,Queen Anne Ave N & W Aloha St,Queen Anne Avenue North and West Aloha Street,,47.626545,-122.356796,1,,0,,America/Los_Angeles,1
+2690,2690,1st Ave N & Mercer St,1st Avenue North and Mercer Street,,47.6247368,-122.355309,1,,0,,America/Los_Angeles,1
+2710,2710,Queen Anne Ave N & Aloha St,Queen Anne Avenue North and Aloha Street,,47.6271095,-122.35659,1,,0,,America/Los_Angeles,1
+2720,2720,Queen Anne Ave N & Ward St,Queen Anne Avenue North and Ward Street,,47.6283188,-122.356575,1,,0,,America/Los_Angeles,1
+2730,2730,Queen Anne Ave N & Highland Dr,Queen Anne Avenue North and Highland Dr,,47.6297913,-122.356522,1,,0,,America/Los_Angeles,1
+2740,2740,Queen Anne Ave N & W Lee St,Queen Anne Avenue North and West Lee Street,,47.6314926,-122.356491,1,,0,,America/Los_Angeles,1
+3037,3037,Seneca St & 8th Ave,Seneca Street and Eighth Avenue,,47.6092796,-122.33017,1,,0,,America/Los_Angeles,1
+3600,3600,S Jackson St & 12th Ave S,South Jackson Street and 12th Avenue South,,47.5992699,-122.317741,1,,0,,America/Los_Angeles,1
+3910,3910,W Mcgraw St & 2nd Ave W,West Mcgraw Street and Second Avenue West,,47.6395149,-122.359184,1,,0,,America/Los_Angeles,1
+3920,3920,Queen Anne Ave N & W Mcgraw St,Queen Anne Avenue North and West Mcgraw Street,,47.6393204,-122.35701,1,,0,,America/Los_Angeles,1
+400,400,3rd Ave & Bell St,3rd Avenue and Bell Street,,47.6142998,-122.344269,21,,0,,America/Los_Angeles,1
+41255,41255,3rd Ave W & W Cremona St,3rd Avenue West and West Cremona Street,,47.6488304,-122.360985,1,,0,,America/Los_Angeles,1
+41270,41270,3rd Ave W & W Fulton St,3rd Avenue West and West Fulton Street,,47.6454697,-122.361,1,,0,,America/Los_Angeles,1
+41280,41280,3rd Ave W & W Raye St,3rd Avenue West and West Raye Street,,47.6430664,-122.361031,1,,0,,America/Los_Angeles,1
+41290,41290,3rd Ave W & W Smith St,3rd Avenue West and West Smith Street,,47.6415901,-122.361031,1,,0,,America/Los_Angeles,1
+41300,41300,3rd Ave W & W Mcgraw St,3rd Avenue West and West Mcgraw Street,,47.6398392,-122.361046,1,,0,,America/Los_Angeles,1
+41320,41320,Queen Anne Ave N & W Garfield St,Queen Anne Avenue North and West Garfield Street,,47.6335716,-122.357094,1,,0,,America/Los_Angeles,1
+41340,41340,W Mcgraw St & Queen Anne Ave N,West Mcgraw Street and Queen Anne Avenue North,,47.6396561,-122.357246,1,,0,,America/Los_Angeles,1
+41350,41350,W Mcgraw St & 3rd Ave W,West Mcgraw Street and Third Avenue West,,47.6396561,-122.360649,1,,0,,America/Los_Angeles,1
+41360,41360,3rd Ave W & W Smith St,3rd Avenue West and West Smith Street,,47.641304,-122.360825,1,,0,,America/Los_Angeles,1
+41370,41370,3rd Ave W & W Raye St,3rd Avenue West and West Raye Street,,47.643425,-122.360786,1,,0,,America/Los_Angeles,1
+41380,41380,3rd Ave W & W Armour St,3rd Avenue West and West Armour Street,,47.6453362,-122.360786,1,,0,,America/Los_Angeles,1
+41390,41390,3rd Ave W & W Dravus St,3rd Avenue West and West Dravus Street,,47.6490974,-122.360786,1,,0,,America/Los_Angeles,1
+420,420,3rd Ave & Virginia St,3rd Avenue and Virginia Street,,47.6124382,-122.34111,21,,0,,America/Los_Angeles,1
+430,430,3rd Ave & Pine St,3rd Avenue and Pine Street,,47.6108971,-122.338966,21,,0,,America/Los_Angeles,1
+4465,4465,Queen Anne Ave N & Garfield St,Queen Anne Avenue North and Garfield Street,,47.6338272,-122.356873,1,,0,,America/Los_Angeles,1
+4490,4490,Queen Anne Ave N & Crockett St,Queen Anne Avenue North and Crockett Street,,47.6374779,-122.356834,1,,0,,America/Los_Angeles,1
+450,450,3rd Ave & Union St,3rd Avenue and Union Street,,47.6082535,-122.336548,21,,0,,America/Los_Angeles,1
+4500,4500,Queen Anne Ave N & W Crockett St,Queen Anne Avenue North and West Crockett Street,,47.636879,-122.357056,1,,0,,America/Los_Angeles,1
+480,480,3rd Ave & Marion St,3rd Avenue and Marion Street,,47.6049957,-122.333572,21,,0,,America/Los_Angeles,1
+500,500,3rd Ave & James St,3rd Avenue and James Street,,47.6028175,-122.331581,21,,0,,America/Los_Angeles,1
+515,515,3rd Ave S & S Main St,3rd Avenue South and South Main Street,,47.6002388,-122.330376,21,,0,,America/Los_Angeles,1
+538,538,3rd Ave & Columbia St,3rd Avenue and Columbia Street,,47.6040955,-122.332504,21,,0,,America/Los_Angeles,1
+558,558,3rd Ave & Seneca St,3rd Avenue and Seneca Street,,47.6070518,-122.335213,21,,0,,America/Los_Angeles,1
+575,575,3rd Ave & Pike St,3rd Avenue and Pike Street,,47.609642,-122.337585,21,,0,,America/Los_Angeles,1
+600,600,3rd Ave & Virginia St,3rd Avenue and Virginia Street,,47.6129951,-122.341743,21,,0,,America/Los_Angeles,1
+605,605,3rd Ave & Bell St,3rd Avenue and Bell Street,,47.6151199,-122.345337,21,,0,,America/Los_Angeles,1

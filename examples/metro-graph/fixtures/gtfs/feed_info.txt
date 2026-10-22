@@ -1,0 +1,2 @@
+feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version,feed_contact_email
+Metro Transit,https://kingcounty.gov/en/dept/metro,EN,20260928,20270326,FAL26-161.2,mtdtechopscore@kingcounty.gov

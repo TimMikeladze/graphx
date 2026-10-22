@@ -1,0 +1,4 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+100001,1,1,,Kinnear - Downtown Seattle,3,https://kingcounty.gov/en/dept/metro/routes-and-service/schedules-and-maps/schedule?route=001,FDB71A,000000
+100028,1,13,,Seattle Pacific - Downtown Seattle,3,https://kingcounty.gov/en/dept/metro/routes-and-service/schedules-and-maps/schedule?route=013,FDB71A,000000
+100340,23,South Lake Union Streetcar,,Streetcar: Fairview/Aloha - Westlake/McGraw,0,https://www.seattle.gov/transportation/getting-around/transit/streetcar/south-lake-union-line,F47836,FFFFFF
