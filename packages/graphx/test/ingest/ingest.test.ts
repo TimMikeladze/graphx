@@ -7,7 +7,7 @@ import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
-import { embReadSql, makeTestDb, stubEmbedder } from '../core/harness.ts';
+import { embJson, embReadSql, makeTestDb, stubEmbedder } from '../core/harness.ts';
 import { ingestDir } from '../../src/ingest/index.ts';
 import type { Source } from '../../src/ingest/source.ts';
 import { EmbeddingError, type Embedder } from '../../src/core/embedder.ts';
@@ -581,7 +581,7 @@ test('ingestDir: batched embeds preserve per-file association (embedConcurrency=
 			args: [uri],
 		});
 		expect(row.rows.length).toBe(1);
-		const arr = JSON.parse(String(row.rows[0]!.v)) as number[];
+		const arr = JSON.parse(embJson(row.rows[0]!.v)) as number[];
 		expect(arr[0]).toBe(b.charCodeAt(0));
 	}
 

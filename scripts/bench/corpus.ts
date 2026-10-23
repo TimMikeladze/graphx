@@ -29,6 +29,7 @@ import process from 'node:process';
 import { createClient } from '@libsql/client';
 import type { DbClient, Embedder } from '../../packages/graphx/src/core/index.ts';
 import { Graph, hashEmbed, init } from '../../packages/graphx/src/core/index.ts';
+import { createBqlRemoteClient } from '../../packages/graphx/src/core/bql.ts';
 import { createPgClient } from '../../packages/graphx/src/core/pg.ts';
 import { applyPlan } from '../seed/apply.ts';
 import { generate } from '../seed/generate.ts';
@@ -161,7 +162,7 @@ async function countStats(client: DbClient): Promise<CorpusStats> {
 		nodes: await one('SELECT COUNT(*) AS c FROM nodes'),
 		versions: await one('SELECT COUNT(*) AS c FROM node_versions'),
 		edges: await one('SELECT COUNT(*) AS c FROM edges'),
-		embedded: await one('SELECT COUNT(*) AS c FROM nodes WHERE emb IS NOT NULL'),
+		embedded: await one('SELECT COUNT(DISTINCT id) AS c FROM node_embeddings'),
 	};
 }
 
@@ -254,6 +255,106 @@ async function openPgCorpus(
 	return client;
 }
 
+// --- bql.sh ------------------------------------------------------------------------------------
+
+interface BqlServer {
+	url: string;
+	token: string;
+}
+
+let bqlServer: Promise<BqlServer & { close(): Promise<void> }> | null = null;
+
+/** Stop the embedded bql.sh server, if this run started one; its listener keeps the process alive. */
+export async function closeBench(): Promise<void> {
+	if (bqlServer) await (await bqlServer).close();
+	bqlServer = null;
+}
+
+/**
+ * The bql.sh server corpora live on: `GRAPHX_BQL_URL` when set, otherwise bql.sh embedded in this
+ * process with its databases under the corpus dir, so cached corpora survive between runs.
+ * Seeding writes in requests far above the stock 8 MB body cap, so the embedded server raises that
+ * one limit. Every read limit stays stock, since those are what the measurement is about.
+ */
+function bqlServerFor(): Promise<BqlServer> {
+	if (process.env.GRAPHX_BQL_URL)
+		return Promise.resolve({
+			url: process.env.GRAPHX_BQL_URL,
+			token: process.env.GRAPHX_BQL_TOKEN ?? '',
+		});
+	bqlServer ??= (async () => {
+		mkdirSync(`${CORPUS_DIR}/bql`, { recursive: true });
+		const specifier = 'bql.sh';
+		const { Bql } = (await import(specifier)) as {
+			Bql: {
+				open(opts: object): Promise<{
+					serve(opts: {
+						host: string;
+						port: number;
+					}): Promise<{ url: string; adminKey: string | null }>;
+					close(): Promise<void>;
+				}>;
+			};
+		};
+		const bql = await Bql.open({
+			dir: `${CORPUS_DIR}/bql`,
+			limits: { maxBodyBytes: 512 * 1024 * 1024, maxQueuedWriteBytes: 512 * 1024 * 1024 },
+		});
+		const server = await bql.serve({ host: '127.0.0.1', port: 0 });
+		return { url: server.url, token: server.adminKey ?? '', close: () => bql.close() };
+	})();
+	return bqlServer;
+}
+
+function bqlDatabase(key: CorpusKey, scale: Scale): string {
+	return `bench_${corpusFingerprint(key)}_${scale}`;
+}
+
+async function bqlClient(database: string): Promise<DbClient> {
+	const { url, token } = await bqlServerFor();
+	return createBqlRemoteClient({ url, database, authToken: token });
+}
+
+async function bqlAdmin(path: string, init: RequestInit): Promise<Response> {
+	const { url, token } = await bqlServerFor();
+	return fetch(new URL(path, url), {
+		...init,
+		headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+	});
+}
+
+async function dropBqlDatabase(database: string): Promise<void> {
+	const res = await bqlAdmin(`/v1/db/${database}`, { method: 'DELETE' });
+	if (!res.ok && res.status !== 404) throw new Error(`bql.sh: drop ${database}: ${res.status}`);
+}
+
+async function bqlHasCorpus(database: string, expected: number): Promise<boolean> {
+	const res = await bqlAdmin(`/v1/db/${database}`, { method: 'GET' });
+	if (!res.ok) return false;
+	const client = await bqlClient(database);
+	try {
+		const rows = await client.execute('SELECT COUNT(*) AS c FROM nodes');
+		return Number(rows.rows[0]?.c ?? 0) === expected;
+	} catch {
+		return false;
+	} finally {
+		client.close();
+	}
+}
+
+async function openBqlCorpus(key: CorpusKey, scale: Scale, log: Logger): Promise<DbClient> {
+	const database = bqlDatabase(key, scale);
+	if (!(await bqlHasCorpus(database, key.nodes))) {
+		log(`seeding ${scale} corpus into bql.sh database ${database}, later runs reuse it`);
+		await dropBqlDatabase(database);
+		const client = await bqlClient(database);
+		await init(client, hashEmbed(key.dim));
+		await seedInto(client, key);
+		return client;
+	}
+	return bqlClient(database);
+}
+
 // --- public API --------------------------------------------------------------------------------
 
 export type Logger = (message: string) => void;
@@ -329,6 +430,7 @@ export async function openCorpus(
 		const schema = pgSchema(key, scale);
 		return buildCorpus(await openPgCorpus(key, scale, schema, log), scale, key);
 	}
+	if (DRIVER === 'bql') return buildCorpus(await openBqlCorpus(key, scale, log), scale, key);
 	const path = await ensureLibsqlCorpus(key, scale, log);
 	return buildCorpus(createClient({ url: `file:${path}` }), scale, key);
 }
@@ -367,6 +469,27 @@ export async function freshCorpus(
 			},
 		};
 	}
+	if (DRIVER === 'bql') {
+		// bql.sh branches the cached database file, the same cheap exact copy libSQL gets.
+		const source = bqlDatabase(key, scale);
+		(await openBqlCorpus(key, scale, log)).close();
+		const scratch = `${source}_scratch`;
+		await dropBqlDatabase(scratch);
+		const res = await bqlAdmin('/v1/db', {
+			method: 'POST',
+			body: JSON.stringify({ name: scratch, from: { db: source } }),
+		});
+		if (!res.ok) throw new Error(`bql.sh: branch ${source}: ${res.status} ${await res.text()}`);
+		const client = await bqlClient(scratch);
+		const corpus = await buildCorpus(client, scale, key);
+		return {
+			...corpus,
+			close: async () => {
+				client.close();
+				await dropBqlDatabase(scratch);
+			},
+		};
+	}
 	const path = await ensureLibsqlCorpus(key, scale, log);
 	const scratch = `${CORPUS_DIR}/scratch-${scale}.db`;
 	removeDb(scratch);
@@ -391,5 +514,6 @@ export function wipeCorpora(): void {
 export async function isCorpusCached(scale: Scale, embedded?: number): Promise<boolean> {
 	const key = corpusKey(scale, embedded);
 	if (DRIVER === 'postgres') return pgSchemaHasCorpus(pgSchema(key, scale), key.nodes);
+	if (DRIVER === 'bql') return bqlHasCorpus(bqlDatabase(key, scale), key.nodes);
 	return existsSync(libsqlPath(key, scale));
 }

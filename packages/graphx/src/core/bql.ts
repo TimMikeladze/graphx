@@ -6,7 +6,7 @@
  * WASM and Expo — NOT `libsql`. The libSQL arm emits `F32_BLOB`, `libsql_vector_idx`,
  * `vector()` and `vector_top_k`, none of which exist outside libSQL's own fork; `init` would
  * fail on the embeddings DDL. Every client this module builds is therefore tagged
- * `dialect: 'sqlite'`, which means exact vector ranking (`retrieve.ts`) rather than ANN.
+ * `dialect: 'sqlite'`, which means an exact sqlite-vec scan (`annSeeds`) rather than ANN.
  *
  * Nothing here imports `bql.sh`. The embedded driver is typed STRUCTURALLY — the same
  * trick `expo.ts` uses for Expo's SQLite module — so this subpath adds no dependency and the

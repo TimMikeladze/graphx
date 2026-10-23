@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { Database as BqlSqlite } from 'bql.sh/sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { createConnectionClient } from '../../src/core/connection.ts';
+import { createBqlClient } from '../../src/core/bql.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import { Graph } from '../../src/core/graph.ts';
@@ -23,41 +23,13 @@ afterEach(async () => {
 	for (const dispose of cleanup.splice(0).reverse()) await dispose();
 });
 
+/** SQLite through bql.sh's pinned libsqlite3, which has the sqlite-vec the dialect's vectors need. */
 function sqliteDb(): TestDb {
 	const dir = mkdtempSync(join(tmpdir(), 'graphx-atomic-'));
-	const clients: ReturnType<typeof createConnectionClient>[] = [];
+	const clients: DbClient[] = [];
 	function open() {
-		const db = new Database(join(dir, 'db.sqlite'));
-		const client = createConnectionClient(
-			{
-				async execute(stmt) {
-					const query = db.query(typeof stmt === 'string' ? stmt : stmt.sql);
-					const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
-					try {
-						const rows = Array.isArray(args)
-							? query.all(...(args as SQLQueryBindings[]))
-							: query.all(args as SQLQueryBindings);
-						const meta = db.query('SELECT changes() AS n, last_insert_rowid() AS id').get() as {
-							n: number;
-							id: number;
-						};
-						return {
-							rows: rows as Record<string, unknown>[],
-							rowsAffected: meta.n,
-							lastInsertRowid: BigInt(meta.id),
-						};
-					} finally {
-						query.finalize();
-					}
-				},
-				async executeMultiple(sql) {
-					db.exec(sql);
-				},
-				close() {
-					db.close();
-				},
-			},
-			'sqlite',
+		const client = createBqlClient(
+			BqlSqlite.open(join(dir, 'db.sqlite'), { safeIntegers: true, wal: false }),
 		);
 		clients.push(client);
 		return client;

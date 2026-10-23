@@ -1,12 +1,14 @@
 import { afterEach, expect, test } from 'bun:test';
-import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { Database as PlainDatabase, type SQLQueryBindings } from 'bun:sqlite';
+import { Database } from 'bql.sh/sqlite';
+import { createBqlClient } from '../../src/core/bql.ts';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { createConnectionClient } from '../../src/core/portable.ts';
 import { vectorSeedRows } from '../../src/core/retrieve.ts';
-import { annSeeds } from '../../src/core/dialect-sql.ts';
+import { annSeeds, embJson, embReadExpr } from '../../src/core/dialect-sql.ts';
 import { getDb } from '../../src/core/db.ts';
 import {
 	Graph,
@@ -24,39 +26,47 @@ import {
 	match,
 } from '../../src/core/portable.ts';
 
-// Ordinary SQLite: no libSQL vector extension and no platform persistence claims.
+// Ordinary SQLite plus sqlite-vec: no libSQL vector extension and no platform persistence claims.
 const disposers: Array<() => Promise<void>> = [];
 afterEach(async () => {
 	for (const dispose of disposers.splice(0).reverse()) await dispose();
 });
 
+/**
+ * SQLite through bql.sh's pinned libsqlite3, which compiles in sqlite-vec: the `sqlite` dialect's
+ * vectors need it. `ddl` rewrites what `init` executes, to simulate a missing module.
+ */
 function open(path = ':memory:', ddl = (sql: string) => sql) {
-	const db = new Database(path);
+	const db = Database.open(path, { safeIntegers: true, wal: false });
+	const database = new Proxy(db, {
+		get(target, key) {
+			if (key === 'exec') return (sql: string) => target.exec(ddl(sql));
+			const value = Reflect.get(target, key);
+			return typeof value === 'function' ? value.bind(target) : value;
+		},
+	});
+	const client = createBqlClient(database);
+	disposers.push(() => client.close());
+	return client;
+}
+
+/**
+ * SQLite without sqlite-vec. After other tests here open bql.sh connections, Bun's own SQLite in
+ * the same process also answers vec_version(), so the missing function is simulated.
+ */
+function openPlain() {
+	const db = new PlainDatabase(':memory:');
 	const client = createConnectionClient(
 		{
 			async execute(stmt) {
 				const sql = typeof stmt === 'string' ? stmt : stmt.sql;
 				const args = typeof stmt === 'string' ? [] : (stmt.args ?? []);
-				const query = db.query(sql);
-				try {
-					const rows = Array.isArray(args)
-						? query.all(...(args as SQLQueryBindings[]))
-						: query.all(args as SQLQueryBindings);
-					const meta = db.query('SELECT changes() AS n, last_insert_rowid() AS id').get() as {
-						n: number;
-						id: number;
-					};
-					return {
-						rows: rows as Record<string, unknown>[],
-						rowsAffected: meta.n,
-						lastInsertRowid: BigInt(meta.id),
-					};
-				} finally {
-					query.finalize();
-				}
+				if (sql.includes('vec_version')) throw new Error('no such function: vec_version');
+				const rows = db.query(sql).all(...(args as SQLQueryBindings[]));
+				return { rows: rows as Record<string, unknown>[], rowsAffected: 0 };
 			},
 			async executeMultiple(sql) {
-				db.exec(ddl(sql));
+				db.exec(sql);
 			},
 			close() {
 				db.close();
@@ -149,13 +159,13 @@ test('SQLite exact vectors deduplicate all chunks, order ties, and preserve best
 		await client.execute({ sql: 'INSERT INTO node_identity VALUES (?)', args: [id] });
 	for (let chunk = 0; chunk < 12; chunk++) {
 		await client.execute({
-			sql: 'INSERT INTO node_embeddings VALUES (?, ?, ?, ?, ?)',
+			sql: 'INSERT INTO node_embeddings VALUES (?, ?, ?, vec_f32(?), ?)',
 			args: ['a', chunk, `chunk ${chunk}`, chunk === 11 ? '[1,0]' : '[1,1]', 'hash'],
 		});
 	}
 	for (const id of ['b', 'c', 'zero'])
 		await client.execute({
-			sql: 'INSERT INTO node_embeddings VALUES (?, 0, NULL, ?, ?)',
+			sql: 'INSERT INTO node_embeddings VALUES (?, 0, NULL, vec_f32(?), ?)',
 			args: [id, id === 'zero' ? '[0,0]' : '[1,0]', 'hash'],
 		});
 	const rows = await vectorSeedRows(client, [1, 0], 4);
@@ -164,39 +174,56 @@ test('SQLite exact vectors deduplicate all chunks, order ties, and preserve best
 	expect(rows.map((r) => r.dist)).toEqual([0, 0, 0, 1]);
 	expect(await vectorSeedRows(client, [0, 0], 4)).toEqual([]);
 	expect((await vectorSeedRows(client, [Number.MAX_VALUE, 0], 1))[0]?.dist).toBe(0);
-	await expect(vectorSeedRows(client, [1], 1)).rejects.toThrow('dimensions');
+	await expect(vectorSeedRows(client, [1], 1)).rejects.toThrow('dimension');
 	await expect(vectorSeedRows(client, [NaN, 0], 1)).rejects.toThrow('finite');
 });
 
-test('SQLite validates vector shape at storage and corrupted components on retrieval', async () => {
+test('SQLite validates vector shape at storage and corrupted blobs on retrieval', async () => {
 	const client = open();
 	await init(client, hashEmbed(2));
 	await client.execute("INSERT INTO node_identity VALUES ('bad')");
-	for (const emb of ['[1]', '{}', 'null', 'invalid']) {
+	for (const emb of ['[1]', '{}', 'null', 'invalid', '[1,null]']) {
 		await expect(
 			client.execute({
-				sql: "INSERT INTO node_embeddings VALUES ('bad', 0, NULL, ?, 'hash')",
+				sql: "INSERT INTO node_embeddings VALUES ('bad', 0, NULL, vec_f32(?), 'hash')",
 				args: [emb],
 			}),
 		).rejects.toThrow();
 	}
-	await client.execute("INSERT INTO node_embeddings VALUES ('bad', 0, NULL, '[1,null]', 'hash')");
-	await expect(vectorSeedRows(client, [1, 0], 1)).rejects.toThrow('finite');
 	await client.execute('PRAGMA ignore_check_constraints = ON');
-	for (const emb of ['[1]', '{}', 'invalid', '[1,1e999]']) {
-		await client.execute({
-			sql: "UPDATE node_embeddings SET emb = ? WHERE id = 'bad'",
-			args: [emb],
-		});
-		await expect(vectorSeedRows(client, [1, 0], 1)).rejects.toThrow();
-	}
+	await client.execute("INSERT INTO node_embeddings VALUES ('bad', 0, NULL, X'0000803F', 'hash')");
+	await expect(vectorSeedRows(client, [1, 0], 1)).rejects.toThrow();
 });
 
-test('native getDb refuses ordinary SQLite and direct ANN SQL is unavailable', () => {
+test('SQLite without sqlite-vec runs a graph but refuses an embedder', async () => {
+	const client = openPlain();
+	await init(client);
+	const graph = new Graph(client, schema);
+	const a = await graph.addNode({ type: 'note', data: { path: 'A.md' }, body: 'plain' });
+	expect((await graph.listNodes({ q: 'plain' })).nodes.map((n) => n.id)).toEqual([a.id]);
+	await expect(init(openPlain(), hashEmbed(2))).rejects.toThrow('sqlite-vec');
+});
+
+test('SQLite vectors read back at full float32 precision', async () => {
+	const client = open();
+	await init(client, hashEmbed(2));
+	await client.execute("INSERT INTO node_identity VALUES ('p')");
+	await client.execute({
+		sql: "INSERT INTO node_embeddings VALUES ('p', 0, NULL, vec_f32(?), 'hash')",
+		args: ['[0.1234567, 1e-7]'],
+	});
+	const row = (await client.execute(`SELECT ${embReadExpr('sqlite')} AS e FROM node_embeddings`))
+		.rows[0];
+	const [x, y] = JSON.parse(embJson(row?.e)) as number[];
+	expect(x).toBeCloseTo(0.1234567, 7);
+	expect(y).toBeCloseTo(1e-7, 12);
+});
+
+test('native getDb refuses ordinary SQLite and SQLite seeds rank with sqlite-vec', () => {
 	expect(() => getDb('sqlite-requires-driver', { driver: 'sqlite' })).toThrow(
 		'createConnectionClient',
 	);
-	expect(() => annSeeds('sqlite')).toThrow('vectorSeedRows');
+	expect(annSeeds('sqlite').sql).toContain('vec_distance_cosine');
 });
 
 test('SQLite bulk ingestion keeps lexical search, temporal boundaries, and pagination consistent', async () => {
@@ -365,12 +392,10 @@ test('SQLite model replacement reembeds chunks and deletion removes live retriev
 });
 
 test('SQLite init propagates a missing FTS module error instead of disabling search', async () => {
-	// Bun includes FTS5. Substitute a nonexistent module to exercise SQLite's actual
-	// missing-module behavior at the DDL boundary. Bun 1.4's multi-statement exec
-	// swallows that middle-statement error; init's single-statement FTS probe must
-	// still reject the missing index. This is not a separate no-FTS SQLite build.
+	// Substitute a nonexistent module to exercise SQLite's actual missing-module behavior at the
+	// DDL boundary. This is not a separate no-FTS SQLite build.
 	const client = open(':memory:', (sql) => sql.replace('USING fts5(', 'USING unavailable_fts5('));
-	await expect(init(client)).rejects.toThrow('nodes_fts');
+	await expect(init(client)).rejects.toThrow('unavailable_fts5');
 });
 
 test('SQLite graph rejects invalid input vectors before persisting any node', async () => {

@@ -361,10 +361,27 @@ export async function createEmbeddings(
 	meta: EmbeddingMeta,
 ): Promise<EmbeddingMeta> {
 	const d = dialectOf(client);
+	if (d === 'sqlite') await requireSqliteVec(client);
 	if (d !== 'duckdb') await client.executeMultiple(embeddingsTableDDL(d, meta.dim));
 	await client.execute({ sql: META_UPSERT_SQL, args: [META_MODEL, meta.model] });
 	await client.execute({ sql: META_UPSERT_SQL, args: [META_DIM, String(meta.dim)] });
 	return meta;
+}
+
+/**
+ * Vectors on the `sqlite` dialect are sqlite-vec blobs, so the connection must have it: bql.sh
+ * compiles it in, Expo loads its bundled copy in `openExpoDb`, and a WASM build has to include it.
+ * A graph without an embedder never gets here and runs on plain SQLite.
+ */
+async function requireSqliteVec(client: DbClient): Promise<void> {
+	try {
+		await client.execute('SELECT vec_version() AS v');
+	} catch {
+		throw new EmbeddingError(
+			'missing',
+			'SQLite vectors need the sqlite-vec extension on this connection (vec_version() is not available). bql.sh includes it; for Expo pass a module with bundledExtensions; for WASM use a sqlite3 build with sqlite-vec compiled in.',
+		);
+	}
 }
 
 /** Remove every stored vector and the model record. DuckDB keeps its width-free table. */

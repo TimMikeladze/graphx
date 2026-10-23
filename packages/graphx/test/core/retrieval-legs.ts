@@ -1,6 +1,6 @@
 import { FOREVER, ftsIndexOwner } from '../../src/core/db.ts';
 import { dialectOf, type DbClient } from '../../src/core/dialect.ts';
-import { embReadExpr, ftsSeedLive } from '../../src/core/dialect-sql.ts';
+import { embJson, embReadExpr, ftsSeedLive } from '../../src/core/dialect-sql.ts';
 import type { Embedder } from '../../src/core/embedder.ts';
 import { ftsArg, hybridRetrieve, rrf } from '../../src/core/hybrid.ts';
 import { retrieve, vectorSeedRows } from '../../src/core/retrieve.ts';
@@ -59,7 +59,7 @@ export async function annScored(
 	return r.rows
 		.map((row) => ({
 			id: String(row.id),
-			dist: cosineDistance(q, JSON.parse(String(row.e)) as number[]),
+			dist: cosineDistance(q, JSON.parse(embJson(row.e)) as number[]),
 		}))
 		.sort((a, b) => a.dist - b.dist);
 }

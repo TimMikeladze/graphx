@@ -455,9 +455,10 @@ function notYet(fragment: string, dialect: Dialect): never {
 /**
  * The vector side table + its ANN index. Created by `init` once an embedder is known (libSQL and
  * Postgres bake the width into the column type; DuckDB's `FLOAT[]` is width-free, so its table
- * is part of the base schema and `dim` is ignored). SQLite stores JSON text with
- * an array-length constraint and no ANN index. One row per `(id, chunk)`; `text` is the
- * chunk's text, or NULL when the row is the node's whole embedding input.
+ * is part of the base schema and `dim` is ignored). SQLite stores float32 blobs through
+ * sqlite-vec (`vec_f32`), width-checked with `vec_length`, and has no ANN index: search is an
+ * exact `vec_distance_cosine` scan in C. One row per `(id, chunk)`; `text` is the chunk's text,
+ * or NULL when the row is the node's whole embedding input.
  */
 export function embeddingsTableDDL(dialect: Dialect, dim: number): string {
 	switch (dialect) {
@@ -466,7 +467,7 @@ export function embeddingsTableDDL(dialect: Dialect, dim: number): string {
   id         TEXT NOT NULL REFERENCES node_identity(id),
   chunk      INTEGER NOT NULL DEFAULT 0,
   text       TEXT,
-  emb        TEXT NOT NULL CHECK (json_valid(emb) AND json_type(emb) = 'array' AND json_array_length(emb) = ${dim}),
+  emb        BLOB NOT NULL CHECK (vec_length(emb) = ${dim}),
   embed_hash TEXT NOT NULL,
   PRIMARY KEY (id, chunk)
 );`;
@@ -527,14 +528,14 @@ export function embeddingsIndexDDL(dialect: Dialect): string {
 }
 
 /**
- * Value expression for binding a vector as a JSON-array string (`[1,2,3]`). libSQL parses it
- * with `vector(?)`; pgvector casts the same text with `?::vector`; DuckDB parses it with
- * `from_json`.
+ * Value expression for binding a vector as a JSON-array string (`[1,2,3]`). SQLite packs it with
+ * sqlite-vec's `vec_f32(?)`; libSQL parses it with `vector(?)`; pgvector casts the same text with
+ * `?::vector`; DuckDB parses it with `from_json`.
  */
 export function embValueExpr(dialect: Dialect): string {
 	switch (dialect) {
 		case 'sqlite':
-			return '?';
+			return 'vec_f32(?)';
 		case 'libsql':
 			return 'vector(?)';
 		case 'postgres':
@@ -546,7 +547,11 @@ export function embValueExpr(dialect: Dialect): string {
 	}
 }
 
-/** Read `emb` back as a JSON-array string. libSQL `vector_extract`; pgvector's text form IS `[..]`. */
+/**
+ * Read `emb` back for {@link embJson}. libSQL `vector_extract`; pgvector's text form IS `[..]`.
+ * SQLite returns the raw float32 blob: sqlite-vec's `vec_to_json` prints six decimals, which would
+ * lose precision on every fork and MMR read.
+ */
 export function embReadExpr(dialect: Dialect): string {
 	switch (dialect) {
 		case 'sqlite':
@@ -564,11 +569,26 @@ export function embReadExpr(dialect: Dialect): string {
 	}
 }
 
+/** A vector read through {@link embReadExpr} as a JSON-array string, whatever the driver returned. */
+export function embJson(value: unknown): string {
+	if (typeof value === 'string') return value;
+	if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+		const bytes =
+			value instanceof ArrayBuffer
+				? new Uint8Array(value)
+				: new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+		// Copied so the Float32Array view starts 4-byte aligned whatever offset the driver used.
+		return JSON.stringify(Array.from(new Float32Array(bytes.slice().buffer)));
+	}
+	return JSON.stringify(value);
+}
+
 /**
  * The nearest `k` vector rows to a query embedding, best first, with their cosine DISTANCE.
  * Rows are chunks; the caller groups them to nodes. `bind(qJson, k)` supplies the bound args in
  * the order the dialect's SQL consumes them.
  *
+ * SQLite: an exact `vec_distance_cosine` scan (sqlite-vec) over every row, ranked in SQL.
  * libSQL: `vector_top_k` over the DiskANN index, joined by rowid, re-scored with
  * `vector_distance_cos` so the ORDER is by true distance (the function's row order is a
  * candidate order, and the rowid it returns is not a rank). Postgres: HNSW-backed
@@ -580,7 +600,14 @@ export function annSeeds(dialect: Dialect): {
 } {
 	switch (dialect) {
 		case 'sqlite':
-			throw new Error('annSeeds: SQLite uses portable exact ranking; call vectorSeedRows instead');
+			return {
+				// A stored zero vector has no direction: sqlite-vec returns NULL, ranked as distance 1.
+				sql: `SELECT id, chunk, text, COALESCE(vec_distance_cosine(emb, vec_f32(?)), 1.0) AS dist
+FROM node_embeddings
+ORDER BY dist, id, chunk
+LIMIT ?`,
+				bind: (q, k) => [q, k],
+			};
 		case 'libsql':
 			return {
 				sql: `SELECT e.id AS id, e.chunk AS chunk, e.text AS text, vector_distance_cos(e.emb, vector(?)) AS dist

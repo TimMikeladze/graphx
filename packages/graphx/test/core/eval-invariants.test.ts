@@ -4,7 +4,7 @@ import { retrieve } from '../../src/core/retrieve.ts';
 import { hashEmbed } from '../../src/core/embedder.ts';
 import { CORPUS, seedCorpus } from './fixtures/corpus.ts';
 import { annScored } from './retrieval-legs.ts';
-import { embReadSql, makeTestDb } from './harness.ts';
+import { embJson, embReadSql, makeTestDb } from './harness.ts';
 
 /**
  * Invariants that hold for ANY embedder — no judgments, no golden file, no model.
@@ -66,7 +66,7 @@ test('stored vectors round-trip exactly (what goes in is what the walk scores)',
 	);
 	expect(r.rows.length).toBe(CORPUS.length);
 	const stored = new Map(
-		r.rows.map((row) => [String(row.id), JSON.parse(String(row.e)) as number[]]),
+		r.rows.map((row) => [String(row.id), JSON.parse(embJson(row.e)) as number[]]),
 	);
 
 	for (const doc of CORPUS) {

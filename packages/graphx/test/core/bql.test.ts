@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Database as BunDatabase, type SQLQueryBindings } from 'bun:sqlite';
+import { Database as BqlSqlite } from 'bql.sh/sqlite';
 import { z } from 'zod';
 import {
 	bqlDatabaseName,
@@ -111,8 +112,8 @@ const schema = defineGraphSchema({
 });
 
 test('a graph runs on an embedded bql.sh connection, through the sqlite dialect', async () => {
-	const { database } = shim();
-	const client = createBqlClient(database);
+	// The real driver, not the shim: vectors on this dialect need bql.sh's compiled-in sqlite-vec.
+	const client = createBqlClient(BqlSqlite.open(':memory:', { safeIntegers: true }));
 	cleanup.push(() => client.close());
 	expect(client.dialect).toBe('sqlite');
 
@@ -137,8 +138,8 @@ test('a graph runs on an embedded bql.sh connection, through the sqlite dialect'
 	).run();
 	expect(rows.map((row) => [row.g.data.name, row.s.data.name])).toEqual([['gw-1', 'us-east-1']]);
 	expect((await g.neighbors(gateway.id)).map((node) => node.id)).toEqual([site.id]);
-	// Retrieval on this dialect is exact vector ranking over JSON text (no ANN index) fused
-	// with FTS5 — the one bql.sh's pinned libsqlite3 compiles in.
+	// Retrieval on this dialect is an exact sqlite-vec scan (no ANN index) fused with FTS5, both
+	// compiled into bql.sh's pinned libsqlite3.
 	const found = await hybridRetrieve(client, embedder, { query: 'gateway in us-east-1', k: 2 });
 	expect(found[0]?.id).toBe(gateway.id);
 });

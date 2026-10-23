@@ -6,7 +6,7 @@ import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
 import { diff, history, slicePredicate } from '../../src/core/temporal.ts';
-import { embReadSql, makeTestDb } from './harness.ts';
+import { embJson, embReadSql, makeTestDb } from './harness.ts';
 import { hashEmbed } from '../../src/core/embedder.ts';
 
 // P6 — temporal ops (§9, §19.1, B4/B5/D3). updateNode/deleteEdge use the
@@ -111,7 +111,7 @@ test('P6 (B5): data-only patch keeps the stored vector (side table survives a ne
 		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
 		args: [n.id],
 	});
-	const arr = JSON.parse(String(got.rows[0]!.v)) as number[];
+	const arr = JSON.parse(embJson(got.rows[0]!.v)) as number[];
 	expect(arr.length).toBe(DIM);
 	expect(arr).toEqual(emb);
 	client.close();
@@ -126,7 +126,7 @@ test('P6 (B5): explicit emb patch replaces the embedding', async () => {
 		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
 		args: [n.id],
 	});
-	expect(JSON.parse(String(got.rows[0]!.v))).toEqual([0, 1, 0, 0]);
+	expect(JSON.parse(embJson(got.rows[0]!.v))).toEqual([0, 1, 0, 0]);
 	client.close();
 });
 

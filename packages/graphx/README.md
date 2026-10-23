@@ -1291,8 +1291,10 @@ namespace-per-tenant model is the shape bql.sh was built for, so one namespace i
 
 It is a **plain libsqlite3**, so graphx speaks the `sqlite` dialect to it — the one the browser and
 Expo drivers use — rather than the libSQL one, whose `F32_BLOB` and `vector_top_k` exist only in
-libSQL's fork. FTS5 is compiled into bql.sh's pinned build, so lexical retrieval is unchanged; vector
-search is exact rather than ANN.
+libSQL's fork. FTS5 and [sqlite-vec](https://github.com/asg017/sqlite-vec) are compiled into bql.sh's
+pinned build. Vectors are stored as float32 blobs and searched exactly with `vec_distance_cosine`, in
+SQL on the server, so only the top rows cross the socket: 3.5 ms for 6,400 vectors at 256 dims and
+25 ms for 50,000, measured over HTTP. There is no ANN index.
 
 ```ts
 import 'graphx/bql'; // registers the bql.sh driver (side effect)
@@ -1405,6 +1407,12 @@ const client = await openExpoDb(SQLite, 'vault.db');
 await init(client);
 ```
 
+Vectors on the browser and Expo runtimes, and on bql.sh, are sqlite-vec blobs, so the SQLite build
+**must** have sqlite-vec to `init` with an embedder; without it `init` throws and names the fix. A
+graph with no embedder runs on any SQLite. On Expo, set `["expo-sqlite", { "withSQLiteVecExtension":
+true }]` in the app config and `openExpoDb` loads the bundled extension. In the browser, pass a sqlite3
+WASM build with sqlite-vec compiled in; `@sqlite.org/sqlite-wasm` doesn't include it.
+
 Each opener owns its connection exclusively and verifies the pragmas it depends on rather than
 assuming them — a host that cannot give durable storage fails loudly instead of quietly running in
 memory. `openBrowserDb` uses rollback journaling so several tabs can share the file; competing
@@ -1459,6 +1467,13 @@ the as-of scrubber has something to say.
   who drives through a light, critical intersections (`betweenness`) and crash risk, and its
   scenario lab forks the city, replays the day with an edit, and shows who wins and who pays.
   `bun run download && bun run prepare-data && bun run load && bun run dev` in the example dir.
+- [`examples/metro-graph`](https://github.com/TimMikeladze/graphx/blob/main/examples/metro-graph): King County Metro (Seattle) from its GTFS
+  feed. 142 routes, 6,265 stops, 423 stop patterns and 31.5k scheduled trips for a weekday,
+  Saturday and Sunday, plus live bus positions from GTFS-realtime. The map animates every
+  scheduled bus through the day; a scenario forks the network, and headway changes, shifted
+  trips, removed routes and drawn routes are writes in the branch, compared against the baseline.
+  Runs on bql.sh, so a scenario fork is a database branch on the server.
+  `bun run download && bun run load && bun run dev` in the example dir.
 - [`examples/iot-fleet`](https://github.com/TimMikeladze/graphx/blob/main/examples/iot-fleet) — end-to-end Vite + Bun + SQLite + React app. Run
   `bun run server.ts` and `bun run dev` in two shells, or `bun test` for an in-process run with no
   server and no port.

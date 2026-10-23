@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { Database, type SQLQueryBindings } from 'bun:sqlite';
+import { Database as BqlSqlite } from 'bql.sh/sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -91,6 +92,64 @@ function wrapped() {
 	cleanup.push(() => client.close());
 	return { ...harness, client };
 }
+/**
+ * Expo's shape over bql.sh's pinned libsqlite3, which compiles sqlite-vec in: the stand-in for an
+ * app built with `withSQLiteVecExtension`. `loads` records what `openExpoDb` asked to load.
+ */
+function vecConnection(path: string, loads: unknown[][]): ExpoDatabase {
+	const db = BqlSqlite.open(path, { safeIntegers: false });
+	cleanup.push(() => {
+		if (!db.closed) db.close();
+	});
+	return {
+		async prepareAsync(sql) {
+			const statement = db.prepare(sql);
+			return {
+				async executeAsync(params) {
+					const rows = statement.all(...(params as never[]));
+					return {
+						changes: Number(db.changes),
+						lastInsertRowId: Number(db.lastInsertRowid),
+						async getAllAsync() {
+							return rows;
+						},
+					};
+				},
+				async getColumnNamesAsync() {
+					return statement.columnNames;
+				},
+				// bql.sh caches prepared statements on the connection and finalizes them on close.
+				async finalizeAsync() {},
+			};
+		},
+		async execAsync(sql) {
+			db.exec(sql);
+		},
+		closeSync() {
+			if (!db.closed) db.close();
+		},
+		async loadExtensionAsync(libPath, entryPoint) {
+			loads.push([libPath, entryPoint]);
+		},
+	};
+}
+
+function vecModule() {
+	const dir = mkdtempSync(join(tmpdir(), 'graphx-expo-vec-'));
+	cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
+	const loads: unknown[][] = [];
+	const module: ExpoSqliteModule = {
+		defaultDatabaseDirectory: dir,
+		bundledExtensions: {
+			'sqlite-vec': { libPath: 'bundled/vec0', entryPoint: 'sqlite3_vec_init' },
+		},
+		async openDatabaseAsync(name, _options, directory) {
+			return vecConnection(join(directory ?? dir, name), loads);
+		},
+	};
+	return { module, loads };
+}
+
 function nativeModule() {
 	const dir = mkdtempSync(join(tmpdir(), 'graphx-expo-'));
 	cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -220,9 +279,9 @@ test('Expo connection owner isolates rollback from outside writes and rolls back
 	expect((await client.execute('SELECT * FROM items')).rows).toEqual([{ id: 'outside' }]);
 });
 
-test('Expo opener requests a new persistent connection, verifies durability and reopens graph data', async () => {
+test('Expo opener requests a new persistent connection and verifies durability', async () => {
 	const { module, dir, calls } = nativeModule();
-	let client = await openExpoDb(module, 'vault.db');
+	const client = await openExpoDb(module, 'vault.db');
 	cleanup.push(() => client.close());
 	expect(calls[0]).toEqual([
 		'vault.db',
@@ -232,6 +291,13 @@ test('Expo opener requests a new persistent connection, verifies durability and 
 	expect((await client.execute('PRAGMA journal_mode')).rows[0]?.journal_mode).toBe('wal');
 	expect((await client.execute('PRAGMA synchronous')).rows[0]?.synchronous).toBe(2);
 	expect((await client.execute('PRAGMA foreign_keys')).rows[0]?.foreign_keys).toBe(1);
+});
+
+test('Expo opener loads the bundled sqlite-vec and reopens graph data with vectors', async () => {
+	const { module, loads } = vecModule();
+	let client = await openExpoDb(module, 'vault.db');
+	cleanup.push(() => client.close());
+	expect(loads).toEqual([['bundled/vec0', 'sqlite3_vec_init']]);
 	const embedder = hashEmbed(8);
 	await init(client, embedder);
 	const schema = defineGraphSchema({ nodes: { note: z.object({ path: z.string() }) }, edges: {} });

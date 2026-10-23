@@ -11,7 +11,13 @@ import {
 	type SqlRow,
 	type SqlStatement,
 } from './dialect.ts';
-import { embReadExpr, embValueExpr, insertOrIgnore, META_UPSERT_SQL } from './dialect-sql.ts';
+import {
+	embJson,
+	embReadExpr,
+	embValueExpr,
+	insertOrIgnore,
+	META_UPSERT_SQL,
+} from './dialect-sql.ts';
 import { FOREVER, ftsIndexOwner, managedWriter } from './runtime.ts';
 import {
 	createEmbeddings,
@@ -522,7 +528,7 @@ async function copyRows(source: DbClient, target: DbClient, plan: CopyPlan): Pro
 					String(r.id),
 					num(r.chunk),
 					str(r.text),
-					typeof r.emb === 'string' ? r.emb : JSON.stringify(r.emb),
+					embJson(r.emb),
 					String(r.embed_hash),
 				]),
 			});

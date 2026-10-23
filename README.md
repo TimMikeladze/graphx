@@ -1291,8 +1291,10 @@ namespace-per-tenant model is the shape bql.sh was built for, so one namespace i
 
 It is a **plain libsqlite3**, so graphx speaks the `sqlite` dialect to it — the one the browser and
 Expo drivers use — rather than the libSQL one, whose `F32_BLOB` and `vector_top_k` exist only in
-libSQL's fork. FTS5 is compiled into bql.sh's pinned build, so lexical retrieval is unchanged; vector
-search is exact rather than ANN.
+libSQL's fork. FTS5 and [sqlite-vec](https://github.com/asg017/sqlite-vec) are compiled into bql.sh's
+pinned build. Vectors are stored as float32 blobs and searched exactly with `vec_distance_cosine`, in
+SQL on the server, so only the top rows cross the socket: 3.5 ms for 6,400 vectors at 256 dims and
+25 ms for 50,000, measured over HTTP. There is no ANN index.
 
 ```ts
 import 'graphx/bql'; // registers the bql.sh driver (side effect)
@@ -1404,6 +1406,12 @@ import * as SQLite from 'expo-sqlite';
 const client = await openExpoDb(SQLite, 'vault.db');
 await init(client);
 ```
+
+Vectors on the browser and Expo runtimes, and on bql.sh, are sqlite-vec blobs, so the SQLite build
+**must** have sqlite-vec to `init` with an embedder; without it `init` throws and names the fix. A
+graph with no embedder runs on any SQLite. On Expo, set `["expo-sqlite", { "withSQLiteVecExtension":
+true }]` in the app config and `openExpoDb` loads the bundled extension. In the browser, pass a sqlite3
+WASM build with sqlite-vec compiled in; `@sqlite.org/sqlite-wasm` doesn't include it.
 
 Each opener owns its connection exclusively and verifies the pragmas it depends on rather than
 assuming them — a host that cannot give durable storage fails loudly instead of quietly running in

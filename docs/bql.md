@@ -6,7 +6,7 @@ this is how graphx reaches it, why it needed no new dialect, and what is deliber
 ## The one decision everything else follows from
 
 bql.sh is a plain libsqlite3, so graphx talks to it with the **`sqlite` dialect it already had** for
-SQLite WASM and Expo — `schema('sqlite')`, `sqliteVectorSeedRows`, the `sqlite` branches in
+SQLite WASM and Expo — `schema('sqlite')`, the sqlite-vec arm of `annSeeds`, the `sqlite` branches in
 `hybrid.ts`, `local-blobs.ts` and `algorithms.ts`. The libSQL arm emits `F32_BLOB`,
 `libsql_vector_idx`, `vector()` and `vector_top_k`, which exist only in libSQL's fork; an untagged
 client reads as `libsql` (`dialectOf`) and `init` would fail on the embeddings DDL.
@@ -111,11 +111,21 @@ Anything else (another backend or server, an existing target, a non-admin token)
 
 ## Not done
 
-- **No ANN.** `sqliteVectorSeedRows` reads every embedding row and ranks in JS: a table scan when
-  embedded, and every vector in the namespace crossing the socket when remote, where it meets
-  bql.sh's `maxRows` cap first. The fix is `sqlite-vec` in bql.sh's pinned build plus a vector arm in
-  `dialect-sql.ts`, and it should be driven by a measurement rather than by taste. Until then this
-  backend is for lexical-first graphs and small vector sets.
+- **No ANN.** Vectors are sqlite-vec float32 blobs searched by an exact `vec_distance_cosine` scan in
+  SQL (`annSeeds('sqlite')`). It replaced a scan in JS that pulled every vector over the socket and
+  failed past bql.sh's result caps. Measured over Hrana on stock limits:
+
+  | Vectors × dims | JS scan (before)   | sqlite-vec scan |
+  | -------------- | ------------------ | --------------- |
+  | 6,400 × 256    | 59 ms              | 3.5 ms          |
+  | 10,000 × 256   | 93 ms              | 4.6 ms          |
+  | 7,000 × 768    | `RESULT_TOO_LARGE` | 8.1 ms          |
+  | 50,000 × 256   | `TOO_MANY_ROWS`    | 24.6 ms         |
+
+  A `vec0` table would be 1.4 to 2× faster again (128 ms vs 91 ms at 200k × 768 in process) at the
+  cost of a second table kept in sync at every vector write site; not worth it until a graph needs
+  it. sqlite-vec's DiskANN and IVF indexes are pre-release (0.1.10 alphas), so there is no ANN yet.
+
 - **Push CDC is not wired.** The hook is reachable (`client.database.onCommit`) and verified to fire,
   but nothing in graphx installs it: `triggers.ts` and `graphx/react` still poll `outboxTail` and
   `changeFeed`. A `GraphEventSink` fed by a commit hook (embedded) and by bql.sh's live queries

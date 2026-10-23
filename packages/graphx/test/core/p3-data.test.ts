@@ -5,7 +5,7 @@ import { defineGraphSchema } from '../../src/core/define-graph-schema.ts';
 import type { DbClient } from '../../src/core/dialect.ts';
 import { Graph } from '../../src/core/graph.ts';
 import { init } from '../../src/core/schema.ts';
-import { embReadSql, libsqlOnly, makeTestDb, stubEmbedder } from './harness.ts';
+import { embJson, embReadSql, libsqlOnly, makeTestDb, stubEmbedder } from './harness.ts';
 import { hashEmbed } from '../../src/core/embedder.ts';
 
 // The nv_emb_idx retrieval probe uses libSQL's vector_top_k; PG vector retrieval is covered by P4.
@@ -337,7 +337,7 @@ test('P3: the graph embeds on write and re-embeds only when the embedding input 
 		sql: `SELECT ${embReadSql(client)} AS v FROM node_embeddings WHERE id = ? AND chunk = 0`,
 		args: [node.id],
 	});
-	expect((JSON.parse(String(vec.rows[0]!.v)) as number[])[0]).toBe('hello there'.length);
+	expect((JSON.parse(embJson(vec.rows[0]!.v)) as number[])[0]).toBe('hello there'.length);
 
 	// A node without a body has no vector; a delete removes the vector rows.
 	const bare = await g.addNode({ type: 'person', data: { name: 'bare' } });

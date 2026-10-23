@@ -22,10 +22,13 @@ export interface ExpoDatabase {
 	prepareAsync(sql: string): Promise<ExpoStatement>;
 	execAsync(sql: string): Promise<void>;
 	closeSync(): void;
+	loadExtensionAsync?(libPath: string, entryPoint?: string): Promise<void>;
 }
 
 export interface ExpoSqliteModule {
 	readonly defaultDatabaseDirectory: string | null;
+	/** Present with the `withSQLiteVecExtension` config plugin option; graphx vectors need it. */
+	readonly bundledExtensions?: Record<string, { libPath: string; entryPoint: string } | undefined>;
 	openDatabaseAsync(
 		name: string,
 		options: { useNewConnection: true; finalizeUnusedStatementsBeforeClosing: false },
@@ -218,6 +221,11 @@ export async function openExpoDb(
 	);
 	const client = createExpoClient(database);
 	try {
+		// sqlite-vec holds graphx's vectors on this dialect. Without it the graph still opens, and
+		// `init` with an embedder refuses with the fix.
+		const vec = sqlite.bundledExtensions?.['sqlite-vec'];
+		if (vec && database.loadExtensionAsync)
+			await database.loadExtensionAsync(vec.libPath, vec.entryPoint);
 		const databases = await client.execute('PRAGMA database_list');
 		const main = databases.rows.find((row) => row.name === 'main');
 		if (!nativeDirectory(main?.file))

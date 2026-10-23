@@ -1,5 +1,5 @@
 import { assertNever, type DbClient, type Dialect, dialectOf } from './dialect.ts';
-import { embReadExpr, ftsSeedAsOf, ftsSeedLive } from './dialect-sql.ts';
+import { embJson, embReadExpr, ftsSeedAsOf, ftsSeedLive } from './dialect-sql.ts';
 import { ftsIndexOwner } from './runtime.ts';
 import { isLive, slicePredicate, type TimeSlice } from './temporal.ts';
 import type { Embedder } from './embedder.ts';
@@ -257,7 +257,7 @@ FROM node_embeddings
 WHERE chunk = 0 AND id IN (${part.map(() => '?').join(',')})`,
 			args: part,
 		});
-		for (const row of r.rows) out.set(String(row.id), JSON.parse(String(row.e)) as number[]);
+		for (const row of r.rows) out.set(String(row.id), JSON.parse(embJson(row.e)) as number[]);
 	}
 	return out;
 }

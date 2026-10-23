@@ -8,6 +8,7 @@ import { createBqlRemoteClient } from '../../src/core/bql.ts';
 import type { Driver } from '../../src/core/db.ts';
 import { type DbClient, dialectOf } from '../../src/core/dialect.ts';
 import {
+	embJson,
 	embReadExpr,
 	embValueExpr,
 	insertOrIgnore,
@@ -200,6 +201,7 @@ export function embSql(client: DbClient): string {
 }
 
 /** Dialect-correct expression for READING an embedding back as a JSON-array string in raw fixtures. */
+/** Pair with `embJson` to parse what it reads: SQLite returns a float32 blob. */
 export function embReadSql(client: DbClient): string {
 	return embReadExpr(dialectOf(client));
 }
@@ -392,3 +394,5 @@ export function makeTestDb(opts: MakeTestDbOpts = {}): TestDb {
 	const client = createClient({ url: ':memory:' });
 	return { client, teardown: async () => client.close() };
 }
+
+export { embJson };

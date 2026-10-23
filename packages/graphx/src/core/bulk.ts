@@ -353,7 +353,7 @@ export async function bulkLoad<S extends GraphSchema>(
 	// libSQL defers the ANN index and FTS trigger across a bulk load and rebuilds after.
 	// Postgres has no trigger to drop. DuckDB has neither object — its ANN scan is
 	// index-free and its FTS index is built at commit time — so the whole bracket is skipped.
-	// Ordinary SQLite keeps FTS5 triggers active; its exact vector scan has no ANN index.
+	// Ordinary SQLite keeps FTS5 triggers active; its exact sqlite-vec scan has no ANN index.
 	const deferIndexes = d === 'libsql';
 	const upcaster = new Upcaster(schema, opts.upcasters ?? {});
 

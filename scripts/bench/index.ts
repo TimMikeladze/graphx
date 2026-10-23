@@ -7,6 +7,7 @@
  *   bun run bench --iters 30                   cap the samples per case
  *   bun run bench --wipe                       rebuild every cached corpus first
  *   GRAPHX_BENCH_DRIVER=postgres bun run bench the same suites through the dialect seam
+ *   GRAPHX_BENCH_DRIVER=bql bun run bench      bql.sh, embedded or at GRAPHX_BQL_URL
  *
  * The purpose is bottleneck discovery, not regression gating: nothing here asserts a threshold or
  * compares against a committed baseline. Results land in `bench/results/` for hand comparison.
@@ -22,6 +23,7 @@ import process from 'node:process';
 import {
 	ALL_SCALES,
 	type Corpus,
+	closeBench,
 	DRIVER,
 	freshCorpus,
 	isScale,
@@ -73,7 +75,7 @@ const USAGE = `bench — graphx performance harness
   bun run bench [suite...] [--scale 1k,10k,100k] [--iters N] [--wipe]
 
 suites: ${SUITES.map((s) => s.name).join(', ')}
-driver: GRAPHX_BENCH_DRIVER=libsql|postgres (currently ${DRIVER})`;
+driver: GRAPHX_BENCH_DRIVER=libsql|postgres|bql (currently ${DRIVER})`;
 
 function log(message: string): void {
 	console.log(`[bench] ${message}`);
@@ -182,3 +184,4 @@ async function main(): Promise<void> {
 }
 
 await main();
+await closeBench();

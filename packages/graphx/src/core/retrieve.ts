@@ -132,57 +132,6 @@ function unitVector(vector: number[]): number[] {
 	return scaled.map((value) => value / norm);
 }
 
-/**
- * Ordinary SQLite exact search. One SELECT snapshots metadata and all chunks together;
- * reading/parsing/ranking costs O(total stored vector components) time and memory,
- * plus O(nodes log nodes) sorting. No vector or SQL math extension is required.
- */
-async function sqliteVectorSeedRows(
-	raw: DbClient,
-	qEmb: number[],
-	k: number,
-): Promise<Array<{ id: string; dist: number; snippet: string | null }>> {
-	const result = await raw.execute(`SELECT e.id, e.chunk, e.text, e.emb, m.value AS dim
-FROM graph_meta m LEFT JOIN node_embeddings e ON 1 = 1
-WHERE m.key = 'emb_dim'
-ORDER BY e.id, e.chunk`);
-	const dim = Number(result.rows[0]?.dim);
-	if (!Number.isSafeInteger(dim) || dim <= 0) {
-		throw new EmbeddingError('dimension', 'SQLite vector search: invalid namespace dimension');
-	}
-	assertVector(qEmb, dim, 'SQLite query');
-	if (isZeroVector(qEmb)) return [];
-	const query = unitVector(qEmb);
-	const best = new Map<string, { id: string; dist: number; snippet: string | null }>();
-	for (const row of result.rows) {
-		if (row.id == null) continue; // Empty vector table still returns the metadata row.
-		const id = String(row.id);
-		let vector: unknown;
-		try {
-			vector = JSON.parse(String(row.emb));
-		} catch {
-			throw new EmbeddingError('invalid', `SQLite stored vector ${id}/${row.chunk}: invalid JSON`);
-		}
-		if (!Array.isArray(vector)) {
-			throw new EmbeddingError(
-				'invalid',
-				`SQLite stored vector ${id}/${row.chunk}: expected a JSON array`,
-			);
-		}
-		assertVector(vector, dim, `SQLite stored vector ${id}/${row.chunk}`);
-		const unit = unitVector(vector);
-		const similarity = query.reduce((dot, value, i) => dot + value * (unit[i] as number), 0);
-		const dist = 1 - Math.max(-1, Math.min(1, similarity));
-		const current = best.get(id);
-		if (!current || dist < current.dist) {
-			best.set(id, { id, dist, snippet: row.text == null ? null : String(row.text) });
-		}
-	}
-	return [...best.values()]
-		.sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-		.slice(0, k);
-}
-
 /** Nearest vector rows to `qEmb`, grouped to nodes by best distance, best first. */
 export async function vectorSeedRows(
 	raw: DbClient,
@@ -190,11 +139,15 @@ export async function vectorSeedRows(
 	k: number,
 ): Promise<Array<{ id: string; dist: number; snippet: string | null }>> {
 	if (k <= 0) return [];
-	if (dialectOf(raw) === 'sqlite') return sqliteVectorSeedRows(raw, qEmb, k);
+	assertVector(qEmb, undefined, 'query');
 	if (isZeroVector(qEmb)) return [];
-	const { sql, bind } = annSeeds(dialectOf(raw));
+	const d = dialectOf(raw);
+	// sqlite-vec packs the query to float32, where a component past ~3.4e38 becomes Inf and every
+	// distance null. Cosine distance ignores scale, so the unit vector ranks the same.
+	const q = d === 'sqlite' ? unitVector(qEmb) : qEmb;
+	const { sql, bind } = annSeeds(d);
 	// Ask for more rows than nodes wanted: several chunks of one node may all rank near the top.
-	const r = await raw.execute({ sql, args: bind(JSON.stringify(qEmb), k * 4) });
+	const r = await raw.execute({ sql, args: bind(JSON.stringify(q), k * 4) });
 	const best = new Map<string, { id: string; dist: number; snippet: string | null }>();
 	for (const row of r.rows) {
 		const id = String(row.id);
