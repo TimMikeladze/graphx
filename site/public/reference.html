@@ -1235,8 +1235,10 @@ S3-compatible bucket with point-in-time restore, and realtime driven by SQLite&#
 namespace-per-tenant model is the shape bql.sh was built for, so one namespace is one bql.sh database.</p>
 <p>It is a <strong>plain libsqlite3</strong>, so graphx speaks the <code>sqlite</code> dialect to it — the one the browser and
 Expo drivers use — rather than the libSQL one, whose <code>F32_BLOB</code> and <code>vector_top_k</code> exist only in
-libSQL&#39;s fork. FTS5 is compiled into bql.sh&#39;s pinned build, so lexical retrieval is unchanged; vector
-search is exact rather than ANN.</p>
+libSQL&#39;s fork. FTS5 and <a href="https://github.com/asg017/sqlite-vec">sqlite-vec</a> are compiled into bql.sh&#39;s
+pinned build. Vectors are stored as float32 blobs and searched exactly with <code>vec_distance_cosine</code>, in
+SQL on the server, so only the top rows cross the socket: 3.5 ms for 6,400 vectors at 256 dims and
+25 ms for 50,000, measured over HTTP. There is no ANN index.</p>
 <pre class="shiki shiki-themes vitesse-light vitesse-dark" style="--shiki-light:#393a34;--shiki-dark:#dbd7caee;--shiki-light-bg:#ffffff;--shiki-dark-bg:#121212" tabindex="0"><code><span class="line"><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375">import</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77"> '</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D">graphx/bql</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77">'</span><span style="--shiki-light:#999999;--shiki-dark:#666666">;</span><span style="--shiki-light:#A0ADA0;--shiki-dark:#758575DD"> // registers the bql.sh driver (side effect)</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#AB5959;--shiki-dark:#CB7676">const </span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">db</span><span style="--shiki-light:#999999;--shiki-dark:#666666"> =</span><span style="--shiki-light:#59873A;--shiki-dark:#80A665"> getDb</span><span style="--shiki-light:#999999;--shiki-dark:#666666">(</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77">'</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D">acme__alpha</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77">'</span><span style="--shiki-light:#999999;--shiki-dark:#666666">,</span><span style="--shiki-light:#999999;--shiki-dark:#666666"> {</span></span>
@@ -1315,7 +1317,11 @@ included. Hosts need standard timers and <code>crypto.getRandomValues</code> for
 <span class="line"><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375">import</span><span style="--shiki-light:#AB5959;--shiki-dark:#CB7676"> *</span><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375"> as</span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A"> SQLite</span><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375"> from</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77"> '</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D">expo-sqlite</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77">'</span><span style="--shiki-light:#999999;--shiki-dark:#666666">;</span></span>
 <span class="line"></span>
 <span class="line"><span style="--shiki-light:#AB5959;--shiki-dark:#CB7676">const </span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">client</span><span style="--shiki-light:#999999;--shiki-dark:#666666"> =</span><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375"> await</span><span style="--shiki-light:#59873A;--shiki-dark:#80A665"> openExpoDb</span><span style="--shiki-light:#999999;--shiki-dark:#666666">(</span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">SQLite</span><span style="--shiki-light:#999999;--shiki-dark:#666666">,</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77"> '</span><span style="--shiki-light:#B56959;--shiki-dark:#C98A7D">vault.db</span><span style="--shiki-light:#B5695977;--shiki-dark:#C98A7D77">'</span><span style="--shiki-light:#999999;--shiki-dark:#666666">);</span></span>
-<span class="line"><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375">await</span><span style="--shiki-light:#59873A;--shiki-dark:#80A665"> init</span><span style="--shiki-light:#999999;--shiki-dark:#666666">(</span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">client</span><span style="--shiki-light:#999999;--shiki-dark:#666666">);</span></span></code></pre><p>Each opener owns its connection exclusively and verifies the pragmas it depends on rather than
+<span class="line"><span style="--shiki-light:#1E754F;--shiki-dark:#4D9375">await</span><span style="--shiki-light:#59873A;--shiki-dark:#80A665"> init</span><span style="--shiki-light:#999999;--shiki-dark:#666666">(</span><span style="--shiki-light:#B07D48;--shiki-dark:#BD976A">client</span><span style="--shiki-light:#999999;--shiki-dark:#666666">);</span></span></code></pre><p>Vectors on the browser and Expo runtimes, and on bql.sh, are sqlite-vec blobs, so the SQLite build
+<strong>must</strong> have sqlite-vec to <code>init</code> with an embedder; without it <code>init</code> throws and names the fix. A
+graph with no embedder runs on any SQLite. On Expo, set <code>[&quot;expo-sqlite&quot;, { &quot;withSQLiteVecExtension&quot;: true }]</code> in the app config and <code>openExpoDb</code> loads the bundled extension. In the browser, pass a sqlite3
+WASM build with sqlite-vec compiled in; <code>@sqlite.org/sqlite-wasm</code> doesn&#39;t include it.</p>
+<p>Each opener owns its connection exclusively and verifies the pragmas it depends on rather than
 assuming them — a host that cannot give durable storage fails loudly instead of quietly running in
 memory. <code>openBrowserDb</code> uses rollback journaling so several tabs can share the file; competing
 writers can still get <code>SQLITE_BUSY</code> and must retry the whole operation. <code>Graph.atomic</code> is the
@@ -1357,6 +1363,13 @@ version per window. A map app answers congestion at any time (<code>asOf</code>)
 who drives through a light, critical intersections (<code>betweenness</code>) and crash risk, and its
 scenario lab forks the city, replays the day with an edit, and shows who wins and who pays.
 <code>bun run download &amp;&amp; bun run prepare-data &amp;&amp; bun run load &amp;&amp; bun run dev</code> in the example dir.</li>
+<li><a href="https://github.com/TimMikeladze/graphx/blob/main/examples/metro-graph"><code>examples/metro-graph</code></a>: King County Metro (Seattle) from its GTFS
+feed. 142 routes, 6,265 stops, 423 stop patterns and 31.5k scheduled trips for a weekday,
+Saturday and Sunday, plus live bus positions from GTFS-realtime. The map animates every
+scheduled bus through the day; a scenario forks the network, and headway changes, shifted
+trips, removed routes and drawn routes are writes in the branch, compared against the baseline.
+Runs on bql.sh, so a scenario fork is a database branch on the server.
+<code>bun run download &amp;&amp; bun run load &amp;&amp; bun run dev</code> in the example dir.</li>
 <li><a href="https://github.com/TimMikeladze/graphx/blob/main/examples/iot-fleet"><code>examples/iot-fleet</code></a> — end-to-end Vite + Bun + SQLite + React app. Run
 <code>bun run server.ts</code> and <code>bun run dev</code> in two shells, or <code>bun test</code> for an in-process run with no
 server and no port.</li>
