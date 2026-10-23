@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-synthesis-graph",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"private": true,
 	"description": "Synthesis route planning for ibuprofen on a bitemporal graphx graph — the Boots, BHC and flow routes enter on their real dates; plan as of any year, fork a supply cut",
 	"homepage": "https://graphx.sh",

@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-lex-graph",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"private": true,
 	"description": "Every Lex Fridman Podcast and Sean Carroll's Mindscape episode as one graphx graph — shared guests, topics, sponsors and chapter mentions, each dated by the episode that introduced it",
 	"homepage": "https://graphx.sh",

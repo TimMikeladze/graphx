@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-metro-graph",
-	"version": "0.1.0",
+	"version": "0.4.0",
 	"private": true,
 	"description": "King County Metro as a graph: every route, stop, pattern and scheduled trip from the GTFS feed, live buses, and a map where you fork the network and edit timetables and routes",
 	"homepage": "https://graphx.sh",

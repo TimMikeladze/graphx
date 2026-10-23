@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-anime-graph",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"private": true,
 	"description": "Every anime in manami-project's anime-offline-database as a graphx graph — franchises, studios, producers and tags, reloaded weekly as bitemporal history",
 	"homepage": "https://graphx.sh",

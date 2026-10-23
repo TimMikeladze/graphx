@@ -1,6 +1,6 @@
 {
 	"name": "graphx-example-city-graph",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"private": true,
 	"description": "Boston as a bitemporal graph — every road and signal, a modelled weekday of traffic, census commute flows, crashes, 311 and the MBTA — with a map UI and a scenario lab that forks the city",
 	"homepage": "https://graphx.sh",
