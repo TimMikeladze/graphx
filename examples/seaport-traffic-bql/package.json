@@ -24,7 +24,7 @@
 		"sqlite:build": "bun run ../../node_modules/bql.sh/packages/db/scripts/sqlite.ts"
 	},
 	"dependencies": {
-		"bql.sh": "^0.4.0",
+		"bql.sh": "^0.5.0",
 		"graphx": "workspace:*",
 		"zod": "^4.4.3"
 	}

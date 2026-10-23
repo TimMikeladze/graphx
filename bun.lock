@@ -114,7 +114,7 @@
         "@deck.gl/mapbox": "^9.4.0",
         "@tanstack/charts": "^0.18.0",
         "@tanstack/react-query": "^5.104.0",
-        "bql.sh": "^0.4.0",
+        "bql.sh": "^0.5.0",
         "d3-scale": "^4.0.2",
         "graphx": "workspace:*",
         "hono": "^4.12.23",
@@ -171,7 +171,7 @@
       "name": "graphx-example-seaport-traffic-bql",
       "version": "0.3.0",
       "dependencies": {
-        "bql.sh": "^0.4.0",
+        "bql.sh": "^0.5.0",
         "graphx": "workspace:*",
         "zod": "^4.4.3",
       },
@@ -299,7 +299,7 @@
         "@types/react-dom": "^19",
         "ajv": "^8.20.0",
         "better-auth": "^1.7.7",
-        "bql.sh": "^0.4.0",
+        "bql.sh": "^0.5.0",
         "happy-dom": "^16.5.3",
         "openapi-x-graphql": "^1.0.0",
         "pg": "^8.13.1",
@@ -1401,7 +1401,7 @@
 
     "bowser": ["bowser@2.14.1", "", {}, "sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg=="],
 
-    "bql.sh": ["bql.sh@0.4.0", "", { "peerDependencies": { "drizzle-orm": ">=0.44", "graphql": ">=16", "kysely": ">=0.28", "openapi-x-graphql": ">=1" }, "optionalPeers": ["drizzle-orm", "graphql", "kysely", "openapi-x-graphql"], "bin": { "bql": "packages/db/src/cli.ts" } }, "sha512-b9ugQsqePADKSqwWn06u7zqckUzDUgjkm5h7uqqYHkx7Cgc0kKfyjsb5dRovmSjHD4hC4z1BvpnqRmZCucBJZg=="],
+    "bql.sh": ["bql.sh@0.5.0", "", { "peerDependencies": { "drizzle-orm": ">=0.44", "graphql": ">=16", "kysely": ">=0.28", "openapi-x-graphql": ">=1" }, "optionalPeers": ["drizzle-orm", "graphql", "kysely", "openapi-x-graphql"], "bin": { "bql": "packages/db/src/cli.ts" } }, "sha512-5enXtIYt57jiJ1Hq5z4raEJqOQ4mU4kfkH3dG3ykSYLuFkOJP6TfmsZpmqmiP7f9Epw5cC9ObHkP4GHIxEDkCw=="],
 
     "brace-expansion": ["brace-expansion@5.0.6", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g=="],
 

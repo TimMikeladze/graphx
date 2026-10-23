@@ -202,7 +202,7 @@
 		"@types/react-dom": "^19",
 		"ajv": "^8.20.0",
 		"better-auth": "^1.7.7",
-		"bql.sh": "^0.4.0",
+		"bql.sh": "^0.5.0",
 		"happy-dom": "^16.5.3",
 		"openapi-x-graphql": "^1.0.0",
 		"pg": "^8.13.1",
