@@ -30,7 +30,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       # bql.sh's pinned libsqlite3, so the native-fork tests (test/core/fork-bql.test.ts) run
-      # instead of skipping. Downloads the SQLite amalgamation, checks its hash, and compiles it.
+      # instead of skipping, and the sqlite-dialect tests get the sqlite-vec their vectors need.
+      # Downloads the SQLite amalgamation, checks its hash, and compiles it.
       - name: Build bql.sh's libsqlite3
         run: bun run bql:build
 
@@ -89,6 +90,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # The sqlite-dialect tests (SQLite, Expo, bql.sh adapter, metro-graph) need sqlite-vec,
+      # which only bql.sh's pinned libsqlite3 carries.
+      - name: Build bql.sh's libsqlite3
+        run: bun run bql:build
+
       # Required, not optional: the `graphx mcp` bin test spawns `dist/cli.js`, and the
       # examples import `graphx` by name — which resolves through the `exports` map into
       # `./dist`. Both fail without a build.
@@ -129,6 +135,11 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      # The sqlite-dialect tests (SQLite, Expo, bql.sh adapter, metro-graph) need sqlite-vec,
+      # which only bql.sh's pinned libsqlite3 carries.
+      - name: Build bql.sh's libsqlite3
+        run: bun run bql:build
 
       # Required, not optional: the `graphx mcp` bin test spawns `dist/cli.js`, and the
       # examples import `graphx` by name — which resolves through the `exports` map into

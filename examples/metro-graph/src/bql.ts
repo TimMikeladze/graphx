@@ -30,12 +30,22 @@ interface BqlModule {
 }
 
 export async function useBql(dir = join(DATA, 'bql')): Promise<BqlHandle> {
+	// graphx reads these from the environment. They're restored on close, because a test run puts
+	// every package's suites in one process and the next one must not inherit the bql driver.
+	const keys = ['GRAPHX_DB_DRIVER', 'GRAPHX_BQL_URL', 'GRAPHX_BQL_TOKEN'] as const;
+	const prior = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+	const restore = () => {
+		for (const k of keys) {
+			if (prior[k] === undefined) delete process.env[k];
+			else process.env[k] = prior[k];
+		}
+	};
 	process.env.GRAPHX_DB_DRIVER = 'bql';
 	if (process.env.GRAPHX_BQL_URL)
 		return {
 			url: process.env.GRAPHX_BQL_URL,
 			token: process.env.GRAPHX_BQL_TOKEN ?? '',
-			close: async () => {},
+			close: async () => restore(),
 		};
 	mkdirSync(dir, { recursive: true });
 	// A variable specifier, so type-checking never walks bql.sh's own sources.
@@ -49,8 +59,7 @@ export async function useBql(dir = join(DATA, 'bql')): Promise<BqlHandle> {
 		url: server.url,
 		token: server.adminKey ?? '',
 		close: async () => {
-			delete process.env.GRAPHX_BQL_URL;
-			delete process.env.GRAPHX_BQL_TOKEN;
+			restore();
 			await bql.close();
 		},
 	};
